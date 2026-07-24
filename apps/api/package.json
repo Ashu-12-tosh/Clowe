@@ -1,0 +1,45 @@
+{
+  "name": "@clowe/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clowe REST API — standalone backend consumed by web (and later mobile)",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "lint": "eslint src",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.112.3",
+    "@clowe/shared": "*",
+    "@prisma/client": "^5.19.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.6.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.2.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^22.4.0",
+    "eslint": "^9.9.0",
+    "prisma": "^5.19.0",
+    "tsx": "^4.17.0",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.2.0"
+  }
+}

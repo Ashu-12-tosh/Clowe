@@ -1,0 +1,29 @@
+{
+  "name": "clowe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Clowe — multi-vendor clothing e-commerce platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:api dev:web",
+    "dev:api": "npm run dev --workspace=@clowe/api",
+    "dev:web": "npm run dev --workspace=@clowe/web",
+    "build": "npm run build --workspace=@clowe/shared && npm run build --workspace=@clowe/api && npm run build --workspace=@clowe/web",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
+    "db:generate": "npm run db:generate --workspace=@clowe/api",
+    "db:migrate": "npm run db:migrate --workspace=@clowe/api",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,css}\""
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.3.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

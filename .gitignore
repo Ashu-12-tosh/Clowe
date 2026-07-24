@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+.next/
+out/
+
+# env — never commit real secrets
+.env
+.env.local
+.env*.local
+
+# prisma
+apps/api/prisma/migrations/**/migration_lock.toml.bak
+
+# logs & misc
+*.log
+.DS_Store
+coverage/
+
+# local uploads (dev file storage)
+apps/api/uploads/
+.env.production
+backups/

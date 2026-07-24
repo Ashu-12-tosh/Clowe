@@ -1,0 +1,481 @@
+// Clowe database schema — Phase 1.
+// Full e-commerce data model: users & auth, sellers, catalog, cart,
+// orders & payments, reviews/returns, referrals, AI try-on, notifications.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  CUSTOMER
+  SELLER
+  ADMIN
+}
+
+enum SellerStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum ProductStatus {
+  DRAFT
+  PENDING // submitted, waiting for admin approval
+  APPROVED // live on the storefront
+  REJECTED
+  ARCHIVED
+}
+
+enum OrderStatus {
+  PLACED
+  CONFIRMED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  RETURN_REQUESTED
+  RETURNED
+}
+
+enum PaymentStatus {
+  CREATED // Razorpay order created, awaiting payment
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  RECEIVED
+  REFUNDED
+}
+
+enum ReferralStatus {
+  PENDING // referred user signed up, reward not yet unlocked
+  CREDITED // reward granted (e.g. after first delivered order)
+}
+
+enum TryOnStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+// ---------------------------------------------------------------------------
+// Users & auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  phone        String   @unique // E.164-ish, 10-digit Indian mobile stored without +91
+  name         String?
+  email        String?  @unique
+  role         Role     @default(CUSTOMER)
+  isActive     Boolean  @default(true)
+  referralCode String   @unique // shareable code for the referral program
+  // Saved photo for AI try-on — uploaded once, reused on every "Try On Me".
+  tryOnPhotoUrl String?
+  referredById String?
+  referredBy   User?    @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals    User[]   @relation("UserReferrals")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sellerProfile    SellerProfile?
+  refreshTokens    RefreshToken[]
+  addresses        Address[]
+  cart             Cart?
+  orders           Order[]
+  wishlistItems    Wishlist[]
+  reviews          Review[]
+  returns          Return[]
+  referralsGiven   Referral[]     @relation("Referrer")
+  referralReceived Referral?      @relation("Referred")
+  tryOnHistory     TryOnHistory[]
+  notifications    Notification[]
+
+  @@map("users")
+}
+
+// One-time passwords for phone login. Codes are stored hashed.
+model OtpCode {
+  id         String    @id @default(cuid())
+  phone      String
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int       @default(0) // wrong-guess counter
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, createdAt])
+  @@map("otp_codes")
+}
+
+// Refresh tokens are stored hashed; rotation revokes the old one.
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Sellers
+// ---------------------------------------------------------------------------
+
+model SellerProfile {
+  id              String       @id @default(cuid())
+  userId          String       @unique
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopName        String
+  description     String?
+  // KYC-lite fields
+  gstNumber       String?
+  panNumber       String?
+  bankAccountName String?
+  bankAccountNo   String?
+  bankIfsc        String?
+  addressLine1    String?
+  city            String?
+  state           String?
+  pincode         String?
+  status          SellerStatus @default(PENDING)
+  rejectionReason String?
+  approvedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  products   Product[]
+  orderItems OrderItem[]
+
+  @@map("seller_profiles")
+}
+
+// ---------------------------------------------------------------------------
+// Catalog
+// ---------------------------------------------------------------------------
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  imageUrl  String?
+  isActive  Boolean    @default(true)
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  sortOrder Int        @default(0)
+  createdAt DateTime   @default(now())
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id              String        @id @default(cuid())
+  sellerId        String
+  seller          SellerProfile @relation(fields: [sellerId], references: [id])
+  categoryId      String
+  category        Category      @relation(fields: [categoryId], references: [id])
+  title           String
+  slug            String        @unique
+  description     String
+  brand           String?
+  // Prices in paise (integer) to avoid floating-point money bugs.
+  basePricePaise  Int
+  status          ProductStatus @default(DRAFT)
+  rejectionReason String?
+  approvedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  variants      ProductVariant[]
+  images        ProductImage[]
+  wishlistItems Wishlist[]
+  reviews       Review[]
+  orderItems    OrderItem[]
+  tryOnHistory  TryOnHistory[]
+
+  @@index([status, categoryId])
+  @@index([sellerId])
+  @@map("products")
+}
+
+// Size/color combinations, each with its own SKU, price, and stock.
+model ProductVariant {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size       String // e.g. S, M, L, XL, 32, 34
+  color      String // display name; hex optional later
+  sku        String   @unique
+  pricePaise Int
+  mrpPaise   Int? // strike-through price
+  stock      Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@unique([productId, size, color])
+  @@map("product_variants")
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  sortOrder Int     @default(0)
+
+  @@map("product_images")
+}
+
+// ---------------------------------------------------------------------------
+// Addresses, cart, wishlist
+// ---------------------------------------------------------------------------
+
+model Address {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  phone     String
+  line1     String
+  line2     String?
+  landmark  String?
+  city      String
+  state     String
+  pincode   String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  orders Order[]
+
+  @@map("addresses")
+}
+
+model Cart {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @updatedAt
+
+  items CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String         @id @default(cuid())
+  cartId    String
+  cart      Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantity  Int            @default(1)
+  createdAt DateTime       @default(now())
+
+  @@unique([cartId, variantId])
+  @@map("cart_items")
+}
+
+model Wishlist {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@map("wishlists")
+}
+
+// ---------------------------------------------------------------------------
+// Orders & payments
+// ---------------------------------------------------------------------------
+
+model Order {
+  id          String      @id @default(cuid())
+  orderNumber String      @unique // human-friendly, e.g. CLW-2026-000123
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+  addressId   String?
+  address     Address?    @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  // Shipping snapshot (kept even if the address is later edited/deleted).
+  shipName    String
+  shipPhone   String
+  shipLine1   String
+  shipLine2   String?
+  shipCity    String
+  shipState   String
+  shipPincode String
+  status      OrderStatus @default(PLACED)
+
+  subtotalPaise Int
+  shippingPaise Int @default(0)
+  discountPaise Int @default(0)
+  totalPaise    Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items   OrderItem[]
+  payment Payment?
+
+  @@index([userId, createdAt])
+  @@map("orders")
+}
+
+// One row per product variant per seller. Item-level status lets each
+// seller ship/deliver their part of a multi-vendor order independently.
+model OrderItem {
+  id        String         @id @default(cuid())
+  orderId   String
+  order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product        @relation(fields: [productId], references: [id])
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+  sellerId  String
+  seller    SellerProfile  @relation(fields: [sellerId], references: [id])
+
+  // Snapshot at purchase time.
+  title      String
+  size       String
+  color      String
+  pricePaise Int
+  quantity   Int
+
+  status      OrderStatus @default(PLACED)
+  shippedAt   DateTime?
+  deliveredAt DateTime?
+
+  // Delivery partner details (filled when the seller ships via ShippingProvider).
+  awbNumber   String?
+  courierName String?
+  trackingUrl String?
+
+  return Return?
+
+  @@index([sellerId, status])
+  @@map("order_items")
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  orderId           String        @unique
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider          String        @default("razorpay")
+  providerOrderId   String? // razorpay_order_id
+  providerPaymentId String? // razorpay_payment_id
+  amountPaise       Int
+  status            PaymentStatus @default(CREATED)
+  failureReason     String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@map("payments")
+}
+
+// ---------------------------------------------------------------------------
+// Reviews & returns
+// ---------------------------------------------------------------------------
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rating    Int // 1..5, validated at the API layer
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, productId])
+  @@map("reviews")
+}
+
+model Return {
+  id          String       @id @default(cuid())
+  orderItemId String       @unique
+  orderItem   OrderItem    @relation(fields: [orderItemId], references: [id])
+  userId      String
+  user        User         @relation(fields: [userId], references: [id])
+  reason      String
+  status      ReturnStatus @default(REQUESTED)
+  resolvedAt  DateTime?
+  createdAt   DateTime     @default(now())
+
+  @@map("returns")
+}
+
+// ---------------------------------------------------------------------------
+// Referrals, AI try-on, notifications
+// ---------------------------------------------------------------------------
+
+model Referral {
+  id                String         @id @default(cuid())
+  referrerId        String
+  referrer          User           @relation("Referrer", fields: [referrerId], references: [id])
+  referredUserId    String         @unique
+  referredUser      User           @relation("Referred", fields: [referredUserId], references: [id])
+  rewardAmountPaise Int            @default(0)
+  status            ReferralStatus @default(PENDING)
+  creditedAt        DateTime?
+  createdAt         DateTime       @default(now())
+
+  @@map("referrals")
+}
+
+model TryOnHistory {
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product     @relation(fields: [productId], references: [id])
+  inputImageUrl  String
+  resultImageUrl String?
+  provider       String      @default("mock")
+  status         TryOnStatus @default(PENDING)
+  costPaise      Int         @default(0) // per-try-on cost log for accounting
+  errorMessage   String?
+  createdAt      DateTime    @default(now())
+
+  @@index([userId, createdAt])
+  @@map("tryon_history")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // e.g. ORDER_PLACED, SELLER_APPROVED, ...
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
