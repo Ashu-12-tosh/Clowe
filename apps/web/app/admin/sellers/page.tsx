@@ -54,7 +54,7 @@ function SellersInner() {
             key={t}
             onClick={() => setTab(t)}
             className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold ${
-              tab === t ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              tab === t ? 'bg-ink-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
             {t}
@@ -71,7 +71,7 @@ function SellersInner() {
 
       <div className="mt-4 space-y-3">
         {rows?.map((s) => (
-          <div key={s.id} className="rounded-xl border border-gray-200 bg-white p-4">
+          <div key={s.id} className="rounded-2xl border border-gray-100 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="text-sm font-semibold">{s.shopName}</p>

@@ -167,10 +167,13 @@ export default function CartPage() {
             </dl>
             <Link
               href="/checkout"
-              className="mt-4 block rounded-lg bg-brand-600 py-2.5 text-center text-sm font-semibold text-white hover:bg-brand-700"
+              className="mt-4 block rounded-lg bg-ink-900 py-3 text-center text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800"
             >
-              Proceed to Checkout →
+              Proceed to Checkout
             </Link>
+            <p className="mt-2 flex items-center justify-center gap-1 text-xs text-gray-400">
+              🔒 Secure checkout
+            </p>
           </aside>
         </div>
       )}

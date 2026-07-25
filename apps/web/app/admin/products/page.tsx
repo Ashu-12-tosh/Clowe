@@ -32,7 +32,7 @@ function ProductReviewPanel({ productId }: { productId: string }) {
           <img
             src={detail.imageUrls[bigImage]}
             alt={detail.title}
-            className="aspect-[3/4] w-full rounded-xl border border-gray-200 object-cover"
+            className="aspect-[3/4] w-full rounded-xl border border-gray-100 bg-cream-100 object-cover"
           />
         )}
         {detail.imageUrls.length > 1 && (
@@ -186,7 +186,7 @@ export default function AdminProductsPage() {
             key={t}
             onClick={() => setTab(t)}
             className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-              tab === t ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              tab === t ? 'bg-ink-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
             {t}
@@ -203,7 +203,7 @@ export default function AdminProductsPage() {
 
       <div className="mt-4 space-y-3">
         {rows?.map((p) => (
-          <div key={p.id} className="rounded-xl border border-gray-200 bg-white p-3">
+          <div key={p.id} className="rounded-2xl border border-gray-100 bg-white p-3">
             <div className="flex items-center gap-4">
               {p.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element

@@ -11,7 +11,7 @@ function Stars({ value, onChange }: { value: number; onChange?: (v: number) => v
         <span
           key={n}
           onClick={onChange ? () => onChange(n) : undefined}
-          className={`text-lg ${n <= value ? 'text-amber-500' : 'text-gray-300'}`}
+          className={`text-lg ${n <= value ? 'text-brand-400' : 'text-gray-300'}`}
         >
           ★
         </span>
@@ -60,6 +60,13 @@ export default function ReviewsSection({ productId }: { productId: string }) {
 
   const mine = reviews?.find((r) => r.isMine);
 
+  // Star breakdown (5→1) computed from the loaded reviews — visual only.
+  const breakdown = [5, 4, 3, 2, 1].map((star) => ({
+    star,
+    count: reviews?.filter((r) => r.rating === star).length ?? 0,
+  }));
+  const totalReviews = reviews?.length ?? 0;
+
   return (
     <section className="mt-10 border-t border-gray-200 pt-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -87,10 +94,35 @@ export default function ReviewsSection({ productId }: { productId: string }) {
         )}
       </div>
 
+      {/* Rating breakdown (reference-style: big average + per-star bars) */}
+      {summary && summary.ratingCount > 0 && summary.ratingAvg != null && totalReviews > 0 && (
+        <div className="mt-4 flex items-center gap-6 rounded-2xl border border-gray-100 bg-white p-4">
+          <div className="text-center">
+            <p className="text-4xl font-bold text-ink-900">{summary.ratingAvg.toFixed(1)}</p>
+            <Stars value={Math.round(summary.ratingAvg)} />
+            <p className="mt-0.5 text-xs text-gray-500">{summary.ratingCount} reviews</p>
+          </div>
+          <div className="flex-1 space-y-1.5">
+            {breakdown.map(({ star, count }) => (
+              <div key={star} className="flex items-center gap-2 text-xs text-gray-500">
+                <span className="w-6">{star} ★</span>
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className="h-full rounded-full bg-brand-500"
+                    style={{ width: `${totalReviews ? (count / totalReviews) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="w-5 text-right">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* AI summary */}
       {summary?.summary && (
-        <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-purple-600">
+        <div className="mt-4 rounded-xl border border-brand-100 bg-brand-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-brand-600">
             ✨ AI summary of reviews
             {summary.provider === 'mock' && (
               <span className="ml-2 rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] text-yellow-700">

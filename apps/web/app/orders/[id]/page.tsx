@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import type { OrderDetailView } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
+import OrderStepper from '@/components/OrderStepper';
 
 const statusStyles: Record<string, string> = {
   PLACED: 'bg-blue-100 text-blue-700',
@@ -132,6 +133,9 @@ function OrderDetailInner({ orderId }: { orderId: string }) {
                 </p>
               )}
               <p className="mt-1 text-sm font-bold">{formatPaise(item.pricePaise * item.quantity)}</p>
+              {item.status !== 'CANCELLED' &&
+                item.status !== 'RETURN_REQUESTED' &&
+                item.status !== 'RETURNED' && <OrderStepper status={item.status} />}
               <div className="mt-1.5 flex items-center gap-3">
                 <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusStyles[item.status] ?? ''}`}>
                   {item.status.replace('_', ' ')}

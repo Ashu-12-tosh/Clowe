@@ -17,9 +17,9 @@ export default function ProductCard({ product, inWishlist, onRemovedFromWishlist
   return (
     <Link
       href={`/products/${product.slug}`}
-      className="group relative overflow-hidden rounded-xl border border-gray-200 bg-white transition hover:shadow-md"
+      className="group relative overflow-hidden rounded-2xl border border-gray-100 bg-white transition hover:-translate-y-0.5 hover:shadow-lg"
     >
-      <div className="relative aspect-[3/4] overflow-hidden bg-gray-100">
+      <div className="relative aspect-[3/4] overflow-hidden bg-cream-100">
         {product.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -38,26 +38,28 @@ export default function ProductCard({ product, inWishlist, onRemovedFromWishlist
         />
       </div>
       <div className="p-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+        <p className="truncate text-sm font-semibold text-ink-900">{product.title}</p>
+        <p className="mt-0.5 text-xs uppercase tracking-wide text-gray-400">
           {product.brand ?? product.categoryName}
         </p>
-        <p className="mt-0.5 truncate text-sm font-medium text-gray-900">{product.title}</p>
-        <div className="mt-1.5 flex items-baseline gap-2 text-sm">
-          <span className="font-bold">{formatPaise(product.pricePaise)}</span>
-          {product.mrpPaise && off && (
-            <>
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-sm font-bold text-brand-600">
+              {formatPaise(product.pricePaise)}
+            </span>
+            {product.mrpPaise && off && (
               <span className="text-xs text-gray-400 line-through">
                 {formatPaise(product.mrpPaise)}
               </span>
-              <span className="text-xs font-semibold text-green-600">{off}% off</span>
-            </>
+            )}
+          </div>
+          {product.ratingCount > 0 && product.ratingAvg != null && (
+            <span className="text-xs text-gray-500">
+              <span className="text-brand-400">★</span> {product.ratingAvg.toFixed(1)} (
+              {product.ratingCount})
+            </span>
           )}
         </div>
-        {product.ratingCount > 0 && product.ratingAvg != null && (
-          <p className="mt-1 text-xs text-gray-500">
-            ★ {product.ratingAvg.toFixed(1)} ({product.ratingCount})
-          </p>
-        )}
       </div>
     </Link>
   );

@@ -15,6 +15,7 @@ import {
   uploadImages,
 } from '@/lib/api';
 import TryOnPhotoCard from '@/components/TryOnPhotoCard';
+import AccountStats from '@/components/AccountStats';
 
 type Step = 'phone' | 'otp' | 'profile' | 'photo' | 'done';
 
@@ -356,6 +357,11 @@ export default function LoginPage() {
         {/* ---------------- Account view (already logged in) ---------------- */}
         {step === 'done' && user && (
           <div className="mt-6 space-y-4">
+            <p className="text-sm text-gray-500">
+              Hello, <span className="font-semibold text-ink-900">{user.name ?? 'there'}</span> 👋
+              Welcome back!
+            </p>
+            <AccountStats />
             <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm">
               <dl className="space-y-2">
                 <div className="flex justify-between">

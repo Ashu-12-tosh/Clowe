@@ -26,8 +26,8 @@ function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-/** Global site header: logo, search, nav, login/account. */
-export default function Header() {
+/** Slim top bar: hamburger (mobile), search with AI voice, action icons. */
+export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const router = useRouter();
   const [q, setQ] = useState('');
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -89,26 +89,40 @@ export default function Header() {
   }, []);
 
   return (
-    <header className="sticky top-0 z-20 border-b border-gray-200 bg-white/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-        <Link href="/" className="text-xl font-bold tracking-tight text-brand-900">
-          Clowe
+    <header className="sticky top-0 z-20 border-b border-gray-100 bg-white/95 backdrop-blur">
+      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
+        {/* Mobile: hamburger + logo */}
+        <button
+          onClick={onMenuClick}
+          aria-label="Open menu"
+          className="rounded-lg p-1.5 text-xl text-ink-900 hover:bg-cream-100 lg:hidden"
+        >
+          ☰
+        </button>
+        <Link href="/" className="lg:hidden">
+          <span className="font-display text-lg font-bold uppercase tracking-[0.2em] text-brand-600">
+            Clowe
+          </span>
         </Link>
 
+        {/* Search */}
         <form
-          className="hidden flex-1 sm:block"
+          className="min-w-0 flex-1"
           onSubmit={(e) => {
             e.preventDefault();
             router.push(q.trim() ? `/products?q=${encodeURIComponent(q.trim())}` : '/products');
           }}
         >
-          <div className="relative w-full max-w-md">
+          <div className="relative mx-auto w-full max-w-xl">
+            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+              ⌕
+            </span>
             <input
               type="search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={listening ? '🎙 Listening… speak now' : 'Search for t-shirts, dresses, jeans…'}
-              className="w-full rounded-full border border-gray-300 bg-gray-50 py-1.5 pl-4 pr-10 text-sm outline-none focus:border-brand-600"
+              placeholder={listening ? '🎙 Listening… speak now' : 'Search for products, brands and more…'}
+              className="w-full rounded-full border border-gray-200 bg-cream-50 py-2 pl-9 pr-10 text-sm outline-none transition focus:border-brand-600 focus:bg-white"
             />
             {speechSupported && (
               <button
@@ -127,50 +141,39 @@ export default function Header() {
           </div>
         </form>
 
-        <nav className="ml-auto flex items-center gap-4 text-sm font-medium text-gray-700">
-          <Link href="/products" className="hover:text-brand-600">
-            Shop
-          </Link>
-          <Link href="/seller" className="hover:text-brand-600">
-            Sell
-          </Link>
-          {user?.role === 'ADMIN' && (
-            <Link href="/admin" className="font-semibold text-brand-600 hover:text-brand-700">
-              Admin
-            </Link>
-          )}
-          <Link href="/wishlist" className="hover:text-brand-600">
-            ♡ Wishlist
-          </Link>
-          <Link href="/cart" className="hover:text-brand-600">
-            🛒 Cart
-          </Link>
+        {/* Action icons */}
+        <nav className="flex items-center gap-1 text-lg text-ink-900 sm:gap-2">
           {user && (
-            <Link href="/orders" className="hover:text-brand-600">
-              Orders
-            </Link>
-          )}
-          {user && (
-            <Link href="/notifications" className="relative hover:text-brand-600" aria-label="Notifications">
+            <Link
+              href="/notifications"
+              className="relative rounded-full p-2 hover:bg-cream-100"
+              aria-label="Notifications"
+            >
               🔔
               {unread > 0 && (
-                <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[10px] font-bold text-white">
                   {unread > 9 ? '9+' : unread}
                 </span>
               )}
             </Link>
           )}
+          <Link href="/wishlist" className="hidden rounded-full p-2 hover:bg-cream-100 sm:block" aria-label="Wishlist">
+            ♡
+          </Link>
+          <Link href="/cart" className="rounded-full p-2 hover:bg-cream-100" aria-label="Cart">
+            🛍
+          </Link>
           {user ? (
             <Link
               href="/login"
-              className="rounded-full bg-brand-100 px-3 py-1 text-brand-600 hover:bg-brand-100/70"
+              className="ml-1 rounded-full bg-ink-900 px-4 py-1.5 text-sm font-semibold text-white hover:bg-ink-800"
             >
               {user.name?.split(' ')[0] ?? 'Account'}
             </Link>
           ) : (
             <Link
               href="/login"
-              className="rounded-full bg-brand-600 px-4 py-1.5 text-white hover:bg-brand-700"
+              className="ml-1 rounded-full bg-brand-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-brand-700"
             >
               Login
             </Link>

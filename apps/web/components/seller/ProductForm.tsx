@@ -190,7 +190,7 @@ export default function ProductForm({ initial }: Props) {
               disabled={aiBusy || title.trim().length < 3}
               onClick={() => void generateDescription()}
               title={title.trim().length < 3 ? 'Enter a title first' : 'Let AI write the description'}
-              className="rounded-full bg-gradient-to-r from-purple-600 to-brand-600 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
+              className="rounded-full bg-gradient-to-r from-brand-600 to-brand-500 px-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
             >
               {aiBusy ? 'Writing…' : '✨ Generate with AI'}
             </button>
@@ -218,7 +218,7 @@ export default function ProductForm({ initial }: Props) {
             </div>
           ))}
           {imageUrls.length < 6 && (
-            <label className="flex h-24 w-20 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 text-gray-400 hover:border-brand-600 hover:text-brand-600">
+            <label className="flex h-24 w-20 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-cream-50 text-gray-400 hover:border-brand-600 hover:text-brand-600">
               <span className="text-xl">+</span>
               <span className="text-[10px]">{uploading ? 'Uploading…' : 'Add'}</span>
               <input
@@ -289,7 +289,7 @@ export default function ProductForm({ initial }: Props) {
         <button
           type="submit"
           disabled={busy || uploading}
-          className="rounded-lg bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+          className="rounded-lg bg-ink-900 px-7 py-2.5 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
         >
           {busy ? 'Saving…' : initial ? 'Save changes (goes to re-approval)' : 'Submit for approval'}
         </button>

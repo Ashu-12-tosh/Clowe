@@ -308,12 +308,12 @@ export default function CheckoutPage() {
             <button
               onClick={() => void placeOrder()}
               disabled={placing || !selectedAddress}
-              className="mt-4 w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+              className="mt-4 w-full rounded-lg bg-ink-900 py-3 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
             >
-              {placing ? 'Placing order…' : 'Place order & pay'}
+              {placing ? 'Placing order…' : 'Place Order'}
             </button>
             <p className="mt-2 text-center text-xs text-gray-400">
-              Secured by Razorpay (mock gateway in dev)
+              🔒 100% Secure Payments · Razorpay (mock in dev)
             </p>
           </aside>
         </div>

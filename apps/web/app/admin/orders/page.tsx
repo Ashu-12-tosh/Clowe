@@ -36,7 +36,7 @@ export default function AdminOrdersPage() {
       )}
 
       {rows && rows.length > 0 && (
-        <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <div className="mt-4 overflow-x-auto rounded-2xl border border-gray-100 bg-white">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500">

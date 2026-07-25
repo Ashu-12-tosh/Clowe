@@ -57,14 +57,14 @@ export default function SellerDashboardPage() {
 
       <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {cards.map((card) => (
-          <div key={card.label} className="rounded-xl border border-gray-200 bg-white p-4">
+          <div key={card.label} className="rounded-2xl border border-gray-100 bg-white p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{card.label}</p>
-            <p className="mt-1 text-2xl font-bold">{card.value}</p>
+            <p className="mt-1 text-2xl font-bold text-brand-600">{card.value}</p>
           </div>
         ))}
         {!stats &&
           Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-20 animate-pulse rounded-xl bg-gray-200" />
+            <div key={i} className="h-20 animate-pulse rounded-2xl bg-gray-200" />
           ))}
       </div>
 
@@ -78,15 +78,15 @@ export default function SellerDashboardPage() {
       <div className="mt-8 flex gap-3">
         <Link
           href="/seller/products/new"
-          className="rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-700"
+          className="rounded-lg bg-ink-900 px-6 py-2.5 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800"
         >
-          + Add product
+          + Add Product
         </Link>
         <Link
           href="/seller/orders"
-          className="rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+          className="rounded-lg border-2 border-brand-600 px-6 py-2.5 text-sm font-bold uppercase tracking-wide text-brand-600 hover:bg-brand-50"
         >
-          View orders
+          View Orders
         </Link>
       </div>
     </div>

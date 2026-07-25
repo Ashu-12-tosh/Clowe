@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
+import { Inter, Playfair_Display } from 'next/font/google';
+import AppShell from '@/components/AppShell';
 import SupportChat from '@/components/SupportChat';
 import './globals.css';
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
+const playfair = Playfair_Display({ subsets: ['latin'], variable: '--font-display' });
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
@@ -24,11 +27,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-gray-50 text-gray-900 antialiased">
-        <Header />
-        {children}
-        <Footer />
+    <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
+      <body className="min-h-screen bg-cream-50 font-sans text-ink-900 antialiased">
+        <AppShell>{children}</AppShell>
         <SupportChat />
       </body>
     </html>

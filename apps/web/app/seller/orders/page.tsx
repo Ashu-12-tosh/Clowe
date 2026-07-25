@@ -62,7 +62,7 @@ export default function SellerOrdersPage() {
       {items && items.length > 0 && (
         <div className="mt-4 space-y-3">
           {items.map((item) => (
-            <div key={item.id} className="rounded-xl border border-gray-200 bg-white p-4">
+            <div key={item.id} className="rounded-2xl border border-gray-100 bg-white p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold">
                   {item.orderNumber}
@@ -95,7 +95,7 @@ export default function SellerOrdersPage() {
                 {(item.status === 'PLACED' || item.status === 'CONFIRMED') && (
                   <button
                     onClick={() => void updateStatus(item.id, 'ship')}
-                    className="rounded-lg bg-brand-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-brand-700"
+                    className="rounded-lg bg-ink-900 px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800"
                   >
                     Mark shipped
                   </button>
@@ -103,7 +103,7 @@ export default function SellerOrdersPage() {
                 {item.status === 'SHIPPED' && (
                   <button
                     onClick={() => void updateStatus(item.id, 'deliver')}
-                    className="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                    className="rounded-lg bg-brand-600 px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-700"
                   >
                     Mark delivered
                   </button>

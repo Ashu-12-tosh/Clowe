@@ -56,7 +56,7 @@ export default function ReferralsPage() {
       {data && (
         <>
           {/* Code card */}
-          <div className="mt-5 rounded-2xl bg-gradient-to-r from-purple-600 to-brand-600 p-6 text-center text-white">
+          <div className="mt-5 rounded-2xl bg-gradient-to-r from-brand-600 to-brand-500 p-6 text-center text-white">
             <p className="text-xs font-semibold uppercase tracking-widest opacity-80">
               Your referral code
             </p>

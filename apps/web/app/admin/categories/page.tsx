@@ -108,13 +108,13 @@ export default function AdminCategoriesPage() {
         </select>
         <button
           disabled={busy || name.trim().length < 2}
-          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
+          className="rounded-lg bg-ink-900 px-5 py-2 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
         >
           Add
         </button>
       </form>
 
-      <div className="mt-5 rounded-xl border border-gray-200 bg-white p-4">
+      <div className="mt-5 rounded-2xl border border-gray-100 bg-white p-4">
         {rows === null && <p className="text-sm text-gray-500">Loading…</p>}
         {roots.map((root) => (
           <div key={root.id}>

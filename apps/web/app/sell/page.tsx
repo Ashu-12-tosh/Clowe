@@ -84,7 +84,7 @@ export default function SellLandingPage() {
       </div>
 
       {/* Hero */}
-      <section className="bg-gradient-to-r from-purple-600 to-brand-600 text-white">
+      <section className="bg-gradient-to-r from-brand-600 to-brand-500 text-white">
         <div className="mx-auto max-w-6xl px-4 py-16 text-center">
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
             Grow your clothing business on Clowe

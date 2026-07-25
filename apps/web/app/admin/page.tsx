@@ -112,9 +112,9 @@ export default function AdminDashboardPage() {
 
       <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-3">
         {cards.map((card) => (
-          <div key={card.label} className="rounded-xl border border-gray-200 bg-white p-4">
+          <div key={card.label} className="rounded-2xl border border-gray-100 bg-white p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{card.label}</p>
-            <p className="mt-1 text-2xl font-bold">{card.value}</p>
+            <p className="mt-1 text-2xl font-bold text-brand-600">{card.value}</p>
           </div>
         ))}
         {!stats &&
@@ -125,7 +125,7 @@ export default function AdminDashboardPage() {
 
       {stats && (
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="rounded-2xl border border-gray-100 bg-white p-4">
             <h2 className="text-sm font-bold">Top 10 products (by units sold)</h2>
             <p className="mt-0.5 text-xs text-gray-400">Click a product to see its image & seller</p>
             {stats.topProducts.length === 0 ? (
@@ -161,7 +161,7 @@ export default function AdminDashboardPage() {
             )}
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="rounded-2xl border border-gray-100 bg-white p-4">
             <h2 className="text-sm font-bold">Seller breakdown</h2>
             <table className="mt-3 w-full text-sm">
               <thead>

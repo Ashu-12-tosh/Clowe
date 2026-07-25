@@ -178,18 +178,27 @@ export default function TryOnModal({ productId, productTitle, onClose }: Props) 
               · {result.remainingToday} left today
             </p>
             <div className="mt-3 flex gap-2">
+              <a
+                href={result.resultImageUrl}
+                download="clowe-tryon"
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 rounded-lg border border-gray-300 py-2 text-center text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                ⬇ Download
+              </a>
               <button
                 onClick={() => {
                   setPhase('pick');
                   setResult(null);
                 }}
-                className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                className="flex-1 rounded-lg border-2 border-brand-600 py-2 text-sm font-semibold text-brand-600 hover:bg-brand-50"
               >
-                Try another photo
+                Try Another
               </button>
               <button
                 onClick={onClose}
-                className="flex-1 rounded-lg bg-brand-600 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+                className="flex-1 rounded-lg bg-ink-900 py-2 text-sm font-semibold text-white hover:bg-ink-800"
               >
                 Done
               </button>

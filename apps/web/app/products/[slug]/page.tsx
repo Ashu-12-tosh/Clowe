@@ -8,6 +8,7 @@ import { fetchWishlistIds } from '@/lib/wishlist';
 import { discountPercent, formatPaise } from '@/lib/format';
 import WishlistButton from '@/components/WishlistButton';
 import AddToCartButton from '@/components/AddToCartButton';
+import { colorToHex } from '@/lib/colors';
 import TryOnModal from '@/components/TryOnModal';
 import ReviewsSection from '@/components/ReviewsSection';
 import RelatedProducts from '@/components/RelatedProducts';
@@ -148,19 +149,24 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
 
           {product.ratingCount > 0 && product.ratingAvg != null && (
             <p className="mt-2 text-sm text-gray-600">
-              ★ {product.ratingAvg.toFixed(1)} · {product.ratingCount} reviews
+              <span className="text-brand-400">★</span> {product.ratingAvg.toFixed(1)} ·{' '}
+              {product.ratingCount} reviews
             </p>
           )}
 
           {selected && (
             <div className="mt-4 flex items-baseline gap-3">
-              <span className="text-3xl font-bold">{formatPaise(selected.pricePaise)}</span>
+              <span className="text-3xl font-bold text-brand-600">
+                {formatPaise(selected.pricePaise)}
+              </span>
               {selected.mrpPaise && off && (
                 <>
                   <span className="text-gray-400 line-through">
                     {formatPaise(selected.mrpPaise)}
                   </span>
-                  <span className="font-semibold text-green-600">{off}% off</span>
+                  <span className="rounded bg-brand-100 px-1.5 py-0.5 text-xs font-bold text-brand-700">
+                    {off}% OFF
+                  </span>
                 </>
               )}
             </div>
@@ -170,23 +176,27 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
             <h3 className="text-sm font-semibold">
               Colour: <span className="font-normal text-gray-600">{color}</span>
             </h3>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {colorOptions.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => {
-                    setColor(c);
-                    setSize(null);
-                  }}
-                  className={`rounded-lg border px-3 py-1.5 text-sm ${
-                    c === color
-                      ? 'border-brand-600 bg-brand-100 font-semibold text-brand-600'
-                      : 'border-gray-300 text-gray-700 hover:border-brand-600'
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
+            <div className="mt-2 flex flex-wrap gap-2.5">
+              {colorOptions.map((c) => {
+                const hex = colorToHex(c);
+                const active = c === color;
+                return (
+                  <button
+                    key={c}
+                    onClick={() => {
+                      setColor(c);
+                      setSize(null);
+                    }}
+                    title={c}
+                    className={`flex h-9 w-9 items-center justify-center rounded-full border-2 transition ${
+                      active ? 'border-brand-600 ring-2 ring-brand-100' : 'border-gray-200 hover:border-gray-400'
+                    }`}
+                    style={hex ? { backgroundColor: hex } : undefined}
+                  >
+                    {!hex && <span className="text-[10px] font-bold text-gray-600">{c.slice(0, 2)}</span>}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -219,13 +229,16 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
 
           <button
             onClick={() => setTryOnOpen(true)}
-            className="mt-7 w-full rounded-lg bg-gradient-to-r from-purple-600 to-brand-600 py-2.5 text-sm font-semibold text-white shadow hover:opacity-90"
+            className="mt-7 w-full rounded-lg bg-gradient-to-r from-brand-600 to-brand-500 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:opacity-90"
           >
             ✨ Try On Me — see it on yourself
           </button>
 
           <div className="mt-3 flex gap-3">
             <AddToCartButton variantId={selected?.id ?? null} stock={selected?.stock ?? 0} />
+            <AddToCartButton variantId={selected?.id ?? null} stock={selected?.stock ?? 0} mode="buy" />
+          </div>
+          <div className="mt-3">
             <WishlistButton productId={product.id} initialInWishlist={inWishlist} variant="button" />
           </div>
 
