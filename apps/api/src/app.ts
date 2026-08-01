@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import type { HealthResponse } from '@clowe/shared';
 import { corsOrigins } from './env';
 import { prisma } from './db';
@@ -20,7 +21,14 @@ import { aiRouter } from './routes/ai';
 import { notificationsRouter } from './routes/notifications';
 import { referralsRouter } from './routes/referrals';
 import { trackRouter } from './routes/track';
+import { complaintsRouter } from './routes/complaints';
+import { settingsRouter } from './routes/settings';
+import { adsRouter } from './routes/ads';
+import { creditsRouter } from './routes/credits';
 import { uploadsRouter, uploadDir } from './routes/uploads';
+import { homeRouter } from './routes/home';
+import { meRouter } from './routes/me';
+import { adminContentRouter } from './routes/adminContent';
 import { errorHandler } from './middleware/error';
 import { globalLimiter } from './middleware/rateLimits';
 
@@ -36,6 +44,7 @@ export function createApp() {
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use('/api', globalLimiter);
   app.use(cors({ origin: corsOrigins, credentials: true }));
+  app.use(cookieParser());
   // Keep the raw body around for webhook signature verification (Razorpay).
   app.use(
     express.json({
@@ -70,11 +79,14 @@ export function createApp() {
   });
 
   app.use('/api/auth', authRouter);
+  app.use('/api/home', homeRouter);
+  app.use('/api/me', meRouter);
   app.use('/api/categories', categoriesRouter);
   app.use('/api/products', productsRouter);
   app.use('/api/wishlist', wishlistRouter);
   app.use('/api/seller', sellerRouter);
   app.use('/api/admin', adminRouter);
+  app.use('/api/admin', adminContentRouter);
   app.use('/api/cart', cartRouter);
   app.use('/api/addresses', addressesRouter);
   app.use('/api/orders', ordersRouter);
@@ -85,6 +97,10 @@ export function createApp() {
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/referrals', referralsRouter);
   app.use('/api/track', trackRouter);
+  app.use('/api/complaints', complaintsRouter);
+  app.use('/api/settings', settingsRouter);
+  app.use('/api/ads', adsRouter);
+  app.use('/api/credits', creditsRouter);
   app.use('/api/uploads', uploadsRouter);
 
   // 404 for unknown API routes.

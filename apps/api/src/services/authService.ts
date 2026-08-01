@@ -14,8 +14,14 @@ import { signAccessToken } from '../utils/jwt';
 import { otpProvider } from './otp';
 
 const OTP_RESEND_COOLDOWN_SEC = 45;
+const PIN_MAX_ATTEMPTS = 5;
 
-function toAuthUser(user: User): AuthUser {
+/** PIN is peppered + scoped to the user before hashing (never stored raw). */
+function pinPlain(userId: string, pin: string): string {
+  return `${userId}:${pin}:${env.JWT_ACCESS_SECRET}`;
+}
+
+export function toAuthUser(user: User): AuthUser {
   return {
     id: user.id,
     phone: user.phone,
@@ -24,7 +30,39 @@ function toAuthUser(user: User): AuthUser {
     role: user.role,
     referralCode: user.referralCode,
     createdAt: user.createdAt.toISOString(),
+    dateOfBirth: user.dateOfBirth ? user.dateOfBirth.toISOString().slice(0, 10) : null,
+    gender: (user.gender as AuthUser['gender']) ?? null,
+    avatarUrl: user.avatarUrl,
+    hasPin: !!user.pinHash,
+    prefs: {
+      email: user.notifyEmail,
+      sms: user.notifySms,
+      whatsapp: user.notifyWhatsapp,
+      recommendations: user.personalizedRecs,
+    },
   };
+}
+
+/**
+ * Validate + consume the latest OTP for a phone (attempt-limited).
+ * Used by login AND the phone-change flow.
+ */
+export async function consumeOtp(phone: string, code: string): Promise<void> {
+  const otp = await prisma.otpCode.findFirst({
+    where: { phone, consumedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!otp) {
+    throw ApiError.badRequest('OTP expired or not requested. Please request a new one.', 'OTP_INVALID');
+  }
+  if (otp.attempts >= env.OTP_MAX_ATTEMPTS) {
+    throw ApiError.tooMany('Too many wrong attempts. Please request a new OTP.', 'OTP_LOCKED');
+  }
+  if (!hashMatches(code, otp.codeHash)) {
+    await prisma.otpCode.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
+    throw ApiError.badRequest('Incorrect OTP', 'OTP_INCORRECT');
+  }
+  await prisma.otpCode.update({ where: { id: otp.id }, data: { consumedAt: new Date() } });
 }
 
 async function issueTokens(user: User): Promise<{ accessToken: string; refreshToken: string }> {
@@ -104,21 +142,7 @@ export const authService = {
     name?: string;
     referralCode?: string;
   }): Promise<AuthTokensResponse> {
-    const otp = await prisma.otpCode.findFirst({
-      where: { phone: input.phone, consumedAt: null, expiresAt: { gt: new Date() } },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!otp) {
-      throw ApiError.badRequest('OTP expired or not requested. Please request a new one.', 'OTP_INVALID');
-    }
-    if (otp.attempts >= env.OTP_MAX_ATTEMPTS) {
-      throw ApiError.tooMany('Too many wrong attempts. Please request a new OTP.', 'OTP_LOCKED');
-    }
-    if (!hashMatches(input.code, otp.codeHash)) {
-      await prisma.otpCode.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
-      throw ApiError.badRequest('Incorrect OTP', 'OTP_INCORRECT');
-    }
-    await prisma.otpCode.update({ where: { id: otp.id }, data: { consumedAt: new Date() } });
+    await consumeOtp(input.phone, input.code);
 
     let user = await prisma.user.findUnique({ where: { phone: input.phone } });
     let isNewUser = false;
@@ -142,8 +166,49 @@ export const authService = {
       throw ApiError.forbidden('This account has been deactivated', 'ACCOUNT_DISABLED');
     }
 
+    // A successful OTP login clears any PIN lockout.
+    if (user.pinAttempts > 0) {
+      await prisma.user.update({ where: { id: user.id }, data: { pinAttempts: 0 } });
+    }
+
     const tokens = await issueTokens(user);
     return { user: toAuthUser(user), ...tokens, isNewUser };
+  },
+
+  /** Quick login with the 4-digit PIN (5 attempts, then OTP-only). */
+  async pinLogin(phone: string, pin: string): Promise<AuthTokensResponse> {
+    const user = await prisma.user.findUnique({ where: { phone } });
+    if (!user || !user.pinHash) {
+      throw ApiError.badRequest('PIN login is not set up for this number', 'PIN_NOT_SET');
+    }
+    if (!user.isActive) {
+      throw ApiError.forbidden('This account has been deactivated', 'ACCOUNT_DISABLED');
+    }
+    if (user.pinAttempts >= PIN_MAX_ATTEMPTS) {
+      throw ApiError.tooMany('Too many attempts — please login with OTP', 'PIN_LOCKED');
+    }
+    if (!hashMatches(pinPlain(user.id, pin), user.pinHash)) {
+      const attempts = user.pinAttempts + 1;
+      await prisma.user.update({ where: { id: user.id }, data: { pinAttempts: attempts } });
+      if (attempts >= PIN_MAX_ATTEMPTS) {
+        throw ApiError.tooMany('Too many attempts — please login with OTP', 'PIN_LOCKED');
+      }
+      throw ApiError.badRequest(
+        `Incorrect PIN — ${PIN_MAX_ATTEMPTS - attempts} attempt${PIN_MAX_ATTEMPTS - attempts > 1 ? 's' : ''} left`,
+        'PIN_INCORRECT',
+      );
+    }
+    await prisma.user.update({ where: { id: user.id }, data: { pinAttempts: 0 } });
+    const tokens = await issueTokens(user);
+    return { user: toAuthUser(user), ...tokens };
+  },
+
+  /** Set (or replace) the quick-login PIN for the authenticated user. */
+  async setPin(userId: string, pin: string): Promise<void> {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { pinHash: sha256(pinPlain(userId, pin)), pinAttempts: 0 },
+    });
   },
 
   /** Rotate a refresh token: revoke the old one, issue a fresh pair. */

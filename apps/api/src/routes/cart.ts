@@ -77,6 +77,13 @@ cartRouter.get('/', async (req, res, next) => {
 // Add a variant (or bump its quantity if already in the cart).
 cartRouter.post('/items', async (req, res, next) => {
   try {
+    // Store is view-only for seller/admin accounts.
+    if (req.auth!.role !== 'CUSTOMER') {
+      throw ApiError.forbidden(
+        'Seller/admin accounts can view the store but cannot purchase',
+        'PURCHASE_CUSTOMER_ONLY',
+      );
+    }
     const { variantId, quantity } = cartItemAddSchema.parse(req.body);
     const variant = await prisma.productVariant.findUnique({
       where: { id: variantId },

@@ -81,6 +81,7 @@ export default function AdminDashboardPage() {
         { label: 'Users', value: String(stats.totals.users) },
         { label: 'Sellers', value: String(stats.totals.sellers) },
         { label: 'Live products', value: `${stats.totals.liveProducts}/${stats.totals.products}` },
+        { label: 'Returns', value: String(stats.totals.returns) },
       ]
     : [];
 
@@ -89,7 +90,7 @@ export default function AdminDashboardPage() {
       <h1 className="text-2xl font-bold">Platform Dashboard</h1>
 
       {/* Pending approvals shortcuts */}
-      {stats && (stats.pending.sellers > 0 || stats.pending.products > 0) && (
+      {stats && (stats.pending.sellers > 0 || stats.pending.products > 0 || stats.pending.complaints > 0 || stats.pending.returns > 0) && (
         <div className="mt-4 flex flex-wrap gap-3">
           {stats.pending.sellers > 0 && (
             <Link
@@ -105,6 +106,22 @@ export default function AdminDashboardPage() {
               className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-2 text-sm font-medium text-yellow-800 hover:bg-yellow-100"
             >
               ⏳ {stats.pending.products} product{stats.pending.products > 1 ? 's' : ''} waiting for approval
+            </Link>
+          )}
+          {stats.pending.complaints > 0 && (
+            <Link
+              href="/admin/complaints"
+              className="rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+            >
+              📢 {stats.pending.complaints} open complaint{stats.pending.complaints > 1 ? 's' : ''}
+            </Link>
+          )}
+          {stats.pending.returns > 0 && (
+            <Link
+              href="/admin/returns?status=REQUESTED"
+              className="rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100"
+            >
+              ↩ {stats.pending.returns} return{stats.pending.returns > 1 ? 's' : ''} awaiting seller action
             </Link>
           )}
         </div>

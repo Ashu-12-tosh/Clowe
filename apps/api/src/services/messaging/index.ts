@@ -20,3 +20,33 @@ export function sendMessageSafe(message: OutboundMessage): void {
     console.error('[clowe-api] messaging send failed:', err);
   });
 }
+
+/**
+ * Preference-aware send. Non-critical messages respect the user's channel
+ * preferences; critical ones (OTP, order/payment/shipping updates) always go.
+ */
+export function sendToUserSafe(
+  userId: string,
+  message: OutboundMessage,
+  options: { critical?: boolean } = {},
+): void {
+  if (options.critical) {
+    sendMessageSafe(message);
+    return;
+  }
+  void (async () => {
+    const { prisma } = await import('../../db');
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { notifyEmail: true, notifySms: true, notifyWhatsapp: true },
+    });
+    const allowed =
+      message.channel === 'email'
+        ? user?.notifyEmail
+        : message.channel === 'sms'
+          ? user?.notifySms
+          : user?.notifyWhatsapp;
+    if (allowed) sendMessageSafe(message);
+    else console.log(`[clowe-api] skipped ${message.channel} to ${message.to} (user preference)`);
+  })().catch((err) => console.error('[clowe-api] preference check failed:', err));
+}

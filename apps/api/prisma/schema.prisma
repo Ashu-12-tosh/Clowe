@@ -61,6 +61,20 @@ enum ReturnStatus {
   REFUNDED
 }
 
+enum ReturnReason {
+  SIZE_FIT
+  DAMAGED
+  WRONG_ITEM
+  QUALITY
+  OTHER
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
 enum ReferralStatus {
   PENDING // referred user signed up, reward not yet unlocked
   CREDITED // reward granted (e.g. after first delivered order)
@@ -72,18 +86,39 @@ enum TryOnStatus {
   FAILED
 }
 
+enum ComplaintStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
 // ---------------------------------------------------------------------------
 // Users & auth
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String   @id @default(cuid())
-  phone        String   @unique // E.164-ish, 10-digit Indian mobile stored without +91
+  id           String    @id @default(cuid())
+  phone        String    @unique // E.164-ish, 10-digit Indian mobile stored without +91
   name         String?
-  email        String?  @unique
-  role         Role     @default(CUSTOMER)
-  isActive     Boolean  @default(true)
+  email        String?   @unique
+  role         Role      @default(CUSTOMER)
+  isActive     Boolean   @default(true)
+  // Profile
+  dateOfBirth  DateTime?
+  gender       String? // MALE | FEMALE | OTHER | PREFER_NOT_TO_SAY
+  avatarUrl    String?
+  // Quick-login PIN (4 digits, hashed; OTP always works as fallback)
+  pinHash     String?
+  pinAttempts Int     @default(0)
+  // Notification preferences (OTP + order-critical messages always sent)
+  notifyEmail    Boolean @default(true)
+  notifySms      Boolean @default(true)
+  notifyWhatsapp Boolean @default(true)
+  personalizedRecs Boolean @default(true)
   referralCode String   @unique // shareable code for the referral program
+  // Shopping credits: earned on paid orders (1 per ₹20), 1 credit = 50 paise.
+  creditsBalance Int @default(0)
   // Saved photo for AI try-on — uploaded once, reused on every "Try On Me".
   tryOnPhotoUrl String?
   referredById String?
@@ -104,8 +139,25 @@ model User {
   referralReceived Referral?      @relation("Referred")
   tryOnHistory     TryOnHistory[]
   notifications    Notification[]
+  complaints       Complaint[]
+  creditLedger     CreditLedger[]
 
   @@map("users")
+}
+
+// Audit trail for shopping credits (positive = earned, negative = spent).
+model CreditLedger {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  delta     Int // credits, signed
+  reason    String // EARN_PURCHASE | REDEEM_CHECKOUT | REFUND_CREDITS
+  orderId   String?
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("credit_ledger")
 }
 
 // One-time passwords for phone login. Codes are stored hashed.
@@ -162,10 +214,88 @@ model SellerProfile {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  products   Product[]
-  orderItems OrderItem[]
+  // Seller-to-seller referral program.
+  referralCode String? @unique // SLR-XXXXXX
+
+  products          Product[]
+  orderItems        OrderItem[]
+  ads               Ad[]
+  referralsGiven    SellerReferral[] @relation("SellerReferrer")
+  referralsReceived SellerReferral[] @relation("SellerReferred")
 
   @@map("seller_profiles")
+}
+
+enum SellerReferralStatus {
+  PENDING // waiting for the referred seller's delivered sales to cross the target
+  EARNED // reward credited to the referrer
+  VOID // voided by admin (fraud/abuse)
+}
+
+// One row per referred seller (a seller can be referred at most once).
+model SellerReferral {
+  id          String               @id @default(cuid())
+  referrerId  String
+  referrer    SellerProfile        @relation("SellerReferrer", fields: [referrerId], references: [id])
+  referredId  String               @unique
+  referred    SellerProfile        @relation("SellerReferred", fields: [referredId], references: [id])
+  status      SellerReferralStatus @default(PENDING)
+  rewardPaise Int                  @default(0)
+  earnedAt    DateTime?
+  voidedAt    DateTime?
+  voidReason  String?
+  createdAt   DateTime             @default(now())
+
+  @@map("seller_referrals")
+}
+
+// ---------------------------------------------------------------------------
+// Platform settings & seller ads
+// ---------------------------------------------------------------------------
+
+// Admin-editable key-value settings (JSON values, defaults live in code).
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_settings")
+}
+
+enum AdPlacement {
+  HOME_BANNER
+  CATEGORY_SPONSORED
+}
+
+enum AdStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+  EXPIRED
+}
+
+// Seller-paid promoted placement. Payment is manual/payout-adjusted for now —
+// pricePaise records what is owed (snapshot of admin pricing at submit time).
+model Ad {
+  id              String        @id @default(cuid())
+  sellerId        String
+  seller          SellerProfile @relation(fields: [sellerId], references: [id])
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id])
+  placement       AdPlacement
+  durationDays    Int
+  pricePaise      Int
+  status          AdStatus      @default(PENDING)
+  rejectionReason String?
+  startAt         DateTime?
+  endAt           DateTime?
+  views           Int           @default(0)
+  clicks          Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status, placement])
+  @@map("ads")
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +307,8 @@ model Category {
   name      String
   slug      String     @unique
   imageUrl  String?
+  // Small emoji/glyph for the category nav bar and mega menu.
+  icon      String?
   isActive  Boolean    @default(true)
   parentId  String?
   parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
@@ -189,6 +321,22 @@ model Category {
   @@map("categories")
 }
 
+// Marketplace brand ("Top Brands" row, brand-filtered listings). Product.brand
+// (string) stays as the display snapshot; brandId links catalogue products.
+model Brand {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  logoUrl   String?
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  products Product[]
+
+  @@map("brands")
+}
+
 model Product {
   id              String        @id @default(cuid())
   sellerId        String
@@ -199,8 +347,22 @@ model Product {
   slug            String        @unique
   description     String
   brand           String?
+  brandId         String?
+  brandRef        Brand?        @relation(fields: [brandId], references: [id], onDelete: SetNull)
   // Prices in paise (integer) to avoid floating-point money bugs.
   basePricePaise  Int
+  // List price for strike-through / "% OFF". Null = no discount shown.
+  mrpPaise        Int?
+  // Denormalised rating cache — synced whenever a review is written, so
+  // listing/landing queries never re-aggregate the reviews table.
+  ratingAvg       Float         @default(0)
+  ratingCount     Int           @default(0)
+  soldCount       Int           @default(0)
+  viewCount       Int           @default(0)
+  // Landing-page badges.
+  isBestSeller    Boolean       @default(false)
+  isNew           Boolean       @default(false)
+  isTrending      Boolean       @default(false)
   status          ProductStatus @default(DRAFT)
   rejectionReason String?
   approvedAt      DateTime?
@@ -213,24 +375,46 @@ model Product {
   reviews       Review[]
   orderItems    OrderItem[]
   tryOnHistory  TryOnHistory[]
+  ads           Ad[]
+  views         ProductView[]
+  dealItems     DealItem[]
 
   @@index([status, categoryId])
   @@index([sellerId])
+  @@index([status, soldCount])
   @@map("products")
 }
 
-// Size/color combinations, each with its own SKU, price, and stock.
+// One row per storefront product-detail view — powers "Trending Now"
+// (views + sales in the last 7 days).
+model ProductView {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([productId, createdAt])
+  @@map("product_views")
+}
+
+// Buyable variants. `size`/`color` remain the canonical unique display columns
+// (cart, orders, seller flows unchanged); `optionValues` additionally stores
+// the structured attributes for non-clothing products (e.g. {"storage":"256GB",
+// "ram":"8GB","color":"Black"}), with the non-color axes packed into `size`
+// for display. Later phases render optionValues natively.
 model ProductVariant {
-  id         String   @id @default(cuid())
-  productId  String
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  size       String // e.g. S, M, L, XL, 32, 34
-  color      String // display name; hex optional later
-  sku        String   @unique
-  pricePaise Int
-  mrpPaise   Int? // strike-through price
-  stock      Int      @default(0)
-  createdAt  DateTime @default(now())
+  id           String   @id @default(cuid())
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size         String // e.g. S, M, L, XL, 32, "8GB / 256GB"
+  color        String // display name; hex optional later
+  optionValues Json     @default("{}")
+  sku          String   @unique
+  pricePaise   Int
+  mrpPaise     Int? // strike-through price
+  stock        Int      @default(0)
+  createdAt    DateTime @default(now())
 
   cartItems  CartItem[]
   orderItems OrderItem[]
@@ -334,13 +518,18 @@ model Order {
   subtotalPaise Int
   shippingPaise Int @default(0)
   discountPaise Int @default(0)
-  totalPaise    Int
+  // Shopping credits redeemed on this order (discountPaise = creditsUsed × 50).
+  creditsUsed Int @default(0)
+  totalPaise  Int
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  items   OrderItem[]
-  payment Payment?
+  items      OrderItem[]
+  payment    Payment?
+  complaints Complaint[]
+  refunds    Refund[]
+  creditLedger CreditLedger[]
 
   @@index([userId, createdAt])
   @@map("orders")
@@ -422,12 +611,46 @@ model Return {
   orderItem   OrderItem    @relation(fields: [orderItemId], references: [id])
   userId      String
   user        User         @relation(fields: [userId], references: [id])
-  reason      String
-  status      ReturnStatus @default(REQUESTED)
-  resolvedAt  DateTime?
-  createdAt   DateTime     @default(now())
+  // Structured reason + free-text details (details required for OTHER).
+  reasonCategory ReturnReason @default(OTHER)
+  reason         String // free-text details (legacy rows keep their original text here)
+  photos         String[]     @default([])
+  status         ReturnStatus @default(REQUESTED)
+  // Seller decision trail.
+  rejectionReason   String?
+  receivedCondition String? // 'OK' | 'DAMAGED' (set on RETURN_RECEIVED)
+  approvedAt        DateTime?
+  rejectedAt        DateTime?
+  receivedAt        DateTime?
+  // Admin dispute-resolution override (approving a seller-rejected return).
+  adminOverrideAt   DateTime?
+  adminOverrideNote String?
+  resolvedAt        DateTime?
+  createdAt         DateTime  @default(now())
 
+  refund Refund?
+
+  @@index([status, createdAt])
   @@map("returns")
+}
+
+// Every refund attempt is logged here (amount, gateway id, status, timestamps).
+model Refund {
+  id               String       @id @default(cuid())
+  returnId         String       @unique
+  return           Return       @relation(fields: [returnId], references: [id])
+  orderId          String
+  order            Order        @relation(fields: [orderId], references: [id])
+  amountPaise      Int
+  provider         String
+  providerRefundId String? // razorpay refund id (rfnd_…) / mock id
+  status           RefundStatus @default(PENDING)
+  failureReason    String?
+  processedAt      DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@map("refunds")
 }
 
 // ---------------------------------------------------------------------------
@@ -466,6 +689,26 @@ model TryOnHistory {
   @@map("tryon_history")
 }
 
+// Customer support complaints raised via the chat bot.
+model Complaint {
+  id          String          @id @default(cuid())
+  complaintId String          @unique // human-readable, e.g. CMP-2026-48213
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId     String?
+  order       Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  category    String // ORDER | PAYMENT | PRODUCT_QUALITY | DELIVERY | ACCOUNT | OTHER
+  description String
+  status      ComplaintStatus @default(OPEN)
+  adminNotes  String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@map("complaints")
+}
+
 model Notification {
   id        String    @id @default(cuid())
   userId    String
@@ -478,4 +721,86 @@ model Notification {
 
   @@index([userId, createdAt])
   @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Landing-page content (admin-managed)
+// ---------------------------------------------------------------------------
+
+// Hero carousel slide. `highlight` is the gold-rendered word inside `headline`.
+model HomeBanner {
+  id             String   @id @default(cuid())
+  headline       String
+  highlight      String?
+  subtext        String?
+  imageUrl       String?
+  primaryLabel   String   @default("Shop Now")
+  primaryHref    String   @default("/products")
+  secondaryLabel String?
+  secondaryHref  String?
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("home_banners")
+}
+
+enum PromoPlacement {
+  PROMO_CARD // 4-card row under the trust strip
+  PROMO_STRIP // 3 wide strips lower on the page
+}
+
+// Admin-managed promo tile (category sales, festivals, ...).
+model PromoTile {
+  id        String         @id @default(cuid())
+  placement PromoPlacement
+  title     String
+  subtitle  String? // discount line, e.g. "Up to 60% Off"
+  imageUrl  String?
+  href      String         @default("/products")
+  sortOrder Int            @default(0)
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([placement, isActive, sortOrder])
+  @@map("promo_tiles")
+}
+
+// "Deals of the Day" window. The landing shows the active deal whose window
+// contains now; when it expires the next scheduled one (if any) takes over.
+model Deal {
+  id        String   @id @default(cuid())
+  title     String   @default("Deals of the Day")
+  startAt   DateTime
+  endAt     DateTime
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  items DealItem[]
+
+  @@index([isActive, startAt, endAt])
+  @@map("deals")
+}
+
+model DealItem {
+  id        String  @id @default(cuid())
+  dealId    String
+  deal      Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sortOrder Int     @default(0)
+
+  @@unique([dealId, productId])
+  @@map("deal_items")
+}
+
+// Newsletter signups from the landing page (admin can view/export).
+model NewsletterSubscriber {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("newsletter_subscribers")
 }

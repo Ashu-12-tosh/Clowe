@@ -40,3 +40,12 @@
 .dual-range input[type='range']:active::-webkit-slider-thumb {
   cursor: grabbing;
 }
+
+/* Hide scrollbars on horizontal rails (content stays scrollable). */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

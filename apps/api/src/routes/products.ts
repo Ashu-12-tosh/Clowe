@@ -11,17 +11,6 @@ import { ApiError } from '../utils/ApiError';
 
 export const productsRouter = Router();
 
-/** Average ratings for a set of product ids, in one query. */
-async function ratingsFor(productIds: string[]) {
-  const rows = await prisma.review.groupBy({
-    by: ['productId'],
-    where: { productId: { in: productIds } },
-    _avg: { rating: true },
-    _count: { rating: true },
-  });
-  return new Map(rows.map((r) => [r.productId, r]));
-}
-
 // Storefront product listing: filters + search + facets + pagination.
 // Only APPROVED products are ever visible here.
 productsRouter.get('/', async (req, res, next) => {
@@ -107,14 +96,11 @@ productsRouter.get('/', async (req, res, next) => {
       }),
     ]);
 
-    const ratings = await ratingsFor(products.map((p) => p.id));
-
     const items: ProductListItem[] = products.map((p) => {
       const minVariant = p.variants.reduce(
         (min, v) => (v.pricePaise < min.pricePaise ? v : min),
         p.variants[0] ?? { pricePaise: p.basePricePaise, mrpPaise: null, size: '', color: '' },
       );
-      const rating = ratings.get(p.id);
       return {
         id: p.id,
         slug: p.slug,
@@ -122,12 +108,13 @@ productsRouter.get('/', async (req, res, next) => {
         brand: p.brand,
         categoryName: p.category.name,
         pricePaise: minVariant.pricePaise,
-        mrpPaise: minVariant.mrpPaise,
+        mrpPaise: p.mrpPaise ?? minVariant.mrpPaise,
         imageUrl: p.images[0]?.url ?? null,
-        sizes: [...new Set(p.variants.map((v) => v.size))],
-        colors: [...new Set(p.variants.map((v) => v.color))],
-        ratingAvg: rating?._avg.rating ?? null,
-        ratingCount: rating?._count.rating ?? 0,
+        sizes: [...new Set(p.variants.map((v) => v.size).filter(Boolean))],
+        colors: [...new Set(p.variants.map((v) => v.color).filter(Boolean))],
+        // Denormalised rating cache — synced on every review write.
+        ratingAvg: p.ratingCount > 0 ? p.ratingAvg : null,
+        ratingCount: p.ratingCount,
       };
     });
 
@@ -157,7 +144,7 @@ productsRouter.get('/:slug', async (req, res, next) => {
     const product = await prisma.product.findUnique({
       where: { slug: req.params.slug },
       include: {
-        category: { select: { name: true, slug: true } },
+        category: { select: { name: true, slug: true, parent: { select: { slug: true } } } },
         seller: { select: { shopName: true } },
         images: { orderBy: { sortOrder: 'asc' } },
         variants: { orderBy: [{ color: 'asc' }, { size: 'asc' }] },
@@ -167,7 +154,16 @@ productsRouter.get('/:slug', async (req, res, next) => {
       throw ApiError.notFound('Product not found');
     }
 
-    const rating = (await ratingsFor([product.id])).get(product.id);
+    // Trending signal: record the view without delaying the response.
+    void prisma
+      .$transaction([
+        prisma.productView.create({ data: { productId: product.id } }),
+        prisma.product.update({
+          where: { id: product.id },
+          data: { viewCount: { increment: 1 } },
+        }),
+      ])
+      .catch(() => {});
 
     const body: ProductDetail = {
       id: product.id,
@@ -175,7 +171,8 @@ productsRouter.get('/:slug', async (req, res, next) => {
       title: product.title,
       description: product.description,
       brand: product.brand,
-      category: product.category,
+      category: { name: product.category.name, slug: product.category.slug },
+      rootCategorySlug: product.category.parent?.slug ?? product.category.slug,
       sellerShopName: product.seller.shopName,
       images: product.images.map((i) => ({ url: i.url, altText: i.altText })),
       variants: product.variants.map((v) => ({
@@ -187,8 +184,8 @@ productsRouter.get('/:slug', async (req, res, next) => {
         mrpPaise: v.mrpPaise,
         stock: v.stock,
       })),
-      ratingAvg: rating?._avg.rating ?? null,
-      ratingCount: rating?._count.rating ?? 0,
+      ratingAvg: product.ratingCount > 0 ? product.ratingAvg : null,
+      ratingCount: product.ratingCount,
       createdAt: product.createdAt.toISOString(),
     };
     res.json({ success: true, data: body });

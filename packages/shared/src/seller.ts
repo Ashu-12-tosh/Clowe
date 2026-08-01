@@ -6,6 +6,14 @@ import { z } from 'zod';
 
 export const sellerRegisterSchema = z.object({
   shopName: z.string().trim().min(3).max(60),
+  /** Optional seller-to-seller referral code (SLR-XXXXXX). */
+  referralCode: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^SLR-[A-Z0-9]{6}$/, 'Referral code looks like SLR-XXXXXX')
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
   description: z.string().trim().max(500).optional(),
   gstNumber: z.string().trim().max(20).optional(),
   panNumber: z.string().trim().max(12).optional(),
@@ -109,7 +117,35 @@ export interface SellerOrderItemRow {
   quantity: number;
   pricePaise: number;
   status: string;
+  /** Set when the customer has requested a return for this item. */
+  returnId: string | null;
   shipTo: { name: string; city: string; state: string; pincode: string };
+}
+
+// ---------------------------------------------------------------------------
+// Seller returns
+// ---------------------------------------------------------------------------
+
+export interface SellerReturnRow {
+  id: string; // return id
+  orderItemId: string;
+  orderNumber: string;
+  title: string;
+  size: string;
+  color: string;
+  quantity: number;
+  pricePaise: number;
+  imageUrl: string | null;
+  customerName: string;
+  reason: string; // ReturnReasonValue
+  details: string | null;
+  photos: string[];
+  status: string; // ReturnStatus
+  rejectionReason: string | null;
+  receivedCondition: string | null;
+  adminOverrideAt: string | null;
+  refund: { status: string; amountPaise: number; providerRefundId: string | null } | null;
+  requestedAt: string;
 }
 
 export interface SellerStats {

@@ -6,6 +6,7 @@ import type { SellerStats } from '@clowe/shared';
 import { api } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { useSeller } from '@/components/seller/SellerContext';
+import ReferralCard from '@/components/seller/ReferralCard';
 
 function StatusBanner() {
   const { state } = useSeller();
@@ -74,6 +75,10 @@ export default function SellerDashboardPage() {
           stock (&lt;5 left).
         </p>
       )}
+
+      <div className="mt-6">
+        <ReferralCard />
+      </div>
 
       <div className="mt-8 flex gap-3">
         <Link

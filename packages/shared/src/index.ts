@@ -27,6 +27,9 @@ export * from './checkout';
 export * from './tryon';
 export * from './ai';
 export * from './growth';
+export * from './complaints';
+export * from './settings';
+export * from './home';
 
 export const healthResponseSchema = z.object({
   status: z.literal('ok'),

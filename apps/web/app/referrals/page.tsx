@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { ReferralView } from '@clowe/shared';
+import { REFERRAL_REWARD_CREDITS, type ReferralView } from '@clowe/shared';
 import { api, getStoredUser } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 
@@ -46,8 +46,13 @@ export default function ReferralsPage() {
       <h1 className="text-2xl font-bold">Refer & Earn 🎁</h1>
       {data && (
         <p className="mt-1 text-sm text-gray-600">
-          Earn <span className="font-semibold">{formatPaise(data.rewardPerReferralPaise)}</span>{' '}
-          every time a friend signs up with your code and places their first order.
+          Earn{' '}
+          <span className="font-semibold">🪙 {REFERRAL_REWARD_CREDITS} Clowe Credits</span> every
+          time a friend signs up with your code and places their first order — spend them on your
+          next purchase.{' '}
+          <Link href="/credits" className="font-semibold text-brand-600 hover:underline">
+            My credits →
+          </Link>
         </p>
       )}
 

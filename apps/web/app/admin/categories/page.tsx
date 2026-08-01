@@ -7,6 +7,7 @@ import { api, ApiRequestError } from '@/lib/api';
 export default function AdminCategoriesPage() {
   const [rows, setRows] = useState<AdminCategoryRow[] | null>(null);
   const [name, setName] = useState('');
+  const [icon, setIcon] = useState('');
   const [parentId, setParentId] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -27,10 +28,11 @@ export default function AdminCategoriesPage() {
     setBusy(true);
     try {
       await api('/api/admin/categories', {
-        body: { name: name.trim(), parentId: parentId || null },
+        body: { name: name.trim(), parentId: parentId || null, icon: icon.trim() || null },
         auth: true,
       });
       setName('');
+      setIcon('');
       load();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
@@ -58,6 +60,7 @@ export default function AdminCategoriesPage() {
         className={`flex items-center justify-between border-t border-gray-100 py-2 ${indent ? 'pl-6' : ''}`}
       >
         <p className="text-sm">
+          {row.icon && <span className="mr-1.5">{row.icon}</span>}
           <span className={row.isActive ? 'font-medium' : 'text-gray-400 line-through'}>
             {row.name}
           </span>{' '}
@@ -93,6 +96,13 @@ export default function AdminCategoriesPage() {
           onChange={(e) => setName(e.target.value)}
           placeholder="New category name"
           className="rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600"
+        />
+        <input
+          value={icon}
+          onChange={(e) => setIcon(e.target.value)}
+          placeholder="Icon (emoji)"
+          className="w-28 rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600"
+          title="Shown in the category nav bar and mega menu"
         />
         <select
           value={parentId}

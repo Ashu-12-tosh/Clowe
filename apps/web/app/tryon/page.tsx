@@ -2,8 +2,47 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { TryOnHistoryRow } from '@clowe/shared';
+import type { ProductListResponse, TryOnHistoryRow } from '@clowe/shared';
 import { api, getStoredUser } from '@/lib/api';
+import { getPublicSettings } from '@/lib/settings';
+import { formatPaise } from '@/lib/format';
+import ProductCard from '@/components/ProductCard';
+
+/** Grid of products eligible for Try-On (price ≥ admin threshold). */
+function EligibleOutfits() {
+  const [minPaise, setMinPaise] = useState<number | null>(null);
+  const [products, setProducts] = useState<ProductListResponse['items'] | null>(null);
+
+  useEffect(() => {
+    getPublicSettings()
+      .then((s) => {
+        setMinPaise(s.tryonMinPricePaise);
+        const minRupees = Math.ceil(s.tryonMinPricePaise / 100);
+        return api<ProductListResponse>(`/api/products?minPrice=${minRupees}&sort=newest`);
+      })
+      .then((r) => setProducts(r.items))
+      .catch(() => setProducts([]));
+  }, []);
+
+  if (products === null || products.length === 0) return null;
+  return (
+    <section className="mt-10">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-lg font-bold">Try-On eligible outfits</h2>
+        {minPaise !== null && (
+          <span className="text-xs text-gray-500">
+            ✨ available on products {formatPaise(minPaise)}+
+          </span>
+        )}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+        {products.slice(0, 8).map((p) => (
+          <ProductCard key={p.id} product={p} inWishlist={false} />
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export default function TryOnHistoryPage() {
   const [rows, setRows] = useState<TryOnHistoryRow[] | null>(null);
@@ -87,6 +126,8 @@ export default function TryOnHistoryPage() {
           ))}
         </div>
       )}
+
+      <EligibleOutfits />
     </main>
   );
 }

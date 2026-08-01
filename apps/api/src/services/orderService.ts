@@ -1,7 +1,7 @@
 import { randomInt } from 'node:crypto';
+import { creditsEarnedFor, creditsToPaise, REFERRAL_REWARD_CREDITS } from '@clowe/shared';
 import { prisma } from '../db';
-import { env } from '../env';
-import { sendMessageSafe } from './messaging';
+import { sendMessageSafe, sendToUserSafe } from './messaging';
 
 /** Human-friendly unique order number, e.g. CLW-2026-482913. */
 export async function generateOrderNumber(): Promise<string> {
@@ -47,6 +47,28 @@ export async function settlePaymentSuccess(orderId: string, providerPaymentId?: 
       },
     }),
   ]);
+
+  // Shopping credits: 1 credit per ₹20 actually paid (1 credit = 50 paise).
+  const earned = creditsEarnedFor(order.totalPaise);
+  if (earned > 0) {
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: order.userId },
+        data: { creditsBalance: { increment: earned } },
+      }),
+      prisma.creditLedger.create({
+        data: { userId: order.userId, delta: earned, reason: 'EARN_PURCHASE', orderId: order.id },
+      }),
+      prisma.notification.create({
+        data: {
+          userId: order.userId,
+          type: 'CREDITS_EARNED',
+          title: `You earned ${earned} Clowe Credits 🪙`,
+          body: `${order.orderNumber} earned you ${earned} credits (worth ₹${(creditsToPaise(earned) / 100).toFixed(2)}). Use them as a discount on your next order!`,
+        },
+      }),
+    ]);
+  }
 
   // Tell each seller they have a new order.
   const sellerIds = [...new Set(order.items.map((i) => i.sellerId))];
@@ -96,25 +118,35 @@ async function creditReferralIfFirstPaidOrder(userId: string) {
   });
   if (paidOrders !== 1) return;
 
-  const rewardPaise = env.REFERRAL_REWARD_PAISE;
+  // Reward = 100 Clowe Credits, spendable on the referrer's next order.
+  const rewardCredits = REFERRAL_REWARD_CREDITS;
+  const rewardValuePaise = creditsToPaise(rewardCredits);
   await prisma.$transaction([
     prisma.referral.update({
       where: { id: referral.id },
-      data: { status: 'CREDITED', rewardAmountPaise: rewardPaise, creditedAt: new Date() },
+      data: { status: 'CREDITED', rewardAmountPaise: rewardValuePaise, creditedAt: new Date() },
+    }),
+    prisma.user.update({
+      where: { id: referral.referrer.id },
+      data: { creditsBalance: { increment: rewardCredits } },
+    }),
+    prisma.creditLedger.create({
+      data: { userId: referral.referrer.id, delta: rewardCredits, reason: 'EARN_REFERRAL' },
     }),
     prisma.notification.create({
       data: {
         userId: referral.referrer.id,
         type: 'REFERRAL_CREDITED',
-        title: 'Referral reward earned! 🎁',
-        body: `Someone you referred just placed their first order — ₹${rewardPaise / 100} credited to you.`,
+        title: `Referral reward: ${rewardCredits} Clowe Credits! 🎁`,
+        body: `Someone you referred just placed their first order — ${rewardCredits} credits (₹${rewardValuePaise / 100}) added. Use them as a discount on your next order.`,
       },
     }),
   ]);
-  sendMessageSafe({
+  // Marketing-ish message — respects the referrer's WhatsApp preference.
+  sendToUserSafe(referral.referrer.id, {
     channel: 'whatsapp',
     to: `+91${referral.referrer.phone}`,
-    body: `Great news ${referral.referrer.name ?? ''}! Your Clowe referral just placed their first order. ₹${rewardPaise / 100} reward credited 🎁`,
+    body: `Great news ${referral.referrer.name ?? ''}! Your Clowe referral just placed their first order. ${rewardCredits} Clowe Credits (₹${rewardValuePaise / 100}) credited 🎁`,
   });
 }
 
@@ -143,5 +175,22 @@ export async function settlePaymentFailure(orderId: string, reason: string) {
         data: { stock: { increment: item.quantity } },
       }),
     ),
+    // Give back any credits that were reserved for the discount.
+    ...(order.creditsUsed > 0
+      ? [
+          prisma.user.update({
+            where: { id: order.userId },
+            data: { creditsBalance: { increment: order.creditsUsed } },
+          }),
+          prisma.creditLedger.create({
+            data: {
+              userId: order.userId,
+              delta: order.creditsUsed,
+              reason: 'REFUND_CREDITS',
+              orderId: order.id,
+            },
+          }),
+        ]
+      : []),
   ]);
 }

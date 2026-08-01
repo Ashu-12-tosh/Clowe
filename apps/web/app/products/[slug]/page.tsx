@@ -12,6 +12,7 @@ import { colorToHex } from '@/lib/colors';
 import TryOnModal from '@/components/TryOnModal';
 import ReviewsSection from '@/components/ReviewsSection';
 import RelatedProducts from '@/components/RelatedProducts';
+import { getPublicSettings } from '@/lib/settings';
 
 /** Image with hover-to-zoom (desktop): magnifies around the cursor. */
 function ZoomImage({ src, alt }: { src: string; alt: string }) {
@@ -53,6 +54,14 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
   const [color, setColor] = useState<string | null>(null);
   const [size, setSize] = useState<string | null>(null);
   const [tryOnOpen, setTryOnOpen] = useState(false);
+  // Try-On is premium-only; threshold comes from admin settings (paise).
+  const [tryonMinPaise, setTryonMinPaise] = useState<number | null>(null);
+
+  useEffect(() => {
+    getPublicSettings()
+      .then((s) => setTryonMinPaise(s.tryonMinPricePaise))
+      .catch(() => setTryonMinPaise(0)); // fail open for display only — server still enforces
+  }, []);
 
   useEffect(() => {
     api<ProductDetail>(`/api/products/${slug}`)
@@ -227,12 +236,18 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
             )}
           </div>
 
-          <button
-            onClick={() => setTryOnOpen(true)}
-            className="mt-7 w-full rounded-lg bg-gradient-to-r from-brand-600 to-brand-500 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:opacity-90"
-          >
-            ✨ Try On Me — see it on yourself
-          </button>
+          {/* Try-On: wearable categories only (the catalogue now has laptops
+              above the price floor) + the admin-set minimum price. */}
+          {product.rootCategorySlug === 'fashion' &&
+            tryonMinPaise !== null &&
+            Math.min(...product.variants.map((v) => v.pricePaise)) >= tryonMinPaise && (
+              <button
+                onClick={() => setTryOnOpen(true)}
+                className="mt-7 w-full rounded-lg bg-gradient-to-r from-brand-600 to-brand-500 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:opacity-90"
+              >
+                ✨ Try On Me — see it on yourself
+              </button>
+            )}
 
           <div className="mt-3 flex gap-3">
             <AddToCartButton variantId={selected?.id ?? null} stock={selected?.stock ?? 0} />

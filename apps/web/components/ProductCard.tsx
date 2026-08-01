@@ -9,14 +9,25 @@ interface Props {
   product: ProductListItem;
   inWishlist: boolean;
   onRemovedFromWishlist?: () => void;
+  /** Promoted placement: renders a small "Sponsored" label (Amazon-style). */
+  sponsored?: boolean;
+  /** Fired on navigation — used for ad click tracking. */
+  onNavigate?: () => void;
 }
 
-export default function ProductCard({ product, inWishlist, onRemovedFromWishlist }: Props) {
+export default function ProductCard({
+  product,
+  inWishlist,
+  onRemovedFromWishlist,
+  sponsored = false,
+  onNavigate,
+}: Props) {
   const off = discountPercent(product.pricePaise, product.mrpPaise);
 
   return (
     <Link
       href={`/products/${product.slug}`}
+      onClick={onNavigate}
       className="group relative overflow-hidden rounded-2xl border border-gray-100 bg-white transition hover:-translate-y-0.5 hover:shadow-lg"
     >
       <div className="relative aspect-[3/4] overflow-hidden bg-cream-100">
@@ -38,6 +49,9 @@ export default function ProductCard({ product, inWishlist, onRemovedFromWishlist
         />
       </div>
       <div className="p-3">
+        {sponsored && (
+          <p className="mb-0.5 text-[10px] font-medium text-gray-400">Sponsored</p>
+        )}
         <p className="truncate text-sm font-semibold text-ink-900">{product.title}</p>
         <p className="mt-0.5 text-xs uppercase tracking-wide text-gray-400">
           {product.brand ?? product.categoryName}

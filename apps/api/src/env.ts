@@ -13,7 +13,7 @@ const envSchema = z.object({
   // --- Auth ---
   JWT_ACCESS_SECRET: z.string().min(16, 'JWT_ACCESS_SECRET must be at least 16 chars'),
   JWT_ACCESS_TTL_MIN: z.coerce.number().default(15), // access token lifetime (minutes)
-  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().default(30),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().default(90), // sliding — renewed on every refresh
 
   // --- OTP ---
   OTP_PROVIDER: z.enum(['mock']).default('mock'), // 'msg91' | 'twilio' added later
@@ -29,6 +29,10 @@ const envSchema = z.object({
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+
+  // --- Returns ---
+  // Customers can request a return up to this many days after delivery.
+  RETURN_WINDOW_DAYS: z.coerce.number().int().min(1).default(7),
 
   // --- AI Try-On ---
   // 'auto': use FASHN when FASHN_API_KEY is set, otherwise the free mock.

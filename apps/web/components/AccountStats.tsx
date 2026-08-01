@@ -11,8 +11,12 @@ export default function AccountStats() {
   const [wishlist, setWishlist] = useState<number | null>(null);
   const [creditsPaise, setCreditsPaise] = useState<number | null>(null);
   const [tryOns, setTryOns] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<number | null>(null);
 
   useEffect(() => {
+    api<{ reviews: number }>('/api/auth/me/stats', { auth: true })
+      .then((s) => setReviews(s.reviews))
+      .catch(() => {});
     api<OrderListRow[]>('/api/orders', { auth: true })
       .then((rows) => setOrders(rows.length))
       .catch(() => {});
@@ -36,10 +40,11 @@ export default function AccountStats() {
       href: '/referrals',
     },
     { label: 'Try-Ons Used', value: tryOns ?? '—', href: '/tryon' },
+    { label: 'Reviews', value: reviews != null ? String(reviews) : '—', href: '/orders' },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
       {tiles.map((tile) => (
         <Link
           key={tile.label}

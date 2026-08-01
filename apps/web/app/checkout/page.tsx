@@ -5,9 +5,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   addressUpsertSchema,
+  CREDIT_VALUE_PAISE,
+  creditsToPaise,
   type AddressInfo,
   type CartView,
   type CheckoutResult,
+  type CreditsInfo,
 } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
@@ -31,6 +34,9 @@ export default function CheckoutPage() {
   const [placing, setPlacing] = useState(false);
   // After checkout with the mock provider: show the fake gateway step.
   const [mockOrder, setMockOrder] = useState<CheckoutResult | null>(null);
+  // Shopping credits (optional discount — the user's choice).
+  const [credits, setCredits] = useState<CreditsInfo | null>(null);
+  const [useCredits, setUseCredits] = useState(false);
 
   useEffect(() => {
     if (!getStoredUser()) {
@@ -38,6 +44,7 @@ export default function CheckoutPage() {
       return;
     }
     api<CartView>('/api/cart', { auth: true }).then(setCart).catch(() => {});
+    api<CreditsInfo>('/api/credits', { auth: true }).then(setCredits).catch(() => {});
     api<AddressInfo[]>('/api/addresses', { auth: true })
       .then((list) => {
         setAddresses(list);
@@ -75,7 +82,7 @@ export default function CheckoutPage() {
     setPlacing(true);
     try {
       const result = await api<CheckoutResult>('/api/orders/checkout', {
-        body: { addressId: selectedAddress },
+        body: { addressId: selectedAddress, useCredits },
         auth: true,
       });
 
@@ -291,20 +298,61 @@ export default function CheckoutPage() {
           {/* -------- Summary + pay -------- */}
           <aside className="h-fit w-full rounded-xl border border-gray-200 bg-white p-4 lg:w-72">
             <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500">Payment</h2>
-            <dl className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <dt className="text-gray-600">Subtotal</dt>
-                <dd>{formatPaise(cart.subtotalPaise)}</dd>
+
+            {/* Discounts: shopping credits (user's choice) */}
+            {credits && credits.balance > 0 && (
+              <div className="mt-3 rounded-xl border border-brand-200 bg-brand-50/60 p-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-brand-700">Discount</p>
+                <label className="mt-1.5 flex cursor-pointer items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={useCredits}
+                    onChange={(e) => setUseCredits(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-brand-600"
+                  />
+                  <span className="text-sm">
+                    Use my Clowe Credits{' '}
+                    <span className="font-bold text-ink-900">
+                      🪙 {credits.balance} = {formatPaise(credits.valuePaise)}
+                    </span>
+                    <span className="block text-xs text-gray-500">
+                      10 credits = ₹5 · applied as instant discount
+                    </span>
+                  </span>
+                </label>
               </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-600">Shipping</dt>
-                <dd>{cart.shippingPaise === 0 ? 'FREE' : formatPaise(cart.shippingPaise)}</dd>
-              </div>
-              <div className="flex justify-between border-t border-gray-200 pt-2 text-base">
-                <dt className="font-bold">To pay</dt>
-                <dd className="font-bold">{formatPaise(cart.totalPaise)}</dd>
-              </div>
-            </dl>
+            )}
+
+            {(() => {
+              // Preview of the server's discount rule: leave at least ₹1 payable.
+              const maxDiscount = Math.max(0, cart.totalPaise - 100);
+              const usable = useCredits && credits
+                ? Math.min(credits.balance, Math.floor(maxDiscount / CREDIT_VALUE_PAISE))
+                : 0;
+              const discount = creditsToPaise(usable);
+              return (
+                <dl className="mt-3 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <dt className="text-gray-600">Subtotal</dt>
+                    <dd>{formatPaise(cart.subtotalPaise)}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-gray-600">Shipping</dt>
+                    <dd>{cart.shippingPaise === 0 ? 'FREE' : formatPaise(cart.shippingPaise)}</dd>
+                  </div>
+                  {discount > 0 && (
+                    <div className="flex justify-between text-brand-700">
+                      <dt>Credits discount ({usable} 🪙)</dt>
+                      <dd className="font-semibold">− {formatPaise(discount)}</dd>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-t border-gray-200 pt-2 text-base">
+                    <dt className="font-bold">To pay</dt>
+                    <dd className="font-bold">{formatPaise(cart.totalPaise - discount)}</dd>
+                  </div>
+                </dl>
+              );
+            })()}
             <button
               onClick={() => void placeOrder()}
               disabled={placing || !selectedAddress}

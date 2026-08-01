@@ -15,4 +15,8 @@ export class MockPaymentProvider implements PaymentProvider {
   verifySignature(): boolean {
     return true; // mock payments settle via /api/payments/mock-pay instead
   }
+
+  async refund(_providerPaymentId: string, _amountPaise: number): Promise<string> {
+    return `mock_refund_${randomBytes(8).toString('hex')}`;
+  }
 }

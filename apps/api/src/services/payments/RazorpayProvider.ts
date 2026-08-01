@@ -34,6 +34,24 @@ export class RazorpayProvider implements PaymentProvider {
     return data.id;
   }
 
+  /** Refund a captured payment (full or partial). https://razorpay.com/docs/api/refunds/ */
+  async refund(providerPaymentId: string, amountPaise: number): Promise<string> {
+    const res = await fetch(`https://api.razorpay.com/v1/payments/${providerPaymentId}/refund`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Basic ${Buffer.from(`${this.keyId}:${this.keySecret}`).toString('base64')}`,
+      },
+      body: JSON.stringify({ amount: amountPaise }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Razorpay refund failed (${res.status}): ${text}`);
+    }
+    const data = (await res.json()) as { id: string };
+    return data.id;
+  }
+
   /** Standard Razorpay checkout signature: HMAC-SHA256(orderId|paymentId, keySecret). */
   verifySignature(providerOrderId: string, paymentId: string, signature: string): boolean {
     const expected = createHmac('sha256', this.keySecret)

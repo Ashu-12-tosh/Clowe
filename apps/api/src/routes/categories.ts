@@ -24,6 +24,7 @@ categoriesRouter.get('/', async (_req, res, next) => {
       name: cat.name,
       slug: cat.slug,
       imageUrl: cat.imageUrl,
+      icon: cat.icon,
       children: (byParent.get(cat.id) ?? []).map(toNode),
     });
 

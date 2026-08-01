@@ -7,6 +7,7 @@ import type { CategoryNode, ProductListResponse, ProductSort } from '@clowe/shar
 import { api } from '@/lib/api';
 import { fetchWishlistIds } from '@/lib/wishlist';
 import ProductCard from '@/components/ProductCard';
+import { trackAdClick, useSponsoredAds } from '@/components/SponsoredAds';
 import PriceRangeSlider from '@/components/PriceRangeSlider';
 import { colorToHex } from '@/lib/colors';
 
@@ -57,6 +58,15 @@ function ProductsPageInner() {
   const maxPrice = searchParams.get('maxPrice') ?? '';
   const sort = (searchParams.get('sort') ?? 'newest') as ProductSort;
   const page = Number(searchParams.get('page') ?? '1');
+
+  // Sponsored products render inline at the top of category listings —
+  // identical cards, just a small "Sponsored" label. Organic duplicates skipped.
+  const sponsoredAds = useSponsoredAds(
+    category && page === 1 ? 'CATEGORY_SPONSORED' : null,
+    category || undefined,
+  );
+  const adProductIds = new Set(sponsoredAds.map((ad) => ad.product.id));
+  const organicItems = (data?.items ?? []).filter((p) => !adProductIds.has(p.id));
 
   /** Update one or more query params (resets to page 1 unless page is set). */
   const setParams = useCallback(
@@ -311,9 +321,18 @@ function ProductsPageInner() {
             </p>
           )}
 
-          {data && data.items.length > 0 && (
+          {data && (data.items.length > 0 || sponsoredAds.length > 0) && (
             <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
-              {data.items.map((product) => (
+              {sponsoredAds.map((ad) => (
+                <ProductCard
+                  key={`ad-${ad.id}`}
+                  product={ad.product}
+                  inWishlist={wishlistIds.has(ad.product.id)}
+                  sponsored
+                  onNavigate={() => trackAdClick(ad.id)}
+                />
+              ))}
+              {organicItems.map((product) => (
                 <ProductCard
                   key={product.id}
                   product={product}

@@ -32,16 +32,71 @@ export const verifyOtpSchema = z.object({
 });
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
 
+export const GENDERS = ['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY'] as const;
+export type Gender = (typeof GENDERS)[number];
+export const GENDER_LABELS: Record<Gender, string> = {
+  MALE: 'Male',
+  FEMALE: 'Female',
+  OTHER: 'Other',
+  PREFER_NOT_TO_SAY: 'Prefer not to say',
+};
+
 /** PATCH /api/auth/me — profile completion / edits. */
 export const updateProfileSchema = z.object({
   name: z.string().trim().min(2).max(60).optional(),
   email: z.string().trim().email().optional(),
+  avatarUrl: z.string().url().nullable().optional(),
+  gender: z.enum(GENDERS).nullable().optional(),
+  dateOfBirth: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
+    .nullable()
+    .optional()
+    .refine(
+      (value) => {
+        if (!value) return true;
+        const dob = new Date(value);
+        if (Number.isNaN(dob.getTime()) || dob >= new Date()) return false;
+        const age = (Date.now() - dob.getTime()) / (365.25 * 24 * 3600 * 1000);
+        return age >= 13 && age <= 120;
+      },
+      { message: 'Enter a valid past date (you must be at least 13)' },
+    ),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 
-/** POST /api/auth/refresh and /api/auth/logout */
+/** PATCH /api/auth/me/preferences */
+export const updatePreferencesSchema = z.object({
+  email: z.boolean().optional(),
+  sms: z.boolean().optional(),
+  whatsapp: z.boolean().optional(),
+  recommendations: z.boolean().optional(),
+});
+export type UpdatePreferencesInput = z.infer<typeof updatePreferencesSchema>;
+
+/** 4-digit quick-login PIN. */
+export const pinSchema = z.string().regex(/^\d{4}$/, 'PIN must be 4 digits');
+
+/** POST /api/auth/check-phone — does this account exist / have a PIN? */
+export const checkPhoneSchema = z.object({ phone: phoneSchema });
+
+/** POST /api/auth/pin-login */
+export const pinLoginSchema = z.object({ phone: phoneSchema, pin: pinSchema });
+
+/** POST /api/auth/me/set-pin */
+export const setPinSchema = z.object({ pin: pinSchema });
+
+/** Phone change — OTP-verified on the NEW number. */
+export const phoneChangeRequestSchema = z.object({ newPhone: phoneSchema });
+export const phoneChangeConfirmSchema = z.object({ newPhone: phoneSchema, code: otpCodeSchema });
+
+/**
+ * POST /api/auth/refresh and /api/auth/logout.
+ * The refresh token normally travels in an httpOnly cookie; the body field is
+ * a fallback (older sessions / future mobile app).
+ */
 export const refreshTokenSchema = z.object({
-  refreshToken: z.string().min(20),
+  refreshToken: z.string().min(20).optional(),
 });
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
 
@@ -54,6 +109,12 @@ export interface AuthUser {
   role: UserRole;
   referralCode: string;
   createdAt: string;
+  dateOfBirth: string | null; // YYYY-MM-DD
+  gender: Gender | null;
+  avatarUrl: string | null;
+  /** True when a quick-login PIN is set (never the PIN itself). */
+  hasPin: boolean;
+  prefs: { email: boolean; sms: boolean; whatsapp: boolean; recommendations: boolean };
 }
 
 /** Response of verify-otp and refresh. */

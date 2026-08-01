@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import type { UserRole } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 
 interface Props {
@@ -16,6 +17,20 @@ export default function AddToCartButton({ variantId, stock, mode = 'cart' }: Pro
   const router = useRouter();
   const [state, setState] = useState<'idle' | 'busy' | 'added'>('idle');
   const [error, setError] = useState('');
+  // Sellers/admins browse the store view-only (in useEffect — avoids hydration mismatch).
+  const [role, setRole] = useState<UserRole | null>(null);
+  useEffect(() => setRole(getStoredUser()?.role ?? null), []);
+
+  if (role === 'SELLER' || role === 'ADMIN') {
+    if (mode === 'buy') return null; // one notice is enough — shown on the cart-mode slot
+    return (
+      <div className="flex-1">
+        <div className="w-full rounded-lg border border-gray-200 bg-cream-100 py-3 text-center text-sm font-semibold text-gray-500">
+          👁 View only — {role === 'SELLER' ? 'seller' : 'admin'} accounts can&apos;t purchase
+        </div>
+      </div>
+    );
+  }
 
   async function add() {
     if (!getStoredUser()) {

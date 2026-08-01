@@ -23,3 +23,6 @@ coverage/
 apps/api/uploads/
 .env.production
 backups/
+
+# TypeScript incremental build info
+*.tsbuildinfo

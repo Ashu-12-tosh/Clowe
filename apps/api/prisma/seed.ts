@@ -5,6 +5,7 @@
 import 'dotenv/config';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { generateReferralCode } from '../src/utils/crypto';
+import { seedMarketplace } from './seed/marketplace';
 
 const prisma = new PrismaClient();
 
@@ -235,6 +236,31 @@ async function main() {
   await seedAdmin();
   await seedCatalog();
   await seedReviews();
+  await seedMarketplace(prisma);
+  await syncRatingCache();
+}
+
+/**
+ * Recompute the denormalised rating columns from real reviews, so products
+ * that have actual reviews never disagree with the cache. (Marketplace-seeded
+ * products keep their synthetic ratings — they have no review rows.)
+ */
+async function syncRatingCache() {
+  const grouped = await prisma.review.groupBy({
+    by: ['productId'],
+    _avg: { rating: true },
+    _count: { rating: true },
+  });
+  for (const row of grouped) {
+    await prisma.product.update({
+      where: { id: row.productId },
+      data: {
+        ratingAvg: Math.round((row._avg.rating ?? 0) * 10) / 10,
+        ratingCount: row._count.rating,
+      },
+    });
+  }
+  console.log(`[seed] Rating cache synced for ${grouped.length} reviewed products`);
 }
 
 main()

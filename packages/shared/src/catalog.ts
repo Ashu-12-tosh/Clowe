@@ -30,6 +30,8 @@ export interface CategoryNode {
   name: string;
   slug: string;
   imageUrl: string | null;
+  /** Emoji/glyph for the category nav bar and mega menu. */
+  icon: string | null;
   children: CategoryNode[];
 }
 
@@ -80,6 +82,12 @@ export interface ProductDetail {
   description: string;
   brand: string | null;
   category: { name: string; slug: string };
+  /**
+   * Slug of the top-level category (e.g. "fashion" for men-t-shirts).
+   * The PDP uses it to offer AI Try-On only on wearable categories now that
+   * the catalogue also has electronics above the try-on price floor.
+   */
+  rootCategorySlug: string;
   sellerShopName: string;
   images: { url: string; altText: string | null }[];
   variants: ProductVariantInfo[];

@@ -59,6 +59,21 @@ reviewsRouter.post('/', requireAuth, async (req, res, next) => {
         comment: input.comment ?? null,
       },
     });
+
+    // Sync the denormalised rating cache the listing/landing pages read.
+    const agg = await prisma.review.aggregate({
+      where: { productId: product.id },
+      _avg: { rating: true },
+      _count: { rating: true },
+    });
+    await prisma.product.update({
+      where: { id: product.id },
+      data: {
+        ratingAvg: Math.round((agg._avg.rating ?? 0) * 10) / 10,
+        ratingCount: agg._count.rating,
+      },
+    });
+
     res.json({ success: true, data: { saved: true } });
   } catch (err) {
     next(err);

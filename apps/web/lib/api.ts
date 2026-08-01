@@ -5,20 +5,22 @@ import type { AuthTokensResponse, AuthUser } from '@clowe/shared';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 const ACCESS_KEY = 'clowe.accessToken';
-const REFRESH_KEY = 'clowe.refreshToken';
+const LEGACY_REFRESH_KEY = 'clowe.refreshToken'; // pre-cookie sessions only
 const USER_KEY = 'clowe.user';
 
-// --- Token storage (localStorage for now; revisited during security phase) ---
+// --- Session storage ---
+// The refresh token lives in an httpOnly cookie set by the API (never
+// readable by JS). Locally we keep only the short-lived access token + user.
 
 export function saveSession(data: AuthTokensResponse) {
   localStorage.setItem(ACCESS_KEY, data.accessToken);
-  localStorage.setItem(REFRESH_KEY, data.refreshToken);
   localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+  localStorage.removeItem(LEGACY_REFRESH_KEY);
 }
 
 export function clearSession() {
   localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+  localStorage.removeItem(LEGACY_REFRESH_KEY);
   localStorage.removeItem(USER_KEY);
 }
 
@@ -32,24 +34,43 @@ export function getStoredUser(): AuthUser | null {
   return raw ? (JSON.parse(raw) as AuthUser) : null;
 }
 
-export function getRefreshToken(): string | null {
-  return localStorage.getItem(REFRESH_KEY);
-}
-
 /**
- * Exchange the stored refresh token for a fresh session (e.g. after the
- * user's role changes on the server). Returns the updated user, or null.
+ * Rotate the session via the httpOnly refresh cookie (older sessions fall
+ * back to their stored token once, migrating them onto the cookie).
+ * Returns the fresh user, or null when the session can't be renewed.
  */
 export async function refreshSession(): Promise<AuthUser | null> {
-  const refreshToken = getRefreshToken();
-  if (!refreshToken) return null;
   try {
-    const data = await api<AuthTokensResponse>('/api/auth/refresh', { body: { refreshToken } });
-    saveSession(data);
-    return data.user;
+    const legacyToken = localStorage.getItem(LEGACY_REFRESH_KEY);
+    const res = await fetch(`${API_URL}/api/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(legacyToken ? { refreshToken: legacyToken } : {}),
+    });
+    const json = await res.json();
+    if (!json.success) return null;
+    saveSession(json.data as AuthTokensResponse);
+    return (json.data as AuthTokensResponse).user;
   } catch {
     return null;
   }
+}
+
+/** Logout on this device: revoke the cookie session + clear local state. */
+export async function logoutSession(): Promise<void> {
+  try {
+    const legacyToken = localStorage.getItem(LEGACY_REFRESH_KEY);
+    await fetch(`${API_URL}/api/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(legacyToken ? { refreshToken: legacyToken } : {}),
+    });
+  } catch {
+    // Local logout still proceeds if the API is unreachable.
+  }
+  clearSession();
 }
 
 /** Upload images (multipart) and get back their public URLs. */
@@ -59,6 +80,7 @@ export async function uploadImages(files: File[]): Promise<string[]> {
   const token = localStorage.getItem(ACCESS_KEY);
   const res = await fetch(`${API_URL}/api/uploads`, {
     method: 'POST',
+    credentials: 'include',
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     body: form,
   });
@@ -80,22 +102,35 @@ export class ApiRequestError extends Error {
   }
 }
 
-export async function api<T>(
-  path: string,
-  options: { method?: string; body?: unknown; auth?: boolean } = {},
-): Promise<T> {
+async function rawRequest(path: string, options: { method?: string; body?: unknown; auth?: boolean }) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (options.auth) {
     const token = localStorage.getItem(ACCESS_KEY);
     if (token) headers.Authorization = `Bearer ${token}`;
   }
-
   const res = await fetch(`${API_URL}${path}`, {
     method: options.method ?? (options.body ? 'POST' : 'GET'),
+    credentials: 'include',
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
-  const json = await res.json();
+  return { res, json: await res.json() };
+}
+
+export async function api<T>(
+  path: string,
+  options: { method?: string; body?: unknown; auth?: boolean } = {},
+): Promise<T> {
+  let { res, json } = await rawRequest(path, options);
+
+  // Access token expired? Silently rotate via the refresh cookie and retry
+  // once — active users never see a login screen.
+  if (!json.success && res.status === 401 && options.auth && !path.startsWith('/api/auth/')) {
+    const renewed = await refreshSession();
+    if (renewed) {
+      ({ res, json } = await rawRequest(path, options));
+    }
+  }
 
   if (!json.success) {
     throw new ApiRequestError(

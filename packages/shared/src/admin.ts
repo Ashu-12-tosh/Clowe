@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ProductStatusValue, SellerStatusValue } from './seller';
+import type { ProductStatusValue, SellerReturnRow, SellerStatusValue } from './seller';
 import type { UserRole } from './index';
 
 // ---------------------------------------------------------------------------
@@ -26,6 +26,8 @@ export const categoryUpsertSchema = z.object({
   name: z.string().trim().min(2).max(40),
   parentId: z.string().nullable().optional(),
   imageUrl: z.string().url().optional(),
+  /** Emoji/glyph shown in the category nav bar and mega menu. */
+  icon: z.string().trim().max(8).nullable().optional(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
 });
@@ -44,8 +46,9 @@ export interface AdminStats {
     orders: number;
     unitsSold: number;
     revenuePaise: number;
+    returns: number;
   };
-  pending: { sellers: number; products: number };
+  pending: { sellers: number; products: number; complaints: number; returns: number };
   topProducts: { id: string; title: string; unitsSold: number; revenuePaise: number }[];
   sellerBreakdown: {
     sellerId: string;
@@ -124,6 +127,7 @@ export interface AdminCategoryRow {
   name: string;
   slug: string;
   parentId: string | null;
+  icon: string | null;
   isActive: boolean;
   sortOrder: number;
   productCount: number;
@@ -149,3 +153,19 @@ export interface AdminOrderRow {
   totalPaise: number;
   createdAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// Admin returns oversight
+// ---------------------------------------------------------------------------
+
+/** SellerReturnRow + seller identity, for the cross-seller admin view. */
+export interface AdminReturnRow extends SellerReturnRow {
+  shopName: string;
+  customerPhone: string;
+}
+
+/** Admin override: approve a seller-rejected return (dispute resolution). */
+export const adminReturnOverrideSchema = z.object({
+  note: z.string().trim().max(300).optional(),
+});
+export type AdminReturnOverrideInput = z.infer<typeof adminReturnOverrideSchema>;

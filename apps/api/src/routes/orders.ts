@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import {
   checkoutSchema,
+  creditsToPaise,
+  CREDIT_VALUE_PAISE,
   returnRequestSchema,
   type CheckoutResult,
   type OrderDetailView,
   type OrderListRow,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { env } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { paymentProvider } from '../services/payments';
@@ -22,7 +25,15 @@ ordersRouter.use(requireAuth);
 
 ordersRouter.post('/checkout', async (req, res, next) => {
   try {
-    const { addressId } = checkoutSchema.parse(req.body);
+    // Sellers/admins can browse the store from their dashboards, but buying
+    // is customer-only.
+    if (req.auth!.role !== 'CUSTOMER') {
+      throw ApiError.forbidden(
+        'Seller/admin accounts can view the store but cannot purchase',
+        'PURCHASE_CUSTOMER_ONLY',
+      );
+    }
+    const { addressId, useCredits } = checkoutSchema.parse(req.body);
     const userId = req.auth!.userId;
 
     const address = await prisma.address.findUnique({ where: { id: addressId } });
@@ -51,7 +62,20 @@ ordersRouter.post('/checkout', async (req, res, next) => {
     const orderNumber = await generateOrderNumber();
     const subtotalPaise = cart.subtotalPaise;
     const shippingPaise = shippingFor(subtotalPaise);
-    const totalPaise = subtotalPaise + shippingPaise;
+
+    // Optional shopping-credits discount (user's choice at the payment step).
+    // Redeemable up to the order value minus ₹1 (gateways need a payable amount).
+    let creditsUsed = 0;
+    if (useCredits) {
+      const me = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { creditsBalance: true },
+      });
+      const maxDiscountPaise = Math.max(0, subtotalPaise + shippingPaise - 100);
+      creditsUsed = Math.min(me?.creditsBalance ?? 0, Math.floor(maxDiscountPaise / CREDIT_VALUE_PAISE));
+    }
+    const discountPaise = creditsToPaise(creditsUsed);
+    const totalPaise = subtotalPaise + shippingPaise - discountPaise;
 
     // Create the order and reserve stock atomically. Conditional decrements
     // guard against a concurrent checkout taking the last unit.
@@ -65,7 +89,17 @@ ordersRouter.post('/checkout', async (req, res, next) => {
           throw ApiError.badRequest(`"${line.title}" just went out of stock`, 'OUT_OF_STOCK');
         }
       }
-      return tx.order.create({
+      // Reserve the credits (conditional — guards a concurrent double-spend).
+      if (creditsUsed > 0) {
+        const spent = await tx.user.updateMany({
+          where: { id: userId, creditsBalance: { gte: creditsUsed } },
+          data: { creditsBalance: { decrement: creditsUsed } },
+        });
+        if (spent.count === 0) {
+          throw ApiError.badRequest('Your credits balance changed — please retry', 'CREDITS_CHANGED');
+        }
+      }
+      const created = await tx.order.create({
         data: {
           orderNumber,
           userId,
@@ -80,6 +114,8 @@ ordersRouter.post('/checkout', async (req, res, next) => {
           status: 'PLACED',
           subtotalPaise,
           shippingPaise,
+          discountPaise,
+          creditsUsed,
           totalPaise,
           items: {
             create: cart.lines.map((line) => ({
@@ -96,6 +132,12 @@ ordersRouter.post('/checkout', async (req, res, next) => {
           },
         },
       });
+      if (creditsUsed > 0) {
+        await tx.creditLedger.create({
+          data: { userId, delta: -creditsUsed, reason: 'REDEEM_CHECKOUT', orderId: created.id },
+        });
+      }
+      return created;
     });
 
     // Gateway order (outside the DB transaction; on failure the order stays
@@ -172,7 +214,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
           include: {
             product: { include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } } },
             seller: { select: { shopName: true } },
-            return: { select: { status: true } },
+            return: { include: { refund: true } },
           },
         },
       },
@@ -180,6 +222,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
     if (!order || order.userId !== req.auth!.userId) throw ApiError.notFound('Order not found');
 
     const cancellable = ['PLACED', 'CONFIRMED'];
+    const windowMs = env.RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000;
     const body: OrderDetailView = {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -194,6 +237,8 @@ ordersRouter.get('/:id', async (req, res, next) => {
         state: order.shipState,
         pincode: order.shipPincode,
       },
+      discountPaise: order.discountPaise,
+      creditsUsed: order.creditsUsed,
       items: order.items.map((i) => ({
         id: i.id,
         productSlug: i.product.slug,
@@ -206,6 +251,32 @@ ordersRouter.get('/:id', async (req, res, next) => {
         imageUrl: i.product.images[0]?.url ?? null,
         shopName: i.seller.shopName,
         returnStatus: i.return?.status ?? null,
+        returnInfo: i.return
+          ? {
+              id: i.return.id,
+              status: i.return.status,
+              reason: i.return.reasonCategory,
+              details: i.return.reason || null,
+              photos: i.return.photos,
+              rejectionReason: i.return.rejectionReason,
+              requestedAt: i.return.createdAt.toISOString(),
+              approvedAt: i.return.approvedAt?.toISOString() ?? null,
+              rejectedAt: i.return.rejectedAt?.toISOString() ?? null,
+              receivedAt: i.return.receivedAt?.toISOString() ?? null,
+              refund: i.return.refund
+                ? {
+                    status: i.return.refund.status,
+                    amountPaise: i.return.refund.amountPaise,
+                    processedAt: i.return.refund.processedAt?.toISOString() ?? null,
+                  }
+                : null,
+            }
+          : null,
+        canReturn:
+          i.status === 'DELIVERED' &&
+          !i.return &&
+          !!i.deliveredAt &&
+          Date.now() - i.deliveredAt.getTime() <= windowMs,
         courierName: i.courierName,
         awbNumber: i.awbNumber,
       })),
@@ -218,6 +289,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
       awaitingPayment: order.payment?.status === 'CREATED' && order.status === 'PLACED',
       canCancel:
         order.status !== 'CANCELLED' && order.items.every((i) => cancellable.includes(i.status)),
+      returnWindowDays: env.RETURN_WINDOW_DAYS,
     };
     res.json({ success: true, data: body });
   } catch (err) {
@@ -247,6 +319,23 @@ ordersRouter.post('/:id/cancel', async (req, res, next) => {
           data: { stock: { increment: item.quantity } },
         }),
       ),
+      // Redeemed credits come back on cancellation.
+      ...(order.creditsUsed > 0
+        ? [
+            prisma.user.update({
+              where: { id: order.userId },
+              data: { creditsBalance: { increment: order.creditsUsed } },
+            }),
+            prisma.creditLedger.create({
+              data: {
+                userId: order.userId,
+                delta: order.creditsUsed,
+                reason: 'REFUND_CREDITS',
+                orderId: order.id,
+              },
+            }),
+          ]
+        : []),
       // Paid orders are marked for refund (actual gateway refund is a later phase).
       ...(order.payment && order.payment.status === 'PAID'
         ? [
@@ -263,13 +352,17 @@ ordersRouter.post('/:id/cancel', async (req, res, next) => {
   }
 });
 
-// Request a return for a delivered item.
+// Request a return for a delivered item (inside the return window).
 ordersRouter.post('/items/:itemId/return', async (req, res, next) => {
   try {
-    const { reason } = returnRequestSchema.parse(req.body);
+    const input = returnRequestSchema.parse(req.body);
     const item = await prisma.orderItem.findUnique({
       where: { id: req.params.itemId },
-      include: { order: { select: { userId: true } }, return: true },
+      include: {
+        order: { select: { userId: true, orderNumber: true } },
+        seller: { select: { userId: true } },
+        return: true,
+      },
     });
     if (!item || item.order.userId !== req.auth!.userId) throw ApiError.notFound('Item not found');
     if (item.status !== 'DELIVERED') {
@@ -277,13 +370,37 @@ ordersRouter.post('/items/:itemId/return', async (req, res, next) => {
     }
     if (item.return) throw ApiError.badRequest('Return already requested for this item');
 
+    // Return window enforced server-side (UI hides the button, this is the law).
+    const windowMs = env.RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    if (!item.deliveredAt || Date.now() - item.deliveredAt.getTime() > windowMs) {
+      throw ApiError.badRequest(
+        `Returns are accepted within ${env.RETURN_WINDOW_DAYS} days of delivery`,
+        'RETURN_WINDOW_CLOSED',
+      );
+    }
+
     await prisma.$transaction([
       prisma.return.create({
-        data: { orderItemId: item.id, userId: req.auth!.userId, reason },
+        data: {
+          orderItemId: item.id,
+          userId: req.auth!.userId,
+          reasonCategory: input.reason,
+          reason: input.details ?? '',
+          photos: input.photos ?? [],
+        },
       }),
       prisma.orderItem.update({
         where: { id: item.id },
         data: { status: 'RETURN_REQUESTED' },
+      }),
+      // Tell the seller a return needs their action.
+      prisma.notification.create({
+        data: {
+          userId: item.seller.userId,
+          type: 'RETURN_REQUESTED',
+          title: 'Return requested ↩',
+          body: `A customer requested a return for "${item.title}" (${item.order.orderNumber}). Review it in your seller panel → Returns.`,
+        },
       }),
     ]);
     res.json({ success: true, data: { requested: true } });

@@ -6,19 +6,50 @@ import { usePathname, useRouter } from 'next/navigation';
 import type { SellerProfileInfo } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import { SellerContext, type SellerState } from '@/components/seller/SellerContext';
+import DashShell, { type DashNavItem } from '@/components/DashShell';
 
-const NAV = [
-  { href: '/seller', label: 'Dashboard' },
-  { href: '/seller/products', label: 'My Products' },
-  { href: '/seller/products/new', label: 'Add Product' },
-  { href: '/seller/orders', label: 'Orders' },
+const NAV: DashNavItem[] = [
+  { href: '/seller', label: 'Dashboard', icon: '▦' },
+  { href: '/seller/products', label: 'My Products', icon: '👕' },
+  { href: '/seller/products/new', label: 'Add Product', icon: '＋' },
+  { href: '/seller/orders', label: 'Orders', icon: '📦' },
+  { href: '/seller/returns', label: 'Returns', icon: '↩' },
+  { href: '/seller/ads', label: 'Advertise', icon: '📣' },
 ];
+
+/** Minimal chrome for the public seller pages (login / register). */
+function SellerPublicShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-screen flex-col bg-cream-50">
+      <header className="bg-ink-950 px-5 py-4">
+        <div className="mx-auto flex max-w-4xl items-center justify-between">
+          <Link href="/sell" className="font-display text-lg font-bold uppercase tracking-[0.2em] text-brand-400">
+            Clowe <span className="text-white">Seller</span>
+          </Link>
+          <Link href="/" className="text-sm font-semibold text-gray-300 hover:text-brand-400">
+            Go to store →
+          </Link>
+        </div>
+      </header>
+      <div className="flex-1">{children}</div>
+    </div>
+  );
+}
 
 export default function SellerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [state, setState] = useState<SellerState>({ kind: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
+  const [pendingReturns, setPendingReturns] = useState(0);
+
+  // Sidebar badge: returns waiting for a decision (refreshed on navigation).
+  useEffect(() => {
+    if (state.kind !== 'ready') return;
+    api<{ count: number }>('/api/seller/returns/pending-count', { auth: true })
+      .then((d) => setPendingReturns(d.count))
+      .catch(() => {});
+  }, [state.kind, pathname]);
 
   useEffect(() => {
     if (!getStoredUser()) {
@@ -47,19 +78,23 @@ export default function SellerLayout({ children }: { children: React.ReactNode }
   if (pathname === '/seller/register' || pathname === '/seller/login') {
     return (
       <SellerContext.Provider value={{ state, reload: () => setReloadKey((k) => k + 1) }}>
-        {children}
+        <SellerPublicShell>{children}</SellerPublicShell>
       </SellerContext.Provider>
     );
   }
 
   if (state.kind === 'loading') {
-    return <main className="mx-auto max-w-6xl px-4 py-10 text-sm text-gray-500">Loading…</main>;
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-cream-50 text-sm text-gray-500">
+        Loading…
+      </main>
+    );
   }
 
   if (state.kind === 'logged-out') {
     return (
-      <main className="mx-auto max-w-6xl px-4 py-16 text-center">
-        <p className="text-lg font-semibold">Seller area</p>
+      <main className="flex min-h-screen flex-col items-center justify-center bg-cream-50 px-4 text-center">
+        <p className="font-display text-xl font-bold text-ink-900">Seller area</p>
         <p className="mt-2 text-sm text-gray-600">
           <Link href="/seller/login" className="font-semibold text-brand-600 hover:underline">
             Seller login
@@ -80,36 +115,15 @@ export default function SellerLayout({ children }: { children: React.ReactNode }
 
   return (
     <SellerContext.Provider value={{ state, reload: () => setReloadKey((k) => k + 1) }}>
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        <div className="flex flex-col gap-6 md:flex-row">
-          <aside className="w-full shrink-0 md:w-52">
-            <div className="rounded-2xl border border-gray-100 bg-white p-3">
-              <div className="rounded-xl bg-ink-900 px-3.5 py-3 text-white">
-                <p className="truncate text-sm font-bold">{state.profile.shopName}</p>
-                <p className="mt-0.5 text-[11px] uppercase tracking-widest text-brand-400">
-                  Seller Panel
-                </p>
-              </div>
-              <nav className="mt-3 flex gap-2 overflow-x-auto md:flex-col md:gap-1">
-                {NAV.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`whitespace-nowrap rounded-xl px-3.5 py-2.5 text-sm transition ${
-                      pathname === item.href
-                        ? 'bg-ink-900 font-semibold text-white shadow'
-                        : 'text-gray-600 hover:bg-cream-100 hover:text-ink-900'
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
-            </div>
-          </aside>
-          <section className="min-w-0 flex-1">{children}</section>
-        </div>
-      </main>
+      <DashShell
+        brand={state.profile.shopName}
+        subtitle="Seller Panel"
+        nav={NAV.map((item) =>
+          item.href === '/seller/returns' ? { ...item, badge: pendingReturns } : item,
+        )}
+      >
+        <div className="mx-auto max-w-6xl">{children}</div>
+      </DashShell>
     </SellerContext.Provider>
   );
 }

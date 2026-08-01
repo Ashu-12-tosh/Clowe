@@ -11,6 +11,7 @@ import { env } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { tryOnProvider } from '../services/tryon';
+import { getSettings } from '../services/settingsService';
 
 export const tryonRouter = Router();
 tryonRouter.use(requireAuth);
@@ -105,6 +106,16 @@ tryonRouter.post('/', async (req, res, next) => {
       include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
     });
     if (!product || product.status !== 'APPROVED') throw ApiError.notFound('Product not found');
+
+    // Try-On is a premium-product feature — threshold set by admin settings.
+    const { tryonMinPricePaise } = await getSettings();
+    if (product.basePricePaise < tryonMinPricePaise) {
+      throw ApiError.badRequest(
+        `AI Try-On is available on products priced ₹${Math.round(tryonMinPricePaise / 100)} and above`,
+        'TRYON_NOT_ELIGIBLE',
+      );
+    }
+
     const garmentImageUrl = product.images[0]?.url;
     if (!garmentImageUrl) throw ApiError.badRequest('This product has no images to try on');
 

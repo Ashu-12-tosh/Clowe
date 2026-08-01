@@ -1,20 +1,36 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import {
+  adminComplaintUpdateSchema,
+  adminReturnOverrideSchema,
+  adDecisionSchema,
   categoryUpsertSchema,
   productDecisionSchema,
   sellerDecisionSchema,
+  type AdminComplaintRow,
   type AdminCategoryRow,
   type AdminOrderRow,
   type AdminProductDetail,
   type AdminProductRow,
+  type AdminReturnRow,
   type AdminSellerRow,
+  type AdminSellerReferralRow,
+  type AdminAdRow,
   type AdminStats,
   type AdminUserRow,
+  updateSettingsSchema,
+  voidReferralSchema,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
+import { sendToUserSafe } from '../services/messaging';
+import { getSettings, setSetting } from '../services/settingsService';
+import { expireDueAds } from './ads';
+import {
+  SELLER_REFERRAL_TARGET_PAISE,
+  deliveredSalesPaise,
+} from '../services/sellerReferralService';
 
 export const adminRouter = Router();
 
@@ -33,7 +49,7 @@ function slugify(text: string): string {
 
 adminRouter.get('/stats', async (_req, res, next) => {
   try {
-    const [users, sellers, products, liveProducts, orders, pendingSellers, pendingProducts] =
+    const [users, sellers, products, liveProducts, orders, pendingSellers, pendingProducts, openComplaints, totalReturns, pendingReturns] =
       await Promise.all([
         prisma.user.count(),
         prisma.sellerProfile.count(),
@@ -42,6 +58,9 @@ adminRouter.get('/stats', async (_req, res, next) => {
         prisma.order.count(),
         prisma.sellerProfile.count({ where: { status: 'PENDING' } }),
         prisma.product.count({ where: { status: 'PENDING' } }),
+        prisma.complaint.count({ where: { status: 'OPEN' } }),
+        prisma.return.count(),
+        prisma.return.count({ where: { status: 'REQUESTED' } }),
       ]);
 
     // Sales aggregates from order items (excludes cancelled/returned).
@@ -88,8 +107,13 @@ adminRouter.get('/stats', async (_req, res, next) => {
     }
 
     const body: AdminStats = {
-      totals: { users, sellers, products, liveProducts, orders, unitsSold, revenuePaise },
-      pending: { sellers: pendingSellers, products: pendingProducts },
+      totals: { users, sellers, products, liveProducts, orders, unitsSold, revenuePaise, returns: totalReturns },
+      pending: {
+        sellers: pendingSellers,
+        products: pendingProducts,
+        complaints: openComplaints,
+        returns: pendingReturns,
+      },
       topProducts: topIds.map(([id, agg]) => ({
         id,
         title: titleById.get(id) ?? 'Unknown product',
@@ -325,6 +349,7 @@ adminRouter.get('/categories', async (_req, res, next) => {
       name: c.name,
       slug: c.slug,
       parentId: c.parentId,
+      icon: c.icon,
       isActive: c.isActive,
       sortOrder: c.sortOrder,
       productCount: c._count.products,
@@ -358,6 +383,7 @@ adminRouter.post('/categories', async (req, res, next) => {
         slug,
         parentId: input.parentId ?? null,
         imageUrl: input.imageUrl,
+        icon: input.icon ?? null,
         sortOrder: input.sortOrder ?? 0,
       },
     });
@@ -378,6 +404,7 @@ adminRouter.patch('/categories/:id', async (req, res, next) => {
       data: {
         name: input.name,
         imageUrl: input.imageUrl,
+        icon: input.icon,
         isActive: input.isActive,
         sortOrder: input.sortOrder,
       },
@@ -449,6 +476,104 @@ adminRouter.patch('/users/:id', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
+// Complaints
+// ---------------------------------------------------------------------------
+
+function toAdminComplaintRow(c: {
+  id: string;
+  complaintId: string;
+  category: string;
+  description: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+  adminNotes: string | null;
+  orderId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  user: { name: string | null; phone: string };
+  order: { orderNumber: string } | null;
+}): AdminComplaintRow {
+  return {
+    id: c.id,
+    complaintId: c.complaintId,
+    category: c.category as AdminComplaintRow['category'],
+    description: c.description,
+    status: c.status,
+    orderNumber: c.order?.orderNumber ?? null,
+    orderId: c.orderId,
+    adminNotes: c.adminNotes,
+    userName: c.user.name,
+    userPhone: c.user.phone,
+    createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString(),
+  };
+}
+
+adminRouter.get('/complaints', async (req, res, next) => {
+  try {
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const rows = await prisma.complaint.findMany({
+      where: {
+        ...(status ? { status: status as never } : {}),
+        ...(category ? { category } : {}),
+        ...(q ? { complaintId: { contains: q.toUpperCase() } } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        user: { select: { name: true, phone: true } },
+        order: { select: { orderNumber: true } },
+      },
+    });
+    res.json({ success: true, data: rows.map(toAdminComplaintRow) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update status / internal notes; the user is notified on status change.
+adminRouter.patch('/complaints/:id', async (req, res, next) => {
+  try {
+    const input = adminComplaintUpdateSchema.parse(req.body);
+    const complaint = await prisma.complaint.findUnique({ where: { id: req.params.id } });
+    if (!complaint) throw ApiError.notFound('Complaint not found');
+
+    const updated = await prisma.complaint.update({
+      where: { id: complaint.id },
+      data: {
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.adminNotes !== undefined ? { adminNotes: input.adminNotes } : {}),
+      },
+      include: {
+        user: { select: { name: true, phone: true } },
+        order: { select: { orderNumber: true } },
+      },
+    });
+
+    if (input.status && input.status !== complaint.status) {
+      const friendly: Record<string, string> = {
+        IN_PROGRESS: 'is now being worked on 🔧',
+        RESOLVED: 'has been resolved ✅',
+        CLOSED: 'has been closed',
+        OPEN: 'has been re-opened',
+      };
+      await prisma.notification.create({
+        data: {
+          userId: complaint.userId,
+          type: 'COMPLAINT_UPDATED',
+          title: 'Complaint update 📢',
+          body: `Your complaint ${complaint.complaintId} ${friendly[input.status]}.`,
+        },
+      });
+    }
+    res.json({ success: true, data: toAdminComplaintRow(updated) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Order overview
 // ---------------------------------------------------------------------------
 
@@ -473,6 +598,316 @@ adminRouter.get('/orders', async (_req, res, next) => {
       createdAt: o.createdAt.toISOString(),
     }));
     res.json({ success: true, data: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Returns oversight (all sellers) + dispute-resolution override
+// ---------------------------------------------------------------------------
+
+adminRouter.get('/returns', async (req, res, next) => {
+  try {
+    const { status } = z
+      .object({ status: z.enum(['REQUESTED', 'APPROVED', 'REJECTED', 'RECEIVED', 'REFUNDED']).optional() })
+      .parse(req.query);
+    const returns = await prisma.return.findMany({
+      where: status ? { status } : undefined,
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: {
+        refund: true,
+        user: { select: { phone: true } },
+        orderItem: {
+          include: {
+            order: { select: { orderNumber: true, shipName: true } },
+            seller: { select: { shopName: true } },
+            product: { include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } } },
+          },
+        },
+      },
+    });
+    const rows: AdminReturnRow[] = returns.map((r) => ({
+      id: r.id,
+      orderItemId: r.orderItemId,
+      orderNumber: r.orderItem.order.orderNumber,
+      title: r.orderItem.title,
+      size: r.orderItem.size,
+      color: r.orderItem.color,
+      quantity: r.orderItem.quantity,
+      pricePaise: r.orderItem.pricePaise,
+      imageUrl: r.orderItem.product.images[0]?.url ?? null,
+      customerName: r.orderItem.order.shipName,
+      customerPhone: r.user.phone,
+      shopName: r.orderItem.seller.shopName,
+      reason: r.reasonCategory,
+      details: r.reason || null,
+      photos: r.photos,
+      status: r.status,
+      rejectionReason: r.rejectionReason,
+      receivedCondition: r.receivedCondition,
+      adminOverrideAt: r.adminOverrideAt?.toISOString() ?? null,
+      refund: r.refund
+        ? {
+            status: r.refund.status,
+            amountPaise: r.refund.amountPaise,
+            providerRefundId: r.refund.providerRefundId,
+          }
+        : null,
+      requestedAt: r.createdAt.toISOString(),
+    }));
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Override a seller's rejection: REJECTED → APPROVED (logged, both sides notified).
+adminRouter.patch('/returns/:id/override', async (req, res, next) => {
+  try {
+    const { note } = adminReturnOverrideSchema.parse(req.body);
+    const r = await prisma.return.findUnique({
+      where: { id: req.params.id },
+      include: {
+        orderItem: {
+          include: {
+            order: { include: { user: { select: { id: true, phone: true } } } },
+            seller: { select: { userId: true } },
+          },
+        },
+      },
+    });
+    if (!r) throw ApiError.notFound('Return not found');
+    if (r.status !== 'REJECTED') {
+      throw ApiError.badRequest('Only rejected returns can be overridden', 'NOT_REJECTED');
+    }
+
+    const customer = r.orderItem.order.user;
+    const label = `"${r.orderItem.title}" (${r.orderItem.order.orderNumber})`;
+    const overrideAt = new Date();
+
+    await prisma.$transaction([
+      prisma.return.update({
+        where: { id: r.id },
+        data: {
+          status: 'APPROVED',
+          approvedAt: overrideAt,
+          adminOverrideAt: overrideAt,
+          adminOverrideNote: note ?? null,
+          resolvedAt: null,
+        },
+      }),
+      // The return is live again.
+      prisma.orderItem.update({
+        where: { id: r.orderItemId },
+        data: { status: 'RETURN_REQUESTED' },
+      }),
+      prisma.notification.create({
+        data: {
+          userId: customer.id,
+          type: 'RETURN_APPROVED',
+          title: 'Return approved by Clowe support ✅',
+          body: `After review, your return for ${label} has been approved. Pickup will be scheduled shortly.`,
+        },
+      }),
+      prisma.notification.create({
+        data: {
+          userId: r.orderItem.seller.userId,
+          type: 'RETURN_OVERRIDDEN',
+          title: 'Return decision overridden',
+          body: `Clowe support reviewed and approved the customer's return for ${label}${note ? ` — note: "${note}"` : ''}. Please process the pickup and mark it received.`,
+        },
+      }),
+    ]);
+    // Audit trail in the server log as well.
+    console.log(
+      `[clowe-api] ADMIN OVERRIDE: return ${r.id} (${label}) REJECTED → APPROVED at ${overrideAt.toISOString()}${note ? ` note="${note}"` : ''}`,
+    );
+    sendToUserSafe(
+      customer.id,
+      {
+        channel: 'whatsapp',
+        to: `+91${customer.phone}`,
+        body: `Clowe: good news — after review, your return for ${label} has been approved. Pickup will be scheduled shortly. ✅`,
+      },
+      { critical: true },
+    );
+    res.json({ success: true, data: { overridden: true } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Platform settings (try-on threshold, social links, ad pricing)
+// ---------------------------------------------------------------------------
+
+adminRouter.get('/settings', async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await getSettings() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminRouter.put('/settings', async (req, res, next) => {
+  try {
+    const input = updateSettingsSchema.parse(req.body);
+    if (input.tryonMinPricePaise !== undefined) {
+      await setSetting('tryonMinPricePaise', input.tryonMinPricePaise);
+    }
+    if (input.socialLinks !== undefined) await setSetting('socialLinks', input.socialLinks);
+    if (input.adPricing !== undefined) await setSetting('adPricing', input.adPricing);
+    res.json({ success: true, data: await getSettings() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Ads moderation
+// ---------------------------------------------------------------------------
+
+adminRouter.get('/ads', async (req, res, next) => {
+  try {
+    const { status } = z
+      .object({ status: z.enum(['PENDING', 'ACTIVE', 'REJECTED', 'EXPIRED']).optional() })
+      .parse(req.query);
+    await expireDueAds();
+    const ads = await prisma.ad.findMany({
+      where: status ? { status } : undefined,
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: {
+        seller: { select: { shopName: true } },
+        product: { select: { title: true, slug: true, images: { orderBy: { sortOrder: 'asc' }, take: 1 } } },
+      },
+    });
+    const rows: AdminAdRow[] = ads.map((ad) => ({
+      id: ad.id,
+      productId: ad.productId,
+      productTitle: ad.product.title,
+      productSlug: ad.product.slug,
+      imageUrl: ad.product.images[0]?.url ?? null,
+      placement: ad.placement,
+      durationDays: ad.durationDays,
+      pricePaise: ad.pricePaise,
+      status: ad.status,
+      rejectionReason: ad.rejectionReason,
+      startAt: ad.startAt?.toISOString() ?? null,
+      endAt: ad.endAt?.toISOString() ?? null,
+      views: ad.views,
+      clicks: ad.clicks,
+      createdAt: ad.createdAt.toISOString(),
+      shopName: ad.seller.shopName,
+    }));
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Approve (goes live now, for its duration) or reject (with reason).
+adminRouter.patch('/ads/:id', async (req, res, next) => {
+  try {
+    const input = adDecisionSchema.parse(req.body);
+    const ad = await prisma.ad.findUnique({
+      where: { id: req.params.id },
+      include: { seller: { select: { userId: true } }, product: { select: { title: true } } },
+    });
+    if (!ad) throw ApiError.notFound('Ad not found');
+    if (ad.status !== 'PENDING') {
+      throw ApiError.badRequest(`Only pending ads can be decided (this one is ${ad.status})`);
+    }
+
+    if (input.action === 'approve') {
+      const startAt = new Date();
+      const endAt = new Date(startAt.getTime() + ad.durationDays * 24 * 60 * 60 * 1000);
+      await prisma.$transaction([
+        prisma.ad.update({ where: { id: ad.id }, data: { status: 'ACTIVE', startAt, endAt } }),
+        prisma.notification.create({
+          data: {
+            userId: ad.seller.userId,
+            type: 'AD_APPROVED',
+            title: 'Your ad is live! 📣',
+            body: `Your ${ad.durationDays}-day ad for "${ad.product.title}" is now live. Amount payable: ₹${(ad.pricePaise / 100).toFixed(2)} (adjusted from payouts).`,
+          },
+        }),
+      ]);
+    } else {
+      await prisma.$transaction([
+        prisma.ad.update({
+          where: { id: ad.id },
+          data: { status: 'REJECTED', rejectionReason: input.reason },
+        }),
+        prisma.notification.create({
+          data: {
+            userId: ad.seller.userId,
+            type: 'AD_REJECTED',
+            title: 'Ad request declined',
+            body: `Your ad for "${ad.product.title}" was declined: "${input.reason}".`,
+          },
+        }),
+      ]);
+    }
+    res.json({ success: true, data: { id: ad.id, status: input.action === 'approve' ? 'ACTIVE' : 'REJECTED' } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Seller referral oversight
+// ---------------------------------------------------------------------------
+
+adminRouter.get('/seller-referrals', async (_req, res, next) => {
+  try {
+    const referrals = await prisma.sellerReferral.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      include: {
+        referrer: { select: { shopName: true } },
+        referred: { select: { id: true, shopName: true, status: true } },
+      },
+    });
+    const rows: AdminSellerReferralRow[] = await Promise.all(
+      referrals.map(async (r) => ({
+        id: r.id,
+        referrerShop: r.referrer.shopName,
+        referredShop: r.referred.shopName,
+        referredApproved: r.referred.status === 'APPROVED',
+        salesPaise: await deliveredSalesPaise(r.referred.id),
+        targetPaise: SELLER_REFERRAL_TARGET_PAISE,
+        status: r.status,
+        rewardPaise: r.rewardPaise,
+        earnedAt: r.earnedAt?.toISOString() ?? null,
+        voidReason: r.voidReason,
+        createdAt: r.createdAt.toISOString(),
+      })),
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Void a fraudulent referral (logged; blocks any future reward).
+adminRouter.patch('/seller-referrals/:id/void', async (req, res, next) => {
+  try {
+    const { reason } = voidReferralSchema.parse(req.body);
+    const referral = await prisma.sellerReferral.findUnique({ where: { id: req.params.id } });
+    if (!referral) throw ApiError.notFound('Referral not found');
+    if (referral.status === 'VOID') throw ApiError.badRequest('Already voided');
+
+    await prisma.sellerReferral.update({
+      where: { id: referral.id },
+      data: { status: 'VOID', voidedAt: new Date(), voidReason: reason },
+    });
+    console.log(
+      `[clowe-api] ADMIN VOID SELLER REFERRAL: ${referral.id} (was ${referral.status}) reason="${reason}"`,
+    );
+    res.json({ success: true, data: { id: referral.id, status: 'VOID' } });
   } catch (err) {
     next(err);
   }

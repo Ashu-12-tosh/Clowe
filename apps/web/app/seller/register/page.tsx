@@ -210,6 +210,18 @@ export default function SellerRegisterPage() {
           <label className="text-sm font-medium">About your shop</label>
           <textarea name="description" rows={2} className={`mt-1 ${field}`} placeholder="What do you sell?" />
         </div>
+        <div>
+          <label className="text-sm font-medium">Seller referral code (optional)</label>
+          <input
+            name="referralCode"
+            maxLength={10}
+            className={`mt-1 ${field} uppercase`}
+            placeholder="SLR-XXXXXX"
+          />
+          <p className="mt-1 text-xs text-gray-400">
+            Got a code from another Clowe seller? They earn a bonus when your shop takes off.
+          </p>
+        </div>
 
         <fieldset className="rounded-lg border border-gray-200 p-4">
           <legend className="px-1 text-sm font-semibold text-gray-700">KYC (optional in dev)</legend>

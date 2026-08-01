@@ -10,4 +10,6 @@ export interface PaymentProvider {
   createOrder(amountPaise: number, receipt: string): Promise<string>;
   /** Verify a client-side payment callback signature. */
   verifySignature(providerOrderId: string, paymentId: string, signature: string): boolean;
+  /** Refund (part of) a captured payment; returns the provider's refund id. */
+  refund(providerPaymentId: string, amountPaise: number): Promise<string>;
 }
