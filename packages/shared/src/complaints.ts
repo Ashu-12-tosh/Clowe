@@ -19,7 +19,13 @@ export const COMPLAINT_CATEGORY_LABELS: Record<ComplaintCategory, string> = {
   OTHER: 'Other',
 };
 
-export const COMPLAINT_STATUSES = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'] as const;
+export const COMPLAINT_STATUSES = [
+  'OPEN',
+  'IN_PROGRESS',
+  'PENDING_CUSTOMER',
+  'RESOLVED',
+  'CLOSED',
+] as const;
 export type ComplaintStatusValue = (typeof COMPLAINT_STATUSES)[number];
 
 /** POST /api/complaints */

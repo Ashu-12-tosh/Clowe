@@ -1,0 +1,17 @@
+-- AlterTable
+ALTER TABLE "products" ADD COLUMN     "allowBackorders" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "attributes" JSONB,
+ADD COLUMN     "heightMm" INTEGER,
+ADD COLUMN     "isVisible" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "lengthMm" INTEGER,
+ADD COLUMN     "lowStockAlert" INTEGER NOT NULL DEFAULT 5,
+ADD COLUMN     "metaDescription" TEXT,
+ADD COLUMN     "metaTitle" TEXT,
+ADD COLUMN     "shippingTemplate" TEXT,
+ADD COLUMN     "shortDescription" TEXT,
+ADD COLUMN     "tags" TEXT[] DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN     "taxRatePercent" INTEGER,
+ADD COLUMN     "tryOnEnabled" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "videoUrl" TEXT,
+ADD COLUMN     "weightGrams" INTEGER,
+ADD COLUMN     "widthMm" INTEGER;

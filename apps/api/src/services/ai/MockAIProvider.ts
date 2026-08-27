@@ -19,7 +19,36 @@ export class MockAIProvider implements AIProvider {
         return this.searchIntent(payload);
       case 'support-chat':
         return this.supportChat(payload);
+      case 'seller-assistant':
+        return this.sellerAssistant(payload);
     }
+  }
+
+  /**
+   * The seller assistant is grounded in help-centre articles, so the mock can
+   * answer for real: it quotes the article the API selected instead of
+   * inventing policy.
+   */
+  private sellerAssistant(p: Record<string, unknown>): string {
+    const articles = Array.isArray(p.articles)
+      ? (p.articles as { title: string; body: string }[])
+      : [];
+    if (articles.length === 0) {
+      return (
+        "I could not find that in the seller handbook. Browse the help topics on this page, " +
+        'or raise a support ticket and a human will pick it up.'
+      );
+    }
+    const top = articles[0];
+    const extra = articles
+      .slice(1)
+      .map((a) => a.title)
+      .join(', ');
+    return (
+      `${top.body.trim()}\n\n(From the seller handbook: ${top.title}` +
+      (extra ? `. Also related: ${extra}` : '') +
+      '.)'
+    );
   }
 
   private productDescription(p: Record<string, unknown>): string {

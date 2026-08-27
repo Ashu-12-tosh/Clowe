@@ -17,7 +17,13 @@ const INLINE_COUNT = 8;
 export default function CategoryNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const activeSlug = pathname === '/products' ? (searchParams.get('category') ?? '') : '';
+  // Nav highlight follows both the listing page and the category landing route.
+  const activeSlug =
+    pathname === '/products'
+      ? (searchParams.get('category') ?? '')
+      : pathname.startsWith('/category/')
+        ? decodeURIComponent(pathname.split('/')[2] ?? '')
+        : '';
   const [tree, setTree] = useState<CategoryNode[]>([]);
   const [megaOpen, setMegaOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -47,9 +53,9 @@ export default function CategoryNav() {
   const overflow = tree.slice(INLINE_COUNT);
 
   const linkClass = (slug: string) =>
-    `flex shrink-0 items-center gap-1.5 border-b-2 px-1 pb-2 pt-2.5 text-sm transition ${
+    `t-nav flex shrink-0 items-center gap-1.5 border-b-2 px-1 pb-2 pt-2.5 transition ${
       activeSlug === slug
-        ? 'border-brand-600 font-semibold text-brand-600'
+        ? 'border-brand-600 !font-semibold text-brand-600'
         : 'border-transparent text-gray-700 hover:text-brand-600'
     }`;
 
@@ -62,7 +68,7 @@ export default function CategoryNav() {
             setMegaOpen((v) => !v);
             setMoreOpen(false);
           }}
-          className={`flex items-center gap-2 border-b-2 px-1 pb-2 pt-2.5 text-sm font-semibold transition ${
+          className={`t-nav flex items-center gap-2 border-b-2 px-1 pb-2 pt-2.5 !font-semibold transition ${
             megaOpen ? 'border-brand-600 text-brand-600' : 'border-transparent text-ink-900 hover:text-brand-600'
           }`}
         >
@@ -70,7 +76,7 @@ export default function CategoryNav() {
         </button>
 
         {inline.map((cat) => (
-          <Link key={cat.id} href={`/products?category=${cat.slug}`} className={linkClass(cat.slug)}>
+          <Link key={cat.id} href={`/category/${cat.slug}`} className={linkClass(cat.slug)}>
             {cat.icon && <span className="text-base leading-none">{cat.icon}</span>}
             {cat.name}
           </Link>
@@ -83,7 +89,7 @@ export default function CategoryNav() {
                 setMoreOpen((v) => !v);
                 setMegaOpen(false);
               }}
-              className={`flex items-center gap-1.5 border-b-2 px-1 pb-2 pt-2.5 text-sm transition ${
+              className={`t-nav flex items-center gap-1.5 border-b-2 px-1 pb-2 pt-2.5 transition ${
                 moreOpen ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-700 hover:text-brand-600'
               }`}
             >
@@ -94,7 +100,7 @@ export default function CategoryNav() {
                 {overflow.map((cat) => (
                   <Link
                     key={cat.id}
-                    href={`/products?category=${cat.slug}`}
+                    href={`/category/${cat.slug}`}
                     className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-cream-100"
                   >
                     {cat.icon && <span>{cat.icon}</span>}
@@ -110,7 +116,7 @@ export default function CategoryNav() {
       {/* Mobile: horizontal scroll strip */}
       <div className="scrollbar-none flex items-center gap-4 overflow-x-auto px-4 lg:hidden">
         {tree.map((cat) => (
-          <Link key={cat.id} href={`/products?category=${cat.slug}`} className={linkClass(cat.slug)}>
+          <Link key={cat.id} href={`/category/${cat.slug}`} className={linkClass(cat.slug)}>
             {cat.icon && <span className="text-base leading-none">{cat.icon}</span>}
             <span className="whitespace-nowrap">{cat.name}</span>
           </Link>
@@ -124,7 +130,7 @@ export default function CategoryNav() {
             {tree.map((cat) => (
               <div key={cat.id}>
                 <Link
-                  href={`/products?category=${cat.slug}`}
+                  href={`/category/${cat.slug}`}
                   className="flex items-center gap-2 text-sm font-bold text-ink-900 hover:text-brand-600"
                 >
                   {cat.icon && <span className="text-base">{cat.icon}</span>}
@@ -134,7 +140,7 @@ export default function CategoryNav() {
                   {cat.children.slice(0, 6).map((child) => (
                     <li key={child.id}>
                       <Link
-                        href={`/products?category=${child.slug}`}
+                        href={`/category/${cat.slug}?category=${child.slug}`}
                         className="text-sm text-gray-600 hover:text-brand-600 hover:underline"
                       >
                         {child.name}
@@ -144,7 +150,7 @@ export default function CategoryNav() {
                   {cat.children.length > 6 && (
                     <li>
                       <Link
-                        href={`/products?category=${cat.slug}`}
+                        href={`/category/${cat.slug}`}
                         className="text-xs font-semibold text-brand-600 hover:underline"
                       >
                         View all →

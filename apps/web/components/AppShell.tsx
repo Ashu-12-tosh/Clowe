@@ -9,11 +9,11 @@ import Header from './Header';
 import Footer from './Footer';
 
 const ACCOUNT_LINKS = [
-  { label: 'My Orders', href: '/orders', icon: '📦' },
+  { label: 'My Orders', href: '/account/orders', icon: '📦' },
   { label: 'Wishlist', href: '/wishlist', icon: '♡' },
   { label: 'Cart', href: '/cart', icon: '🛍' },
   { label: 'My Account', href: '/account', icon: '👤' },
-  { label: 'Clowe Credits', href: '/credits', icon: '🪙' },
+  { label: 'Clowe Credits', href: '/account/credits', icon: '🪙' },
   { label: 'Refer & Earn', href: '/referrals', icon: '🎁' },
   { label: 'AI Try-On', href: '/tryon', icon: '✨' },
   { label: 'Track Order', href: '/track', icon: '🚚' },

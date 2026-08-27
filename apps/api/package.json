@@ -2,7 +2,7 @@
   "name": "@clowe/api",
   "version": "0.1.0",
   "private": true,
-  "description": "Clowe REST API — standalone backend consumed by web (and later mobile)",
+  "description": "Clowe REST API \u2014 standalone backend consumed by web (and later mobile)",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -12,7 +12,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:seed:inventory": "tsx prisma/seedInventory.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

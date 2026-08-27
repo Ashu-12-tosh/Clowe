@@ -140,3 +140,24 @@ export async function api<T>(
   }
   return json.data as T;
 }
+
+/**
+ * Download an authenticated file response (e.g. the try-on CSV export) and
+ * hand it to the browser as a save dialog.
+ */
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const token = localStorage.getItem(ACCESS_KEY);
+  const res = await fetch(`${API_URL}${path}`, {
+    credentials: 'include',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) throw new ApiRequestError('DOWNLOAD_FAILED', 'Could not download the file');
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}

@@ -1,0 +1,36 @@
+-- AlterTable
+ALTER TABLE "seller_profiles" ADD COLUMN     "addressLine2" TEXT,
+ADD COLUMN     "bannerUrl" TEXT,
+ADD COLUMN     "codEnabled" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "dispatchDays" INTEGER NOT NULL DEFAULT 2,
+ADD COLUMN     "highlights" JSONB,
+ADD COLUMN     "landmark" TEXT,
+ADD COLUMN     "logoUrl" TEXT,
+ADD COLUMN     "pickupCity" TEXT,
+ADD COLUMN     "pickupLine1" TEXT,
+ADD COLUMN     "pickupLine2" TEXT,
+ADD COLUMN     "pickupName" TEXT,
+ADD COLUMN     "pickupPhone" TEXT,
+ADD COLUMN     "pickupPincode" TEXT,
+ADD COLUMN     "pickupSameAsBusiness" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "pickupState" TEXT,
+ADD COLUMN     "primaryCategoryId" TEXT,
+ADD COLUMN     "returnAddressSameAsPickup" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "returnCity" TEXT,
+ADD COLUMN     "returnLine1" TEXT,
+ADD COLUMN     "returnPincode" TEXT,
+ADD COLUMN     "returnState" TEXT,
+ADD COLUMN     "returnWindowDays" INTEGER,
+ADD COLUMN     "slug" TEXT,
+ADD COLUMN     "socialLinks" JSONB,
+ADD COLUMN     "storeEmail" TEXT,
+ADD COLUMN     "storePhone" TEXT,
+ADD COLUMN     "tagline" TEXT,
+ADD COLUMN     "vacationMessage" TEXT,
+ADD COLUMN     "vacationMode" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "vacationUntil" TIMESTAMP(3),
+ADD COLUMN     "workingHours" JSONB;
+
+-- CreateIndex
+CREATE UNIQUE INDEX "seller_profiles_slug_key" ON "seller_profiles"("slug");
+

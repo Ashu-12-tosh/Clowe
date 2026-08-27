@@ -26,7 +26,7 @@ export function SectionHeader({
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex items-center gap-3">
-        <h2 className="font-display text-xl font-bold text-ink-900 sm:text-2xl">{title}</h2>
+        <h2 className="t-section text-ink-900">{title}</h2>
         {accent}
       </div>
       <div className="flex items-center gap-3">

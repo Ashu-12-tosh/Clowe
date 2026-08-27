@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import LoginBackdrop from '@/components/LoginBackdrop';
 import type { AuthTokensResponse, AuthUser, UserRole } from '@clowe/shared';
 import {
   api,
@@ -312,7 +313,7 @@ export default function LoginPage() {
 
   // ------------------- Split-screen auth experience -------------------
   return (
-    <main className="flex min-h-screen flex-col lg:flex-row">
+    <div className="flex min-h-screen flex-col lg:flex-row">
       {/* ============ LEFT: brand panel — the exact reference artwork ============ */}
       <aside className="sticky top-0 hidden h-screen shrink-0 bg-black lg:block">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -324,10 +325,12 @@ export default function LoginPage() {
         />
       </aside>
 
-      {/* ============ RIGHT: auth card ============ */}
-      <section className="flex flex-1 flex-col bg-cream-50">
+      {/* ============ RIGHT: auth card over the blurred storefront ============ */}
+      <main className="relative flex flex-1 flex-col bg-cream-50">
+        <LoginBackdrop />
+
         {/* Mobile compact brand header */}
-        <div className="bg-ink-950 px-5 py-4 text-center lg:hidden">
+        <div className="relative z-10 bg-ink-950 px-5 py-4 text-center lg:hidden">
           <span className="font-display text-xl font-bold uppercase tracking-[0.25em] text-brand-400">
             Clowe
           </span>
@@ -335,7 +338,7 @@ export default function LoginPage() {
         </div>
 
         {/* Top-right signup switch */}
-        <div className="flex items-center justify-end gap-3 px-6 pt-5">
+        <div className="relative z-10 flex items-center justify-end gap-3 px-6 pt-5">
           <span className="hidden text-sm text-gray-500 sm:inline">
             {signupMode ? 'Already have an account?' : 'New to Clowe?'}
           </span>
@@ -352,8 +355,8 @@ export default function LoginPage() {
           </button>
         </div>
 
-        <div className="flex flex-1 items-start justify-center px-4 py-6 sm:items-center sm:py-10">
-          <div className="w-full max-w-md rounded-3xl border border-gray-100 bg-white p-6 shadow-sm sm:p-9">
+        <div className="relative z-10 flex flex-1 items-start justify-center px-4 py-6 sm:items-center sm:py-10">
+          <div className="w-full max-w-md rounded-3xl border border-gray-100 bg-white p-6 shadow-xl sm:p-9">
             {/* Card header */}
             <h2 className="text-center font-display text-3xl font-bold text-ink-900">
               {step === 'profile'
@@ -616,7 +619,7 @@ export default function LoginPage() {
         <p className="pb-5 text-center text-xs text-gray-400">
           © {new Date().getFullYear()} Clowe. All rights reserved.
         </p>
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }

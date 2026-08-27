@@ -3,8 +3,11 @@ import {
   aiDescriptionSchema,
   searchIntentSchema,
   supportChatSchema,
+  findHelpArticles,
+  sellerAssistantSchema,
   type ReviewSummaryView,
   type SearchIntent,
+  type SellerAssistantReply,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -190,6 +193,56 @@ aiRouter.post('/support-chat', async (req, res, next) => {
       maxTokens: 1024,
     });
     res.json({ success: true, data: { reply, provider: aiProvider.name } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 5. Seller assistant — grounded in the seller handbook
+// ---------------------------------------------------------------------------
+
+const SELLER_CHAT_DAILY_LIMIT = 100;
+const sellerChatUsage = new Map<string, { count: number; day: string }>();
+
+aiRouter.post('/seller-assistant', requireAuth, async (req, res, next) => {
+  try {
+    const input = sellerAssistantSchema.parse(req.body);
+
+    const userId = req.auth!.userId;
+    const today = new Date().toDateString();
+    const usage = sellerChatUsage.get(userId);
+    const count = usage?.day === today ? usage.count : 0;
+    if (count >= SELLER_CHAT_DAILY_LIMIT) {
+      throw ApiError.tooMany('Assistant limit reached for today. Please try again tomorrow.');
+    }
+    sellerChatUsage.set(userId, { count: count + 1, day: today });
+
+    // Ground the answer in the handbook so it can't contradict the docs.
+    const articles = findHelpArticles(input.question, 3);
+
+    const answer = await aiProvider.complete({
+      task: 'seller-assistant',
+      system:
+        'You are the seller assistant for Clowe, an Indian multi-vendor marketplace. ' +
+        'Answer ONLY from the handbook articles provided. If they do not cover the question, say so ' +
+        'and suggest raising a support ticket — never invent policy, fees, timelines or numbers. ' +
+        'Be concise and practical: name the exact page or button in the seller panel where relevant. ' +
+        "Never quote a seller's own figures — you cannot see their data.",
+      user: JSON.stringify({
+        question: input.question,
+        history: input.history.slice(-6),
+        articles: articles.map((a) => ({ id: a.id, title: a.title, body: a.body })),
+      }),
+      maxTokens: 1024,
+    });
+
+    const body: SellerAssistantReply = {
+      answer,
+      provider: aiProvider.name,
+      sources: articles.map((a) => ({ id: a.id, title: a.title })),
+    };
+    res.json({ success: true, data: body });
   } catch (err) {
     next(err);
   }

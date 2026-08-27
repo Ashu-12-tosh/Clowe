@@ -6,6 +6,9 @@ import 'dotenv/config';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { generateReferralCode } from '../src/utils/crypto';
 import { seedMarketplace } from './seed/marketplace';
+import { seedElectronics } from './seed/electronics';
+import { seedFashion } from './seed/fashion';
+import { seedTryOns } from './seed/tryon';
 
 const prisma = new PrismaClient();
 
@@ -232,11 +235,123 @@ async function seedReviews() {
   console.log(`[seed] Reviews created: ${created} across ${products.length} products`);
 }
 
+/** Demo promo codes for the cart's "Add Coupon" panel. */
+async function seedCoupons() {
+  const yearOut = new Date();
+  yearOut.setFullYear(yearOut.getFullYear() + 1);
+  const lastMonth = new Date();
+  lastMonth.setMonth(lastMonth.getMonth() - 1);
+
+  const coupons = [
+    {
+      code: 'CLOWE10',
+      description: '10% off your order, up to ₹300',
+      type: 'PERCENT' as const,
+      value: 10,
+      minSubtotalPaise: 99900, // ₹999
+      maxDiscountPaise: 30000, // ₹300
+      kind: 'STANDARD',
+      perUserLimit: null,
+      expiresAt: yearOut,
+    },
+    {
+      code: 'FASHION15',
+      description: '15% off, up to ₹500 — on orders above ₹1,499',
+      type: 'PERCENT' as const,
+      value: 15,
+      minSubtotalPaise: 149900,
+      maxDiscountPaise: 50000,
+      kind: 'STANDARD',
+      perUserLimit: null,
+      expiresAt: yearOut,
+    },
+    {
+      code: 'PREMIUM20',
+      description: '20% off for Clowe Premium members, up to ₹800',
+      type: 'PERCENT' as const,
+      value: 20,
+      minSubtotalPaise: 249900,
+      maxDiscountPaise: 80000,
+      kind: 'PREMIUM',
+      perUserLimit: null,
+      expiresAt: yearOut,
+    },
+    {
+      code: 'BANK10',
+      description: '10% instant discount on partner bank cards',
+      type: 'PERCENT' as const,
+      value: 10,
+      minSubtotalPaise: 149900,
+      maxDiscountPaise: 40000,
+      kind: 'BANK',
+      perUserLimit: null,
+      expiresAt: yearOut,
+    },
+    {
+      code: 'WELCOME200',
+      description: '₹200 off your first order — one use per account',
+      type: 'FLAT' as const,
+      value: 20000,
+      minSubtotalPaise: 149900,
+      maxDiscountPaise: null,
+      kind: 'STANDARD',
+      perUserLimit: 1,
+      expiresAt: yearOut,
+    },
+    {
+      code: 'BIGSAVE25',
+      description: '25% off, up to ₹1,000 — on orders above ₹2,999',
+      type: 'PERCENT' as const,
+      value: 25,
+      minSubtotalPaise: 299900,
+      maxDiscountPaise: 100000,
+      kind: 'STANDARD',
+      perUserLimit: null,
+      expiresAt: yearOut,
+    },
+    {
+      code: 'FLAT50',
+      description: '₹50 off — no minimum order value',
+      type: 'FLAT' as const,
+      value: 5000,
+      minSubtotalPaise: 0,
+      maxDiscountPaise: null,
+      kind: 'STANDARD',
+      perUserLimit: null,
+      expiresAt: yearOut,
+    },
+    {
+      // Kept so the coupon wallet has a real "expired" example.
+      code: 'NEWYEAR100',
+      description: '₹100 off — new year sale',
+      type: 'FLAT' as const,
+      value: 10000,
+      minSubtotalPaise: 99900,
+      maxDiscountPaise: null,
+      kind: 'STANDARD',
+      perUserLimit: 1,
+      expiresAt: lastMonth,
+    },
+  ];
+  for (const coupon of coupons) {
+    await prisma.coupon.upsert({
+      where: { code: coupon.code },
+      update: { ...coupon, isActive: true },
+      create: coupon,
+    });
+  }
+  console.log(`[seed] Coupons ready: ${coupons.map((c) => c.code).join(', ')}`);
+}
+
 async function main() {
   await seedAdmin();
   await seedCatalog();
   await seedReviews();
   await seedMarketplace(prisma);
+  await seedElectronics(prisma);
+  await seedFashion(prisma);
+  await seedCoupons();
+  await seedTryOns(prisma);
   await syncRatingCache();
 }
 

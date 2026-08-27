@@ -50,7 +50,7 @@ export default function ReferralsPage() {
           <span className="font-semibold">🪙 {REFERRAL_REWARD_CREDITS} Clowe Credits</span> every
           time a friend signs up with your code and places their first order — spend them on your
           next purchase.{' '}
-          <Link href="/credits" className="font-semibold text-brand-600 hover:underline">
+          <Link href="/account/credits" className="font-semibold text-brand-600 hover:underline">
             My credits →
           </Link>
         </p>

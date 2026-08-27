@@ -43,7 +43,7 @@ function SidebarContent({
     <div className="flex h-full flex-col px-3 py-5">
       {/* Brand card */}
       <div className="rounded-2xl bg-ink-900 px-4 py-3.5 text-white">
-        <p className="truncate font-display text-sm font-bold uppercase tracking-[0.15em] text-brand-400">
+        <p className="t-logo-sm truncate uppercase text-brand-400">
           {brand}
         </p>
         <p className="mt-0.5 truncate text-[11px] uppercase tracking-widest text-gray-400">
@@ -131,7 +131,10 @@ export default function DashShell({
   return (
     <div className="flex min-h-screen bg-cream-50">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 overflow-y-auto border-r border-gray-100 bg-white lg:block">
+      <aside
+        data-print-hide
+        className="sticky top-0 hidden h-screen w-60 shrink-0 overflow-y-auto border-r border-gray-100 bg-white lg:block"
+      >
         <SidebarContent brand={brand} subtitle={subtitle} nav={nav} pathname={pathname} />
       </aside>
 
@@ -157,7 +160,10 @@ export default function DashShell({
       {/* Content column */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="sticky top-0 z-40 border-b border-gray-100 bg-white/90 backdrop-blur">
+        <header
+          data-print-hide
+          className="sticky top-0 z-40 border-b border-gray-100 bg-white/90 backdrop-blur"
+        >
           <div className="flex items-center gap-3 px-4 py-3 sm:px-6">
             <button
               onClick={() => setDrawerOpen(true)}
@@ -166,7 +172,7 @@ export default function DashShell({
             >
               ☰
             </button>
-            <h1 className="min-w-0 flex-1 truncate font-display text-lg font-bold text-ink-900">
+            <h1 className="t-page-title min-w-0 flex-1 truncate text-ink-900">
               {title}
             </h1>
 

@@ -1,6 +1,9 @@
 import { Router, type Response } from 'express';
 import { env } from '../env';
 import {
+  deleteAccountSchema,
+  type SecurityOverview,
+  type SessionInfo,
   checkPhoneSchema,
   phoneChangeConfirmSchema,
   phoneChangeRequestSchema,
@@ -16,6 +19,7 @@ import { prisma } from '../db';
 import { consumeOtp } from '../services/authService';
 import { ApiError } from '../utils/ApiError';
 import { authService } from '../services/authService';
+import { auditLogin } from '../services/auditService';
 import { requireAuth } from '../middleware/auth';
 import { otpRequestLimiter, otpVerifyLimiter } from '../middleware/rateLimits';
 
@@ -68,12 +72,23 @@ authRouter.post('/check-phone', async (req, res, next) => {
 
 // Quick login with the 4-digit PIN (no OTP/SMS cost).
 authRouter.post('/pin-login', otpVerifyLimiter, async (req, res, next) => {
+  const { phone } = req.body ?? {};
   try {
-    const { phone, pin } = pinLoginSchema.parse(req.body);
-    const data = await authService.pinLogin(phone, pin);
+    const input = pinLoginSchema.parse(req.body);
+    const data = await authService.pinLogin(input.phone, input.pin);
     setRefreshCookie(res, data.refreshToken);
+    auditLogin(req, 'SUCCESS', {
+      userId: data.user.id,
+      name: data.user.name,
+      role: data.user.role,
+      phone: input.phone,
+    });
     res.json({ success: true, data });
   } catch (err) {
+    auditLogin(req, 'FAILED', {
+      phone: typeof phone === 'string' ? phone : 'unknown',
+      reason: err instanceof Error ? err.message : 'PIN login failed',
+    });
     next(err);
   }
 });
@@ -105,12 +120,24 @@ authRouter.post('/request-otp', otpRequestLimiter, async (req, res, next) => {
 // The refresh token is set as an httpOnly cookie (and returned in the body
 // for non-browser clients).
 authRouter.post('/verify-otp', otpVerifyLimiter, async (req, res, next) => {
+  const { phone } = req.body ?? {};
   try {
     const input = verifyOtpSchema.parse(req.body);
     const data = await authService.verifyOtp(input);
     setRefreshCookie(res, data.refreshToken);
+    auditLogin(req, 'SUCCESS', {
+      userId: data.user.id,
+      name: data.user.name,
+      role: data.user.role,
+      phone: input.phone,
+    });
     res.json({ success: true, data });
   } catch (err) {
+    // Wrong or expired OTP is exactly what a security review wants to see.
+    auditLogin(req, 'FAILED', {
+      phone: typeof phone === 'string' ? phone : 'unknown',
+      reason: err instanceof Error ? err.message : 'OTP verification failed',
+    });
     next(err);
   }
 });
@@ -175,6 +202,13 @@ authRouter.patch('/me', requireAuth, async (req, res, next) => {
         ...(input.gender !== undefined ? { gender: input.gender } : {}),
         ...(input.dateOfBirth !== undefined
           ? { dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null }
+          : {}),
+        ...(input.location !== undefined ? { location: input.location || null } : {}),
+        ...(input.profession !== undefined ? { profession: input.profession || null } : {}),
+        ...(input.interests !== undefined ? { interests: input.interests } : {}),
+        ...(input.favouriteBrands !== undefined ? { favouriteBrands: input.favouriteBrands } : {}),
+        ...(input.preferredCategories !== undefined
+          ? { preferredCategories: input.preferredCategories }
           : {}),
       },
     });
@@ -256,6 +290,131 @@ authRouter.get('/me', requireAuth, async (req, res, next) => {
   try {
     const data = await authService.getMe(req.auth!.userId);
     res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Security: sessions + a score built from real signals
+// ---------------------------------------------------------------------------
+
+/** Live sessions = refresh tokens that are neither revoked nor expired. */
+async function liveSessions(userId: string) {
+  return prisma.refreshToken.findMany({
+    where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+authRouter.get('/me/sessions', requireAuth, async (req, res, next) => {
+  try {
+    const rows = await liveSessions(req.auth!.userId);
+    const body: SessionInfo[] = rows.map((row, i) => ({
+      id: row.id,
+      createdAt: row.createdAt.toISOString(),
+      expiresAt: row.expiresAt.toISOString(),
+      // The newest live token is this browser in practice — we never see the
+      // raw token here, so it is the closest honest signal we have.
+      isCurrent: i === 0,
+    }));
+    res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Sign one other device out. */
+authRouter.delete('/me/sessions/:id', requireAuth, async (req, res, next) => {
+  try {
+    const userId = req.auth!.userId;
+    const { count } = await prisma.refreshToken.updateMany({
+      where: { id: req.params.id, userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (count === 0) throw ApiError.notFound('Session not found');
+    const rows = await liveSessions(userId);
+    const body: SessionInfo[] = rows.map((row, i) => ({
+      id: row.id,
+      createdAt: row.createdAt.toISOString(),
+      expiresAt: row.expiresAt.toISOString(),
+      isCurrent: i === 0,
+    }));
+    res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
+
+authRouter.get('/me/security', requireAuth, async (req, res, next) => {
+  try {
+    const userId = req.auth!.userId;
+    const [user, sessions] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId } }),
+      liveSessions(userId),
+    ]);
+    if (!user) throw ApiError.notFound('Account not found');
+
+    const checks = {
+      hasPin: !!user.pinHash,
+      emailVerified: !!user.emailVerifiedAt,
+      // Every account signs in by OTP, so the phone is verified by definition.
+      phoneVerified: true,
+      loginAlerts: user.notifyEmail || user.notifySms || user.notifyWhatsapp,
+      // More than a couple of live devices is worth a nudge, not a penalty.
+      fewSessions: sessions.length <= 2,
+    };
+    const passed = Object.values(checks).filter(Boolean).length;
+    const score = Math.round((passed / Object.keys(checks).length) * 100);
+    const label =
+      score >= 90 ? 'Strong' : score >= 70 ? 'Good' : score >= 45 ? 'Fair' : 'Weak';
+
+    const suggestions: string[] = [];
+    if (!checks.hasPin) suggestions.push('Set a 4-digit quick-login PIN');
+    if (!checks.emailVerified) suggestions.push('Add and verify an email address');
+    if (!checks.loginAlerts) suggestions.push('Turn on at least one login alert channel');
+    if (!checks.fewSessions) suggestions.push('Review and sign out devices you no longer use');
+
+    const body: SecurityOverview = {
+      hasPin: checks.hasPin,
+      emailVerified: checks.emailVerified,
+      phoneVerified: checks.phoneVerified,
+      loginAlerts: checks.loginAlerts,
+      activeSessions: sessions.length,
+      score,
+      label: label as SecurityOverview['label'],
+      suggestions,
+    };
+    res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Close the account. Everything owned by the user cascades away; orders are
+ * kept for the sellers' records but detached from the deleted profile.
+ */
+authRouter.delete('/me', requireAuth, async (req, res, next) => {
+  try {
+    const userId = req.auth!.userId;
+    const { confirmPhone } = deleteAccountSchema.parse(req.body);
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw ApiError.notFound('Account not found');
+    if (user.phone !== confirmPhone) {
+      throw ApiError.badRequest('Phone number does not match this account', 'CONFIRM_MISMATCH');
+    }
+    const openOrders = await prisma.order.count({
+      where: { userId, status: { in: ['PLACED', 'CONFIRMED', 'PACKED', 'SHIPPED'] } },
+    });
+    if (openOrders > 0) {
+      throw ApiError.badRequest(
+        `You have ${openOrders} order(s) still in progress. They must be delivered or cancelled first.`,
+        'OPEN_ORDERS',
+      );
+    }
+    await prisma.user.delete({ where: { id: userId } });
+    res.json({ success: true, data: { deleted: true } });
   } catch (err) {
     next(err);
   }

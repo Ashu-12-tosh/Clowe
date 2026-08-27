@@ -8,9 +8,11 @@ import { ApiError } from '../utils/ApiError';
 export const addressesRouter = Router();
 addressesRouter.use(requireAuth);
 
-function toInfo(a: Address): AddressInfo {
+/** Shared with the account dashboard. */
+export function toAddressInfo(a: Address): AddressInfo {
   return {
     id: a.id,
+    label: a.label,
     name: a.name,
     phone: a.phone,
     line1: a.line1,
@@ -29,7 +31,7 @@ addressesRouter.get('/', async (req, res, next) => {
       where: { userId: req.auth!.userId },
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
     });
-    res.json({ success: true, data: addresses.map(toInfo) });
+    res.json({ success: true, data: addresses.map(toAddressInfo) });
   } catch (err) {
     next(err);
   }
@@ -49,7 +51,7 @@ addressesRouter.post('/', async (req, res, next) => {
     const address = await prisma.address.create({
       data: { ...input, isDefault: makeDefault, userId: req.auth!.userId },
     });
-    res.json({ success: true, data: toInfo(address) });
+    res.json({ success: true, data: toAddressInfo(address) });
   } catch (err) {
     next(err);
   }
@@ -70,7 +72,7 @@ addressesRouter.put('/:id', async (req, res, next) => {
       where: { id: existing.id },
       data: { ...input, isDefault: input.isDefault ?? existing.isDefault },
     });
-    res.json({ success: true, data: toInfo(address) });
+    res.json({ success: true, data: toAddressInfo(address) });
   } catch (err) {
     next(err);
   }

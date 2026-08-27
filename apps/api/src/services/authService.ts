@@ -34,6 +34,13 @@ export function toAuthUser(user: User): AuthUser {
     gender: (user.gender as AuthUser['gender']) ?? null,
     avatarUrl: user.avatarUrl,
     hasPin: !!user.pinHash,
+    isPremium: user.isPremium,
+    location: user.location,
+    profession: user.profession,
+    interests: user.interests,
+    favouriteBrands: user.favouriteBrands,
+    preferredCategories: user.preferredCategories,
+    emailVerified: !!user.emailVerifiedAt,
     prefs: {
       email: user.notifyEmail,
       sms: user.notifySms,

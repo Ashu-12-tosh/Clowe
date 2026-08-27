@@ -6,9 +6,14 @@ const COURIERS = ['Delhivery', 'BlueDart', 'Ekart Logistics', 'XpressBees', 'DTD
 /** Dev provider: fabricates a plausible AWB + courier without external calls. */
 export class MockShippingProvider implements ShippingProvider {
   readonly name = 'mock';
+  readonly couriers = COURIERS;
 
   async createShipment(request: ShipmentRequest): Promise<Shipment> {
-    const courierName = COURIERS[randomInt(COURIERS.length)];
+    // Honour the seller's pick when it's a courier we serve.
+    const courierName =
+      request.preferredCourier && COURIERS.includes(request.preferredCourier)
+        ? request.preferredCourier
+        : COURIERS[randomInt(COURIERS.length)];
     const awbNumber = `AWB${Date.now().toString().slice(-8)}${randomInt(100, 999)}`;
     return {
       awbNumber,

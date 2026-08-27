@@ -14,6 +14,9 @@ interface ChatItem {
  * Menu-driven support bot (rule-based — no AI calls). All content lives in
  * lib/support/faq-content.ts; the engine behind ChatEngine is swappable.
  */
+/** Other pages dispatch this to pop the support chat open. */
+export const SUPPORT_CHAT_EVENT = 'clowe:open-support-chat';
+
 export default function SupportChat() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -26,6 +29,12 @@ export default function SupportChat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [items, open, busy]);
+
+  useEffect(() => {
+    const openChat = () => setOpen(true);
+    window.addEventListener(SUPPORT_CHAT_EVENT, openChat);
+    return () => window.removeEventListener(SUPPORT_CHAT_EVENT, openChat);
+  }, []);
 
   // Lock body scroll while the mobile sheet is open.
   useEffect(() => {

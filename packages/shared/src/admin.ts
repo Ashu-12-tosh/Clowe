@@ -143,16 +143,8 @@ export interface AdminUserRow {
   createdAt: string;
 }
 
-export interface AdminOrderRow {
-  id: string;
-  orderNumber: string;
-  customerName: string | null;
-  customerPhone: string;
-  status: string;
-  itemCount: number;
-  totalPaise: number;
-  createdAt: string;
-}
+// AdminOrderRow was replaced by AdminOrderListRow in ./adminOrders, which the
+// Order Management desk uses.
 
 // ---------------------------------------------------------------------------
 // Admin returns oversight

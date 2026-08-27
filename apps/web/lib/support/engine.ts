@@ -63,6 +63,7 @@ function chipFor(id: string): Chip {
 const STATUS_EMOJI: Record<string, string> = {
   PLACED: '🕐',
   CONFIRMED: '✅',
+  PACKED: '📦',
   SHIPPED: '🚚',
   DELIVERED: '📦',
   CANCELLED: '❌',

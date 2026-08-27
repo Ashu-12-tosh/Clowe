@@ -22,14 +22,35 @@ export interface ApiResponse<T> {
 export * from './auth';
 export * from './catalog';
 export * from './seller';
+export * from './sellerCatalog';
+export * from './sellerCustomers';
+export * from './sellerInventory';
+export * from './sellerStore';
+export * from './sellerSupport';
+export * from './sellerDashboard';
+export * from './sellerHelp';
+export * from './sellerOrders';
+export * from './sellerPayouts';
+export * from './sellerPromotions';
+export * from './sellerReturns';
 export * from './admin';
 export * from './checkout';
 export * from './tryon';
+export * from './adminAudit';
+export * from './adminInventory';
+export * from './adminOrders';
+export * from './adminOverview';
+export * from './adminPayments';
+export * from './adminReturns';
+export * from './adminSellers';
+export * from './adminSupportDesk';
+export * from './adminTryon';
 export * from './ai';
 export * from './growth';
 export * from './complaints';
 export * from './settings';
 export * from './home';
+export * from './account';
 
 export const healthResponseSchema = z.object({
   status: z.literal('ok'),

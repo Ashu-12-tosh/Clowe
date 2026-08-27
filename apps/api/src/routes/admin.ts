@@ -1,19 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import {
-  adminComplaintUpdateSchema,
   adminReturnOverrideSchema,
   adDecisionSchema,
   categoryUpsertSchema,
   productDecisionSchema,
-  sellerDecisionSchema,
-  type AdminComplaintRow,
   type AdminCategoryRow,
-  type AdminOrderRow,
   type AdminProductDetail,
   type AdminProductRow,
   type AdminReturnRow,
-  type AdminSellerRow,
   type AdminSellerReferralRow,
   type AdminAdRow,
   type AdminStats,
@@ -49,19 +44,29 @@ function slugify(text: string): string {
 
 adminRouter.get('/stats', async (_req, res, next) => {
   try {
-    const [users, sellers, products, liveProducts, orders, pendingSellers, pendingProducts, openComplaints, totalReturns, pendingReturns] =
-      await Promise.all([
-        prisma.user.count(),
-        prisma.sellerProfile.count(),
-        prisma.product.count({ where: { status: { not: 'ARCHIVED' } } }),
-        prisma.product.count({ where: { status: 'APPROVED' } }),
-        prisma.order.count(),
-        prisma.sellerProfile.count({ where: { status: 'PENDING' } }),
-        prisma.product.count({ where: { status: 'PENDING' } }),
-        prisma.complaint.count({ where: { status: 'OPEN' } }),
-        prisma.return.count(),
-        prisma.return.count({ where: { status: 'REQUESTED' } }),
-      ]);
+    const [
+      users,
+      sellers,
+      products,
+      liveProducts,
+      orders,
+      pendingSellers,
+      pendingProducts,
+      openComplaints,
+      totalReturns,
+      pendingReturns,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.sellerProfile.count(),
+      prisma.product.count({ where: { status: { not: 'ARCHIVED' } } }),
+      prisma.product.count({ where: { status: 'APPROVED' } }),
+      prisma.order.count(),
+      prisma.sellerProfile.count({ where: { status: 'PENDING' } }),
+      prisma.product.count({ where: { status: 'PENDING' } }),
+      prisma.complaint.count({ where: { status: 'OPEN' } }),
+      prisma.return.count(),
+      prisma.return.count({ where: { status: 'REQUESTED' } }),
+    ]);
 
     // Sales aggregates from order items (excludes cancelled/returned).
     const soldItems = await prisma.orderItem.findMany({
@@ -107,7 +112,16 @@ adminRouter.get('/stats', async (_req, res, next) => {
     }
 
     const body: AdminStats = {
-      totals: { users, sellers, products, liveProducts, orders, unitsSold, revenuePaise, returns: totalReturns },
+      totals: {
+        users,
+        sellers,
+        products,
+        liveProducts,
+        orders,
+        unitsSold,
+        revenuePaise,
+        returns: totalReturns,
+      },
       pending: {
         sellers: pendingSellers,
         products: pendingProducts,
@@ -138,81 +152,6 @@ adminRouter.get('/stats', async (_req, res, next) => {
 
 // ---------------------------------------------------------------------------
 // Seller moderation
-// ---------------------------------------------------------------------------
-
-adminRouter.get('/sellers', async (req, res, next) => {
-  try {
-    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
-    const sellers = await prisma.sellerProfile.findMany({
-      where: status ? { status: status as never } : undefined,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: { select: { phone: true, name: true } },
-        _count: { select: { products: true } },
-      },
-    });
-    const rows: AdminSellerRow[] = sellers.map((s) => ({
-      id: s.id,
-      shopName: s.shopName,
-      status: s.status,
-      rejectionReason: s.rejectionReason,
-      phone: s.user.phone,
-      userName: s.user.name,
-      city: s.city,
-      state: s.state,
-      gstNumber: s.gstNumber,
-      panNumber: s.panNumber,
-      productCount: s._count.products,
-      createdAt: s.createdAt.toISOString(),
-    }));
-    res.json({ success: true, data: rows });
-  } catch (err) {
-    next(err);
-  }
-});
-
-adminRouter.patch('/sellers/:id', async (req, res, next) => {
-  try {
-    const { action, reason } = sellerDecisionSchema.parse(req.body);
-    const seller = await prisma.sellerProfile.findUnique({
-      where: { id: req.params.id },
-      include: { user: { select: { id: true } } },
-    });
-    if (!seller) throw ApiError.notFound('Seller not found');
-
-    const status = action === 'approve' ? 'APPROVED' : action === 'reject' ? 'REJECTED' : 'SUSPENDED';
-    await prisma.sellerProfile.update({
-      where: { id: seller.id },
-      data: {
-        status,
-        rejectionReason: action === 'approve' ? null : (reason ?? null),
-        approvedAt: action === 'approve' ? new Date() : seller.approvedAt,
-      },
-    });
-
-    const messages = {
-      approve: { title: 'Seller account approved 🎉', body: 'You can now list products on Clowe.' },
-      reject: {
-        title: 'Seller application rejected',
-        body: reason ? `Reason: ${reason}` : 'Contact support for details.',
-      },
-      suspend: {
-        title: 'Seller account suspended',
-        body: reason ? `Reason: ${reason}` : 'Contact support for details.',
-      },
-    } as const;
-    await prisma.notification.create({
-      data: { userId: seller.user.id, type: `SELLER_${status}`, ...messages[action] },
-    });
-
-    res.json({ success: true, data: { id: seller.id, status } });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Product moderation
 // ---------------------------------------------------------------------------
 
 adminRouter.get('/products', async (req, res, next) => {
@@ -428,10 +367,7 @@ adminRouter.get('/users', async (req, res, next) => {
         ...(role ? { role: role as never } : {}),
         ...(q
           ? {
-              OR: [
-                { phone: { contains: q } },
-                { name: { contains: q, mode: 'insensitive' } },
-              ],
+              OR: [{ phone: { contains: q } }, { name: { contains: q, mode: 'insensitive' } }],
             }
           : {}),
       },
@@ -479,129 +415,8 @@ adminRouter.patch('/users/:id', async (req, res, next) => {
 // Complaints
 // ---------------------------------------------------------------------------
 
-function toAdminComplaintRow(c: {
-  id: string;
-  complaintId: string;
-  category: string;
-  description: string;
-  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
-  adminNotes: string | null;
-  orderId: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  user: { name: string | null; phone: string };
-  order: { orderNumber: string } | null;
-}): AdminComplaintRow {
-  return {
-    id: c.id,
-    complaintId: c.complaintId,
-    category: c.category as AdminComplaintRow['category'],
-    description: c.description,
-    status: c.status,
-    orderNumber: c.order?.orderNumber ?? null,
-    orderId: c.orderId,
-    adminNotes: c.adminNotes,
-    userName: c.user.name,
-    userPhone: c.user.phone,
-    createdAt: c.createdAt.toISOString(),
-    updatedAt: c.updatedAt.toISOString(),
-  };
-}
-
-adminRouter.get('/complaints', async (req, res, next) => {
-  try {
-    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
-    const category = typeof req.query.category === 'string' ? req.query.category : undefined;
-    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
-    const rows = await prisma.complaint.findMany({
-      where: {
-        ...(status ? { status: status as never } : {}),
-        ...(category ? { category } : {}),
-        ...(q ? { complaintId: { contains: q.toUpperCase() } } : {}),
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      include: {
-        user: { select: { name: true, phone: true } },
-        order: { select: { orderNumber: true } },
-      },
-    });
-    res.json({ success: true, data: rows.map(toAdminComplaintRow) });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Update status / internal notes; the user is notified on status change.
-adminRouter.patch('/complaints/:id', async (req, res, next) => {
-  try {
-    const input = adminComplaintUpdateSchema.parse(req.body);
-    const complaint = await prisma.complaint.findUnique({ where: { id: req.params.id } });
-    if (!complaint) throw ApiError.notFound('Complaint not found');
-
-    const updated = await prisma.complaint.update({
-      where: { id: complaint.id },
-      data: {
-        ...(input.status ? { status: input.status } : {}),
-        ...(input.adminNotes !== undefined ? { adminNotes: input.adminNotes } : {}),
-      },
-      include: {
-        user: { select: { name: true, phone: true } },
-        order: { select: { orderNumber: true } },
-      },
-    });
-
-    if (input.status && input.status !== complaint.status) {
-      const friendly: Record<string, string> = {
-        IN_PROGRESS: 'is now being worked on 🔧',
-        RESOLVED: 'has been resolved ✅',
-        CLOSED: 'has been closed',
-        OPEN: 'has been re-opened',
-      };
-      await prisma.notification.create({
-        data: {
-          userId: complaint.userId,
-          type: 'COMPLAINT_UPDATED',
-          title: 'Complaint update 📢',
-          body: `Your complaint ${complaint.complaintId} ${friendly[input.status]}.`,
-        },
-      });
-    }
-    res.json({ success: true, data: toAdminComplaintRow(updated) });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Order overview
-// ---------------------------------------------------------------------------
-
-adminRouter.get('/orders', async (_req, res, next) => {
-  try {
-    const orders = await prisma.order.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      include: {
-        user: { select: { name: true, phone: true } },
-        _count: { select: { items: true } },
-      },
-    });
-    const rows: AdminOrderRow[] = orders.map((o) => ({
-      id: o.id,
-      orderNumber: o.orderNumber,
-      customerName: o.user.name,
-      customerPhone: o.user.phone,
-      status: o.status,
-      itemCount: o._count.items,
-      totalPaise: o.totalPaise,
-      createdAt: o.createdAt.toISOString(),
-    }));
-    res.json({ success: true, data: rows });
-  } catch (err) {
-    next(err);
-  }
-});
+// Orders moved to routes/adminOrders (the Order Management desk), mounted
+// ahead of this router at /api/admin/orders.
 
 // ---------------------------------------------------------------------------
 // Returns oversight (all sellers) + dispute-resolution override
@@ -610,7 +425,9 @@ adminRouter.get('/orders', async (_req, res, next) => {
 adminRouter.get('/returns', async (req, res, next) => {
   try {
     const { status } = z
-      .object({ status: z.enum(['REQUESTED', 'APPROVED', 'REJECTED', 'RECEIVED', 'REFUNDED']).optional() })
+      .object({
+        status: z.enum(['REQUESTED', 'APPROVED', 'REJECTED', 'RECEIVED', 'REFUNDED']).optional(),
+      })
       .parse(req.query);
     const returns = await prisma.return.findMany({
       where: status ? { status } : undefined,
@@ -759,6 +576,16 @@ adminRouter.put('/settings', async (req, res, next) => {
     }
     if (input.socialLinks !== undefined) await setSetting('socialLinks', input.socialLinks);
     if (input.adPricing !== undefined) await setSetting('adPricing', input.adPricing);
+    // Seller payout economics — every rate the payout page explains.
+    for (const key of [
+      'payoutCommissionPercent',
+      'payoutGatewayPercent',
+      'payoutTdsPercent',
+      'payoutMinPaise',
+      'payoutHoldDays',
+    ] as const) {
+      if (input[key] !== undefined) await setSetting(key, input[key]);
+    }
     res.json({ success: true, data: await getSettings() });
   } catch (err) {
     next(err);
@@ -781,7 +608,9 @@ adminRouter.get('/ads', async (req, res, next) => {
       take: 100,
       include: {
         seller: { select: { shopName: true } },
-        product: { select: { title: true, slug: true, images: { orderBy: { sortOrder: 'asc' }, take: 1 } } },
+        product: {
+          select: { title: true, slug: true, images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
+        },
       },
     });
     const rows: AdminAdRow[] = ads.map((ad) => ({
@@ -851,7 +680,10 @@ adminRouter.patch('/ads/:id', async (req, res, next) => {
         }),
       ]);
     }
-    res.json({ success: true, data: { id: ad.id, status: input.action === 'approve' ? 'ACTIVE' : 'REJECTED' } });
+    res.json({
+      success: true,
+      data: { id: ad.id, status: input.action === 'approve' ? 'ACTIVE' : 'REJECTED' },
+    });
   } catch (err) {
     next(err);
   }

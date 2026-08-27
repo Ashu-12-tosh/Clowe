@@ -33,3 +33,17 @@ export function requireRole(...roles: UserRole[]) {
     next();
   };
 }
+
+/**
+ * Attaches `req.auth` when a valid token is present, but never rejects — for
+ * public routes that behave slightly differently once you are logged in.
+ */
+export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+  const header = req.headers.authorization;
+  const token = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : undefined;
+  if (token) {
+    const payload = verifyAccessToken(token);
+    if (payload) req.auth = { userId: payload.sub, role: payload.role };
+  }
+  next();
+}

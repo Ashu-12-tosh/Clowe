@@ -9,14 +9,15 @@ import {
   AD_PLACEMENT_LABELS,
   type AdPricing,
   type AdPlacementValue,
-  type SellerProductListItem,
+  type SellerProductPage,
+  type SellerProductRow,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 
 export default function NewAdPage() {
   const router = useRouter();
-  const [products, setProducts] = useState<SellerProductListItem[] | null>(null);
+  const [products, setProducts] = useState<SellerProductRow[] | null>(null);
   const [pricing, setPricing] = useState<AdPricing | null>(null);
   const [productId, setProductId] = useState('');
   const [placement, setPlacement] = useState<AdPlacementValue>('CATEGORY_SPONSORED');
@@ -25,8 +26,8 @@ export default function NewAdPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api<SellerProductListItem[]>('/api/seller/products', { auth: true })
-      .then((rows) => setProducts(rows.filter((p) => p.status === 'APPROVED')))
+    api<SellerProductPage>('/api/seller/products?state=ACTIVE&pageSize=100', { auth: true })
+      .then((page) => setProducts(page.rows))
       .catch(() => setProducts([]));
     api<AdPricing>('/api/seller/ads/pricing', { auth: true })
       .then(setPricing)
@@ -90,7 +91,7 @@ export default function NewAdPage() {
                 )}
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold">{p.title}</span>
-                  <span className="text-xs text-gray-500">{formatPaise(p.minPricePaise)}</span>
+                  <span className="text-xs text-gray-500">{formatPaise(p.pricePaise)}</span>
                 </span>
               </button>
             ))}

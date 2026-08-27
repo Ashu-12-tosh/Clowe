@@ -10,9 +10,9 @@ import {
   sellerProductUpsertSchema,
   sellerReturnActionSchema,
   type SellerAdRow,
-  type SellerOrderItemRow,
+  type ProductAttribute,
   type SellerProductDetail,
-  type SellerProductListItem,
+  type SellerProductUpsertInput,
   type SellerProfileInfo,
   type SellerReferralInfo,
   type SellerReturnRow,
@@ -21,16 +21,12 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { shippingProvider } from '../services/shipping';
-import { sendMessageSafe, sendToUserSafe } from '../services/messaging';
-import { paymentProvider } from '../services/payments';
-import { processRefund } from '../services/refundService';
+import { applyReturnDecision, findSellerReturn } from '../services/returnService';
 import { getSettings } from '../services/settingsService';
 import { expireDueAds } from './ads';
 import {
   SELLER_REFERRAL_REWARD_PAISE,
   SELLER_REFERRAL_TARGET_PAISE,
-  checkSellerReferralReward,
   deliveredSalesPaise,
   ensureSellerReferralCode,
 } from '../services/sellerReferralService';
@@ -47,7 +43,7 @@ declare module 'express-serve-static-core' {
  * Loads the caller's seller profile from the DB (not the JWT), so a freshly
  * registered seller works without waiting for a token refresh.
  */
-async function requireSeller(req: Request, _res: Response, next: NextFunction) {
+export async function requireSeller(req: Request, _res: Response, next: NextFunction) {
   try {
     const profile = await prisma.sellerProfile.findUnique({
       where: { userId: req.auth!.userId },
@@ -222,36 +218,6 @@ sellerRouter.get('/profile', requireSeller, (req, res) => {
 // Products (own products only)
 // ---------------------------------------------------------------------------
 
-sellerRouter.get('/products', requireSeller, async (req, res, next) => {
-  try {
-    const products = await prisma.product.findMany({
-      where: { sellerId: req.seller!.id, status: { not: 'ARCHIVED' } },
-      orderBy: { updatedAt: 'desc' },
-      include: {
-        category: { select: { name: true } },
-        images: { orderBy: { sortOrder: 'asc' }, take: 1 },
-        variants: { select: { stock: true, pricePaise: true } },
-      },
-    });
-    const items: SellerProductListItem[] = products.map((p) => ({
-      id: p.id,
-      title: p.title,
-      slug: p.slug,
-      status: p.status,
-      rejectionReason: p.rejectionReason,
-      categoryName: p.category.name,
-      imageUrl: p.images[0]?.url ?? null,
-      variantCount: p.variants.length,
-      totalStock: p.variants.reduce((sum, v) => sum + v.stock, 0),
-      minPricePaise: Math.min(...p.variants.map((v) => v.pricePaise), p.basePricePaise),
-      updatedAt: p.updatedAt.toISOString(),
-    }));
-    res.json({ success: true, data: items });
-  } catch (err) {
-    next(err);
-  }
-});
-
 /** Fetch one of the seller's own products or 404. */
 async function ownProduct(req: Request, id: string) {
   const product = await prisma.product.findUnique({
@@ -270,16 +236,36 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
     const body: SellerProductDetail = {
       id: p.id,
       title: p.title,
+      slug: p.slug,
       categoryId: p.categoryId,
       brand: p.brand,
+      brandId: p.brandId,
+      shortDescription: p.shortDescription,
       description: p.description,
       status: p.status,
       rejectionReason: p.rejectionReason,
       imageUrls: p.images.map((i) => i.url),
+      videoUrl: p.videoUrl,
+      attributes: (p.attributes as ProductAttribute[] | null) ?? [],
+      highlights: (p.highlights as string[] | null) ?? [],
+      taxRatePercent: p.taxRatePercent,
+      weightGrams: p.weightGrams,
+      lengthMm: p.lengthMm,
+      widthMm: p.widthMm,
+      heightMm: p.heightMm,
+      shippingTemplate: (p.shippingTemplate as SellerProductDetail['shippingTemplate']) ?? null,
+      metaTitle: p.metaTitle,
+      metaDescription: p.metaDescription,
+      tags: p.tags,
+      isVisible: p.isVisible,
+      tryOnEnabled: p.tryOnEnabled,
+      lowStockAlert: p.lowStockAlert,
+      allowBackorders: p.allowBackorders,
       variants: p.variants.map((v) => ({
         id: v.id,
         size: v.size,
         color: v.color,
+        sku: v.sku,
         pricePaise: v.pricePaise,
         mrpPaise: v.mrpPaise,
         stock: v.stock,
@@ -292,25 +278,60 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
 });
 
 // Create a product — goes live only after admin approval (status PENDING).
+
+/** Fields shared by create and update — everything the listing form owns. */
+function productDataFrom(input: SellerProductUpsertInput) {
+  return {
+    title: input.title,
+    categoryId: input.categoryId,
+    brand: input.brand?.trim() || null,
+    brandId: input.brandId || null,
+    shortDescription: input.shortDescription?.trim() || null,
+    description: input.description,
+    videoUrl: input.videoUrl?.trim() || null,
+    attributes: (input.attributes ?? []) as object,
+    highlights: (input.highlights ?? []) as object,
+    taxRatePercent: input.taxRatePercent ?? null,
+    weightGrams: input.weightGrams ?? null,
+    lengthMm: input.lengthMm ?? null,
+    widthMm: input.widthMm ?? null,
+    heightMm: input.heightMm ?? null,
+    shippingTemplate: input.shippingTemplate ?? null,
+    metaTitle: input.metaTitle?.trim() || null,
+    metaDescription: input.metaDescription?.trim() || null,
+    tags: input.tags ?? [],
+    isVisible: input.isVisible ?? true,
+    tryOnEnabled: input.tryOnEnabled ?? true,
+    lowStockAlert: input.lowStockAlert ?? 5,
+    allowBackorders: input.allowBackorders ?? false,
+  };
+}
+
+/**
+ * Base price drives listing cards and the try-on threshold. A draft may have
+ * no variants yet, so it falls back to 0 until one is added.
+ */
+function basePriceOf(input: SellerProductUpsertInput): number {
+  const prices = input.variants.map((v) => v.pricePaise);
+  return prices.length > 0 ? Math.min(...prices) : 0;
+}
+
 sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req, res, next) => {
   try {
     const input = sellerProductUpsertSchema.parse(req.body);
     const category = await prisma.category.findUnique({ where: { id: input.categoryId } });
     if (!category) throw ApiError.badRequest('Category not found', 'CATEGORY_NOT_FOUND');
 
-    const basePricePaise = Math.min(...input.variants.map((v) => v.pricePaise));
     const slug = `${slugify(`${input.brand ?? ''} ${input.title}`)}-${randomBytes(3).toString('hex')}`;
 
     const product = await prisma.product.create({
       data: {
         sellerId: req.seller!.id,
-        categoryId: input.categoryId,
-        title: input.title,
+        ...productDataFrom(input),
         slug,
-        brand: input.brand ?? null,
-        description: input.description,
-        basePricePaise,
-        status: 'PENDING',
+        basePricePaise: basePriceOf(input),
+        // Drafts stay private until the seller submits them for review.
+        status: input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING',
         images: {
           create: input.imageUrls.map((url, i) => ({ url, altText: input.title, sortOrder: i })),
         },
@@ -319,7 +340,7 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
             size: v.size,
             color: v.color,
             optionValues: { size: v.size, color: v.color },
-            sku: newSku(),
+            sku: v.sku?.trim() || newSku(),
             pricePaise: v.pricePaise,
             mrpPaise: v.mrpPaise ?? null,
             stock: v.stock,
@@ -340,18 +361,15 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
     const product = await ownProduct(req, req.params.id);
 
     const keptIds = input.variants.filter((v) => v.id).map((v) => v.id!);
-    const basePricePaise = Math.min(...input.variants.map((v) => v.pricePaise));
 
     await prisma.$transaction([
       prisma.product.update({
         where: { id: product.id },
         data: {
-          title: input.title,
-          categoryId: input.categoryId,
-          brand: input.brand ?? null,
-          description: input.description,
-          basePricePaise,
-          status: 'PENDING', // edits require re-approval
+          ...productDataFrom(input),
+          basePricePaise: basePriceOf(input),
+          // Saving a draft keeps it private; submitting sends it for re-approval.
+          status: input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING',
           rejectionReason: null,
         },
       }),
@@ -377,6 +395,7 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
               size: v.size,
               color: v.color,
               optionValues: { size: v.size, color: v.color },
+              ...(v.sku?.trim() ? { sku: v.sku.trim() } : {}),
               pricePaise: v.pricePaise,
               mrpPaise: v.mrpPaise ?? null,
               stock: v.stock,
@@ -393,7 +412,7 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
                   size: v.size,
                   color: v.color,
                   optionValues: { size: v.size, color: v.color },
-                  sku: newSku(),
+                  sku: v.sku?.trim() || newSku(),
                   pricePaise: v.pricePaise,
                   mrpPaise: v.mrpPaise ?? null,
                   stock: v.stock,
@@ -402,7 +421,10 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
           ]
         : []),
     ]);
-    res.json({ success: true, data: { id: product.id, status: 'PENDING' } });
+    res.json({
+      success: true,
+      data: { id: product.id, status: input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING' },
+    });
   } catch (err) {
     next(err);
   }
@@ -422,115 +444,6 @@ sellerRouter.delete('/products/:id', requireSeller, async (req, res, next) => {
 // ---------------------------------------------------------------------------
 // Orders (this seller's items only) — will populate once Phase 5 ships
 // ---------------------------------------------------------------------------
-
-sellerRouter.get('/orders', requireSeller, async (req, res, next) => {
-  try {
-    // Unpaid orders (order.status PLACED) are hidden from sellers.
-    const items = await prisma.orderItem.findMany({
-      where: { sellerId: req.seller!.id, order: { status: { not: 'PLACED' } } },
-      orderBy: { order: { createdAt: 'desc' } },
-      include: { order: true, return: { select: { id: true } } },
-      take: 100,
-    });
-    const rows: SellerOrderItemRow[] = items.map((i) => ({
-      id: i.id,
-      orderNumber: i.order.orderNumber,
-      placedAt: i.order.createdAt.toISOString(),
-      title: i.title,
-      size: i.size,
-      color: i.color,
-      quantity: i.quantity,
-      pricePaise: i.pricePaise,
-      status: i.status,
-      returnId: i.return?.id ?? null,
-      shipTo: {
-        name: i.order.shipName,
-        city: i.order.shipCity,
-        state: i.order.shipState,
-        pincode: i.order.shipPincode,
-      },
-    }));
-    res.json({ success: true, data: rows });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Mark an order item shipped / delivered.
-sellerRouter.patch('/orders/:itemId/status', requireSeller, async (req, res, next) => {
-  try {
-    const { action } = z.object({ action: z.enum(['ship', 'deliver']) }).parse(req.body);
-    const item = await prisma.orderItem.findUnique({
-      where: { id: req.params.itemId },
-      include: { order: { include: { user: { select: { id: true, phone: true } } } } },
-    });
-    if (!item || item.sellerId !== req.seller!.id) throw ApiError.notFound('Order item not found');
-
-    if (action === 'ship') {
-      // Only paid (CONFIRMED) items can ship — PLACED means payment pending.
-      if (item.status !== 'CONFIRMED') {
-        throw ApiError.badRequest(`Cannot ship an item in status ${item.status}`);
-      }
-      // Book the shipment with the delivery partner (mock AWB in dev).
-      const shipment = await shippingProvider.createShipment({
-        orderNumber: item.order.orderNumber,
-        orderItemId: item.id,
-        destinationCity: item.order.shipCity,
-        destinationPincode: item.order.shipPincode,
-      });
-      await prisma.$transaction([
-        prisma.orderItem.update({
-          where: { id: item.id },
-          data: {
-            status: 'SHIPPED',
-            shippedAt: new Date(),
-            awbNumber: shipment.awbNumber,
-            courierName: shipment.courierName,
-            trackingUrl: shipment.trackingUrl,
-          },
-        }),
-        prisma.notification.create({
-          data: {
-            userId: item.order.user.id,
-            type: 'ITEM_SHIPPED',
-            title: 'Your order is on its way 🚚',
-            body: `"${item.title}" (${item.order.orderNumber}) shipped via ${shipment.courierName} — AWB ${shipment.awbNumber}. Expected in ~${shipment.etaDays} days.`,
-          },
-        }),
-      ]);
-      sendMessageSafe({
-        channel: 'whatsapp',
-        to: `+91${item.order.user.phone}`,
-        body: `Your Clowe item "${item.title}" has shipped via ${shipment.courierName} (AWB ${shipment.awbNumber}). Track: /track 🚚`,
-      });
-    } else {
-      if (item.status !== 'SHIPPED') {
-        throw ApiError.badRequest(`Cannot deliver an item in status ${item.status}`);
-      }
-      await prisma.$transaction([
-        prisma.orderItem.update({
-          where: { id: item.id },
-          data: { status: 'DELIVERED', deliveredAt: new Date() },
-        }),
-        prisma.notification.create({
-          data: {
-            userId: item.order.user.id,
-            type: 'ITEM_DELIVERED',
-            title: 'Delivered! 📦',
-            body: `"${item.title}" (${item.order.orderNumber}) has been delivered. We'd love a review!`,
-          },
-        }),
-      ]);
-      // Seller-referral reward check (idempotent, no-op unless this seller was referred).
-      checkSellerReferralReward(req.seller!.id).catch((err) =>
-        console.error('[clowe-api] referral reward check failed:', err),
-      );
-    }
-    res.json({ success: true, data: { id: item.id } });
-  } catch (err) {
-    next(err);
-  }
-});
 
 // ---------------------------------------------------------------------------
 // Ads (promoted placements — admin approves; payment manual for now)
@@ -629,20 +542,6 @@ sellerRouter.post('/ads', requireSeller, requireApprovedSeller, async (req, res,
 
 type ReturnWithRelations = Awaited<ReturnType<typeof findSellerReturn>>;
 
-function findSellerReturn(sellerId: string, id: string) {
-  return prisma.return.findFirst({
-    where: { id, orderItem: { sellerId } },
-    include: {
-      refund: true,
-      orderItem: {
-        include: {
-          order: { select: { orderNumber: true, shipName: true } },
-          product: { include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } } },
-        },
-      },
-    },
-  });
-}
 
 function toReturnRow(r: NonNullable<ReturnWithRelations>): SellerReturnRow {
   return {
@@ -729,134 +628,8 @@ sellerRouter.get('/returns/:id', requireSeller, async (req, res, next) => {
 sellerRouter.patch('/returns/:id', requireSeller, async (req, res, next) => {
   try {
     const input = sellerReturnActionSchema.parse(req.body);
-    const r = await findSellerReturn(req.seller!.id, req.params.id);
-    if (!r) throw ApiError.notFound('Return not found');
-
-    const item = await prisma.orderItem.findUnique({
-      where: { id: r.orderItemId },
-      include: { order: { include: { user: { select: { id: true, phone: true } } } } },
-    });
-    if (!item) throw ApiError.notFound('Order item not found');
-    const customer = item.order.user;
-    const label = `"${item.title}" (${item.order.orderNumber})`;
-
-    if (input.action === 'approve') {
-      if (r.status !== 'REQUESTED') {
-        throw ApiError.badRequest(`Cannot approve a return in status ${r.status}`);
-      }
-      await prisma.$transaction([
-        prisma.return.update({
-          where: { id: r.id },
-          data: { status: 'APPROVED', approvedAt: new Date() },
-        }),
-        prisma.notification.create({
-          data: {
-            userId: customer.id,
-            type: 'RETURN_APPROVED',
-            title: 'Return approved ✅',
-            body: `Your return for ${label} is approved. Pickup will be scheduled shortly — please keep the item packed.`,
-          },
-        }),
-      ]);
-      sendToUserSafe(
-        customer.id,
-        {
-          channel: 'whatsapp',
-          to: `+91${customer.phone}`,
-          body: `Clowe: your return for ${label} is approved. Pickup will be scheduled shortly. ✅`,
-        },
-        { critical: true },
-      );
-    } else if (input.action === 'reject') {
-      if (r.status !== 'REQUESTED') {
-        throw ApiError.badRequest(`Cannot reject a return in status ${r.status}`);
-      }
-      await prisma.$transaction([
-        prisma.return.update({
-          where: { id: r.id },
-          data: {
-            status: 'REJECTED',
-            rejectionReason: input.rejectionReason,
-            rejectedAt: new Date(),
-            resolvedAt: new Date(),
-          },
-        }),
-        // The item goes back to DELIVERED (the return did not happen).
-        prisma.orderItem.update({ where: { id: item.id }, data: { status: 'DELIVERED' } }),
-        prisma.notification.create({
-          data: {
-            userId: customer.id,
-            type: 'RETURN_REJECTED',
-            title: 'Return request declined',
-            body: `Your return for ${label} was declined: "${input.rejectionReason}". If you disagree, raise a complaint from Support and our team will review it.`,
-          },
-        }),
-      ]);
-      sendToUserSafe(
-        customer.id,
-        {
-          channel: 'whatsapp',
-          to: `+91${customer.phone}`,
-          body: `Clowe: your return for ${label} was declined — ${input.rejectionReason}`,
-        },
-        { critical: true },
-      );
-    } else {
-      // action === 'received'
-      if (r.status !== 'APPROVED') {
-        throw ApiError.badRequest(`Cannot mark received a return in status ${r.status}`);
-      }
-      const refundPaise = item.pricePaise * item.quantity;
-      const [, , refundRecord] = await prisma.$transaction([
-        prisma.return.update({
-          where: { id: r.id },
-          data: {
-            status: 'RECEIVED',
-            receivedAt: new Date(),
-            receivedCondition: input.condition,
-            ...(input.condition === 'DAMAGED' ? { resolvedAt: new Date() } : {}),
-          },
-        }),
-        prisma.orderItem.update({ where: { id: item.id }, data: { status: 'RETURNED' } }),
-        // Refund only when the item came back in OK condition.
-        ...(input.condition === 'OK'
-          ? [
-              prisma.refund.create({
-                data: {
-                  returnId: r.id,
-                  orderId: item.orderId,
-                  amountPaise: refundPaise,
-                  provider: paymentProvider.name,
-                  status: 'PENDING',
-                },
-              }),
-              prisma.notification.create({
-                data: {
-                  userId: customer.id,
-                  type: 'REFUND_INITIATED',
-                  title: 'Refund initiated 💰',
-                  body: `We received ${label} back. Your refund of ₹${(refundPaise / 100).toFixed(2)} has been initiated — expect it within 5–7 business days.`,
-                },
-              }),
-            ]
-          : [
-              prisma.notification.create({
-                data: {
-                  userId: customer.id,
-                  type: 'RETURN_RECEIVED',
-                  title: 'Return received',
-                  body: `${label} reached the seller, but was flagged as damaged on arrival. Our support team will contact you — you can also raise a complaint from Support.`,
-                },
-              }),
-            ]),
-      ]);
-      if (input.condition === 'OK' && refundRecord && 'returnId' in refundRecord) {
-        await processRefund(refundRecord.id);
-      }
-    }
-
-    const fresh = await findSellerReturn(req.seller!.id, r.id);
-    res.json({ success: true, data: toReturnRow(fresh!) });
+    const updated = await applyReturnDecision(req.seller!.id, req.params.id, input);
+    res.json({ success: true, data: toReturnRow(updated) });
   } catch (err) {
     next(err);
   }

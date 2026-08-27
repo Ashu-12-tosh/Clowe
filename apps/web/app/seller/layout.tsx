@@ -12,9 +12,15 @@ const NAV: DashNavItem[] = [
   { href: '/seller', label: 'Dashboard', icon: '▦' },
   { href: '/seller/products', label: 'My Products', icon: '👕' },
   { href: '/seller/products/new', label: 'Add Product', icon: '＋' },
+  { href: '/seller/inventory', label: 'Inventory', icon: '▤' },
   { href: '/seller/orders', label: 'Orders', icon: '📦' },
   { href: '/seller/returns', label: 'Returns', icon: '↩' },
+  { href: '/seller/payouts', label: 'Payouts', icon: '₹' },
+  { href: '/seller/customers', label: 'Customers', icon: '👥' },
+  { href: '/seller/promotions', label: 'Promotions', icon: '🏷' },
   { href: '/seller/ads', label: 'Advertise', icon: '📣' },
+  { href: '/seller/settings', label: 'Store Settings', icon: '⚙' },
+  { href: '/seller/support', label: 'Support', icon: '💬' },
 ];
 
 /** Minimal chrome for the public seller pages (login / register). */

@@ -242,10 +242,8 @@ export default function HomePage() {
       <section className="mt-10 overflow-hidden rounded-3xl bg-ink-950 text-white">
         <div className="grid items-center gap-8 p-7 sm:p-10 lg:grid-cols-[1fr_auto]">
           <div>
-            <h2 className="font-display text-2xl font-bold sm:text-3xl">
-              ✨ Experience <span className="text-brand-400">AI Shopping</span>
-            </h2>
-            <p className="mt-2 text-sm text-gray-400">Smart features that make shopping effortless.</p>
+            <h2 className="t-section">✨ Experience <span className="text-brand-400">AI Shopping</span></h2>
+            <p className="t-section-desc mt-2 text-gray-400">Smart features that make shopping effortless.</p>
             <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
               {AI_FEATURES.map((feature) => (
                 <Link key={feature.title} href={feature.href} className="group">

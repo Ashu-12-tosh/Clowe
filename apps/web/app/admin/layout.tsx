@@ -15,12 +15,16 @@ const NAV: DashNavItem[] = [
   { href: '/admin/promos', label: 'Promos', icon: '🏷' },
   { href: '/admin/deals', label: 'Deals', icon: '⚡' },
   { href: '/admin/newsletter', label: 'Newsletter', icon: '✉' },
+  { href: '/admin/tryon', label: 'AI Try-On Monitor', icon: '✦' },
   { href: '/admin/users', label: 'Users', icon: '👥' },
   { href: '/admin/orders', label: 'Orders', icon: '📦' },
+  { href: '/admin/payments', label: 'Payments', icon: '💳' },
   { href: '/admin/returns', label: 'Returns', icon: '↩' },
-  { href: '/admin/complaints', label: 'Complaints', icon: '📮' },
+  { href: '/admin/support', label: 'Customer Support', icon: '📮' },
+  { href: '/admin/inventory', label: 'Inventory & Warehouse', icon: '🏭' },
   { href: '/admin/ads', label: 'Ads', icon: '📣' },
   { href: '/admin/seller-referrals', label: 'Referrals', icon: '🤝' },
+  { href: '/admin/audit', label: 'Audit Logs', icon: '📋' },
   { href: '/admin/settings', label: 'Settings', icon: '⚙' },
 ];
 

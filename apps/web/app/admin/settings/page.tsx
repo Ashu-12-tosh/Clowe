@@ -21,6 +21,13 @@ export default function AdminSettingsPage() {
   const [tryonMin, setTryonMin] = useState('');
   const [social, setSocial] = useState({ facebook: '', twitter: '', instagram: '' });
   const [adPrices, setAdPrices] = useState<Record<string, string>>({});
+  const [payout, setPayout] = useState({
+    commission: '',
+    gateway: '',
+    tds: '',
+    minRupees: '',
+    holdDays: '',
+  });
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -36,6 +43,13 @@ export default function AdminSettingsPage() {
           for (const d of AD_DURATIONS)
             prices[`${pl}:${d}`] = toRupees(s.adPricing[pl][String(d) as '7' | '15' | '30']);
         setAdPrices(prices);
+        setPayout({
+          commission: String(s.payoutCommissionPercent),
+          gateway: String(s.payoutGatewayPercent),
+          tds: String(s.payoutTdsPercent),
+          minRupees: toRupees(s.payoutMinPaise),
+          holdDays: String(s.payoutHoldDays),
+        });
       })
       .catch(() => setError('Could not load settings'));
   }, []);
@@ -55,7 +69,16 @@ export default function AdminSettingsPage() {
 
       const fresh = await api<PlatformSettings>('/api/admin/settings', {
         method: 'PUT',
-        body: { tryonMinPricePaise: toPaise(tryonMin), socialLinks: social, adPricing },
+        body: {
+          tryonMinPricePaise: toPaise(tryonMin),
+          socialLinks: social,
+          adPricing,
+          payoutCommissionPercent: Number(payout.commission) || 0,
+          payoutGatewayPercent: Number(payout.gateway) || 0,
+          payoutTdsPercent: Number(payout.tds) || 0,
+          payoutMinPaise: toPaise(payout.minRupees),
+          payoutHoldDays: Math.max(0, Math.round(Number(payout.holdDays) || 0)),
+        },
         auth: true,
       });
       setSettings(fresh);
@@ -116,6 +139,78 @@ export default function AdminSettingsPage() {
             />
           </div>
         ))}
+      </div>
+
+      {/* Seller payouts */}
+      <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
+        <h2 className="text-sm font-bold">₹ Seller payouts</h2>
+        <p className="mt-1 text-xs text-gray-400">
+          What the marketplace withholds from a seller&rsquo;s delivered sales. Every seller&rsquo;s
+          payout page explains these rates back to them.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div>
+            <label className="text-xs text-gray-500">Commission (%)</label>
+            <input
+              type="number"
+              min={0}
+              max={50}
+              step="0.5"
+              value={payout.commission}
+              onChange={(e) => setPayout((p) => ({ ...p, commission: e.target.value }))}
+              className={field}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Gateway / collection (%)</label>
+            <input
+              type="number"
+              min={0}
+              max={20}
+              step="0.5"
+              value={payout.gateway}
+              onChange={(e) => setPayout((p) => ({ ...p, gateway: e.target.value }))}
+              className={field}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">TDS 194-O (%)</label>
+            <input
+              type="number"
+              min={0}
+              max={20}
+              step="0.1"
+              value={payout.tds}
+              onChange={(e) => setPayout((p) => ({ ...p, tds: e.target.value }))}
+              className={field}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Minimum payout (₹)</label>
+            <input
+              type="number"
+              min={0}
+              value={payout.minRupees}
+              onChange={(e) => setPayout((p) => ({ ...p, minRupees: e.target.value }))}
+              className={field}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Clearing hold (days)</label>
+            <input
+              type="number"
+              min={0}
+              max={90}
+              value={payout.holdDays}
+              onChange={(e) => setPayout((p) => ({ ...p, holdDays: e.target.value }))}
+              className={field}
+            />
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          Earnings are released this many days after delivery — keep it at or above the return
+          window so refunds never chase money that has already left.
+        </p>
       </div>
 
       {/* Ad pricing */}

@@ -2,6 +2,124 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---------------------------------------------------------------------------
+   Typography scale
+   Inter carries the functional UI; Cormorant Garamond is brand-only (logo,
+   hero campaigns, editorial). Each class sets size + weight + line-height, so
+   don't stack Tailwind text or font utilities on the same element. Desktop
+   sizes match the spec; the mobile step-down is baked in below 640px.
+--------------------------------------------------------------------------- */
+@layer components {
+  /* --- Brand ------------------------------------------------------------ */
+  .t-logo {
+    font-family: var(--font-display), Georgia, serif;
+    font-size: 2.25rem; /* 36px mobile */
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    line-height: 1;
+  }
+  /* Compact lockup for the sticky header, where the full 54px would blow out
+     the row height. Same family/weight/tracking as .t-logo. */
+  .t-logo-sm {
+    font-family: var(--font-display), Georgia, serif;
+    font-size: 1.5rem; /* 24 mobile */
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    line-height: 1;
+  }
+  .t-tagline {
+    font-size: 0.75rem; /* 12 */
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    line-height: 1.2;
+  }
+
+  /* --- Chrome ----------------------------------------------------------- */
+  .t-announce { font-size: 0.8125rem; font-weight: 500; line-height: 1.4; }  /* 13 */
+  .t-nav      { font-size: 0.9375rem; font-weight: 500; line-height: 1.4; }  /* 15 */
+  .t-nav:hover { font-weight: 600; }
+  .t-search   { font-size: 1rem; font-weight: 400; line-height: 1.5; }       /* 16 */
+
+  /* --- Hero ------------------------------------------------------------- */
+  .t-hero-luxury {
+    font-family: var(--font-display), Georgia, serif;
+    font-size: 2.25rem; /* 36 mobile */
+    font-weight: 700;
+    line-height: 1.05;
+  }
+  .t-hero-offer { font-size: 2.25rem; font-weight: 800; line-height: 1.05; letter-spacing: -0.01em; }
+  .t-hero-desc  { font-size: 1rem; font-weight: 400; line-height: 1.6; }
+
+  /* --- Sections & pages ------------------------------------------------- */
+  .t-section      { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }  /* 28 mobile */
+  .t-section-desc { font-size: 1rem; font-weight: 400; line-height: 1.6; }
+  .t-page-title   { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }  /* 28 mobile */
+  .t-sub-heading  { font-size: 1.25rem; font-weight: 600; line-height: 1.3; }  /* 20 → 24 */
+
+  /* --- Product card ----------------------------------------------------- */
+  .t-card-title { font-size: 1rem; font-weight: 600; line-height: 1.35; }      /* 16 → 18 */
+  .t-card-brand { font-size: 0.875rem; font-weight: 400; line-height: 1.4; }
+  .t-price      { font-size: 1.25rem; font-weight: 700; line-height: 1.2; }    /* 20 → 26 */
+  .t-price-old  { font-size: 0.9375rem; font-weight: 400; line-height: 1.4; }
+  .t-discount   { font-size: 0.875rem; font-weight: 600; line-height: 1.4; }
+  .t-rating     { font-size: 0.875rem; font-weight: 500; line-height: 1.4; }
+  .t-delivery   { font-size: 0.8125rem; font-weight: 400; line-height: 1.4; }
+
+  /* --- Product detail --------------------------------------------------- */
+  .t-pdp-title { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }     /* 28 → 42 */
+  .t-pdp-brand { font-size: 1rem; font-weight: 500; line-height: 1.4; }
+  .t-pdp-price { font-size: 1.75rem; font-weight: 700; line-height: 1.15; }    /* 28 → 36 */
+  .t-pdp-desc  { font-size: 1rem; font-weight: 400; line-height: 1.65; }
+  .t-spec      { font-size: 0.9375rem; font-weight: 400; line-height: 1.6; }
+
+  /* --- Cart & checkout -------------------------------------------------- */
+  .t-cart-price    { font-size: 1.125rem; font-weight: 700; line-height: 1.2; }  /* 18 → 22 */
+  .t-cart-subtotal { font-size: 1.5rem; font-weight: 700; line-height: 1.15; }   /* 24 → 28 */
+  .t-summary-row   { font-size: 1rem; font-weight: 500; line-height: 1.5; }
+
+  /* --- Dashboards ------------------------------------------------------- */
+  .t-kpi          { font-size: 1.75rem; font-weight: 700; line-height: 1.1; }   /* 28 → 36 */
+  .t-card-label   { font-size: 0.9375rem; font-weight: 500; line-height: 1.4; }
+  .t-table-head   { font-size: 0.875rem; font-weight: 600; line-height: 1.4; }
+  .t-table-cell   { font-size: 0.875rem; font-weight: 400; line-height: 1.5; }
+  .t-sidebar      { font-size: 0.9375rem; font-weight: 500; line-height: 1.4; }
+  .t-sidebar-cat  { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+  .t-chart-title  { font-size: 1rem; font-weight: 600; line-height: 1.4; }
+
+  /* --- Bits ------------------------------------------------------------- */
+  .t-btn     { font-size: 0.9375rem; font-weight: 600; line-height: 1.2; }
+  .t-badge   { font-size: 0.75rem; font-weight: 600; line-height: 1.2; }
+  .t-status  { font-size: 1rem; font-weight: 600; line-height: 1.4; }
+  .t-body    { font-size: 0.9375rem; font-weight: 400; line-height: 1.6; }
+  .t-caption { font-size: 0.8125rem; font-weight: 400; line-height: 1.5; }
+
+  /* --- Footer ----------------------------------------------------------- */
+  .t-footer-head { font-size: 1.125rem; font-weight: 600; line-height: 1.3; }
+  .t-footer-link { font-size: 0.9375rem; font-weight: 400; line-height: 1.6; }
+  .t-copyright   { font-size: 0.8125rem; font-weight: 400; line-height: 1.5; }
+}
+
+/* Desktop sizes from the spec. */
+@media (min-width: 640px) {
+  .t-logo          { font-size: 3.375rem; }  /* 54 */
+  .t-logo-sm       { font-size: 2rem; }      /* 32 */
+  .t-hero-luxury   { font-size: 4rem; }      /* 64 */
+  .t-hero-offer    { font-size: 3.625rem; }  /* 58 */
+  .t-hero-desc     { font-size: 1.25rem; }   /* 20 */
+  .t-section       { font-size: 2.125rem; }  /* 34 */
+  .t-page-title    { font-size: 2.25rem; }   /* 36 */
+  .t-sub-heading   { font-size: 1.5rem; }    /* 24 */
+  .t-card-title    { font-size: 1.125rem; }  /* 18 */
+  .t-price         { font-size: 1.625rem; }  /* 26 */
+  .t-pdp-title     { font-size: 2.625rem; }  /* 42 */
+  .t-pdp-price     { font-size: 2.25rem; }   /* 36 */
+  .t-cart-price    { font-size: 1.375rem; }  /* 22 */
+  .t-cart-subtotal { font-size: 1.75rem; }   /* 28 */
+  .t-kpi           { font-size: 2.25rem; }   /* 36 */
+  .t-body          { font-size: 1rem; }      /* 16 */
+}
+
 /* Dual-thumb price range slider (Amazon-style) */
 .dual-range input[type='range'] {
   position: absolute;
@@ -48,4 +166,23 @@
 }
 .scrollbar-none::-webkit-scrollbar {
   display: none;
+}
+
+/* Print output (shipping labels, invoices): drop the dashboard chrome and
+   anything explicitly marked, so only the document itself reaches paper. */
+@media print {
+  [data-print-hide] {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  .print-sheet {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-page-break {
+    break-after: page;
+    page-break-after: always;
+  }
 }

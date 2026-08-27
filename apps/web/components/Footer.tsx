@@ -81,7 +81,7 @@ export default function Footer() {
         <div className="lg:col-span-2 lg:pr-8">
           <Link href="/" className="inline-block leading-none">
             <span className="block text-[10px] leading-none text-brand-400">♛</span>
-            <span className="font-display text-2xl font-bold uppercase tracking-[0.18em] text-ink-900">
+            <span className="t-logo-sm block uppercase text-ink-900">
               Clowe
             </span>
           </Link>
@@ -113,11 +113,11 @@ export default function Footer() {
         {/* Link columns */}
         {COLUMNS.map((col) => (
           <div key={col.title}>
-            <h3 className="text-sm font-bold uppercase tracking-wide text-ink-900">{col.title}</h3>
+            <h3 className="t-footer-head text-ink-900">{col.title}</h3>
             <ul className="mt-3 space-y-2">
               {col.links.map((link) => (
                 <li key={link.label}>
-                  <Link href={link.href} className="text-sm text-gray-500 hover:text-brand-600 hover:underline">
+                  <Link href={link.href} className="t-footer-link text-gray-500 hover:text-brand-600 hover:underline">
                     {link.label}
                   </Link>
                 </li>
@@ -144,7 +144,7 @@ export default function Footer() {
             ))}
             <span className="ml-1 text-xs text-gray-500">🛡 100% Secure Payments</span>
           </div>
-          <p className="text-xs text-gray-400">
+          <p className="t-copyright text-gray-400">
             © {new Date().getFullYear()} CLOWE. All rights reserved.
           </p>
         </div>

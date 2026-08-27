@@ -42,9 +42,26 @@ export const GENDER_LABELS: Record<Gender, string> = {
 };
 
 /** PATCH /api/auth/me — profile completion / edits. */
+/** Options offered in the "About you" pickers. */
+export const INTEREST_OPTIONS = [
+  'Tech', 'Fashion', 'Fitness', 'Books', 'Beauty', 'Home', 'Gaming', 'Travel', 'Music', 'Food',
+] as const;
+
+export const PROFESSION_OPTIONS = [
+  'Student', 'Working professional', 'Business owner', 'Homemaker', 'Freelancer', 'Retired', 'Other',
+] as const;
+
+const shortList = (max: number) =>
+  z.array(z.string().trim().min(1).max(40)).max(max).optional();
+
 export const updateProfileSchema = z.object({
   name: z.string().trim().min(2).max(60).optional(),
   email: z.string().trim().email().optional(),
+  location: z.string().trim().max(80).nullable().optional(),
+  profession: z.string().trim().max(60).nullable().optional(),
+  interests: shortList(12),
+  favouriteBrands: shortList(12),
+  preferredCategories: shortList(12),
   avatarUrl: z.string().url().nullable().optional(),
   gender: z.enum(GENDERS).nullable().optional(),
   dateOfBirth: z
@@ -114,6 +131,15 @@ export interface AuthUser {
   avatarUrl: string | null;
   /** True when a quick-login PIN is set (never the PIN itself). */
   hasPin: boolean;
+  /** Optional "About you" profile — powers recommendations. */
+  location: string | null;
+  profession: string | null;
+  interests: string[];
+  favouriteBrands: string[];
+  preferredCategories: string[];
+  emailVerified: boolean;
+  /** Premium membership — free standard delivery with no minimum. */
+  isPremium: boolean;
   prefs: { email: boolean; sms: boolean; whatsapp: boolean; recommendations: boolean };
 }
 
@@ -125,3 +151,34 @@ export interface AuthTokensResponse {
   /** True when verify-otp just created the account. */
   isNewUser?: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Account security
+// ---------------------------------------------------------------------------
+
+/** One signed-in device, from the refresh-token trail. */
+export interface SessionInfo {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  /** The session making this request. */
+  isCurrent: boolean;
+}
+
+export interface SecurityOverview {
+  hasPin: boolean;
+  emailVerified: boolean;
+  phoneVerified: boolean;
+  loginAlerts: boolean;
+  activeSessions: number;
+  /** 0-100, derived from the checks above. */
+  score: number;
+  label: 'Weak' | 'Fair' | 'Good' | 'Strong';
+  /** What would raise the score, in priority order. */
+  suggestions: string[];
+}
+
+/** DELETE /api/auth/me — typing the phone number confirms intent. */
+export const deleteAccountSchema = z.object({
+  confirmPhone: phoneSchema,
+});

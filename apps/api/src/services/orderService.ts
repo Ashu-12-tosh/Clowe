@@ -2,6 +2,8 @@ import { randomInt } from 'node:crypto';
 import { creditsEarnedFor, creditsToPaise, REFERRAL_REWARD_CREDITS } from '@clowe/shared';
 import { prisma } from '../db';
 import { sendMessageSafe, sendToUserSafe } from './messaging';
+import { creditExpiryFrom } from '../routes/credits';
+import { returnStock } from './stockService';
 
 /** Human-friendly unique order number, e.g. CLW-2026-482913. */
 export async function generateOrderNumber(): Promise<string> {
@@ -37,13 +39,22 @@ export async function settlePaymentSuccess(orderId: string, providerPaymentId?: 
       where: { orderId: order.id },
       data: { status: 'CONFIRMED' },
     }),
-    prisma.cartItem.deleteMany({ where: { cart: { userId: order.userId } } }),
+    // Clear only what was actually bought — lines the shopper left unticked
+    // stay in the cart. The coupon is spent, so it comes off too.
+    prisma.cartItem.deleteMany({
+      where: {
+        cart: { userId: order.userId },
+        variantId: { in: order.items.map((i) => i.variantId) },
+      },
+    }),
+    prisma.cart.updateMany({ where: { userId: order.userId }, data: { couponCode: null } }),
     prisma.notification.create({
       data: {
         userId: order.userId,
         type: 'ORDER_CONFIRMED',
         title: 'Order confirmed 🎉',
         body: `Payment received for ${order.orderNumber}. We'll update you when it ships.`,
+        linkHref: `/orders/${order.id}/confirmation`,
       },
     }),
   ]);
@@ -57,13 +68,20 @@ export async function settlePaymentSuccess(orderId: string, providerPaymentId?: 
         data: { creditsBalance: { increment: earned } },
       }),
       prisma.creditLedger.create({
-        data: { userId: order.userId, delta: earned, reason: 'EARN_PURCHASE', orderId: order.id },
+        data: {
+          userId: order.userId,
+          delta: earned,
+          reason: 'EARN_PURCHASE',
+          orderId: order.id,
+          expiresAt: creditExpiryFrom(),
+        },
       }),
       prisma.notification.create({
         data: {
           userId: order.userId,
           type: 'CREDITS_EARNED',
           title: `You earned ${earned} Clowe Credits 🪙`,
+          linkHref: '/account/credits',
           body: `${order.orderNumber} earned you ${earned} credits (worth ₹${(creditsToPaise(earned) / 100).toFixed(2)}). Use them as a discount on your next order!`,
         },
       }),
@@ -81,6 +99,7 @@ export async function settlePaymentSuccess(orderId: string, providerPaymentId?: 
       userId: s.userId,
       type: 'NEW_ORDER',
       title: 'New order received 🛍',
+      linkHref: '/seller/orders',
       body: `You have new items to ship in order ${order.orderNumber}.`,
     })),
   });
@@ -114,7 +133,7 @@ async function creditReferralIfFirstPaidOrder(userId: string) {
 
   // The just-confirmed order is included in this count.
   const paidOrders = await prisma.order.count({
-    where: { userId, status: { in: ['CONFIRMED', 'SHIPPED', 'DELIVERED'] } },
+    where: { userId, status: { in: ['CONFIRMED', 'PACKED', 'SHIPPED', 'DELIVERED'] } },
   });
   if (paidOrders !== 1) return;
 
@@ -131,13 +150,19 @@ async function creditReferralIfFirstPaidOrder(userId: string) {
       data: { creditsBalance: { increment: rewardCredits } },
     }),
     prisma.creditLedger.create({
-      data: { userId: referral.referrer.id, delta: rewardCredits, reason: 'EARN_REFERRAL' },
+      data: {
+        userId: referral.referrer.id,
+        delta: rewardCredits,
+        reason: 'EARN_REFERRAL',
+        expiresAt: creditExpiryFrom(),
+      },
     }),
     prisma.notification.create({
       data: {
         userId: referral.referrer.id,
         type: 'REFERRAL_CREDITED',
         title: `Referral reward: ${rewardCredits} Clowe Credits! 🎁`,
+        linkHref: '/account/credits',
         body: `Someone you referred just placed their first order — ${rewardCredits} credits (₹${rewardValuePaise / 100}) added. Use them as a discount on your next order.`,
       },
     }),
@@ -175,6 +200,15 @@ export async function settlePaymentFailure(orderId: string, reason: string) {
         data: { stock: { increment: item.quantity } },
       }),
     ),
+    // Release the coupon redemption reserved at checkout.
+    ...(order.couponCode && order.couponDiscountPaise > 0
+      ? [
+          prisma.coupon.updateMany({
+            where: { code: order.couponCode, usedCount: { gt: 0 } },
+            data: { usedCount: { decrement: 1 } },
+          }),
+        ]
+      : []),
     // Give back any credits that were reserved for the discount.
     ...(order.creditsUsed > 0
       ? [
@@ -188,9 +222,93 @@ export async function settlePaymentFailure(orderId: string, reason: string) {
               delta: order.creditsUsed,
               reason: 'REFUND_CREDITS',
               orderId: order.id,
+              expiresAt: creditExpiryFrom(),
             },
           }),
         ]
       : []),
   ]);
+
+  // Reserved units are back on the variant; return them to the warehouse they
+  // were allocated from so the location rows stay in step.
+  await prisma.$transaction(async (tx) => {
+    for (const item of order.items) {
+      await returnStock(tx, {
+        variantId: item.variantId,
+        quantity: item.quantity,
+        reason: `Payment failed: ${reason}`,
+        reference: order.orderNumber,
+      });
+    }
+  });
+}
+
+/**
+ * Confirm a Cash-on-Delivery order. Same downstream effects as a paid order —
+ * cart cleared, sellers notified, credits granted — except the payment row
+ * stays CREATED because the courier collects the money on delivery.
+ */
+export async function confirmCodOrder(orderId: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true },
+  });
+  if (!order || order.status !== 'PLACED') return;
+
+  await prisma.$transaction([
+    prisma.order.update({ where: { id: order.id }, data: { status: 'CONFIRMED' } }),
+    prisma.orderItem.updateMany({ where: { orderId: order.id }, data: { status: 'CONFIRMED' } }),
+    prisma.cartItem.deleteMany({
+      where: {
+        cart: { userId: order.userId },
+        variantId: { in: order.items.map((i) => i.variantId) },
+      },
+    }),
+    prisma.cart.updateMany({ where: { userId: order.userId }, data: { couponCode: null } }),
+    prisma.notification.create({
+      data: {
+        userId: order.userId,
+        type: 'ORDER_CONFIRMED',
+        title: 'Order confirmed 🎉',
+        body: `${order.orderNumber} is confirmed. Keep ₹${(order.totalPaise / 100).toLocaleString('en-IN')} ready for the courier.`,
+        linkHref: `/orders/${order.id}/confirmation`,
+      },
+    }),
+  ]);
+
+  // Credits are earned the same way as a prepaid order; a cancellation
+  // reverses the redeemed credits through the existing cancel path.
+  const earned = creditsEarnedFor(order.totalPaise);
+  if (earned > 0) {
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: order.userId },
+        data: { creditsBalance: { increment: earned } },
+      }),
+      prisma.creditLedger.create({
+        data: {
+          userId: order.userId,
+          delta: earned,
+          reason: 'EARN_PURCHASE',
+          orderId: order.id,
+          expiresAt: creditExpiryFrom(),
+        },
+      }),
+    ]);
+  }
+
+  const sellerIds = [...new Set(order.items.map((i) => i.sellerId))];
+  const sellers = await prisma.sellerProfile.findMany({
+    where: { id: { in: sellerIds } },
+    select: { userId: true },
+  });
+  await prisma.notification.createMany({
+    data: sellers.map((s) => ({
+      userId: s.userId,
+      type: 'NEW_ORDER',
+      title: 'New COD order received 🛍',
+      body: `Order ${order.orderNumber} is Cash on Delivery — collect on handover.`,
+      linkHref: '/seller/orders',
+    })),
+  });
 }

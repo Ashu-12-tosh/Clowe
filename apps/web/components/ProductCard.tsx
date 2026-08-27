@@ -52,23 +52,23 @@ export default function ProductCard({
         {sponsored && (
           <p className="mb-0.5 text-[10px] font-medium text-gray-400">Sponsored</p>
         )}
-        <p className="truncate text-sm font-semibold text-ink-900">{product.title}</p>
-        <p className="mt-0.5 text-xs uppercase tracking-wide text-gray-400">
+        <p className="t-card-title truncate text-ink-900">{product.title}</p>
+        <p className="t-card-brand mt-0.5 uppercase tracking-wide text-gray-400">
           {product.brand ?? product.categoryName}
         </p>
         <div className="mt-1.5 flex items-center justify-between gap-2">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-sm font-bold text-brand-600">
+            <span className="t-price text-brand-600">
               {formatPaise(product.pricePaise)}
             </span>
             {product.mrpPaise && off && (
-              <span className="text-xs text-gray-400 line-through">
+              <span className="t-price-old text-gray-400 line-through">
                 {formatPaise(product.mrpPaise)}
               </span>
             )}
           </div>
           {product.ratingCount > 0 && product.ratingAvg != null && (
-            <span className="text-xs text-gray-500">
+            <span className="t-rating text-gray-500">
               <span className="text-brand-400">★</span> {product.ratingAvg.toFixed(1)} (
               {product.ratingCount})
             </span>

@@ -23,14 +23,37 @@ import { referralsRouter } from './routes/referrals';
 import { trackRouter } from './routes/track';
 import { complaintsRouter } from './routes/complaints';
 import { settingsRouter } from './routes/settings';
+import { deliveryRouter } from './routes/delivery';
 import { adsRouter } from './routes/ads';
 import { creditsRouter } from './routes/credits';
 import { uploadsRouter, uploadDir } from './routes/uploads';
 import { homeRouter } from './routes/home';
 import { meRouter } from './routes/me';
 import { adminContentRouter } from './routes/adminContent';
+import { adminTryonRouter } from './routes/adminTryon';
+import { adminSellersRouter } from './routes/adminSellers';
+import { adminAuditRouter } from './routes/adminAudit';
+import { adminSupportDeskRouter } from './routes/adminSupportDesk';
+import { adminOverviewRouter } from './routes/adminOverview';
+import { adminInventoryRouter } from './routes/adminInventory';
+import { adminOrdersRouter } from './routes/adminOrders';
+import { adminPaymentsRouter } from './routes/adminPayments';
+import { adminReturnsRouter } from './routes/adminReturns';
+import { sellerDashboardRouter } from './routes/sellerDashboard';
+import { sellerOrdersRouter } from './routes/sellerOrders';
+import { sellerPayoutsRouter } from './routes/sellerPayouts';
+import { sellerProductsRouter } from './routes/sellerProducts';
+import { sellerPromotionsRouter } from './routes/sellerPromotions';
+import { sellerReturnsRouter } from './routes/sellerReturns';
+import { sellerCustomersRouter } from './routes/sellerCustomers';
+import { sellerInventoryRouter } from './routes/sellerInventory';
+import { sellerSupportRouter } from './routes/sellerSupport';
+import { sellerStoreRouter } from './routes/sellerStore';
+import { storesRouter } from './routes/stores';
+import { adminSupportRouter } from './routes/adminSupport';
 import { errorHandler } from './middleware/error';
 import { globalLimiter } from './middleware/rateLimits';
+import { auditLogger } from './middleware/audit';
 
 export function createApp() {
   const app = express();
@@ -54,6 +77,10 @@ export function createApp() {
       },
     }),
   );
+
+  // Audit every state-changing API call, before the routes see it. Mounted at
+  // the root so req.path keeps its /api prefix for the route rules.
+  app.use(auditLogger);
 
   // Uploaded product images (local disk in dev).
   app.use('/uploads', express.static(uploadDir, { maxAge: '7d', immutable: true }));
@@ -82,9 +109,35 @@ export function createApp() {
   app.use('/api/home', homeRouter);
   app.use('/api/me', meRouter);
   app.use('/api/categories', categoriesRouter);
+  app.use('/api/stores', storesRouter);
   app.use('/api/products', productsRouter);
+  app.use('/api/delivery', deliveryRouter);
   app.use('/api/wishlist', wishlistRouter);
+  // Mounted before /api/seller so the order-management routes win.
+  app.use('/api/seller/dashboard', sellerDashboardRouter);
+  app.use('/api/seller/orders', sellerOrdersRouter);
+  app.use('/api/seller/payouts', sellerPayoutsRouter);
+  // Only the dashboard endpoints live here; product CRUD falls through below.
+  app.use('/api/seller/products', sellerProductsRouter);
+  app.use('/api/seller/promotions', sellerPromotionsRouter);
+  app.use('/api/seller/returns', sellerReturnsRouter);
+  app.use('/api/seller/customers', sellerCustomersRouter);
+  app.use('/api/seller/inventory', sellerInventoryRouter);
+  app.use('/api/seller/support', sellerSupportRouter);
+  app.use('/api/seller/store', sellerStoreRouter);
   app.use('/api/seller', sellerRouter);
+  // Specific admin routers first — a catch-all /api/admin mount would
+  // otherwise answer (or 404) their paths before they are reached.
+  app.use('/api/admin/tryon', adminTryonRouter);
+  app.use('/api/admin/sellers', adminSellersRouter);
+  app.use('/api/admin/audit', adminAuditRouter);
+  app.use('/api/admin/support-desk', adminSupportDeskRouter);
+  app.use('/api/admin/overview', adminOverviewRouter);
+  app.use('/api/admin/inventory', adminInventoryRouter);
+  app.use('/api/admin/orders', adminOrdersRouter);
+  app.use('/api/admin/payments', adminPaymentsRouter);
+  app.use('/api/admin/returns', adminReturnsRouter);
+  app.use('/api/admin/support', adminSupportRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/admin', adminContentRouter);
   app.use('/api/cart', cartRouter);

@@ -81,7 +81,7 @@ async function trendingCards(): Promise<HomeProductCard[]> {
   const rankedIds = [...score.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
 
   const products = await prisma.product.findMany({
-    where: { id: { in: rankedIds.slice(0, 30) }, status: 'APPROVED' },
+    where: { id: { in: rankedIds.slice(0, 30) }, status: 'APPROVED', isVisible: true, seller: { vacationMode: false } },
     include: cardInclude,
   });
   const byId = new Map(products.map((p) => [p.id, p]));
@@ -94,7 +94,7 @@ async function trendingCards(): Promise<HomeProductCard[]> {
   // Sparse signals (fresh database) — pad with all-time best sellers.
   if (cards.length < 8) {
     const pad = await prisma.product.findMany({
-      where: { status: 'APPROVED', id: { notIn: cards.map((c) => c.id) } },
+      where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, id: { notIn: cards.map((c) => c.id) } },
       orderBy: { soldCount: 'desc' },
       take: 12 - cards.length,
       include: cardInclude,
