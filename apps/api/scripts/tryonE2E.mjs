@@ -12,7 +12,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const API = process.env.API_URL ?? 'http://localhost:4400';
+const API = process.env.API_URL ?? 'http://localhost:4000';
 // Fresh number per run: the OTP endpoint enforces a 45s per-phone cooldown.
 const PHONE = `9${String(Date.now()).slice(-9)}`;
 let pass = 0;

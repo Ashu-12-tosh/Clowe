@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "next dev --turbo -p 4300",
     "build": "next build",
-    "start": "next start -p 4300",
+    "start": "next start",
+    "start:local": "next start -p 4300",
     "lint": "next lint"
   },
   "dependencies": {

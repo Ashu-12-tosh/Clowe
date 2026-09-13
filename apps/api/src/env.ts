@@ -1,14 +1,19 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
-dotenv.config();
+// `.env` holds the shared, checked-in-by-example config; `.env.local` holds
+// whatever one machine needs differently (a free port, a local service) and
+// wins where both set the same key. Both are gitignored. This mirrors how
+// Next.js layers the two on the web side, so the same file means the same
+// thing in either app.
+dotenv.config({ path: ['.env.local', '.env'] });
 
 // Validate environment up-front so a misconfigured server fails fast.
 const envSchema = z.object({
-  PORT: z.coerce.number().default(4400),
+  PORT: z.coerce.number().default(4000),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  CORS_ORIGINS: z.string().default('http://localhost:4300'),
+  CORS_ORIGINS: z.string().default('http://localhost:3000'),
 
   // --- Auth ---
   JWT_ACCESS_SECRET: z.string().min(16, 'JWT_ACCESS_SECRET must be at least 16 chars'),
@@ -67,7 +72,7 @@ const envSchema = z.object({
   // --- File storage (local disk in dev; S3-compatible later) ---
   UPLOAD_DIR: z.string().default('uploads'),
   // Public base URL of this API, used to build absolute image URLs.
-  API_PUBLIC_URL: z.string().default('http://localhost:4400'),
+  API_PUBLIC_URL: z.string().default('http://localhost:4000'),
   // Public base URL of the web app, printed into the QR codes on seller labels and
   // invoices. Defaults to the first CORS origin, which is the storefront everywhere.
   WEB_PUBLIC_URL: z.string().optional(),

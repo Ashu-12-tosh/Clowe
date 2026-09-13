@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import type { HealthResponse } from '@clowe/shared';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4400';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 type Status = 'loading' | 'ok' | 'error';
 

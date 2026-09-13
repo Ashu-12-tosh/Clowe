@@ -2,7 +2,7 @@
 
 import type { AuthTokensResponse, AuthUser } from '@clowe/shared';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4400';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 const ACCESS_KEY = 'clowe.accessToken';
 const LEGACY_REFRESH_KEY = 'clowe.refreshToken'; // pre-cookie sessions only
