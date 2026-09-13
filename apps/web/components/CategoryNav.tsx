@@ -10,7 +10,7 @@ import { api } from '@/lib/api';
 const INLINE_COUNT = 8;
 
 /**
- * Category nav bar: "All Categories" mega menu + inline links with icons +
+ * Category nav bar: "All Categories" mega menu + inline text links +
  * a "More" overflow. Desktop-only — on mobile the AppShell drawer takes over,
  * and a horizontal scroll strip renders instead.
  */
@@ -77,7 +77,6 @@ export default function CategoryNav() {
 
         {inline.map((cat) => (
           <Link key={cat.id} href={`/category/${cat.slug}`} className={linkClass(cat.slug)}>
-            {cat.icon && <span className="text-base leading-none">{cat.icon}</span>}
             {cat.name}
           </Link>
         ))}
@@ -103,7 +102,6 @@ export default function CategoryNav() {
                     href={`/category/${cat.slug}`}
                     className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-cream-100"
                   >
-                    {cat.icon && <span>{cat.icon}</span>}
                     {cat.name}
                   </Link>
                 ))}
@@ -117,7 +115,6 @@ export default function CategoryNav() {
       <div className="scrollbar-none flex items-center gap-4 overflow-x-auto px-4 lg:hidden">
         {tree.map((cat) => (
           <Link key={cat.id} href={`/category/${cat.slug}`} className={linkClass(cat.slug)}>
-            {cat.icon && <span className="text-base leading-none">{cat.icon}</span>}
             <span className="whitespace-nowrap">{cat.name}</span>
           </Link>
         ))}
@@ -133,7 +130,6 @@ export default function CategoryNav() {
                   href={`/category/${cat.slug}`}
                   className="flex items-center gap-2 text-sm font-bold text-ink-900 hover:text-brand-600"
                 >
-                  {cat.icon && <span className="text-base">{cat.icon}</span>}
                   {cat.name}
                 </Link>
                 <ul className="mt-2 space-y-1.5">

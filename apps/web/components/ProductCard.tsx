@@ -30,7 +30,7 @@ export default function ProductCard({
       onClick={onNavigate}
       className="group relative overflow-hidden rounded-2xl border border-gray-100 bg-white transition hover:-translate-y-0.5 hover:shadow-lg"
     >
-      <div className="relative aspect-[3/4] overflow-hidden bg-cream-100">
+      <div className="relative aspect-square overflow-hidden bg-cream-100">
         {product.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img

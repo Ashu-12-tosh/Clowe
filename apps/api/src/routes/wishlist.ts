@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import type { Prisma } from '@prisma/client';
-import type { SharedWishlist, WishlistEntry, WishlistShare } from '@clowe/shared';
+import type { CategoryRules, SharedWishlist, WishlistEntry, WishlistShare } from '@clowe/shared';
 import { prisma } from '../db';
+import { categoryRulesMap } from '../services/categoryRules';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { listingStockFields, defaultVariantOf } from '../utils/productListing';
@@ -31,7 +32,7 @@ const WISHLIST_INCLUDE = {
 
 type WishlistRow = Prisma.WishlistGetPayload<{ include: typeof WISHLIST_INCLUDE }>;
 
-function toEntry(row: WishlistRow): WishlistEntry {
+function toEntry(row: WishlistRow, rules: Map<string, CategoryRules>): WishlistEntry {
   const p = row.product;
   const cheapest = p.variants.reduce(
     (min, v) => (v.pricePaise < min.pricePaise ? v : min),
@@ -42,6 +43,7 @@ function toEntry(row: WishlistRow): WishlistEntry {
     addedAt: row.createdAt.toISOString(),
     rootCategorySlug: p.category.parent?.slug ?? p.category.slug,
     rootCategoryName: p.category.parent?.name ?? p.category.name,
+    tryOnEligible: (rules.get(p.categoryId)?.tryOnEligible ?? false) && p.tryOnEnabled,
     isBestSeller: p.isBestSeller,
     isNew: p.isNew,
     priceAtAddPaise: row.priceAtAddPaise,
@@ -69,7 +71,9 @@ async function wishlistFor(userId: string): Promise<WishlistEntry[]> {
     orderBy: { createdAt: 'desc' },
     include: WISHLIST_INCLUDE,
   });
-  return rows.filter((row) => row.product.status === 'APPROVED').map(toEntry);
+  const live = rows.filter((row) => row.product.status === 'APPROVED');
+  const rules = await categoryRulesMap(live.map((row) => row.product.categoryId));
+  return live.map((row) => toEntry(row, rules));
 }
 
 // ---------------------------------------------------------------------------

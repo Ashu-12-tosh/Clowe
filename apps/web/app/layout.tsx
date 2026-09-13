@@ -1,36 +1,41 @@
 import type { Metadata } from 'next';
-import { Cormorant_Garamond, Inter } from 'next/font/google';
+import localFont from 'next/font/local';
 import AppShell from '@/components/AppShell';
 import SupportChat from '@/components/SupportChat';
 import './globals.css';
 
 // Inter carries ~90% of the UI; Cormorant Garamond is reserved for brand
 // moments (logo, hero campaigns, editorial banners).
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700', '800'],
+// Both are self-hosted variable fonts (SIL OFL 1.1, see ./fonts). Using
+// next/font/local instead of next/font/google means dev compiles and builds
+// never wait on a Google Fonts download, and visitors make no third-party
+// font requests.
+const inter = localFont({
+  src: './fonts/inter-latin-wght-normal.woff2',
+  weight: '100 900',
   variable: '--font-sans',
   display: 'swap',
 });
-const cormorant = Cormorant_Garamond({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+const cormorant = localFont({
+  src: './fonts/cormorant-garamond-latin-wght-normal.woff2',
+  weight: '300 700',
   variable: '--font-display',
   display: 'swap',
+  adjustFontFallback: 'Times New Roman',
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:4300'),
   title: {
-    default: 'Clowe — Fashion, tried on by you',
+    default: 'Clowe — Everything you need, one marketplace',
     template: '%s | Clowe',
   },
   description:
-    'Multi-vendor clothing marketplace with AI virtual try-on. Shop t-shirts, dresses, jeans and more — and see them on yourself before you buy.',
-  keywords: ['clothing', 'fashion', 'online shopping', 'AI try-on', 'virtual try-on', 'India'],
+    'Multi-vendor online marketplace for electronics, mobiles, fashion, home & kitchen, beauty, books, groceries and more — with AI virtual try-on on fashion.',
+  keywords: ['online shopping', 'marketplace', 'electronics', 'mobiles', 'fashion', 'home', 'beauty', 'books', 'AI try-on', 'India'],
   openGraph: {
-    title: 'Clowe — Fashion, tried on by you',
-    description: 'Shop clothing with AI virtual try-on. See it on yourself before you buy.',
+    title: 'Clowe — Everything you need, one marketplace',
+    description: 'Electronics, fashion, home, beauty, books and more from trusted sellers - with AI try-on on fashion.',
     type: 'website',
     siteName: 'Clowe',
   },

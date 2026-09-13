@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { CategoryCallout, CategoryDetail, CategoryNode } from '@clowe/shared';
 import { prisma } from '../db';
+import { chainOf, descendantIds, rulesFromChain } from '../services/categoryRules';
 import { ApiError } from '../utils/ApiError';
 
 export const categoriesRouter = Router();
@@ -27,6 +28,7 @@ categoriesRouter.get('/', async (_req, res, next) => {
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
 
+    const byId = new Map(categories.map((c) => [c.id, c]));
     const byParent = new Map<string | null, typeof categories>();
     for (const cat of categories) {
       const list = byParent.get(cat.parentId) ?? [];
@@ -40,6 +42,8 @@ categoriesRouter.get('/', async (_req, res, next) => {
       slug: cat.slug,
       imageUrl: cat.imageUrl,
       icon: cat.icon,
+      // Rules resolve up the chain in memory - the tree is already loaded.
+      rules: rulesFromChain(chainOf(byId, cat.id)),
       children: (byParent.get(cat.id) ?? []).map(toNode),
     });
 
@@ -69,7 +73,7 @@ categoriesRouter.get('/:slug', async (req, res, next) => {
     if (!category || !category.isActive) throw ApiError.notFound('Category not found');
 
     // One grouped count covers the category and every child in one round trip.
-    const scopeIds = [category.id, ...category.children.map((c) => c.id)];
+    const scopeIds = await descendantIds(category.id);
     const counts = await prisma.product.groupBy({
       by: ['categoryId'],
       where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, categoryId: { in: scopeIds } },

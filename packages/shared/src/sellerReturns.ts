@@ -50,11 +50,11 @@ export interface SellerReturnListRow {
   orderNumber: string;
   orderedAt: string;
   customerName: string;
-  customerPhone: string;
   customerEmail: string | null;
   title: string;
   size: string;
   color: string;
+  variantLabel: string;
   quantity: number;
   imageUrl: string | null;
   reason: ReturnReasonValue;

@@ -5,7 +5,9 @@
 //
 // Idempotent: categories/brands upsert by slug, products skip when their slug
 // already exists, and the legacy migration is a no-op once it has run.
+import { demoImage } from './demoImage';
 import { Prisma, PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
+import { variantOptionFields } from '@clowe/shared';
 import { generateReferralCode } from '../../src/utils/crypto';
 
 function makeRng(seed: number) {
@@ -26,7 +28,7 @@ function slugify(text: string): string {
 }
 
 const photo = (keyword: string, lock: number, w = 800, h = 1000) =>
-  `https://loremflickr.com/${w}/${h}/${keyword}?lock=${lock}`;
+  demoImage(`https://loremflickr.com/${w}/${h}/${keyword}?lock=${lock}`);
 
 // ---------------------------------------------------------------------------
 // Subcategories — the order the landing rail shows them in
@@ -282,16 +284,6 @@ function combosOf(axes: Record<string, string[]>, cap = 8): Record<string, strin
   return combos.slice(0, cap);
 }
 
-function packAxes(options: Record<string, string>): { size: string; color: string } {
-  const color = options.color ?? '';
-  const size =
-    Object.entries(options)
-      .filter(([key]) => key !== 'color')
-      .map(([, value]) => value)
-      .join(' / ') || 'One Size';
-  return { size, color };
-}
-
 async function ensureDemoSeller(prisma: PrismaClient) {
   const user = await prisma.user.upsert({
     where: { phone: '9000000001' },
@@ -501,11 +493,8 @@ export async function seedFashion(prisma: PrismaClient) {
           },
           variants: {
             create: combos.map((options, vi) => {
-              const { size, color } = packAxes(options);
               return {
-                size,
-                color: color || 'Standard',
-                optionValues: options,
+                ...variantOptionFields(options),
                 sku: `CLW-${String(sku++).padStart(6, '0')}`,
                 pricePaise: (price + (vi % 3) * Math.round(price * 0.05)) * 100,
                 mrpPaise: mrp * 100,

@@ -4,14 +4,14 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'Sell on Clowe',
   description:
-    'Grow your clothing business on Clowe — AI try-on for your products, free AI listing tools, easy shipping, and secure payouts.',
+    'Grow your business on Clowe — sell electronics, fashion, home, beauty, books and more with free AI listing tools, easy shipping and secure payouts.',
 };
 
 const BENEFITS = [
   {
     icon: '🛍',
     title: 'Growing customer base',
-    text: 'Reach fashion shoppers across India. Your products appear in search, filters, and AI-powered voice search from day one.',
+    text: 'Reach shoppers across India in every category. Your products appear in search, filters, and AI-powered voice search from day one.',
   },
   {
     icon: '✨',
@@ -87,10 +87,10 @@ export default function SellLandingPage() {
       <section className="bg-gradient-to-r from-brand-600 to-brand-500 text-white">
         <div className="mx-auto max-w-6xl px-4 py-16 text-center">
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            Grow your clothing business on Clowe
+            Grow your business on Clowe
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-lg opacity-90">
-            India&apos;s AI-powered fashion marketplace — where customers don&apos;t just see your
+            India&apos;s AI-powered online marketplace — where customers don&apos;t just see your
             products, they <span className="font-semibold">try them on virtually</span> before
             buying.
           </p>

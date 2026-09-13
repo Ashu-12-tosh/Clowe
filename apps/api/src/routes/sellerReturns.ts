@@ -40,7 +40,7 @@ const listQuery = z.object({
 
 const RETURN_INCLUDE = {
   refund: true,
-  user: { select: { name: true, phone: true, email: true } },
+  user: { select: { name: true, email: true } },
   orderItem: {
     include: {
       order: { select: { id: true, orderNumber: true, createdAt: true, paymentMethod: true } },
@@ -71,11 +71,11 @@ function toRow(record: ReturnRecord): SellerReturnListRow {
     orderNumber: item.order.orderNumber,
     orderedAt: item.order.createdAt.toISOString(),
     customerName: record.user.name ?? 'Customer',
-    customerPhone: record.user.phone,
     customerEmail: record.user.email,
     title: item.title,
     size: item.size,
     color: item.color,
+    variantLabel: item.variantLabel,
     quantity: item.quantity,
     imageUrl: item.product.images[0]?.url ?? null,
     reason: record.reasonCategory as ReturnReasonValue,
@@ -153,7 +153,6 @@ async function loadRows(
               },
             },
             { user: { name: { contains: query.q, mode: 'insensitive' } } },
-            { user: { phone: { contains: query.q } } },
             { id: { endsWith: query.q.toLowerCase().replace(/^rtn-\d{8}-/i, '') } },
           ],
         }
@@ -341,7 +340,6 @@ sellerReturnsRouter.get('/export', async (req, res, next) => {
       'Order',
       'Requested on',
       'Customer',
-      'Phone',
       'Product',
       'Size',
       'Colour',
@@ -361,7 +359,6 @@ sellerReturnsRouter.get('/export', async (req, res, next) => {
           row.orderNumber,
           row.requestedAt,
           row.customerName,
-          row.customerPhone,
           row.title,
           row.size,
           row.color,

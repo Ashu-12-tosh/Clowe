@@ -2,7 +2,7 @@
 
 import type { AuthTokensResponse, AuthUser } from '@clowe/shared';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4400';
 
 const ACCESS_KEY = 'clowe.accessToken';
 const LEGACY_REFRESH_KEY = 'clowe.refreshToken'; // pre-cookie sessions only
@@ -89,6 +89,24 @@ export async function uploadImages(files: File[]): Promise<string[]> {
     throw new ApiRequestError(json.error?.code ?? 'UNKNOWN', json.error?.message ?? 'Upload failed');
   }
   return json.data.urls as string[];
+}
+
+/** Upload one packing video (multipart) and get back its public URL. */
+export async function uploadVideo(file: File): Promise<string> {
+  const form = new FormData();
+  form.append('video', file);
+  const token = localStorage.getItem(ACCESS_KEY);
+  const res = await fetch(`${API_URL}/api/uploads/video`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  const json = await res.json();
+  if (!json.success) {
+    throw new ApiRequestError(json.error?.code ?? 'UNKNOWN', json.error?.message ?? 'Upload failed');
+  }
+  return json.data.url as string;
 }
 
 // --- Fetch helper with the standard { success, data, error } envelope ---

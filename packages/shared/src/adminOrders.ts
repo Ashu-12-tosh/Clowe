@@ -147,6 +147,7 @@ export interface AdminOrderItemRow {
   imageUrl: string | null;
   size: string;
   color: string;
+  variantLabel: string;
   sku: string;
   sellerId: string;
   sellerName: string;

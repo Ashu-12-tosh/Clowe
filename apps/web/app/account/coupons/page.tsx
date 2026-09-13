@@ -34,7 +34,7 @@ type FilterKey = (typeof FILTERS)[number]['key'];
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns within 7 days' },
+  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
   { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
@@ -109,8 +109,7 @@ function HowToUse({ onClose }: { onClose: () => void }) {
           ))}
         </ol>
         <p className="t-caption mt-4 rounded-lg bg-cream-50 px-3 py-2 text-gray-500">
-          Bank offers are applied by your bank on the payment page, not by Clowe. Premium coupons
-          need an active Clowe Premium membership.
+          Bank offers are applied by your bank on the payment page, not by Clowe.
         </p>
         <button
           onClick={onClose}
@@ -422,7 +421,7 @@ export default function CouponsPage() {
             </div>
             {alertsOn ? (
               <Link
-                href="/account/notifications"
+                href="/notifications"
                 className="t-btn rounded-lg border border-brand-600 px-4 py-2.5 text-brand-700 transition hover:bg-brand-50"
               >
                 Manage alerts
@@ -465,7 +464,7 @@ export default function CouponsPage() {
               </span>
             </div>
             <Link
-              href="/account/orders"
+              href="/orders"
               className="t-btn mt-3 block rounded-lg border border-gray-300 py-2.5 text-center text-ink-900 transition hover:border-brand-600"
             >
               View Savings History

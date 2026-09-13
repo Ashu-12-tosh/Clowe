@@ -107,6 +107,7 @@ export interface MyReturnRow {
   imageUrl: string | null;
   size: string;
   color: string;
+  variantLabel: string;
   quantity: number;
   pricePaise: number;
   status: string;

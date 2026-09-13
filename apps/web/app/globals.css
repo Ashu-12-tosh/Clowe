@@ -159,6 +159,23 @@
   cursor: grabbing;
 }
 
+/* The page itself never scrolls sideways - any stray overflow is clipped.
+   Scrollable regions inside (tables, rails) keep their own overflow. */
+html,
+body {
+  overflow-x: clip;
+}
+
+/* Horizontal rails (chips, tabs, card strips) scroll without showing a bar;
+   tables keep theirs so desktop users can tell there is more to see. */
+.overflow-x-auto:not(:has(table)) {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.overflow-x-auto:not(:has(table))::-webkit-scrollbar {
+  display: none;
+}
+
 /* Hide scrollbars on horizontal rails (content stays scrollable). */
 .scrollbar-none {
   -ms-overflow-style: none;

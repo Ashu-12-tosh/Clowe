@@ -20,6 +20,7 @@ export interface ApiResponse<T> {
 
 /** Health-check response returned by GET /api/health. */
 export * from './auth';
+export * from './imageUrl';
 export * from './catalog';
 export * from './seller';
 export * from './sellerCatalog';
@@ -60,3 +61,6 @@ export const healthResponseSchema = z.object({
   database: z.enum(['up', 'down']),
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
+export * from './variants';
+export * from './categoryRules';
+export * from './sellerTryon';

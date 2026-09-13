@@ -83,6 +83,21 @@ function ProductReviewPanel({ productId }: { productId: string }) {
           </p>
         </div>
 
+        {/* Packing video (expires 10 days after upload) */}
+        {detail.packingVideoUrl && (
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">
+              Packing video
+            </h3>
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <video
+              src={detail.packingVideoUrl}
+              controls
+              className="mt-2 max-h-56 rounded-lg border border-gray-200 bg-black"
+            />
+          </div>
+        )}
+
         {/* Variants */}
         <div>
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">
@@ -93,8 +108,7 @@ function ProductReviewPanel({ productId }: { productId: string }) {
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
                   <th className="pb-1 pr-3">SKU</th>
-                  <th className="pb-1 pr-3">Colour</th>
-                  <th className="pb-1 pr-3">Size</th>
+                  <th className="pb-1 pr-3">Options</th>
                   <th className="pb-1 pr-3 text-right">Price</th>
                   <th className="pb-1 pr-3 text-right">MRP</th>
                   <th className="pb-1 text-right">Stock</th>
@@ -104,8 +118,7 @@ function ProductReviewPanel({ productId }: { productId: string }) {
                 {detail.variants.map((v) => (
                   <tr key={v.sku} className="border-t border-gray-100">
                     <td className="py-1.5 pr-3 font-mono text-xs">{v.sku}</td>
-                    <td className="py-1.5 pr-3">{v.color}</td>
-                    <td className="py-1.5 pr-3">{v.size}</td>
+                    <td className="py-1.5 pr-3">{v.label || <span className="text-gray-400">Single SKU</span>}</td>
                     <td className="py-1.5 pr-3 text-right font-medium">{formatPaise(v.pricePaise)}</td>
                     <td className="py-1.5 pr-3 text-right text-gray-500">
                       {v.mrpPaise ? formatPaise(v.mrpPaise) : '—'}

@@ -38,7 +38,7 @@ export default function WishlistCard({
   const off = discountPercent(product.pricePaise, product.mrpPaise);
   const badge = badgeFor(entry);
   const tryOn =
-    entry.rootCategorySlug === 'fashion' &&
+    entry.tryOnEligible &&
     tryOnMinPaise !== null &&
     product.pricePaise >= tryOnMinPaise;
   const droppedBy =
@@ -89,7 +89,7 @@ export default function WishlistCard({
 
         {tryOn && (
           <Link
-            href={`/products/${product.slug}/tryon`}
+            href={`/products/${product.slug}?tryon=1`}
             className="absolute bottom-2 right-2 rounded border border-brand-200 bg-white/95 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-700 backdrop-blur transition hover:bg-brand-50"
           >
             ✨ AI Try-On
@@ -143,12 +143,10 @@ export default function WishlistCard({
 
         {(product.sizes.length > 0 || product.colors.length > 0) && (
           <p className="mt-1 truncate text-[11px] text-gray-500">
-            {product.sizes.length > 0 && product.sizes[0] !== 'One Size' && (
-              <>Size: {product.sizes.slice(0, 2).join(', ')}</>
+            {product.sizes.length > 0 && <>Size: {product.sizes.slice(0, 2).join(', ')}</>}
+            {product.sizes.length > 0 && product.colors.length > 0 && (
+              <span className="mx-1.5 text-gray-300">|</span>
             )}
-            {product.sizes.length > 0 &&
-              product.sizes[0] !== 'One Size' &&
-              product.colors.length > 0 && <span className="mx-1.5 text-gray-300">|</span>}
             {product.colors.length > 0 && <>Color: {product.colors.slice(0, 2).join(', ')}</>}
           </p>
         )}

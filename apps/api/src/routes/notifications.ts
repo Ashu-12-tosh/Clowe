@@ -15,6 +15,9 @@ notificationsRouter.use(requireAuth);
 
 const listQuery = z.object({
   category: z.enum(NOTIFICATION_CATEGORIES).optional(),
+  /** Optional createdAt window for the "received in" filter (ISO dates). */
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(10),
 });
@@ -37,9 +40,13 @@ notificationsRouter.get('/', async (req, res, next) => {
     ]);
 
     const withCategory = all.map((n) => ({ ...n, category: notificationCategory(n.type) }));
-    const filtered = query.category
-      ? withCategory.filter((n) => n.category === query.category)
-      : withCategory;
+    // Window + category narrow the page; the summary stays over everything.
+    const filtered = withCategory.filter(
+      (n) =>
+        (!query.category || n.category === query.category) &&
+        (!query.from || n.createdAt >= query.from) &&
+        (!query.to || n.createdAt < query.to),
+    );
 
     const now = Date.now();
     const startOfToday = new Date();
@@ -71,6 +78,7 @@ notificationsRouter.get('/', async (req, res, next) => {
         today: withCategory.filter((n) => n.createdAt >= startOfToday).length,
         thisWeek: withCategory.filter((n) => n.createdAt.getTime() >= weekAgo).length,
         byCategory,
+        firstAt: all.length > 0 ? all[all.length - 1].createdAt.toISOString() : null,
       },
     };
     res.json({ success: true, data: body });

@@ -204,7 +204,7 @@ export default function SellerRegisterPage() {
         )}
         <div>
           <label className="text-sm font-medium">Shop name *</label>
-          <input name="shopName" required minLength={3} className={`mt-1 ${field}`} placeholder="e.g. Ashu Fashion House" />
+          <input name="shopName" required minLength={3} className={`mt-1 ${field}`} placeholder="e.g. Ashu Electronics" />
         </div>
         <div>
           <label className="text-sm font-medium">About your shop</label>

@@ -80,7 +80,7 @@ function SidebarContent({
           onClick={onNavigate}
           className="text-xs font-semibold text-gray-500 hover:text-brand-600"
         >
-          ← View store
+          ← Visit main website
         </Link>
       </div>
     </div>
@@ -213,7 +213,7 @@ export default function DashShell({
                       className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-cream-100"
                       onClick={() => setMenuOpen(false)}
                     >
-                      🛍 View store
+                      🛍 Visit main website
                     </Link>
                     <button
                       onClick={() => void logout()}

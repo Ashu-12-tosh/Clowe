@@ -591,7 +591,7 @@ export default function AdminReturnsPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] text-xs">
+              <table className="w-full min-w-[840px] text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-gray-500">
                     <th className="px-3 py-2.5">
@@ -957,7 +957,7 @@ function ReturnRow({
           <div className="min-w-0">
             <p className="truncate text-ink-900">{row.item.title}</p>
             <p className="truncate text-[11px] text-gray-400">
-              {row.item.size}/{row.item.color} · ×{row.item.quantity}
+              {row.item.variantLabel ? ` · ` : ''}×{row.item.quantity}
             </p>
           </div>
         </div>
@@ -1119,7 +1119,7 @@ function ReturnDrawer({
           <div className="min-w-0 text-xs">
             <p className="truncate font-medium text-ink-900">{detail.item.title}</p>
             <p className="truncate text-[11px] text-gray-400">
-              {detail.item.size} / {detail.item.color} · {detail.item.sku} · ×{detail.item.quantity}
+              {detail.item.variantLabel ? ` · ` : ''}{detail.item.sku} · ×{detail.item.quantity}
             </p>
             <p className="mt-1 font-semibold text-ink-900">
               {formatPaise(detail.refundAmountPaise)}

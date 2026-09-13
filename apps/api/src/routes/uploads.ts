@@ -72,3 +72,63 @@ uploadsRouter.post('/', requireAuth, uploadLimiter, upload.array('images', 6), (
     data: { urls: files.map((f) => `${env.API_PUBLIC_URL}/uploads/${f.filename}`) },
   });
 });
+
+// ---------------------------------------------------------------------------
+// Packing videos (sellers) — one clip per listing, kept for 10 days.
+// ---------------------------------------------------------------------------
+
+const VIDEO_ALLOWED = new Map([
+  ['video/mp4', '.mp4'],
+  ['video/webm', '.webm'],
+  ['video/quicktime', '.mov'],
+]);
+
+const videoUpload = multer({
+  storage: multer.diskStorage({
+    destination: uploadDir,
+    filename: (_req, file, cb) => {
+      const ext = VIDEO_ALLOWED.get(file.mimetype) ?? '.bin';
+      cb(null, `${Date.now()}-${randomBytes(6).toString('hex')}${ext}`);
+    },
+  }),
+  limits: { fileSize: 50 * 1024 * 1024, files: 1 }, // 50 MB per video
+  fileFilter: (_req, file, cb) => {
+    if (VIDEO_ALLOWED.has(file.mimetype)) cb(null, true);
+    else cb(new ApiError(400, 'INVALID_FILE_TYPE', 'Only MP4, WebM or MOV videos are allowed'));
+  },
+});
+
+/** Magic-byte check: MP4/MOV carry "ftyp" at offset 4, WebM starts with the EBML header. */
+function isRealVideo(filePath: string): boolean {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const header = Buffer.alloc(12);
+    fs.readSync(fd, header, 0, 12, 0);
+    if (header.subarray(4, 8).toString('ascii') === 'ftyp') return true; // MP4 / MOV
+    if (header.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) return true; // WebM
+    return false;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+// Upload one packing video; returns its public URL.
+uploadsRouter.post('/video', requireAuth, uploadLimiter, videoUpload.single('video'), (req, res) => {
+  const file = req.file;
+  if (!file) {
+    throw ApiError.badRequest('No video uploaded. Use multipart field name "video".');
+  }
+  if (!isRealVideo(file.path)) {
+    fs.unlink(file.path, () => {});
+    throw ApiError.badRequest('That file is not a valid video', 'INVALID_FILE_CONTENT');
+  }
+  res.json({ success: true, data: { url: `${env.API_PUBLIC_URL}/uploads/${file.filename}` } });
+});
+
+/** Best-effort delete of a local upload by its public URL (used by video expiry). */
+export function removeUploadByUrl(url: string): void {
+  const name = url.split('/uploads/')[1];
+  // Refuse anything that is not a plain filename (no traversal, no separators).
+  if (!name || path.basename(name) !== name || name.includes('..')) return;
+  fs.unlink(path.join(uploadDir, name), () => {});
+}

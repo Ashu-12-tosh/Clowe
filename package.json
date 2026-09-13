@@ -2,7 +2,7 @@
   "name": "clowe",
   "version": "0.1.0",
   "private": true,
-  "description": "Clowe — multi-vendor clothing e-commerce platform",
+  "description": "Clowe — multi-vendor e-commerce marketplace",
   "workspaces": [
     "apps/*",
     "packages/*"

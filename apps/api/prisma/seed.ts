@@ -5,10 +5,13 @@
 import 'dotenv/config';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { generateReferralCode } from '../src/utils/crypto';
+import { variantOptionFields } from '@clowe/shared';
 import { seedMarketplace } from './seed/marketplace';
+import { seedCategoryRules } from './seed/categoryRules';
 import { seedElectronics } from './seed/electronics';
 import { seedFashion } from './seed/fashion';
 import { seedTryOns } from './seed/tryon';
+import { demoImage } from './seed/demoImage';
 
 const prisma = new PrismaClient();
 
@@ -21,7 +24,7 @@ function slugify(text: string): string {
 
 /** Dev placeholder images (picsum photos keyed by slug, so they're stable). */
 function imageUrls(slug: string, count = 3): string[] {
-  return Array.from({ length: count }, (_, i) => `https://picsum.photos/seed/${slug}-${i}/600/800`);
+  return Array.from({ length: count }, (_, i) => demoImage(`https://picsum.photos/seed/${slug}-${i}/600/800`));
 }
 
 async function seedAdmin() {
@@ -159,8 +162,7 @@ async function seedCatalog() {
         variants: {
           create: colors.flatMap((color) =>
             sizes.map((size) => ({
-              size,
-              color,
+              ...variantOptionFields({ size, color }),
               sku: `CLW-${String(skuCounter++).padStart(5, '0')}`,
               pricePaise: price * 100,
               mrpPaise: mrp * 100,
@@ -348,6 +350,7 @@ async function main() {
   await seedCatalog();
   await seedReviews();
   await seedMarketplace(prisma);
+  console.log(`[seed] Category rules applied to ${await seedCategoryRules(prisma)} roots`);
   await seedElectronics(prisma);
   await seedFashion(prisma);
   await seedCoupons();

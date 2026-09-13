@@ -106,6 +106,7 @@ export interface InventoryStockRow {
   sellerName: string;
   size: string;
   color: string;
+  label: string;
   warehouseId: string;
   warehouseName: string;
   warehouseCode: string;
@@ -272,6 +273,7 @@ export interface PurchaseOrderItemRow {
   title: string;
   size: string;
   color: string;
+  label: string;
   quantityOrdered: number;
   quantityReceived: number;
   unitCostPaise: number;

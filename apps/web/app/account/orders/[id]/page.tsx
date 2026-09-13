@@ -317,15 +317,11 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                     >
                       {item.title}
                     </Link>
-                    <p className="t-caption mt-0.5 text-gray-500">
-                      {item.size !== 'One Size' && (
-                        <>
-                          Size: <span className="text-gray-700">{item.size}</span>
-                          <span className="mx-1.5 text-gray-300">|</span>
-                        </>
-                      )}
-                      Color: <span className="text-gray-700">{item.color}</span>
-                    </p>
+                    {item.variantLabel && (
+                      <p className="t-caption mt-0.5 text-gray-500">
+                        <span className="text-gray-700">{item.variantLabel}</span>
+                      </p>
+                    )}
                     <p className="t-caption mt-0.5 text-gray-500">Sold by {item.shopName}</p>
                     <span
                       className={`t-badge mt-1.5 inline-block rounded px-2 py-0.5 ${
@@ -626,30 +622,6 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
               <span className="t-cart-price shrink-0 text-brand-700">+ {order.earnedCredits}</span>
             </div>
           )}
-
-          <div className="overflow-hidden rounded-2xl bg-ink-950 p-5 text-white">
-            <p className="t-sub-heading text-brand-400">♛ CLOWE Premium</p>
-            <p className="t-caption mt-1 text-gray-300">Thank you for shopping with CLOWE!</p>
-            <ul className="mt-3 space-y-1.5">
-              {[
-                'Early access to sales',
-                'Member-only coupons',
-                'Priority customer support',
-                'Free & fast delivery',
-              ].map((perk) => (
-                <li key={perk} className="t-caption flex items-start gap-2 text-gray-300">
-                  <span className="text-brand-400">✦</span>
-                  {perk}
-                </li>
-              ))}
-            </ul>
-            <Link
-              href="/pages/help"
-              className="t-btn mt-4 block rounded-lg bg-brand-600 py-2.5 text-center text-white transition hover:bg-brand-700"
-            >
-              Explore Premium ›
-            </Link>
-          </div>
         </aside>
       </div>
 

@@ -268,7 +268,7 @@ export default function SellerCustomersPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by name, email, phone or city…"
+              placeholder="Search by name or city…"
               className="min-w-56 flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs outline-none focus:border-brand-600"
             />
             <select
@@ -335,11 +335,10 @@ export default function SellerCustomersPage() {
 
           {/* --- Table --------------------------------------------------- */}
           <div className="overflow-x-auto rounded-b-2xl border border-gray-100 bg-white">
-            <table className="w-full min-w-[880px] text-xs">
+            <table className="w-full min-w-[640px] text-xs">
               <thead>
                 <tr className="text-left uppercase tracking-wide text-gray-500">
                   <th className="px-3 py-2.5 font-semibold">Customer</th>
-                  <th className="px-3 py-2.5 font-semibold">Contact</th>
                   <th className="px-3 py-2.5 font-semibold">Segment</th>
                   <th className="px-3 py-2.5 text-right font-semibold">Orders</th>
                   <th className="px-3 py-2.5 text-right font-semibold">Lifetime value</th>
@@ -364,10 +363,6 @@ export default function SellerCustomersPage() {
                           </p>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <p className="max-w-44 truncate text-gray-600">{row.email ?? '—'}</p>
-                      <p className="text-[11px] text-gray-400">+91 {row.phone}</p>
                     </td>
                     <td className="px-3 py-2.5">
                       <span
@@ -413,14 +408,14 @@ export default function SellerCustomersPage() {
                 ))}
                 {data && data.rows.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-3 py-12 text-center text-gray-500">
+                    <td colSpan={7} className="px-3 py-12 text-center text-gray-500">
                       No customers match these filters.
                     </td>
                   </tr>
                 )}
                 {!data && (
                   <tr>
-                    <td colSpan={8} className="px-3 py-12 text-center text-gray-400">
+                    <td colSpan={7} className="px-3 py-12 text-center text-gray-400">
                       Loading…
                     </td>
                   </tr>

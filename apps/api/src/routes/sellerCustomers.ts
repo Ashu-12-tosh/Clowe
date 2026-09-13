@@ -47,8 +47,6 @@ const listQuery = z.object({
 interface CustomerAccumulator {
   userId: string;
   name: string;
-  email: string | null;
-  phone: string;
   city: string | null;
   state: string | null;
   orders: Set<string>;
@@ -81,7 +79,7 @@ async function loadCustomers(sellerId: string): Promise<CustomerAccumulator[]> {
           createdAt: true,
           shipCity: true,
           shipState: true,
-          user: { select: { id: true, name: true, phone: true, email: true } },
+          user: { select: { id: true, name: true } },
         },
       },
       return: { select: { id: true } },
@@ -96,8 +94,6 @@ async function loadCustomers(sellerId: string): Promise<CustomerAccumulator[]> {
       ({
         userId: user.id,
         name: user.name ?? 'Customer',
-        email: user.email,
-        phone: user.phone,
         city: item.order.shipCity,
         state: item.order.shipState,
         orders: new Set<string>(),
@@ -171,8 +167,6 @@ function toRow(
   return {
     userId: customer.userId,
     name: customer.name,
-    email: customer.email,
-    phone: customer.phone,
     city: customer.city,
     state: customer.state,
     segment,
@@ -225,7 +219,7 @@ async function loadRows(
       if (query.status !== 'ALL' && row.status !== query.status) return false;
       if (query.city && (row.city ?? '').toLowerCase() !== query.city.toLowerCase()) return false;
       if (q) {
-        const haystack = `${row.name} ${row.email ?? ''} ${row.phone} ${row.city ?? ''}`.toLowerCase();
+        const haystack = `${row.name} ${row.city ?? ''}`.toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       return true;
@@ -410,8 +404,6 @@ sellerCustomersRouter.get('/export', async (req, res, next) => {
     const { rows } = await loadRows(req.seller!.id, listQuery.parse(req.query));
     const header = [
       'Customer',
-      'Phone',
-      'Email',
       'City',
       'State',
       'Segment',
@@ -430,8 +422,6 @@ sellerCustomersRouter.get('/export', async (req, res, next) => {
       lines.push(
         [
           row.name,
-          row.phone,
-          row.email ?? '',
           row.city ?? '',
           row.state ?? '',
           row.segment,

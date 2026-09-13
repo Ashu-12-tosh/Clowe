@@ -52,8 +52,13 @@ function ProductsPageInner() {
 
   const q = searchParams.get('q') ?? '';
   const category = searchParams.get('category') ?? '';
-  const sizes = (searchParams.get('sizes') ?? '').split(',').filter(Boolean);
-  const colors = (searchParams.get('colors') ?? '').split(',').filter(Boolean);
+  // Option filters live in the URL as opt[<axis>]=a,b — one entry per axis.
+  const optionFilters: Record<string, string[]> = {};
+  searchParams.forEach((value, key) => {
+    if (!key.startsWith('opt[') || !key.endsWith(']')) return;
+    optionFilters[key.slice(4, -1)] = value.split(',').filter(Boolean);
+  });
+  const activeOptionCount = Object.values(optionFilters).reduce((n, v) => n + v.length, 0);
   const minPrice = searchParams.get('minPrice') ?? '';
   const maxPrice = searchParams.get('maxPrice') ?? '';
   const sort = (searchParams.get('sort') ?? 'newest') as ProductSort;
@@ -104,16 +109,17 @@ function ProductsPageInner() {
     };
   }, [sheetOpen]);
 
-  const toggleListParam = (key: 'sizes' | 'colors', value: string, current: string[]) => {
+  const toggleOption = (axis: string, value: string) => {
+    const current = optionFilters[axis] ?? [];
     const next = current.includes(value)
       ? current.filter((v) => v !== value)
       : [...current, value];
-    setParams({ [key]: next.join(',') });
+    setParams({ [`opt[${axis}]`]: next.join(',') });
   };
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
   const activeFilterCount =
-    (category ? 1 : 0) + sizes.length + colors.length + (minPrice || maxPrice ? 1 : 0);
+    (category ? 1 : 0) + activeOptionCount + (minPrice || maxPrice ? 1 : 0);
   const hasAnyFilter = Boolean(q) || activeFilterCount > 0;
 
   /** All filter options — rendered in the desktop sidebar AND the mobile sheet. */
@@ -155,56 +161,62 @@ function ProductsPageInner() {
         </ul>
       </div>
 
-      {data && data.facets.sizes.length > 0 && (
-        <FilterSection title="Size" defaultOpen={inSheet || sizes.length > 0}>
-          <div className="flex flex-wrap gap-1.5">
-            {data.facets.sizes.map((size) => (
-              <button
-                key={size}
-                onClick={() => toggleListParam('sizes', size, sizes)}
-                className={`rounded border px-2 py-1 text-xs ${
-                  sizes.includes(size)
-                    ? 'border-brand-600 bg-brand-100 font-semibold text-brand-600'
-                    : 'border-gray-300 text-gray-600 hover:border-brand-600'
-                }`}
-              >
-                {size}
-              </button>
-            ))}
-          </div>
-        </FilterSection>
-      )}
-
-      {data && data.facets.colors.length > 0 && (
-        <FilterSection title="Colour" defaultOpen={inSheet || colors.length > 0}>
-          <div className="flex flex-wrap gap-2">
-            {data.facets.colors.map((color) => {
-              const hex = colorToHex(color);
-              const active = colors.includes(color);
-              return (
-                <button
-                  key={color}
-                  onClick={() => toggleListParam('colors', color, colors)}
-                  title={color}
-                  className={`flex h-7 w-7 items-center justify-center rounded-full border-2 transition ${
-                    active ? 'border-brand-600 ring-2 ring-brand-100' : 'border-gray-200 hover:border-gray-400'
-                  }`}
-                  style={hex ? { backgroundColor: hex } : undefined}
-                >
-                  {!hex && (
-                    <span className="text-[9px] font-bold text-gray-500">{color.slice(0, 2)}</span>
-                  )}
-                  {active && hex && (
-                    <span className={hex === '#ffffff' || hex === '#f5e6c8' ? 'text-ink-900' : 'text-white'}>
-                      ✓
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </FilterSection>
-      )}
+      {/* One filter group per option axis in scope - colour as swatches, the rest as chips */}
+      {data?.facets.options.map((facet) => {
+        const active = optionFilters[facet.key] ?? [];
+        return (
+          <FilterSection
+            key={facet.key}
+            title={facet.label}
+            defaultOpen={inSheet || active.length > 0}
+          >
+            {facet.key === 'color' ? (
+              <div className="flex flex-wrap gap-2">
+                {facet.values.map((color) => {
+                  const hex = colorToHex(color);
+                  const on = active.includes(color);
+                  return (
+                    <button
+                      key={color}
+                      onClick={() => toggleOption(facet.key, color)}
+                      title={color}
+                      className={`flex h-7 w-7 items-center justify-center rounded-full border-2 transition ${
+                        on ? 'border-brand-600 ring-2 ring-brand-100' : 'border-gray-200 hover:border-gray-400'
+                      }`}
+                      style={hex ? { backgroundColor: hex } : undefined}
+                    >
+                      {!hex && (
+                        <span className="text-[9px] font-bold text-gray-500">{color.slice(0, 2)}</span>
+                      )}
+                      {on && hex && (
+                        <span className={hex === '#ffffff' || hex === '#f5e6c8' ? 'text-ink-900' : 'text-white'}>
+                          ✓
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {facet.values.map((value) => (
+                  <button
+                    key={value}
+                    onClick={() => toggleOption(facet.key, value)}
+                    className={`rounded border px-2 py-1 text-xs ${
+                      active.includes(value)
+                        ? 'border-brand-600 bg-brand-100 font-semibold text-brand-600'
+                        : 'border-gray-300 text-gray-600 hover:border-brand-600'
+                    }`}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            )}
+          </FilterSection>
+        );
+      })}
 
       {data?.facets.priceRange && (
         <div className="mt-5">
@@ -266,7 +278,7 @@ function ProductsPageInner() {
           </div>
 
           {/* ---------------- Mobile filter chip bar ---------------- */}
-          <div className="sticky top-[57px] z-10 -mx-4 mt-3 flex items-center gap-2 overflow-x-auto border-b border-gray-100 bg-cream-50/95 px-4 py-2 backdrop-blur md:hidden">
+          <div className="sticky top-[var(--header-h,108px)] z-10 -mx-4 mt-3 flex items-center gap-2 overflow-x-auto border-b border-gray-100 bg-cream-50/95 px-4 py-2 backdrop-blur md:hidden">
             <button
               onClick={() => setSheetOpen(true)}
               className={`relative flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-semibold ${
@@ -310,7 +322,7 @@ function ProductsPageInner() {
           {loading && !data && (
             <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="aspect-[3/4] animate-pulse rounded-xl bg-gray-200" />
+                <div key={i} className="aspect-square animate-pulse rounded-xl bg-gray-200" />
               ))}
             </div>
           )}

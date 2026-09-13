@@ -236,7 +236,7 @@ export default function SellerDashboardPage() {
               href={`/store/${data.store.slug}`}
               className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
             >
-              ↗ View store
+              ↗ Visit own store
             </Link>
           )}
         </div>

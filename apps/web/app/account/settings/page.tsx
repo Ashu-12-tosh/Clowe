@@ -47,7 +47,7 @@ const QUICK_ACTIONS = [
   { href: '/account/payments', Icon: CardIcon, title: 'Payment Methods', text: 'Manage cards, UPI & wallets' },
   { href: '/account/credits', Icon: TagIcon, title: 'Clowe Credits', text: 'View balance and transactions' },
   { href: '/account/coupons', Icon: TagIcon, title: 'My Coupons', text: 'View all available coupons' },
-  { href: '/account/notifications/settings', Icon: HeadsetIcon, title: 'Notification Settings', text: 'Customize your notifications' },
+  { href: '/notifications/settings', Icon: HeadsetIcon, title: 'Notification Settings', text: 'Customize your notifications' },
 ];
 
 const PINCODE_KEY = 'clowe.pincode';
@@ -743,7 +743,7 @@ export default function AccountSettingsPage() {
                 ))}
               </ul>
               <Link
-                href="/account/notifications"
+                href="/notifications"
                 className="t-caption mt-3 inline-block font-semibold text-brand-600 hover:underline"
               >
                 View my notifications →

@@ -5,10 +5,10 @@ dotenv.config();
 
 // Validate environment up-front so a misconfigured server fails fast.
 const envSchema = z.object({
-  PORT: z.coerce.number().default(4000),
+  PORT: z.coerce.number().default(4400),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
-  CORS_ORIGINS: z.string().default('http://localhost:3000'),
+  CORS_ORIGINS: z.string().default('http://localhost:4300'),
 
   // --- Auth ---
   JWT_ACCESS_SECRET: z.string().min(16, 'JWT_ACCESS_SECRET must be at least 16 chars'),
@@ -37,7 +37,15 @@ const envSchema = z.object({
   // --- AI Try-On ---
   // 'auto': use FASHN when FASHN_API_KEY is set, otherwise the free mock.
   TRYON_PROVIDER: z.enum(['auto', 'mock', 'fashn']).default('auto'),
-  FASHN_API_KEY: z.string().optional(),
+  FASHN_API_KEY: z.string().trim().min(1).optional(),
+  // FASHN model. 'tryon-v1.6' is 1 credit per image; 'tryon-max' is higher
+  // quality and costs more credits per run.
+  FASHN_MODEL: z.string().default('tryon-v1.6'),
+  // Speed/quality trade-off: performance ~5s, balanced ~8s, quality ~12-17s.
+  FASHN_MODE: z.enum(['performance', 'balanced', 'quality']).default('balanced'),
+  // Whole-run budget. The request is held open for this long, so it must stay
+  // comfortably under any proxy/CDN timeout in front of the API (Cloudflare: 100s).
+  TRYON_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(90_000).default(75_000),
   TRYON_DAILY_LIMIT: z.coerce.number().int().min(1).default(10),
   // Cost logged per FASHN try-on (paise) — for accounting (~$0.075 ≈ ₹6.5).
   TRYON_COST_PAISE: z.coerce.number().int().min(0).default(650),
@@ -59,9 +67,13 @@ const envSchema = z.object({
   // --- File storage (local disk in dev; S3-compatible later) ---
   UPLOAD_DIR: z.string().default('uploads'),
   // Public base URL of this API, used to build absolute image URLs.
-  API_PUBLIC_URL: z.string().default('http://localhost:4000'),
+  API_PUBLIC_URL: z.string().default('http://localhost:4400'),
+  // Public base URL of the web app, printed into the QR codes on seller labels and
+  // invoices. Defaults to the first CORS origin, which is the storefront everywhere.
+  WEB_PUBLIC_URL: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);
 
 export const corsOrigins = env.CORS_ORIGINS.split(',').map((o) => o.trim());
+export const webPublicUrl = env.WEB_PUBLIC_URL ?? corsOrigins[0];

@@ -22,7 +22,7 @@ import {
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns within 7 days' },
+  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
   { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
@@ -506,7 +506,7 @@ export default function PaymentMethodsPage() {
               ))}
               <li>
                 <Link
-                  href="/account/orders"
+                  href="/orders"
                   className="flex items-center gap-2.5 py-3 transition hover:text-brand-600"
                 >
                   <BoxIcon className="h-4 w-4 shrink-0 text-gray-500" />

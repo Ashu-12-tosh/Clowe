@@ -294,7 +294,7 @@ function SellersView() {
 
       {/* --- Table ------------------------------------------------------- */}
       <div className="mt-4 overflow-x-auto rounded-2xl border border-gray-100 bg-white">
-        <table className="w-full min-w-[900px] text-xs">
+        <table className="w-full min-w-[640px] text-xs">
           <thead>
             <tr className="text-left uppercase tracking-wide text-gray-500">
               <th className="px-3 py-2.5 font-semibold">Seller</th>

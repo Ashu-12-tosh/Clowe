@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import {
-  RETURN_REASONS,
+  returnReasonsFor,
   RETURN_REASON_LABELS,
   RETURN_REASONS_NEED_PHOTOS,
   type OrderDetailItem,
@@ -134,7 +134,7 @@ export function ReturnModal({
 
         <p className="mt-4 text-sm font-semibold text-ink-900">Why are you returning this?</p>
         <div className="mt-2 space-y-1.5">
-          {RETURN_REASONS.map((r) => (
+          {returnReasonsFor(item.size !== '').map((r) => (
             <label
               key={r}
               className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-2.5 text-sm transition ${

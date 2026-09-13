@@ -8,7 +8,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR ?? 'uploads');
-const PUBLIC_URL = process.env.API_PUBLIC_URL ?? 'http://localhost:4000';
+const PUBLIC_URL = process.env.API_PUBLIC_URL ?? 'http://localhost:4400';
 
 const u = (id: string) =>
   `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=600&h=800&q=80`;

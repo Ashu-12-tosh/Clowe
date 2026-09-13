@@ -32,7 +32,7 @@ export default function AccountStats() {
   }, []);
 
   const tiles = [
-    { label: 'Orders', value: orders != null ? String(orders) : '—', href: '/account/orders' },
+    { label: 'Orders', value: orders != null ? String(orders) : '—', href: '/orders' },
     { label: 'Wishlist', value: wishlist != null ? String(wishlist) : '—', href: '/wishlist' },
     {
       label: 'Clowe Credits',
@@ -40,7 +40,7 @@ export default function AccountStats() {
       href: '/referrals',
     },
     { label: 'Try-Ons Used', value: tryOns ?? '—', href: '/tryon' },
-    { label: 'Reviews', value: reviews != null ? String(reviews) : '—', href: '/account/orders' },
+    { label: 'Reviews', value: reviews != null ? String(reviews) : '—', href: '/orders' },
   ];
 
   return (

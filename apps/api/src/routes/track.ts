@@ -46,6 +46,7 @@ trackRouter.get('/', async (req, res, next) => {
         quantity: i.quantity,
         size: i.size,
         color: i.color,
+        variantLabel: i.variantLabel,
         status: i.status,
         shippedAt: i.shippedAt?.toISOString() ?? null,
         deliveredAt: i.deliveredAt?.toISOString() ?? null,

@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import type { CategoryNode, ProductDetail, PdpOffer } from '@clowe/shared';
+import type { CategoryNode, ProductDetail, ProductVariantInfo, PdpOffer } from '@clowe/shared';
 import { api } from '@/lib/api';
+import { recordRecentlyViewed } from '@/lib/recentlyViewed';
 import { fetchWishlistIds } from '@/lib/wishlist';
 import { discountPercent, formatPaise } from '@/lib/format';
 import WishlistButton from '@/components/WishlistButton';
@@ -14,6 +15,7 @@ import RelatedProducts from '@/components/RelatedProducts';
 import DeliveryCard from '@/components/product/DeliveryCard';
 import OffersCard from '@/components/product/OffersCard';
 import SizeGuideModal from '@/components/product/SizeGuideModal';
+import TryOnPanel from '@/components/product/TryOnPanel';
 import { getPublicSettings } from '@/lib/settings';
 import {
   BoxIcon,
@@ -22,21 +24,6 @@ import {
   ShieldCheckIcon,
   TruckIcon,
 } from '@/components/cart/CartIcons';
-
-const TRUST_ROW = [
-  { Icon: BoxIcon, title: '100% Original', text: 'Products' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Within 7 days' },
-  { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% Safe & Secure' },
-  { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
-];
-
-const TRUST_STRIP = [
-  { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns within 7 days' },
-  { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
-  { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
-  { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
-];
 
 /** "12K+ Sold" / "845 Sold". */
 function compactCount(n: number): string {
@@ -76,15 +63,7 @@ function ZoomImage({ src, alt }: { src: string; alt: string }) {
 }
 
 /** Star row, e.g. ★ 4.6 (2.4K Ratings) | 12K+ Sold. */
-function RatingLine({
-  avg,
-  count,
-  sold,
-}: {
-  avg: number;
-  count: number;
-  sold: number;
-}) {
+function RatingLine({ avg, count, sold }: { avg: number; count: number; sold: number }) {
   const ratings = count >= 1000 ? `${(count / 1000).toFixed(1)}K` : String(count);
   return (
     <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
@@ -102,15 +81,31 @@ function RatingLine({
   );
 }
 
+/** Variant to preselect: cheapest in-stock one, else the first. */
+function defaultVariant(variants: ProductVariantInfo[]): ProductVariantInfo | null {
+  const inStock = variants.filter((v) => v.stock > 0);
+  const pool = inStock.length ? inStock : variants;
+  return pool.reduce<ProductVariantInfo | null>(
+    (min, v) => (!min || v.pricePaise < min.pricePaise ? v : min),
+    null,
+  );
+}
+
 export default function ProductDetailPage({ params }: { params: { slug: string } }) {
   const { slug } = params;
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [inWishlist, setInWishlist] = useState(false);
   const [imageIndex, setImageIndex] = useState(0);
-  const [color, setColor] = useState<string | null>(null);
-  const [size, setSize] = useState<string | null>(null);
+  /** Chosen value per option axis, e.g. { color: "Black", size: "L" }. */
+  const [selection, setSelection] = useState<Record<string, string>>({});
   const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
+  // ?tryon=1 opens the panel on arrival, so a "Try On" link from elsewhere
+  // (the wishlist, a campaign) lands on the product with it already open.
+  const [tryOnOpen, setTryOnOpen] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('tryon') === '1') setTryOnOpen(true);
+  }, []);
   const [shared, setShared] = useState(false);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   // Try-On is premium-only; threshold comes from admin settings (paise).
@@ -130,26 +125,52 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
   useEffect(() => {
     setProduct(null);
     setImageIndex(0);
-    setSize(null);
-    api<ProductDetail>(`/api/products/${slug}`)
+    // auth: true so a signed-in view is attributed to this shopper — the
+    // endpoint is public, but without the token every view landed on the
+    // server as anonymous and "Recently viewed" stayed empty.
+    api<ProductDetail>(`/api/products/${slug}`, { auth: true })
       .then((p) => {
         setProduct(p);
-        setColor(p.variants[0]?.color ?? null);
+        setSelection({ ...(defaultVariant(p.variants)?.optionValues ?? {}) });
+        recordRecentlyViewed(p.id);
         fetchWishlistIds().then((ids) => setInWishlist(ids.has(p.id)));
       })
       .catch(() => setNotFound(true));
   }, [slug]);
 
-  const colorOptions = useMemo(
-    () => [...new Set(product?.variants.map((v) => v.color) ?? [])],
-    [product],
-  );
-  const sizeOptions = useMemo(
-    () => product?.variants.filter((v) => v.color === color) ?? [],
-    [product, color],
-  );
-  const selected = sizeOptions.find((v) => v.size === size) ?? sizeOptions[0] ?? null;
+  const axes = useMemo(() => product?.variantAxes ?? [], [product]);
+
+  // The variant whose options match every current choice.
+  const selected = useMemo(() => {
+    if (!product) return null;
+    return (
+      product.variants.find((v) =>
+        axes.every((a) => (v.optionValues[a.key] ?? '') === (selection[a.key] ?? '')),
+      ) ?? null
+    );
+  }, [product, axes, selection]);
   const off = selected ? discountPercent(selected.pricePaise, selected.mrpPaise) : null;
+
+  /** Distinct values of one axis, in the API's (sorted) order. */
+  const valuesFor = (key: string): string[] =>
+    [...new Set(product?.variants.map((v) => v.optionValues[key]).filter(Boolean) ?? [])];
+
+  /** Pick one value; other axes follow to the nearest in-stock variant that has it. */
+  function choose(key: string, value: string) {
+    if (!product) return;
+    const next = { ...selection, [key]: value };
+    const exact = product.variants.find((v) =>
+      axes.every((a) => (v.optionValues[a.key] ?? '') === (next[a.key] ?? '')),
+    );
+    if (exact) {
+      setSelection(next);
+      return;
+    }
+    const candidates = product.variants.filter((v) => v.optionValues[key] === value);
+    const fallback =
+      candidates.find((v) => v.stock > 0) ?? candidates[0] ?? null;
+    if (fallback) setSelection({ ...fallback.optionValues });
+  }
 
   // Breadcrumb: Home > Root > Subcategory > Product.
   const rootCategory = categories.find((c) => c.slug === product?.rootCategorySlug);
@@ -201,9 +222,24 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
   }
 
   const tryOnEligible =
-    product.rootCategorySlug === 'fashion' &&
+    product.tryOnEligible &&
     tryonMinPaise !== null &&
     Math.min(...product.variants.map((v) => v.pricePaise)) >= tryonMinPaise;
+  const returnsText = `Within ${product.returnWindowDays} day${product.returnWindowDays === 1 ? '' : 's'}`;
+
+  const trustRow = [
+    { Icon: BoxIcon, title: '100% Original', text: 'Products' },
+    { Icon: ReturnIcon, title: 'Easy Returns', text: returnsText },
+    { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% Safe & Secure' },
+    { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
+  ];
+  const trustStrip = [
+    { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
+    { Icon: ReturnIcon, title: 'Easy Returns', text: `Hassle-free returns ${returnsText.toLowerCase()}` },
+    { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
+    { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
+    { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
+  ];
 
   return (
     <main className="mx-auto max-w-7xl px-4 pb-10 pt-4">
@@ -245,7 +281,7 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
                   key={img.url}
                   onClick={() => setImageIndex(i)}
                   aria-label={`View image ${i + 1}`}
-                  className={`h-20 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition ${
+                  className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition ${
                     i === imageIndex ? 'border-brand-600' : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
@@ -278,12 +314,8 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
         <div>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              {product.brand && (
-                <p className="t-pdp-brand text-gray-500">{product.brand}</p>
-              )}
-              <h1 className="t-pdp-title mt-0.5 text-ink-900">
-                {product.title}
-              </h1>
+              {product.brand && <p className="t-pdp-brand text-gray-500">{product.brand}</p>}
+              <h1 className="t-pdp-title mt-0.5 text-ink-900">{product.title}</h1>
             </div>
             <button
               onClick={() => void share()}
@@ -316,79 +348,89 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
             </>
           )}
 
-          {/* Colour */}
-          {colorOptions.length > 0 && (
-            <div className="mt-6">
-              <h3 className="text-sm font-bold text-ink-900">
-                Color: <span className="font-normal text-gray-600">{color}</span>
-              </h3>
-              <div className="mt-2 flex flex-wrap gap-2.5">
-                {colorOptions.map((c) => {
-                  const hex = colorToHex(c);
-                  const active = c === color;
-                  return (
+          {/* Option axes — colour renders as swatches, everything else as chips */}
+          {axes.map((axis) => {
+            const values = valuesFor(axis.key);
+            if (values.length === 0) return null;
+            const current = selection[axis.key];
+            const isColor = axis.key === 'color';
+            return (
+              <div key={axis.key} className={isColor ? 'mt-6' : 'mt-5'}>
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-bold text-ink-900">
+                    {axis.label}: <span className="font-normal text-gray-600">{current}</span>
+                  </h3>
+                  {product.sizeGuide && axis.key === 'size' && (
                     <button
-                      key={c}
-                      onClick={() => {
-                        setColor(c);
-                        setSize(null);
-                      }}
-                      title={c}
-                      aria-label={c}
-                      className={`flex h-9 w-9 items-center justify-center rounded-full border-2 transition ${
-                        active
-                          ? 'border-brand-600 ring-2 ring-brand-100'
-                          : 'border-gray-200 hover:border-gray-400'
-                      }`}
-                      style={hex ? { backgroundColor: hex } : undefined}
+                      onClick={() => setSizeGuideOpen(true)}
+                      className="text-xs font-semibold text-brand-600 hover:underline"
                     >
-                      {!hex && (
-                        <span className="text-[10px] font-bold text-gray-600">{c.slice(0, 2)}</span>
-                      )}
+                      ✎ Size Guide
                     </button>
-                  );
-                })}
+                  )}
+                </div>
+                <div className={`mt-2 flex flex-wrap ${isColor ? 'gap-2.5' : 'gap-2'}`}>
+                  {values.map((value) => {
+                    const active = value === current;
+                    // Sold out on every combination that includes this value.
+                    const soldOut = !product.variants.some(
+                      (v) => v.optionValues[axis.key] === value && v.stock > 0,
+                    );
+                    if (isColor) {
+                      const hex = colorToHex(value);
+                      return (
+                        <button
+                          key={value}
+                          onClick={() => choose(axis.key, value)}
+                          disabled={soldOut}
+                          title={soldOut ? `${value} — sold out` : value}
+                          aria-label={value}
+                          className={`flex h-9 w-9 items-center justify-center rounded-full border-2 transition ${
+                            active
+                              ? 'border-brand-600 ring-2 ring-brand-100'
+                              : 'border-gray-200 hover:border-gray-400'
+                          } ${soldOut ? 'opacity-40' : ''}`}
+                          style={hex ? { backgroundColor: hex } : undefined}
+                        >
+                          {!hex && (
+                            <span className="text-[10px] font-bold text-gray-600">
+                              {value.slice(0, 2)}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    }
+                    return (
+                      <button
+                        key={value}
+                        onClick={() => choose(axis.key, value)}
+                        disabled={soldOut}
+                        className={`min-w-14 rounded-lg border px-3 py-2 text-sm transition ${
+                          active
+                            ? 'border-brand-600 bg-brand-50 font-bold text-brand-700'
+                            : soldOut
+                              ? 'border-gray-200 text-gray-300 line-through'
+                              : 'border-gray-300 text-gray-700 hover:border-brand-600'
+                        }`}
+                      >
+                        {value}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            );
+          })}
+          {selected && selected.stock > 0 && selected.stock <= 5 && (
+            <p className="mt-2 text-xs font-medium text-orange-600">
+              Only {selected.stock} left in stock
+            </p>
           )}
-
-          {/* Size */}
-          <div className="mt-5">
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-bold text-ink-900">
-                Size: <span className="font-normal text-gray-600">{selected?.size}</span>
-              </h3>
-              <button
-                onClick={() => setSizeGuideOpen(true)}
-                className="text-xs font-semibold text-brand-600 hover:underline"
-              >
-                ✎ Size Guide
-              </button>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {sizeOptions.map((v) => (
-                <button
-                  key={v.id}
-                  onClick={() => setSize(v.size)}
-                  disabled={v.stock === 0}
-                  className={`min-w-14 rounded-lg border px-3 py-2 text-sm transition ${
-                    selected?.id === v.id
-                      ? 'border-brand-600 bg-brand-50 font-bold text-brand-700'
-                      : v.stock === 0
-                        ? 'border-gray-200 text-gray-300 line-through'
-                        : 'border-gray-300 text-gray-700 hover:border-brand-600'
-                  }`}
-                >
-                  {v.size}
-                </button>
-              ))}
-            </div>
-            {selected && selected.stock > 0 && selected.stock <= 5 && (
-              <p className="mt-2 text-xs font-medium text-orange-600">
-                Only {selected.stock} left in stock
-              </p>
-            )}
-          </div>
+          {selected && selected.stock === 0 && (
+            <p className="mt-2 text-xs font-medium text-red-600">
+              {axes.length ? 'This option is out of stock' : 'Out of stock'}
+            </p>
+          )}
 
           {/* CTAs */}
           <div className="mt-6 flex gap-3">
@@ -402,7 +444,7 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
 
           {/* Trust row */}
           <div className="mt-5 grid grid-cols-2 gap-3 border-t border-gray-100 pt-4 sm:grid-cols-4">
-            {TRUST_ROW.map(({ Icon, title, text }) => (
+            {trustRow.map(({ Icon, title, text }) => (
               <div key={title} className="flex items-start gap-2">
                 <Icon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
                 <div className="min-w-0">
@@ -417,7 +459,12 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
           <div className="mt-6 border-t border-gray-100 pt-5">
             <h3 className="text-sm font-bold text-ink-900">Product Details</h3>
             <p className="t-pdp-desc mt-2 whitespace-pre-line text-gray-600">{product.description}</p>
-            {selected && <p className="mt-3 text-xs text-gray-400">SKU: {selected.sku}</p>}
+            {selected && (
+              <p className="mt-3 text-xs text-gray-400">
+                SKU: {selected.sku}
+                {selected.label ? ` · ${selected.label}` : ''}
+              </p>
+            )}
           </div>
         </div>
 
@@ -432,14 +479,14 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold text-ink-900">See how this looks on you</p>
                   <p className="mt-0.5 text-xs text-gray-500">
-                    Upload your photo and try this on virtually.
+                    See it on your own photo, right here.
                   </p>
-                  <Link
-                    href={`/products/${product.slug}/tryon`}
+                  <button
+                    onClick={() => setTryOnOpen(true)}
                     className="mt-3 inline-block rounded-lg border border-brand-600 bg-white px-4 py-2 text-xs font-bold text-brand-700 transition hover:bg-brand-50"
                   >
                     Try On Now
-                  </Link>
+                  </button>
                 </div>
                 {product.images[0] && (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -472,7 +519,7 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
 
           {product.attributes.length > 0 && (
             <div className="rounded-2xl border border-gray-100 bg-white p-4">
-              <p className="text-sm font-bold text-ink-900">Product details</p>
+              <p className="text-sm font-bold text-ink-900">Specifications</p>
               <dl className="mt-2.5 divide-y divide-gray-50">
                 {product.attributes.map((attr) => (
                   <div key={attr.name} className="flex gap-3 py-1.5 text-sm">
@@ -511,10 +558,19 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
         </aside>
       </div>
 
+      {tryOnEligible && (
+        <TryOnPanel
+          product={product}
+          variant={selected}
+          open={tryOnOpen}
+          onClose={() => setTryOnOpen(false)}
+        />
+      )}
+
       {sizeGuideOpen && (
         <SizeGuideModal
-          sizes={[...new Set(product.variants.map((v) => v.size))]}
-          selectedSize={selected?.size ?? null}
+          sizes={valuesFor('size')}
+          selectedSize={selected?.optionValues.size ?? null}
           onClose={() => setSizeGuideOpen(false)}
         />
       )}
@@ -525,7 +581,7 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
 
       {/* Bottom trust strip */}
       <section className="mt-8 grid gap-3 rounded-2xl bg-cream-50 p-5 sm:grid-cols-2 lg:grid-cols-5">
-        {TRUST_STRIP.map(({ Icon, title, text }) => (
+        {trustStrip.map(({ Icon, title, text }) => (
           <div key={title} className="flex items-start gap-2.5">
             <Icon className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
             <div className="min-w-0">

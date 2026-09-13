@@ -557,7 +557,7 @@ export default function AdminOrdersPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-xs">
+              <table className="w-full min-w-[660px] text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-gray-500">
                     <th className="px-3 py-2.5 font-semibold">Order ID</th>
@@ -1023,7 +1023,7 @@ function OrderDrawer({
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-ink-900">{i.title}</p>
                 <p className="truncate text-[11px] text-gray-400">
-                  {i.size} / {i.color} · {i.sellerName}
+                  {i.variantLabel ? ` · ` : ''}{i.sellerName}
                 </p>
                 <p className="mt-0.5">
                   <span
@@ -1477,7 +1477,7 @@ function CreateOrderModal({
                     <span className="font-mono text-brand-600">{h.sku}</span> {h.title}
                     <span className="text-gray-400">
                       {' '}
-                      · {h.size}/{h.color}
+                      {[h.size, h.color].filter(Boolean).length ? ` · ${[h.size, h.color].filter(Boolean).join(' / ')}` : ''}
                     </span>
                   </span>
                   <span className="shrink-0 text-gray-500">

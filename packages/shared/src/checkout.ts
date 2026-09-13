@@ -50,6 +50,8 @@ export interface CartLine {
   imageUrl: string | null;
   size: string;
   color: string;
+  /** Human variant label ("Black · L"); "" for single-SKU products. */
+  label: string;
   pricePaise: number;
   mrpPaise: number | null;
   stock: number; // current stock, so the UI can warn
@@ -58,6 +60,8 @@ export interface CartLine {
   selected: boolean;
   /** Top-level category, so the cart can flag Try-On eligible lines. */
   rootCategorySlug: string;
+  /** Category allows AI Try-On and the seller has it on. */
+  tryOnEligible: boolean;
   /** Seller promotion applied to this line, if any. */
   promotion: { id: string; name: string; code: string | null } | null;
   /** What the promotion takes off this line's total (already in the totals). */
@@ -417,6 +421,8 @@ export interface OrderListResponse {
     counts: Record<OrderFilter, number>;
     /** Everything saved across all orders (catalogue + coupons + credits). */
     totalSavedPaise: number;
+    /** When the first order was placed - drives the year list in the "placed in" filter. */
+    firstOrderAt: string | null;
   };
 }
 
@@ -424,19 +430,46 @@ export interface OrderListResponse {
 // Returns
 // ---------------------------------------------------------------------------
 
-export const RETURN_REASONS = ['SIZE_FIT', 'DAMAGED', 'WRONG_ITEM', 'QUALITY', 'OTHER'] as const;
+export const RETURN_REASONS = [
+  'SIZE_FIT',
+  'DAMAGED',
+  'DEFECTIVE',
+  'WRONG_ITEM',
+  'MISSING_PARTS',
+  'NOT_AS_DESCRIBED',
+  'QUALITY',
+  'CHANGED_MIND',
+  'OTHER',
+] as const;
 export type ReturnReasonValue = (typeof RETURN_REASONS)[number];
 
 export const RETURN_REASON_LABELS: Record<ReturnReasonValue, string> = {
   SIZE_FIT: 'Size / fit issue',
-  DAMAGED: 'Damaged / defective',
+  DAMAGED: 'Arrived damaged',
+  DEFECTIVE: 'Defective / not working',
   WRONG_ITEM: 'Wrong item received',
+  MISSING_PARTS: 'Missing parts or accessories',
+  NOT_AS_DESCRIBED: 'Not as described',
   QUALITY: 'Quality not as expected',
+  CHANGED_MIND: 'No longer needed',
   OTHER: 'Other',
 };
 
 /** Reasons where photo proof is mandatory. */
-export const RETURN_REASONS_NEED_PHOTOS: ReturnReasonValue[] = ['DAMAGED', 'WRONG_ITEM'];
+export const RETURN_REASONS_NEED_PHOTOS: ReturnReasonValue[] = [
+  'DAMAGED',
+  'DEFECTIVE',
+  'WRONG_ITEM',
+  'MISSING_PARTS',
+];
+
+/** Reasons that only make sense for wearables - offered when the item has a size. */
+export const RETURN_REASONS_WEARABLE: ReturnReasonValue[] = ['SIZE_FIT'];
+
+/** Reasons to offer for one item: wearable-only ones are hidden when there is no size. */
+export function returnReasonsFor(hasSize: boolean): ReturnReasonValue[] {
+  return RETURN_REASONS.filter((r) => hasSize || !RETURN_REASONS_WEARABLE.includes(r));
+}
 
 /** Customer's view of a return (status timeline + refund). */
 export interface ReturnInfo {
@@ -460,6 +493,8 @@ export interface OrderDetailItem {
   title: string;
   size: string;
   color: string;
+  /** Human variant label ("Black · L"); "" for single-SKU products. */
+  variantLabel: string;
   quantity: number;
   pricePaise: number;
   status: string;

@@ -12,8 +12,16 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { tryOnProvider } from '../services/tryon';
+import {
+  TRYON_MIN_AGE_YEARS,
+  TryOnError,
+  garmentCategoryFor,
+  isSizeBelowTryOnAge,
+  isSensitiveForTryOn,
+  tryOnProvider,
+} from '../services/tryon';
 import { getSettings } from '../services/settingsService';
+import { categoryRulesFor } from '../services/categoryRules';
 
 export const tryonRouter = Router();
 tryonRouter.use(requireAuth);
@@ -144,10 +152,47 @@ tryonRouter.post('/', async (req, res, next) => {
 
     const product = await prisma.product.findUnique({
       where: { id: input.productId },
-      include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } },
+      include: {
+        images: { orderBy: { sortOrder: 'asc' }, take: 1 },
+        category: { select: { name: true } },
+        variants: { select: { size: true } },
+        seller: { select: { id: true, tryOnCredits: true } },
+      },
     });
     if (!product || product.status !== 'APPROVED') throw ApiError.notFound('Product not found');
 
+    // Category gate first: try-on is for wearables, whatever the seller toggled.
+    const rules = await categoryRulesFor(product.categoryId);
+    if (!rules.tryOnEligible) {
+      throw ApiError.badRequest(
+        'AI Try-On is only available for wearable categories',
+        'TRYON_NOT_ELIGIBLE',
+      );
+    }
+    // Never render a shopper in innerwear, swimwear or sleepwear, whatever
+    // the category tree says — a mis-filed listing must not be enough.
+    if (isSensitiveForTryOn(product.category.name, product.title)) {
+      throw ApiError.badRequest(
+        'AI Try-On is not available for this kind of product',
+        'TRYON_NOT_ELIGIBLE',
+      );
+    }
+    // Kids' clothing is sized by age ("4-5Y"). Below the cut-off we do not
+    // render a child wearing the garment, whatever photo was uploaded. The
+    // size on screen is what counts; with none sent, the smallest size the
+    // listing offers stands in, so omitting it cannot open the gate.
+    const sizeUnderTest =
+      input.variantSize ??
+      product.variants
+        .map((v) => v.size)
+        .filter(Boolean)
+        .sort()[0];
+    if (isSizeBelowTryOnAge(sizeUnderTest)) {
+      throw ApiError.badRequest(
+        `AI Try-On is only available on clothing sized for ages ${TRYON_MIN_AGE_YEARS} and above`,
+        'TRYON_NOT_ELIGIBLE',
+      );
+    }
     // Try-On is a premium-product feature — threshold set by admin settings.
     if (!product.tryOnEnabled) {
       throw ApiError.badRequest(
@@ -158,6 +203,21 @@ tryonRouter.post('/', async (req, res, next) => {
     if (product.basePricePaise < settings.tryonMinPricePaise) {
       throw ApiError.badRequest(
         `AI Try-On is available on products priced ₹${Math.round(settings.tryonMinPricePaise / 100)} and above`,
+        'TRYON_NOT_ELIGIBLE',
+      );
+    }
+
+    // Seller-side quota: every run costs the shop one credit, and the seller
+    // may cap individual products. Either running out turns try-on off here.
+    if (product.seller.tryOnCredits <= 0) {
+      throw ApiError.badRequest(
+        'AI Try-On is not available on this product right now',
+        'TRYON_NOT_ELIGIBLE',
+      );
+    }
+    if (product.tryOnLimit != null && product.tryOnUsed >= product.tryOnLimit) {
+      throw ApiError.badRequest(
+        'AI Try-On is not available on this product right now',
         'TRYON_NOT_ELIGIBLE',
       );
     }
@@ -184,17 +244,40 @@ tryonRouter.post('/', async (req, res, next) => {
         personImageUrl: input.photoUrl,
         garmentImageUrl,
         productTitle: product.title,
+        // Category first, title as the fallback - "Jeans" as a category beats
+        // guessing from "Zephyr Slim Fit Stretch" as a title.
+        garmentCategory: garmentCategoryFor(product.category.name, product.title),
       });
       // Cost + latency are logged per run — the admin accounting/monitor trail.
-      const updated = await prisma.tryOnHistory.update({
-        where: { id: record.id },
-        data: {
-          status: 'SUCCESS',
-          resultImageUrl,
-          costPaise: tryOnProvider.costPaise,
-          durationMs: Date.now() - startedAt,
-        },
-      });
+      // A successful run also consumes one of the seller's try-on credits and
+      // counts against the product's own cap.
+      const [updated] = await prisma.$transaction([
+        prisma.tryOnHistory.update({
+          where: { id: record.id },
+          data: {
+            status: 'SUCCESS',
+            resultImageUrl,
+            costPaise: tryOnProvider.costPaise,
+            durationMs: Date.now() - startedAt,
+          },
+        }),
+        prisma.sellerProfile.update({
+          where: { id: product.seller.id },
+          data: { tryOnCredits: { decrement: 1 } },
+        }),
+        prisma.product.update({
+          where: { id: product.id },
+          data: { tryOnUsed: { increment: 1 } },
+        }),
+        prisma.tryOnCreditLedger.create({
+          data: {
+            sellerId: product.seller.id,
+            delta: -1,
+            reason: 'RUN',
+            note: product.title.slice(0, 80),
+          },
+        }),
+      ]);
       const body: TryOnResult = {
         id: updated.id,
         status: 'SUCCESS',
@@ -206,12 +289,24 @@ tryonRouter.post('/', async (req, res, next) => {
       };
       res.json({ success: true, data: body });
     } catch (genErr) {
-      const message = genErr instanceof Error ? genErr.message : 'Try-on generation failed';
+      // TryOnError carries a message written for the shopper plus a detail for
+      // the admin monitor. Anything else is an internal fault: log it in full,
+      // but never show its text to a customer.
+      const isKnown = genErr instanceof TryOnError;
+      const message = isKnown
+        ? genErr.message
+        : 'AI Try-On could not complete. Please try again in a moment.';
+      const detail = isKnown
+        ? genErr.detail
+        : genErr instanceof Error
+          ? `${genErr.name}: ${genErr.message}`
+          : String(genErr);
+      if (!isKnown) console.error('[clowe-api] try-on failed:', genErr);
       await prisma.tryOnHistory.update({
         where: { id: record.id },
         data: {
           status: 'FAILED',
-          errorMessage: message.slice(0, 500),
+          errorMessage: detail.slice(0, 500),
           durationMs: Date.now() - startedAt,
         },
       });

@@ -93,6 +93,8 @@ export interface NotificationList {
     thisWeek: number;
     /** Count per category across everything (drives the chips). */
     byCategory: Record<NotificationCategory, number>;
+    /** Oldest notification - drives the year list in the "received in" filter. */
+    firstAt: string | null;
   };
 }
 
@@ -115,6 +117,7 @@ export interface TrackOrderItem {
   quantity: number;
   size: string;
   color: string;
+  variantLabel: string;
   status: string;
   shippedAt: string | null;
   deliveredAt: string | null;

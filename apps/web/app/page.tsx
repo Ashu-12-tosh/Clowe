@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { newsletterSubscribeSchema, type HomePayload } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import HeroCarousel from '@/components/home/HeroCarousel';
+import RecentlyViewed from '@/components/home/RecentlyViewed';
 import {
   Countdown,
   DealCard,
@@ -22,7 +23,7 @@ const TRUST_ITEMS = [
 ];
 
 const AI_FEATURES = [
-  { icon: '✨', title: 'AI Try-On', text: 'Try outfits virtually', href: '/tryon' },
+  { icon: '✨', title: 'AI Try-On', text: 'Try clothes on virtually', href: '/tryon' },
   { icon: '⌕', title: 'AI Search', text: 'Search with voice', href: '/products' },
   { icon: '✦', title: 'AI Recommendations', text: 'Picks just for you', href: '/products' },
   { icon: '💬', title: 'AI Assistant', text: 'Your shopping buddy', href: '/pages/help' },
@@ -348,7 +349,10 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* 10 ─ Bottom strip + newsletter */}
+      {/* 10 ─ Recently viewed (browser history; hides itself when empty) */}
+      <RecentlyViewed />
+
+      {/* 11 ─ Bottom strip + newsletter */}
       <section className="mb-4 mt-10 grid gap-4 lg:grid-cols-[1fr_auto]">
         <div className="grid gap-3 sm:grid-cols-3">
           {BOTTOM_STRIP.map((item) => (

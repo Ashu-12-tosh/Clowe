@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import {
+  gstRateFor,
   SELLER_ORDER_TABS,
   SELLER_ORDER_TAB_LABELS,
   SELLER_ORDER_TAB_STATUSES,
@@ -17,9 +18,13 @@ import {
   type SellerOrderSort,
   type SellerOrderSummary,
   type SellerOrderTab,
+  type SellerQr,
   type SellerShippingLabel,
 } from '@clowe/shared';
+import QRCode from 'qrcode';
 import { prisma } from '../db';
+import { categoryRulesMap } from '../services/categoryRules';
+import { webPublicUrl } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { shippingProvider } from '../services/shipping';
@@ -39,6 +44,21 @@ sellerOrdersRouter.use(requireAuth, requireSeller);
 const SCAN_CAP = 5000;
 /** Items scanned for the KPI tiles. */
 const ITEM_CAP = 20000;
+
+/**
+ * QR printed on labels and invoices: scanning it opens the order in the seller
+ * panel. Each document gets its own URL (item / invoice ref), so codes are unique.
+ */
+async function sellerOrderQr(orderId: string, ref: Record<string, string>): Promise<SellerQr> {
+  const url = new URL(`/seller/orders/${orderId}`, webPublicUrl);
+  for (const [key, value] of Object.entries(ref)) url.searchParams.set(key, value);
+  const dataUrl = await QRCode.toDataURL(url.toString(), {
+    margin: 1,
+    width: 256,
+    errorCorrectionLevel: 'M',
+  });
+  return { url: url.toString(), dataUrl };
+}
 
 // ---------------------------------------------------------------------------
 // Query parsing
@@ -111,7 +131,6 @@ function buildOrderWhere(
       { orderNumber: { contains: q, mode: 'insensitive' } },
       { shipName: { contains: q, mode: 'insensitive' } },
       { shipPincode: { contains: q } },
-      { user: { phone: { contains: q } } },
       { user: { name: { contains: q, mode: 'insensitive' } } },
       { items: { some: { sellerId, title: { contains: q, mode: 'insensitive' } } } },
       { items: { some: { sellerId, awbNumber: { contains: q, mode: 'insensitive' } } } },
@@ -128,7 +147,7 @@ function buildOrderWhere(
 
 const ORDER_INCLUDE = (sellerId: string) =>
   ({
-    user: { select: { name: true, phone: true, email: true } },
+    user: { select: { name: true } },
     payment: { select: { status: true } },
     items: {
       where: { sellerId },
@@ -164,6 +183,7 @@ function toLine(item: OrderRecord['items'][number], orderCancelled: boolean): Se
     imageUrl: item.product.images[0]?.url ?? null,
     size: item.size,
     color: item.color,
+    label: item.variantLabel,
     quantity: item.quantity,
     pricePaise: item.pricePaise,
     status: item.status,
@@ -188,14 +208,10 @@ function toRow(order: OrderRecord): SellerOrderRow {
     orderId: order.id,
     orderNumber: order.orderNumber,
     placedAt: order.createdAt.toISOString(),
-    customer: {
-      name: order.user.name ?? order.shipName,
-      email: order.user.email,
-      phone: order.user.phone,
-    },
+    // Name + address only - sellers never receive buyer contact details.
+    customer: { name: order.user.name ?? order.shipName },
     shipTo: {
       name: order.shipName,
-      phone: order.shipPhone,
       line1: order.shipLine1,
       line2: order.shipLine2,
       city: order.shipCity,
@@ -586,7 +602,8 @@ sellerOrdersRouter.get('/labels', async (req, res, next) => {
       include: { order: true },
     });
 
-    const labels: SellerShippingLabel[] = items.map((i) => ({
+    const labels: SellerShippingLabel[] = await Promise.all(
+      items.map(async (i) => ({
       orderItemId: i.id,
       orderNumber: i.order.orderNumber,
       placedAt: i.order.createdAt.toISOString(),
@@ -598,10 +615,10 @@ sellerOrdersRouter.get('/labels', async (req, res, next) => {
       title: i.title,
       size: i.size,
       color: i.color,
+      variantLabel: i.variantLabel,
       quantity: i.quantity,
       shipTo: {
         name: i.order.shipName,
-        phone: i.order.shipPhone,
         line1: i.order.shipLine1,
         line2: i.order.shipLine2,
         city: i.order.shipCity,
@@ -617,7 +634,9 @@ sellerOrdersRouter.get('/labels', async (req, res, next) => {
         pincode: seller.pickupSameAsBusiness ? seller.pincode : seller.pickupPincode,
         gstNumber: seller.gstNumber,
       },
-    }));
+      qr: await sellerOrderQr(i.orderId, { item: i.id }),
+      })),
+    );
     res.json({ success: true, data: labels });
   } catch (err) {
     next(err);
@@ -628,41 +647,34 @@ sellerOrdersRouter.get('/labels', async (req, res, next) => {
 // Tax invoice (seller's lines of one order)
 // ---------------------------------------------------------------------------
 
-/**
- * GST rate for a line: the slab the seller set on the listing, else the
- * apparel default (5% up to ₹1,000 per piece, 12% above). Prices in Clowe are
- * tax-inclusive, so the taxable value is backed out of the price.
- */
-function gstRateFor(unitPricePaise: number, listingRate?: number | null): number {
-  if (listingRate != null) return listingRate;
-  return unitPricePaise <= 100000 ? 5 : 12;
-}
-
 sellerOrdersRouter.get('/:orderId/invoice', async (req, res, next) => {
   try {
     const seller = req.seller!;
     const order = await prisma.order.findUnique({
       where: { id: req.params.orderId },
       include: {
-        user: { select: { name: true, phone: true, email: true } },
+        user: { select: { name: true } },
         payment: { select: { status: true } },
         items: {
           where: { sellerId: seller.id },
-          include: { product: { select: { taxRatePercent: true } } },
+          include: { product: { select: { taxRatePercent: true, categoryId: true } } },
         },
       },
     });
     if (!order || order.items.length === 0) throw ApiError.notFound('Order not found');
     if (order.status === 'PLACED') throw ApiError.badRequest('This order is not paid yet');
+    // GST: the listing's own slab, else the category rule (apparel slab, flat 18%, 0% for books...).
+    const taxRules = await categoryRulesMap(order.items.map((i) => i.product.categoryId));
 
     const lines = order.items.map((i) => {
       const gross = i.pricePaise * i.quantity;
-      const rate = gstRateFor(i.pricePaise, i.product.taxRatePercent);
+      const rate = gstRateFor(i.pricePaise, i.product.taxRatePercent, taxRules.get(i.product.categoryId)!);
       const taxable = Math.round(gross / (1 + rate / 100));
       return {
         title: i.title,
         size: i.size,
         color: i.color,
+        variantLabel: i.variantLabel,
         quantity: i.quantity,
         unitPricePaise: i.pricePaise,
         grossPaise: gross,
@@ -674,8 +686,9 @@ sellerOrdersRouter.get('/:orderId/invoice', async (req, res, next) => {
     const taxablePaise = lines.reduce((sum, l) => sum + l.taxablePaise, 0);
     const gstPaise = lines.reduce((sum, l) => sum + l.gstPaise, 0);
 
+    const invoiceNumber = `INV-${order.orderNumber}-${seller.id.slice(-4).toUpperCase()}`;
     const body: SellerInvoice = {
-      invoiceNumber: `INV-${order.orderNumber}-${seller.id.slice(-4).toUpperCase()}`,
+      invoiceNumber,
       issuedAt: new Date().toISOString(),
       orderNumber: order.orderNumber,
       placedAt: order.createdAt.toISOString(),
@@ -693,28 +706,28 @@ sellerOrdersRouter.get('/:orderId/invoice', async (req, res, next) => {
       },
       billTo: {
         name: order.billName ?? order.shipName,
-        phone: order.shipPhone,
         line1: order.billLine1 ?? order.shipLine1,
         line2: order.billLine2 ?? order.shipLine2,
         city: order.billCity ?? order.shipCity,
         state: order.billState ?? order.shipState,
         pincode: order.billPincode ?? order.shipPincode,
       },
-      customer: {
-        name: order.user.name ?? order.shipName,
-        phone: order.user.phone,
-        email: order.user.email,
-      },
+      customer: { name: order.user.name ?? order.shipName },
       lines,
       gstRatePercent:
         order.items.length > 0
-          ? gstRateFor(order.items[0].pricePaise, order.items[0].product.taxRatePercent)
+          ? gstRateFor(
+              order.items[0].pricePaise,
+              order.items[0].product.taxRatePercent,
+              taxRules.get(order.items[0].product.categoryId)!,
+            )
           : 5,
       taxablePaise,
       gstPaise,
       isIntraState:
         !!seller.state && seller.state.toLowerCase() === (order.shipState ?? '').toLowerCase(),
       totalPaise: taxablePaise + gstPaise,
+      qr: await sellerOrderQr(order.id, { invoice: invoiceNumber }),
     };
     res.json({ success: true, data: body });
   } catch (err) {
@@ -748,7 +761,6 @@ sellerOrdersRouter.get('/export', async (req, res, next) => {
       'Order number',
       'Order date',
       'Customer',
-      'Phone',
       'City',
       'State',
       'Pincode',
@@ -773,7 +785,6 @@ sellerOrdersRouter.get('/export', async (req, res, next) => {
             row.orderNumber,
             row.placedAt,
             row.customer.name,
-            row.customer.phone,
             row.shipTo.city,
             row.shipTo.state,
             row.shipTo.pincode,
@@ -804,7 +815,7 @@ sellerOrdersRouter.get('/export', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
-// Single order (drawer)
+// Single order (detail page)
 // ---------------------------------------------------------------------------
 
 sellerOrdersRouter.get('/:orderId', async (req, res, next) => {

@@ -39,7 +39,7 @@ aiRouter.post('/product-description', requireAuth, async (req, res, next) => {
     const description = await aiProvider.complete({
       task: 'product-description',
       system:
-        'You write product descriptions for Clowe, an Indian clothing marketplace. ' +
+        'You write product descriptions for Clowe, an Indian online marketplace that sells everything from electronics and home appliances to fashion, books and groceries. Match the tone and vocabulary to the product category given. ' +
         'Write one paragraph of 60-100 words: warm, concrete, benefit-led, no emojis, no headings, ' +
         'no invented specifications (only use the details provided). Plain text only.',
       user: JSON.stringify(input),
@@ -93,7 +93,7 @@ aiRouter.get('/review-summary/:productId', async (req, res, next) => {
     const summary = await aiProvider.complete({
       task: 'review-summary',
       system:
-        'You summarize customer reviews for a product page on Clowe, an Indian clothing marketplace. ' +
+        'You summarize customer reviews for a product page on Clowe, an Indian online marketplace. ' +
         'Write 2-3 sentences capturing overall sentiment, what buyers praise, and any recurring complaint. ' +
         'Be balanced and specific. Plain text only.',
       user: JSON.stringify({
@@ -129,10 +129,10 @@ aiRouter.post('/search-intent', async (req, res, next) => {
     const reply = await aiProvider.complete({
       task: 'search-intent',
       system:
-        'You convert a spoken shopping query into JSON search filters for a clothing store. ' +
+        'You convert a spoken shopping query into JSON search filters for an online marketplace (electronics, mobiles, fashion, home, beauty, books, grocery and more). ' +
         'Reply with ONLY a JSON object: {"q": string, "category": string|null, "maxPrice": number|null, "colors": string[]}. ' +
         '"category" must be one of the provided slugs or null. "maxPrice" is in rupees. ' +
-        '"q" is the cleaned search text (keep garment words, drop filler and filter words).',
+        '"q" is the cleaned search text (keep product words such as brand, model, material or spec; drop filler and filter words).',
       user: JSON.stringify({ transcript, categories }),
       maxTokens: 512,
     });
@@ -180,7 +180,7 @@ aiRouter.post('/support-chat', async (req, res, next) => {
     const reply = await aiProvider.complete({
       task: 'support-chat',
       system:
-        'You are the customer support assistant for Clowe, an Indian multi-vendor clothing marketplace. ' +
+        'You are the customer support assistant for Clowe, an Indian multi-vendor online marketplace. ' +
         'Facts: shipping free at/above ₹999 else ₹49, delivery 3-7 days; orders cancellable until shipped; ' +
         'returns via Orders page after delivery, refunds after seller receives the item; payments via Razorpay (UPI/cards/netbanking); ' +
         'AI "Try On Me" on every product page (upload a photo, 10/day free); sellers register via the Sell page and are approved by admin. ' +

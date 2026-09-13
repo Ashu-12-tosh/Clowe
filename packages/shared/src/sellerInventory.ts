@@ -43,6 +43,7 @@ export interface InventoryRow {
   sku: string;
   size: string;
   color: string;
+  label: string;
   pricePaise: number;
   mrpPaise: number | null;
   stock: number;
@@ -91,6 +92,7 @@ export interface InventorySummary {
     sku: string;
     size: string;
     color: string;
+    label: string;
     stock: number;
     lowStockAlert: number;
     unitsSold: number;

@@ -19,7 +19,7 @@ import { prisma } from '../db';
 import { env } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { listingStockFields } from '../utils/productListing';
+import { productListItemInclude, toProductListItem } from '../utils/productListing';
 import { toAddressInfo } from './addresses';
 
 export const meRouter = Router();
@@ -103,40 +103,13 @@ async function recentlyViewedFor(userId: string, take = 8): Promise<ProductListI
 
   const products = await prisma.product.findMany({
     where: { id: { in: seen } },
-    include: {
-      category: { select: { name: true } },
-      images: { orderBy: { sortOrder: 'asc' }, take: 1 },
-      variants: {
-        select: { id: true, size: true, color: true, pricePaise: true, mrpPaise: true, stock: true },
-      },
-    },
+    include: productListItemInclude,
   });
   const byId = new Map(products.map((p) => [p.id, p]));
   // Preserve view order, which the query above lost.
   return seen.flatMap((id) => {
-    const p = byId.get(id);
-    if (!p) return [];
-    const cheapest = p.variants.reduce(
-      (min, v) => (v.pricePaise < min.pricePaise ? v : min),
-      p.variants[0] ?? { pricePaise: p.basePricePaise, mrpPaise: null },
-    );
-    return [
-      {
-        id: p.id,
-        slug: p.slug,
-        title: p.title,
-        brand: p.brand,
-        categoryName: p.category.name,
-        pricePaise: cheapest.pricePaise,
-        mrpPaise: p.mrpPaise ?? cheapest.mrpPaise,
-        imageUrl: p.images[0]?.url ?? null,
-        sizes: [...new Set(p.variants.map((v) => v.size).filter(Boolean))],
-        colors: [...new Set(p.variants.map((v) => v.color).filter(Boolean))],
-        ratingAvg: p.ratingCount > 0 ? p.ratingAvg : null,
-        ratingCount: p.ratingCount,
-        ...listingStockFields(p.variants),
-      },
-    ];
+    const product = byId.get(id);
+    return product ? [toProductListItem(product)] : [];
   });
 }
 
@@ -280,6 +253,7 @@ meRouter.get('/returns', async (req, res, next) => {
       imageUrl: r.orderItem.product.images[0]?.url ?? null,
       size: r.orderItem.size,
       color: r.orderItem.color,
+      variantLabel: r.orderItem.variantLabel,
       quantity: r.orderItem.quantity,
       pricePaise: r.orderItem.pricePaise,
       status: r.status,

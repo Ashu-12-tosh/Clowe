@@ -5,7 +5,9 @@
 // already exists, landing content seeds only into empty tables. The original
 // clothing catalogue is preserved — its categories are re-parented under
 // Fashion, never recreated.
+import { demoImage } from './demoImage';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
+import { variantOptionFields } from '@clowe/shared';
 import { generateReferralCode } from '../../src/utils/crypto';
 import {
   BRANDS,
@@ -36,7 +38,7 @@ function slugify(text: string): string {
 }
 
 /** Stable neutral placeholder images keyed by slug — no brand assets. */
-const img = (key: string, w = 800, h = 1000) => `https://picsum.photos/seed/${key}/${w}/${h}`;
+const img = (key: string, w = 800, h = 1000) => demoImage(`https://picsum.photos/seed/${key}/${w}/${h}`);
 
 // ---------------------------------------------------------------------------
 // Categories
@@ -130,16 +132,6 @@ function combosOf(axes: Record<string, string[]>, cap = 8): Record<string, strin
   return combos.slice(0, cap);
 }
 
-/** Pack non-color axes into the display `size` column (color stays color). */
-function packAxes(options: Record<string, string>): { size: string; color: string } {
-  const color = options.color ?? '';
-  const size = Object.entries(options)
-    .filter(([key]) => key !== 'color')
-    .map(([, value]) => value)
-    .join(' / ');
-  return { size, color };
-}
-
 async function ensureDemoSeller(prisma: PrismaClient) {
   const user = await prisma.user.upsert({
     where: { phone: '9000000001' },
@@ -229,11 +221,8 @@ async function seedProducts(
           },
           variants: {
             create: combos.map((options, vi) => {
-              const { size, color } = packAxes(options);
               return {
-                size,
-                color,
-                optionValues: options,
+                ...variantOptionFields(options),
                 sku: `CLW-${String(sku++).padStart(6, '0')}`,
                 pricePaise: (price + (vi % 3) * Math.round(price * 0.05)) * 100,
                 mrpPaise: mrp * 100,

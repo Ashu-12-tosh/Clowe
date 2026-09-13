@@ -2,7 +2,7 @@
   "name": "@clowe/api",
   "version": "0.1.0",
   "private": true,
-  "description": "Clowe REST API \u2014 standalone backend consumed by web (and later mobile)",
+  "description": "Clowe REST API — standalone backend consumed by web (and later mobile)",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -13,7 +13,11 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "db:seed:inventory": "tsx prisma/seedInventory.ts"
+    "db:seed:inventory": "tsx prisma/seedInventory.ts",
+    "db:localize-images": "tsx prisma/localizeImages.ts",
+    "seed:tryon-demo": "tsx scripts/seedTryOnDemoProduct.ts",
+    "tryon:check": "tsx scripts/tryonCheck.ts",
+    "tryon:e2e": "node scripts/tryonE2E.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -30,6 +34,8 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.2.0",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.35.4",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -39,6 +45,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.2.0",
     "@types/node": "^22.4.0",
+    "@types/qrcode": "^1.5.6",
     "eslint": "^9.9.0",
     "prisma": "^5.19.0",
     "tsx": "^4.17.0",

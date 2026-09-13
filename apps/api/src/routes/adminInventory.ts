@@ -66,6 +66,7 @@ const LOCATION_INCLUDE = {
       sku: true,
       size: true,
       color: true,
+      label: true,
       pricePaise: true,
       product: {
         select: {
@@ -148,6 +149,7 @@ function toStockRow(
     sellerName: product.seller.shopName,
     size: variant.size,
     color: variant.color,
+    label: variant.label,
     warehouseId: location.warehouse.id,
     warehouseName: location.warehouse.name,
     warehouseCode: location.warehouse.code,
@@ -1095,7 +1097,7 @@ const PO_INCLUDE = {
   items: {
     include: {
       variant: {
-        select: { sku: true, size: true, color: true, product: { select: { title: true } } },
+        select: { sku: true, size: true, color: true, label: true, product: { select: { title: true } } },
       },
     },
   },
@@ -1128,6 +1130,7 @@ function toPoRow(
       title: i.variant.product.title,
       size: i.variant.size,
       color: i.variant.color,
+      label: i.variant.label,
       quantityOrdered: i.quantityOrdered,
       quantityReceived: i.quantityReceived,
       unitCostPaise: i.unitCostPaise,
@@ -1512,6 +1515,7 @@ adminInventoryRouter.get('/meta/variants', async (req, res, next) => {
         sku: true,
         size: true,
         color: true,
+        label: true,
         pricePaise: true,
         stock: true,
         product: { select: { title: true } },
@@ -1529,6 +1533,7 @@ adminInventoryRouter.get('/meta/variants', async (req, res, next) => {
         title: v.product.title,
         size: v.size,
         color: v.color,
+        label: v.label,
         pricePaise: v.pricePaise,
         totalStock: v.stock,
         atWarehouse: v.stockLocations.reduce((sum, l) => sum + l.quantity, 0),
@@ -1553,8 +1558,7 @@ adminInventoryRouter.get('/stock/export', async (req, res, next) => {
       'Category',
       'Brand',
       'Seller',
-      'Size',
-      'Colour',
+      'Variant',
       'Warehouse',
       'Available',
       'Reserved',
@@ -1573,8 +1577,7 @@ adminInventoryRouter.get('/stock/export', async (req, res, next) => {
           r.categoryName,
           r.brandName ?? '',
           r.sellerName,
-          r.size,
-          r.color,
+          r.label,
           `${r.warehouseName} (${r.warehouseCode})`,
           r.available,
           r.reserved,

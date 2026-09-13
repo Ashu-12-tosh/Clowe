@@ -74,8 +74,12 @@ enum ReturnStatus {
 enum ReturnReason {
   SIZE_FIT
   DAMAGED
+  DEFECTIVE
   WRONG_ITEM
+  MISSING_PARTS
+  NOT_AS_DESCRIBED
   QUALITY
+  CHANGED_MIND
   OTHER
 }
 
@@ -351,6 +355,11 @@ model SellerProfile {
   // Why the shop was suspended or banned (shown to the seller).
   suspensionReason String?
   suspendedAt      DateTime?
+  // AI Try-On credits: each shopper run on this shop deducts one. First 100
+  // sellers get 50 free (tryOnFreeGrant marks who received the launch offer).
+  tryOnCredits   Int     @default(0)
+  tryOnFreeGrant Boolean @default(false)
+  tryOnCreditLedger TryOnCreditLedger[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
@@ -639,6 +648,21 @@ model Category {
   highlights  Json?
   // Bottom feature strip: [{ icon, title, subtitle }].
   features    Json?
+  // --- Marketplace rules (null / empty = inherit from the parent category) ---
+  // Option axes variants in this department use: [{ key, label, values? }].
+  variantAxes      Json?
+  // Spec-sheet fields sellers fill in: [{ key, label, type, unit?, required?, options? }].
+  attributeSchema  Json?
+  // AI Try-On and the size guide only make sense for wearables.
+  tryOnEligible    Boolean?
+  sizeGuide        Boolean?
+  // GST default for listings without their own slab: a flat rate, or
+  // taxRule = APPAREL_SLAB (5% up to Rs 1,000, 12% above).
+  taxRule               String?
+  defaultTaxRatePercent Int?
+  hsnCode               String?
+  // Days after delivery a return can be requested (null = platform default).
+  returnWindowDays Int?
   isActive  Boolean    @default(true)
   parentId  String?
   parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
@@ -721,7 +745,10 @@ model Product {
   attributes      Json?
   // Optional YouTube/Vimeo link shown beside the gallery.
   videoUrl        String?
-  // GST slab for this listing; null falls back to the apparel slab rule.
+  // Mandatory packing video uploaded at listing time; auto-removed after 10 days.
+  packingVideoUrl        String?
+  packingVideoUploadedAt DateTime?
+  // GST slab for this listing; null falls back to the category rule.
   taxRatePercent  Int?
   // Logistics, used for shipping estimates and the packing slip.
   weightGrams     Int?
@@ -735,8 +762,11 @@ model Product {
   tags            String[]      @default([])
   // Seller's own switch — hides an approved listing without archiving it.
   isVisible       Boolean       @default(true)
-  // Seller opt-out for AI Try-On; the platform price rule still applies.
-  tryOnEnabled    Boolean       @default(true)
+  // Seller opt-in for AI Try-On; only honoured in try-on eligible categories.
+  tryOnEnabled    Boolean       @default(false)
+  // Optional per-product cap on shopper try-ons; null = until credits run out.
+  tryOnLimit      Int?
+  tryOnUsed       Int           @default(0)
   // Inventory guards.
   lowStockAlert   Int           @default(5)
   allowBackorders Boolean       @default(false)
@@ -815,9 +845,15 @@ model ProductVariant {
   id           String   @id @default(cuid())
   productId    String
   product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  size         String // e.g. S, M, L, XL, 32, "8GB / 256GB"
-  color        String // display name; hex optional later
+  // Source of truth: the option combination, e.g. { size, color } or { ram, storage }.
   optionValues Json     @default("{}")
+  // Canonical "key=value|key=value" of optionValues - the per-product uniqueness key.
+  optionsKey   String   @default("")
+  // Human label derived from optionValues ("Black · L"); "" for single-SKU products.
+  label        String   @default("")
+  // Display caches of optionValues.size / .color ("" when the axis does not apply).
+  size         String   @default("")
+  color        String   @default("")
   sku          String   @unique
   pricePaise   Int
   mrpPaise     Int? // strike-through price
@@ -832,7 +868,7 @@ model ProductVariant {
   purchaseOrderItems PurchaseOrderItem[]
   transferItems      StockTransferItem[]
 
-  @@unique([productId, size, color])
+  @@unique([productId, optionsKey])
   @@map("product_variants")
 }
 
@@ -1050,6 +1086,9 @@ model OrderItem {
   title      String
   size       String
   color      String
+  // Human variant label + option map at purchase time (size/color kept for legacy readers).
+  variantLabel String @default("")
+  optionValues Json   @default("{}")
   pricePaise Int
   quantity   Int
 
@@ -1704,4 +1743,19 @@ model StockTransferItem {
 
   @@unique([transferId, variantId])
   @@map("stock_transfer_items")
+}
+
+// Every credit movement on a seller's AI Try-On balance: the launch grant,
+// purchased packs, and one row per shopper run.
+model TryOnCreditLedger {
+  id        String        @id @default(cuid())
+  sellerId  String
+  seller    SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  delta     Int
+  reason    String // FREE_GRANT | PURCHASE | RUN
+  note      String?
+  createdAt DateTime      @default(now())
+
+  @@index([sellerId, createdAt])
+  @@map("tryon_credit_ledger")
 }

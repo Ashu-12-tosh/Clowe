@@ -36,7 +36,7 @@ import {
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns within 7 days' },
+  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
   { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
@@ -691,7 +691,7 @@ function PaymentPageInner() {
                       {line.title}
                     </p>
                     <p className="t-caption text-gray-500">
-                      {line.size !== 'One Size' ? `Size: ${line.size} | ` : ''}Qty: {line.quantity}
+                      {line.label ? ` | ` : ''}Qty: {line.quantity}
                     </p>
                   </div>
                   <span className="t-caption shrink-0 font-bold text-ink-900">

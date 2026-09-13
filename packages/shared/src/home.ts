@@ -1,3 +1,4 @@
+import { imageUrlSchema } from './imageUrl';
 import { z } from 'zod';
 
 // ---------------------------------------------------------------------------
@@ -107,7 +108,7 @@ export interface MyCounts {
 
 export const brandUpsertSchema = z.object({
   name: z.string().trim().min(2).max(40),
-  logoUrl: z.string().url().nullable().optional(),
+  logoUrl: imageUrlSchema.nullable().optional(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
 });
@@ -131,7 +132,7 @@ export const bannerUpsertSchema = z.object({
   headline: z.string().trim().min(3).max(80),
   highlight: z.string().trim().max(40).nullable().optional(),
   subtext: z.string().trim().max(200).nullable().optional(),
-  imageUrl: z.string().url().nullable().optional(),
+  imageUrl: imageUrlSchema.nullable().optional(),
   primaryLabel: z.string().trim().min(1).max(30).optional(),
   primaryHref: z.string().trim().min(1).max(200).optional(),
   secondaryLabel: z.string().trim().max(30).nullable().optional(),
@@ -157,7 +158,7 @@ export const promoTileUpsertSchema = z.object({
   placement: z.enum(promoPlacementValues),
   title: z.string().trim().min(2).max(60),
   subtitle: z.string().trim().max(80).nullable().optional(),
-  imageUrl: z.string().url().nullable().optional(),
+  imageUrl: imageUrlSchema.nullable().optional(),
   href: z.string().trim().min(1).max(200).optional(),
   sortOrder: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),

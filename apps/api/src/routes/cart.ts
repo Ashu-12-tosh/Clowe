@@ -11,6 +11,7 @@ import {
   type CouponOffer,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { categoryRulesMap } from '../services/categoryRules';
 import { applyPromotions } from '../services/promotionService';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -134,6 +135,7 @@ export async function buildCartView(userId: string): Promise<CartView> {
 
   // Drop lines whose product is no longer live (rejected/archived after adding).
   const liveItems = items.filter((i) => i.variant.product.status === 'APPROVED');
+  const rulesByCategory = await categoryRulesMap(liveItems.map((i) => i.variant.product.categoryId));
 
   // Seller promotions are resolved before the totals: they come off the line
   // price, so everything downstream (order, invoice, payout) sees the real
@@ -164,6 +166,7 @@ export async function buildCartView(userId: string): Promise<CartView> {
       imageUrl: i.variant.product.images[0]?.url ?? null,
       size: i.variant.size,
       color: i.variant.color,
+      label: i.variant.label,
       pricePaise: i.variant.pricePaise,
       mrpPaise: i.variant.mrpPaise,
       stock: i.variant.stock,
@@ -171,6 +174,9 @@ export async function buildCartView(userId: string): Promise<CartView> {
       selected: i.selected,
       rootCategorySlug:
         i.variant.product.category.parent?.slug ?? i.variant.product.category.slug,
+      tryOnEligible:
+        (rulesByCategory.get(i.variant.product.categoryId)?.tryOnEligible ?? false) &&
+        i.variant.product.tryOnEnabled,
       promotion: promotions.get(i.variantId)
         ? {
             id: promotions.get(i.variantId)!.promotionId,

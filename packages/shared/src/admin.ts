@@ -1,4 +1,6 @@
+import { imageUrlSchema } from './imageUrl';
 import { z } from 'zod';
+import { categoryRulesInputSchema, type CategoryRuleFields, type CategoryRules } from './categoryRules';
 import type { ProductStatusValue, SellerReturnRow, SellerStatusValue } from './seller';
 import type { UserRole } from './index';
 
@@ -25,12 +27,12 @@ export type ProductDecisionInput = z.infer<typeof productDecisionSchema>;
 export const categoryUpsertSchema = z.object({
   name: z.string().trim().min(2).max(40),
   parentId: z.string().nullable().optional(),
-  imageUrl: z.string().url().optional(),
+  imageUrl: imageUrlSchema.optional(),
   /** Emoji/glyph shown in the category nav bar and mega menu. */
   icon: z.string().trim().max(8).nullable().optional(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
-});
+}).merge(categoryRulesInputSchema);
 export type CategoryUpsertInput = z.infer<typeof categoryUpsertSchema>;
 
 // ---------------------------------------------------------------------------
@@ -101,10 +103,14 @@ export interface AdminProductDetail {
   categoryName: string;
   description: string;
   imageUrls: string[];
+  /** Packing video uploaded with the listing (expires after 10 days). */
+  packingVideoUrl: string | null;
   variants: {
     sku: string;
     size: string;
     color: string;
+    optionValues: Record<string, string>;
+    label: string;
     pricePaise: number;
     mrpPaise: number | null;
     stock: number;
@@ -131,6 +137,12 @@ export interface AdminCategoryRow {
   isActive: boolean;
   sortOrder: number;
   productCount: number;
+  /** 0 = root, 1 = child, 2 = grandchild. */
+  depth: number;
+  /** Rule fields set on this category itself (null = inherited). */
+  own: CategoryRuleFields;
+  /** Effective rules after inheritance. */
+  rules: CategoryRules;
 }
 
 export interface AdminUserRow {

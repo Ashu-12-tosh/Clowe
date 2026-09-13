@@ -12,22 +12,13 @@ import {
   MapPinIcon,
   ReturnIcon,
   ShieldCheckIcon,
-  TagIcon,
-  TruckIcon,
 } from '@/components/cart/CartIcons';
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: 'Free Shipping', text: 'On orders above ₹999' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: '7 days return policy' },
+  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Easy return policy' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure' },
   { Icon: HeadsetIcon, title: '24x7 Support', text: 'We are here for you' },
-];
-
-const PREMIUM_BENEFITS = [
-  { Icon: TruckIcon, title: 'Free Delivery', text: 'Unlimited free standard delivery' },
-  { Icon: TagIcon, title: 'Exclusive Offers', text: 'Member-only coupons' },
-  { Icon: BoxIcon, title: 'Early Access', text: 'Shop sales before everyone' },
-  { Icon: HeadsetIcon, title: 'Priority Support', text: '24x7 priority help' },
 ];
 
 const STATUS_STYLES: Record<string, string> = {
@@ -90,7 +81,7 @@ export default function AccountOverviewPage() {
 
   const firstName = data.profile.name?.split(' ')[0] ?? 'there';
   const stats = [
-    { label: 'Orders', value: String(data.stats.orders), href: '/account/orders', icon: '📦' },
+    { label: 'Orders', value: String(data.stats.orders), href: '/orders', icon: '📦' },
     { label: 'Wishlist', value: String(data.stats.wishlist), href: '/wishlist', icon: '♡' },
     {
       label: 'Clowe Wallet',
@@ -110,45 +101,6 @@ export default function AccountOverviewPage() {
           Manage your account, orders and preferences all in one place.
         </p>
       </div>
-
-      {/* Premium banner / upsell */}
-      {data.profile.isPremium ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-ink-950 px-5 py-4 text-white">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl text-brand-400">♛</span>
-            <div>
-              <p className="text-sm font-bold">Premium Member</p>
-              <p className="text-xs text-gray-400">
-                You are enjoying unlimited free delivery and exclusive offers.
-              </p>
-            </div>
-          </div>
-          <Link
-            href="/pages/help"
-            className="rounded-lg border border-brand-500 px-4 py-2 text-xs font-bold text-brand-400 transition hover:bg-brand-600 hover:text-white"
-          >
-            View Benefits
-          </Link>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-cream-50 px-5 py-4">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl text-brand-500">♛</span>
-            <div>
-              <p className="text-sm font-bold text-ink-900">Clowe Premium</p>
-              <p className="text-xs text-gray-500">
-                Unlimited free delivery, exclusive offers and early access to sales.
-              </p>
-            </div>
-          </div>
-          <Link
-            href="/pages/help"
-            className="rounded-lg bg-brand-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-brand-700"
-          >
-            Explore Premium
-          </Link>
-        </div>
-      )}
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -179,7 +131,7 @@ export default function AccountOverviewPage() {
         <section className="rounded-2xl border border-gray-100 bg-white p-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-base font-bold text-ink-900">Recent Orders</h2>
-            <Link href="/account/orders" className="text-xs font-semibold text-brand-600 hover:underline">
+            <Link href="/orders" className="text-xs font-semibold text-brand-600 hover:underline">
               View All Orders →
             </Link>
           </div>
@@ -243,7 +195,7 @@ export default function AccountOverviewPage() {
                 ))}
               </ul>
               <Link
-                href="/account/orders"
+                href="/orders"
                 className="mt-3 block rounded-lg border border-gray-300 py-2.5 text-center text-sm font-bold text-ink-900 transition hover:bg-cream-50"
               >
                 View All Orders
@@ -351,41 +303,6 @@ export default function AccountOverviewPage() {
               + Add New Card
             </Link>
           </div>
-
-          {/* Recently viewed */}
-          {data.recentlyViewed.length > 0 && (
-            <div className="rounded-2xl border border-gray-100 bg-white p-4">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-sm font-bold text-ink-900">Recently Viewed</h2>
-                <Link
-                  href="/account/recently-viewed"
-                  className="text-xs font-semibold text-brand-600 hover:underline"
-                >
-                  View All
-                </Link>
-              </div>
-              <div className="mt-3 grid grid-cols-4 gap-2">
-                {data.recentlyViewed.slice(0, 4).map((product) => (
-                  <Link key={product.id} href={`/products/${product.slug}`} className="group">
-                    {product.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={product.imageUrl}
-                        alt={product.title}
-                        loading="lazy"
-                        className="aspect-square w-full rounded-lg bg-cream-100 object-cover"
-                      />
-                    ) : (
-                      <div className="aspect-square w-full rounded-lg bg-cream-100" />
-                    )}
-                    <p className="mt-1 truncate text-[11px] font-semibold text-ink-900 group-hover:text-brand-600">
-                      {formatPaise(product.pricePaise)}
-                    </p>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -400,37 +317,6 @@ export default function AccountOverviewPage() {
             </div>
           </div>
         ))}
-      </section>
-
-      {/* Premium footer banner */}
-      <section className="overflow-hidden rounded-2xl bg-ink-950 p-5 text-white">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:items-center">
-          <div>
-            <p className="font-display text-xl font-bold text-brand-400">♛ CLOWE PREMIUM</p>
-            <p className="mt-2 text-sm text-gray-300">
-              Enjoy unlimited free delivery, exclusive offers and early access to sales.
-            </p>
-            {!data.profile.isPremium && (
-              <Link
-                href="/pages/help"
-                className="mt-4 inline-block rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-brand-700"
-              >
-                Explore Premium Benefits
-              </Link>
-            )}
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {PREMIUM_BENEFITS.map(({ Icon, title, text }) => (
-              <div key={title} className="flex items-start gap-2.5">
-                <Icon className="mt-0.5 h-5 w-5 shrink-0 text-brand-400" />
-                <div className="min-w-0">
-                  <p className="text-xs font-bold">{title}</p>
-                  <p className="text-[11px] text-gray-400">{text}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </section>
     </div>
   );

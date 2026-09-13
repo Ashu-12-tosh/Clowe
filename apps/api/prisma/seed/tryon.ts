@@ -1,3 +1,4 @@
+import { demoImage } from './demoImage';
 import { PrismaClient, Role, TryOnStatus } from '@prisma/client';
 import { generateReferralCode } from '../../src/utils/crypto';
 
@@ -116,7 +117,7 @@ export async function seedTryOns(prisma: PrismaClient): Promise<void> {
           gender: s.gender,
           role: Role.CUSTOMER,
           referralCode: generateReferralCode(),
-          tryOnPhotoUrl: `https://picsum.photos/seed/clowe-person-${i}/480/640`,
+          tryOnPhotoUrl: demoImage(`https://picsum.photos/seed/clowe-person-${i}/480/640`),
         },
       }),
     );
@@ -180,7 +181,7 @@ export async function seedTryOns(prisma: PrismaClient): Promise<void> {
       rows.push({
         userId: user.id,
         productId: product.id,
-        inputImageUrl: user.tryOnPhotoUrl ?? `https://picsum.photos/seed/clowe-person-x/480/640`,
+        inputImageUrl: user.tryOnPhotoUrl ?? demoImage(`https://picsum.photos/seed/clowe-person-x/480/640`),
         resultImageUrl: ok ? (product.images[0]?.url ?? null) : null,
         provider: random() < 0.82 ? 'mock' : 'fashn',
         status,

@@ -807,7 +807,7 @@ function OverviewTab({
         {/* Table ------------------------------------------------------- */}
         <section className="rounded-2xl border border-gray-100 bg-white">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px] text-xs">
+            <table className="w-full min-w-[840px] text-xs">
               <thead>
                 <tr className="text-left uppercase tracking-wide text-gray-500">
                   <th className="px-3 py-2.5">
@@ -857,7 +857,7 @@ function OverviewTab({
                       <td className="max-w-56 px-3 py-2.5">
                         <p className="truncate font-medium text-ink-900">{r.title}</p>
                         <p className="truncate text-[11px] text-gray-400">
-                          {r.size} · {r.color} · {r.sellerName}
+                          {r.label ? ` · ` : ''}{r.sellerName}
                         </p>
                       </td>
                       <td className="px-3 py-2.5 text-gray-600">{r.categoryName}</td>
@@ -1292,7 +1292,7 @@ function AddStockModal({
                   {l.variant.title}
                   <span className="text-gray-400">
                     {' '}
-                    · {l.variant.size}/{l.variant.color}
+                    {[l.variant.size, l.variant.color].filter(Boolean).length ? ` · ${[l.variant.size, l.variant.color].filter(Boolean).join(' / ')}` : ''}
                   </span>
                 </td>
                 <td className="py-1.5 text-right text-gray-500">{num(l.variant.atWarehouse)}</td>
@@ -1747,7 +1747,7 @@ function AdjustModal({
   return (
     <Modal title={`Adjust ${row.sku}`} onClose={onClose}>
       <p className="text-xs text-gray-500">
-        {row.title} · {row.size} / {row.color} · <strong>{row.warehouseName}</strong>
+        {row.title}{row.label ? ` · ` : ''} · <strong>{row.warehouseName}</strong>
       </p>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
@@ -1967,7 +1967,7 @@ function WarehousesTab({
 
       <Panel title="Stock transfers" subtitle="Stock only moves when a transfer is completed">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-xs">
+          <table className="w-full min-w-[660px] text-xs">
             <thead>
               <tr className="text-left uppercase tracking-wide text-gray-500">
                 <th className="px-3 py-2 font-semibold">Transfer</th>
@@ -2303,7 +2303,7 @@ function VariantPicker({
                   <span className="text-ink-900">{h.title}</span>
                   <span className="text-gray-400">
                     {' '}
-                    · {h.size}/{h.color}
+                    {[h.size, h.color].filter(Boolean).length ? ` · ${[h.size, h.color].filter(Boolean).join(' / ')}` : ''}
                   </span>
                 </span>
                 <span className="shrink-0 text-gray-500">
@@ -2561,7 +2561,7 @@ function MovementsTab({ options }: { options: InventoryFilterOptions }) {
 
       <section className="rounded-2xl border border-gray-100 bg-white">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-xs">
+          <table className="w-full min-w-[640px] text-xs">
             <thead>
               <tr className="text-left uppercase tracking-wide text-gray-500">
                 <th className="px-3 py-2.5 font-semibold">Type</th>
@@ -2784,7 +2784,7 @@ function SuppliersTab({ flash }: { flash: (m: string) => void }) {
 
       <section className="rounded-2xl border border-gray-100 bg-white">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-xs">
+          <table className="w-full min-w-[640px] text-xs">
             <thead>
               <tr className="text-left uppercase tracking-wide text-gray-500">
                 <th className="px-3 py-2.5 font-semibold">Code</th>
@@ -3054,7 +3054,7 @@ function PurchaseOrdersTab({
 
       <section className="rounded-2xl border border-gray-100 bg-white">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-xs">
+          <table className="w-full min-w-[640px] text-xs">
             <thead>
               <tr className="text-left uppercase tracking-wide text-gray-500">
                 <th className="px-3 py-2.5 font-semibold">PO</th>
@@ -3433,7 +3433,7 @@ function ReceiveModal({
                   {i.title}
                   <span className="text-gray-400">
                     {' '}
-                    · {i.size}/{i.color}
+                    {[i.size, i.color].filter(Boolean).length ? ` · ${[i.size, i.color].filter(Boolean).join(' / ')}` : ''}
                   </span>
                 </td>
                 <td className="py-1.5 text-right">{num(i.quantityOrdered)}</td>

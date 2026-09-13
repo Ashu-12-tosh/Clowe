@@ -59,8 +59,6 @@ function Label({ label }: { label: SellerShippingLabel }) {
             {shipTo.line2 && <>, {shipTo.line2}</>}
             <br />
             {shipTo.city}, {shipTo.state} — <span className="font-bold">{shipTo.pincode}</span>
-            <br />
-            Phone: {shipTo.phone}
           </p>
         </div>
         <div>
@@ -87,12 +85,13 @@ function Label({ label }: { label: SellerShippingLabel }) {
         <p className="text-sm text-ink-900">
           {label.title}{' '}
           <span className="text-gray-500">
-            · {label.color} / {label.size} · Qty {label.quantity}
+            {label.variantLabel ? `·  ` : ''}· Qty {label.quantity}
           </span>
         </p>
       </div>
 
-      <footer className="border-t-2 border-dashed border-gray-300 pt-2">
+      <footer className="flex items-end justify-between gap-4 border-t-2 border-dashed border-gray-300 pt-2">
+        <div className="min-w-0 flex-1">
         {label.awbNumber ? (
           <>
             <BarcodeStrip value={label.awbNumber} />
@@ -105,6 +104,18 @@ function Label({ label }: { label: SellerShippingLabel }) {
             No AWB yet — ship this item to book a shipment, then reprint.
           </p>
         )}
+        </div>
+        <div className="shrink-0 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={label.qr.dataUrl}
+            alt="QR code - open this order in the seller panel"
+            className="h-24 w-24"
+          />
+          <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500">
+            Scan for order details
+          </p>
+        </div>
       </footer>
     </article>
   );

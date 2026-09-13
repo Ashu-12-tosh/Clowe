@@ -69,12 +69,6 @@ export default function CustomerDrawer({
             <p className="truncate font-display text-lg font-bold text-ink-900">
               {detail?.name ?? 'Loading…'}
             </p>
-            {detail && (
-              <p className="text-xs text-gray-500">
-                +91 {detail.phone}
-                {detail.email && <> · {detail.email}</>}
-              </p>
-            )}
           </div>
           <button
             onClick={onClose}

@@ -1,6 +1,6 @@
 # Clowe
 
-Multi-vendor clothing e-commerce platform with AI virtual try-on ("Try On Me").
+Multi-vendor e-commerce marketplace (electronics, mobiles, fashion, home & kitchen, beauty, books, grocery and more) with AI virtual try-on ("Try On Me") on fashion.
 
 **Architecture:** API-first monorepo. The backend is a standalone REST API; the web frontend (and a future mobile app) consume the same APIs.
 
@@ -39,30 +39,48 @@ npm run build --workspace=@clowe/shared
 
 # 6. Seed the admin account (uses ADMIN_PHONE from apps/api/.env)
 npm run db:seed --workspace=@clowe/api
+
+# 7. Fetch the demo catalog's placeholder images once (~75 MB into apps/api/uploads/demo,
+#    gitignored) so pages never wait on picsum/loremflickr. Safe to re-run after a re-seed.
+npm run db:localize-images --workspace=@clowe/api
 ```
+
+## Marketplace categories, variants & rules
+
+Clowe is category-agnostic. The behaviour that used to be hard-coded for clothing now lives on the category tree (`Category` model, editable in **Admin → Categories → Rules**, inherited by children):
+
+| Rule | What it drives |
+|---|---|
+| `variantAxes` | Option columns sellers get by default (Colour × Size for Fashion, Colour × Storage × RAM for Mobiles…). Sellers can add their own axes (max 3). |
+| `attributeSchema` | The spec sheet on the listing form and product page; `required` fields block submission for review. |
+| `tryOnEligible` / `sizeGuide` | AI Try-On and the size guide only appear in wearable categories. |
+| `taxRule` / `defaultTaxRatePercent` / `hsnCode` | GST default for listings without their own slab (`APPAREL_SLAB` = 5%/12% by price; electronics 18%; books 0%). |
+| `returnWindowDays` | Return window per department (a seller policy overrides it; the platform setting is the last fallback). |
+
+Variants are keyed on `ProductVariant.optionValues` (e.g. `{"ram":"16GB","storage":"512GB"}`) with a unique `(productId, optionsKey)`; `size`/`color` are display caches and `label` is the human string ("Black · L"). Order items snapshot `variantLabel` + `optionValues`. Storefront filters accept `opt[<axis>]=a,b` for any axis and facets come back as `facets.options`.
 
 ## Run (development)
 
 ```bash
 npm run dev        # runs API + web together
 # or separately:
-npm run dev:api    # API  → http://localhost:4000
-npm run dev:web    # Web  → http://localhost:3000
+npm run dev:api    # API  → http://localhost:4400
+npm run dev:web    # Web  → http://localhost:4300
 ```
 
 ## Verify Phase 0
 
 | Check | How |
 |---|---|
-| API health | `curl http://localhost:4000/api/health` → `{"success":true,"data":{"status":"ok",...,"database":"up"}}` |
-| Web hello page | Open http://localhost:3000 — Clowe page shows **API connected** and **Database: connected** |
+| API health | `curl http://localhost:4400/api/health` → `{"success":true,"data":{"status":"ok",...,"database":"up"}}` |
+| Web hello page | Open http://localhost:4300 — Clowe page shows **API connected** and **Database: connected** |
 | DB running | `docker ps` shows `clowe-db` |
 
 ## Verify Phase 1 — Database & Auth
 
 **Login in the browser (easiest):**
 
-1. Run `npm run dev`, open http://localhost:3000/login
+1. Run `npm run dev`, open http://localhost:4300/login
 2. Enter any valid Indian mobile number (e.g. `9876543210`) → **Send OTP**
 3. Look at the **API terminal** — the mock provider prints the OTP there:
    ```
@@ -97,10 +115,10 @@ npm run dev:web    # Web  → http://localhost:3000
 ## Verify Phase 2 — Product Catalog
 
 1. Re-run the seed to load the demo catalog: `npm run db:seed -w @clowe/api` (creates a demo seller, 13 categories, 24 products with size/colour variants — skipped if products already exist)
-2. Open http://localhost:3000 — home page shows category tiles → **Shop now**
-3. http://localhost:3000/products — filter by category / size / colour / price, search from the header, sort, paginate
+2. Open http://localhost:4300 — home page shows category tiles → **Shop now**
+3. http://localhost:4300/products — filter by category / size / colour / price, search from the header, sort, paginate
 4. Click any product — detail page with **hover-to-zoom** images, colour & size selection, stock hints
-5. Click the ♡ on any card (login required) — then check http://localhost:3000/wishlist
+5. Click the ♡ on any card (login required) — then check http://localhost:4300/wishlist
 
 **Catalog API endpoints:**
 
@@ -115,7 +133,7 @@ npm run dev:web    # Web  → http://localhost:3000
 
 **As the approved demo seller (fastest):**
 
-1. Login at http://localhost:3000/login with phone `9000000001` (pre-approved seller)
+1. Login at http://localhost:4300/login with phone `9000000001` (pre-approved seller)
 2. Click **Sell** in the header → seller dashboard with stats (24 live products)
 3. **My Products** — the seeded catalog with status chips; try **Edit** (edits reset the product to PENDING for re-approval — it disappears from the public shop until re-approved)
 4. **Add Product** — upload real images (JPG/PNG/WebP, max 5 MB), add size/colour variant rows, submit → status **PENDING**, not visible in the shop until admin approval (Phase 4)
@@ -138,7 +156,7 @@ npm run dev:web    # Web  → http://localhost:3000
 
 ## Verify Phase 4 — Admin Dashboard
 
-1. Login at http://localhost:3000/login with the admin phone (`9999999999`) → open http://localhost:3000/admin
+1. Login at http://localhost:4300/login with the admin phone (`9999999999`) → open http://localhost:4300/admin
 2. **Dashboard** — platform totals (revenue, orders, users, sellers, live products), pending-approval shortcuts, top products, per-seller breakdown
 3. **Sellers** — the "Ashu Test Shop" application is waiting: approve or reject it (seller gets a notification either way)
 4. **Products** — your pending product is waiting: approve it → it appears in the public shop; reject it (with reason) → the seller sees the reason on their product list
@@ -187,17 +205,55 @@ npm run dev:web    # Web  → http://localhost:3000
 
 ## Verify Phase 6 — AI Try-On ("Try On Me") ⭐
 
-1. Login as a customer → open any product → hit **✨ Try On Me**
-2. Upload a photo (full-body front-facing works best; on mobile the camera opens) → **Generate try-on**
-3. Dev/mock mode returns a watermarked composite preview ("CLOWE AI TRY-ON — MOCK PREVIEW") — free, no API key needed
-4. Result is saved — see **My Try-Ons** at http://localhost:3000/tryon
-5. Limits: 10 try-ons/user/day (failed runs don't count), one at a time per user
+1. Login as a customer → open any fashion product → hit **Try On Now**
+2. A panel slides in over the right of the product page — the listing, price and Add to Cart stay behind it. No navigation, no second tab.
+3. The photo comes from the account (asked for once at sign-up), so the normal path is one press of **Generate my try-on**. **Use a different photo** swaps it, and the new one becomes the saved one.
+4. Dev/mock mode returns a watermarked composite preview ("CLOWE AI TRY-ON — MOCK PREVIEW") — free, no API key needed
+5. Every run is kept: flip between results for this product in the panel, rate the fit, or see them all at http://localhost:4300/tryon
+6. Limits: 10 try-ons/user/day (failed runs don't count), one at a time per user
 
-**Enable REAL AI try-on (FASHN):** get a key at https://fashn.ai, then in `apps/api/.env` set:
-```
-FASHN_API_KEY=fa-your-key-here
-```
-That's it — `TRYON_PROVIDER=auto` switches to the real FASHN try-on (model `tryon-v1.6`) automatically; no code changes. Local dev images are sent as base64 so it works from localhost, and results are re-hosted under `/uploads` so they don't expire with FASHN's CDN links. Each real run logs `TRYON_COST_PAISE` (default ₹6.50) into `tryon_history` for accounting.
+`/products/<slug>?tryon=1` opens a product with the panel already open — that is what "Try On" links from elsewhere (e.g. the wishlist) point at.
+
+### Going live with real AI try-on (FASHN)
+
+1. Get a key at https://fashn.ai → Settings → API, and put it in `apps/api/.env`:
+   ```
+   FASHN_API_KEY=fa-your-key-here
+   ```
+2. Restart the API. The boot log says which provider is live and warns immediately if the key is rejected:
+   ```
+   [clowe-api] AI Try-On: FASHN (tryon-v1.6, mode=balanced)
+   ```
+3. Verify before letting shoppers near it:
+   ```bash
+   npm run tryon:check --workspace=@clowe/api            # config + key, nothing billed
+   npm run tryon:check --workspace=@clowe/api -- --live  # one real run, 1 credit
+   npm run tryon:e2e   --workspace=@clowe/api            # whole pipeline over HTTP
+   ```
+4. Try it as a shopper. The seeded catalog uses random stock photos, so its "garments" are often landscapes or animals and the results tell you nothing. This lists one real, properly photographed garment to try it on:
+   ```bash
+   npm run seed:tryon-demo --workspace=@clowe/api
+   ```
+   Then open `/products/truethread-essential-v-neck-tee?tryon=1`, press **Use a different photo**, pick a clear front-facing photo of yourself, and **Generate**. One run costs 1 FASHN credit.
+
+`TRYON_PROVIDER=auto` switches to FASHN the moment a key is present — no code change. Tunables in `.env`: `FASHN_MODEL` (`tryon-v1.6` at 1 credit/image, or `tryon-max` for higher quality at more credits), `FASHN_MODE` (`performance` ~5s / `balanced` ~8s / `quality` ~12-17s) and `TRYON_TIMEOUT_MS`.
+
+**How the pipeline behaves**
+
+| Concern | What happens |
+|---|---|
+| Image prep | Both images are EXIF-rotated, resized into FASHN's 864×1296 processing box and re-encoded as JPEG. Re-encoding also strips EXIF, so a shopper's GPS coordinates never leave the server. |
+| Transport | Images go as base64 data URIs, so try-on works from localhost and from a private staging host. Typical payload is ~100 KB per image. |
+| Category | The product's category picks `tops` / `bottoms` / `one-pieces`; anything ambiguous falls back to FASHN's own classifier. |
+| Failures | Every call has a timeout and retries 5xx/429 up to 3 times. Shoppers see a plain message ("out of credits", "try a clearer photo"); the raw upstream text goes to `tryon_history.errorMessage` for the admin monitor. |
+| Results | Downloaded and re-hosted under `/uploads`, so they outlive FASHN's expiring CDN links. |
+| Cost | A successful run logs `TRYON_COST_PAISE` (default ₹6.50), decrements the seller's try-on credits and writes a `tryOnCreditLedger` row. Failures cost nothing and don't count against the shopper's daily quota. |
+| Eligibility | Only wearable garments run. Footwear, bags, watches, sunglasses, jewellery, caps and accessories are excluded in the category rules — the model cannot place those on a person, so every attempt would waste a credit. |
+| Only the garment changes | `segmentation_free` fits the garment directly instead of masking the photo first, so the shopper's pose, face, body and background come through untouched — the result is their own photo with the clothing swapped. |
+| Children's clothing | Kids sizing is by age ("4-5Y"), and try-on is refused below **5 years**. The gate is on the size being tried on, not the listing: a t-shirt sold in 4-5Y / 6-7Y / 8-9Y keeps the feature and refuses only the 4-5Y run. A request with no size falls back to the listing's smallest, so omitting it cannot open the gate. Change the cut-off in `TRYON_MIN_AGE_YEARS` ([ageGate.ts](apps/api/src/services/tryon/ageGate.ts)). |
+| Sensitive garments | Innerwear, lingerie, swimwear, sleepwear and shapewear never run, whatever category they are filed under. Try-on paints a garment onto a photo of a real customer, and for these that means generating a near-undressed image of them. Enforced in three places: the Innerwear department's category rule, `isSensitiveForTryOn()` on the product title and category (so a bikini listed under "Women" is still refused), and the seller form, which will not set `tryOnEnabled` on such a listing. FASHN's own `moderation_level` is set to `conservative` as a provider-side backstop on the uploaded photo. |
+
+Kill switches live in **Admin → Try-On**: an on/off toggle, the daily limit per shopper, a minimum product price and a monthly spend cap.
 
 **Try-on API:**
 
@@ -231,7 +287,7 @@ All four features run behind one `AIService` abstraction. Out of the box they us
 1. **Refer & Earn:** login → account page (top-right name) → **🎁 Refer & Earn** — your code, share message, and earnings. Signup with the code on a second account, place & pay a first order → referrer instantly gets **₹100 credited** (`REFERRAL_REWARD_PAISE`), a 🔔 notification, and a (mock) WhatsApp message.
 2. **Notifications:** 🔔 bell in the header shows the unread count → `/notifications` lists everything (order confirmed/shipped/delivered, seller approvals, referral rewards). Opening the page marks all read.
 3. **WhatsApp/email/SMS hooks:** provider-agnostic `MessagingService` — in dev every send is printed in the API console (`MOCK 🟢 WhatsApp`). Order confirmation, shipping, and referral messages already wired.
-4. **Order tracking:** public page http://localhost:3000/track — order number + phone (no login), per-item timeline Confirmed → Shipped → Delivered with courier + AWB.
+4. **Order tracking:** public page http://localhost:4300/track — order number + phone (no login), per-item timeline Confirmed → Shipped → Delivered with courier + AWB.
 5. **Delivery partner stub:** when a seller hits **Mark shipped**, the Shiprocket-style `ShippingProvider` books a (mock) shipment — AWB number + courier saved on the item, shown on the order page, tracking page, and in the customer's notification.
 
 **Growth API endpoints:**

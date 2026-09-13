@@ -91,6 +91,7 @@ export interface AdminReturnRowItem {
   imageUrl: string | null;
   size: string;
   color: string;
+  variantLabel: string;
   sku: string;
   quantity: number;
 }

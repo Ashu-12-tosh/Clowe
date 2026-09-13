@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { OrderStatus } from '@prisma/client';
 import {
+  optionValuesFromJson,
   ORDER_FILTERS,
   type OrderFilter,
   type OrderListResponse,
@@ -19,6 +20,7 @@ import { prisma } from '../db';
 import { getSettings } from '../services/settingsService';
 import { recordRedemptions } from '../services/promotionService';
 import { env } from '../env';
+import { returnWindowDaysFor } from '../services/categoryRules';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { paymentProvider } from '../services/payments';
@@ -100,6 +102,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
       include: { product: { select: { sellerId: true } } },
     });
     const sellerByVariant = new Map(variants.map((v) => [v.id, v.product.sellerId]));
+    const variantById = new Map(variants.map((v) => [v.id, v]));
 
     const orderNumber = await generateOrderNumber();
     const subtotalPaise = cart.subtotalPaise;
@@ -252,6 +255,8 @@ ordersRouter.post('/checkout', async (req, res, next) => {
               title: line.title,
               size: line.size,
               color: line.color,
+              variantLabel: variantById.get(line.variantId)?.label ?? line.label,
+              optionValues: optionValuesFromJson(variantById.get(line.variantId)?.optionValues),
               pricePaise: line.pricePaise - Math.floor(line.promoDiscountPaise / line.quantity),
               quantity: line.quantity,
               status: 'PLACED',
@@ -343,6 +348,9 @@ ordersRouter.post('/checkout', async (req, res, next) => {
 const orderListQuery = z.object({
   status: z.enum(ORDER_FILTERS).default('ALL'),
   q: z.string().trim().max(60).optional(),
+  /** Optional createdAt window for the "placed in" filter (ISO dates). */
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(50).default(10),
 });
@@ -371,10 +379,21 @@ ordersRouter.get('/', async (req, res, next) => {
           ],
         }
       : {};
+    // "Placed in" window: [from, to).
+    const placed =
+      query.from || query.to
+        ? {
+            createdAt: {
+              ...(query.from ? { gte: query.from } : {}),
+              ...(query.to ? { lt: query.to } : {}),
+            },
+          }
+        : {};
     const where = {
       userId,
       ...(statuses ? { status: { in: statuses } } : {}),
       ...search,
+      ...placed,
     };
 
     const [orders, total, allOrders] = await Promise.all([
@@ -403,7 +422,7 @@ ordersRouter.get('/', async (req, res, next) => {
       // Counts + lifetime savings are computed over everything, not the page.
       prisma.order.findMany({
         where: { userId },
-        select: { status: true, discountPaise: true, subtotalPaise: true },
+        select: { status: true, discountPaise: true, subtotalPaise: true, createdAt: true },
       }),
     ]);
 
@@ -454,6 +473,10 @@ ordersRouter.get('/', async (req, res, next) => {
       summary: {
         counts,
         totalSavedPaise: allOrders.reduce((sum, o) => sum + o.discountPaise, 0),
+        firstOrderAt:
+          allOrders.length > 0
+            ? new Date(Math.min(...allOrders.map((o) => o.createdAt.getTime()))).toISOString()
+            : null,
       },
     };
     res.json({ success: true, data: body });
@@ -566,9 +589,16 @@ ordersRouter.get('/:id', async (req, res, next) => {
 
     // Packed items haven't left the warehouse yet, so they stay cancellable.
     const cancellable = ['PLACED', 'CONFIRMED', 'PACKED'];
-    // Each seller may promise a longer return window than the platform's.
-    const windowMsFor = (days: number | null | undefined) =>
-      (days ?? env.RETURN_WINDOW_DAYS) * 24 * 60 * 60 * 1000;
+    // Return window per item: seller policy, else the category rule, else the platform default.
+    const windowDaysByItem = new Map<string, number>();
+    for (const i of order.items) {
+      windowDaysByItem.set(
+        i.id,
+        await returnWindowDaysFor(i.product.categoryId, i.seller.returnWindowDays),
+      );
+    }
+    const windowMsFor = (itemId: string) =>
+      (windowDaysByItem.get(itemId) ?? env.RETURN_WINDOW_DAYS) * 24 * 60 * 60 * 1000;
     const body: OrderDetailView = {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -609,6 +639,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
         title: i.title,
         size: i.size,
         color: i.color,
+        variantLabel: i.variantLabel,
         quantity: i.quantity,
         pricePaise: i.pricePaise,
         status: i.status,
@@ -640,7 +671,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
           i.status === 'DELIVERED' &&
           !i.return &&
           !!i.deliveredAt &&
-          Date.now() - i.deliveredAt.getTime() <= windowMsFor(i.seller.returnWindowDays),
+          Date.now() - i.deliveredAt.getTime() <= windowMsFor(i.id),
         courierName: i.courierName,
         awbNumber: i.awbNumber,
         trackingUrl: i.trackingUrl,
@@ -666,7 +697,9 @@ ordersRouter.get('/:id', async (req, res, next) => {
       awaitingPayment: order.payment?.status === 'CREATED' && order.status === 'PLACED',
       canCancel:
         order.status !== 'CANCELLED' && order.items.every((i) => cancellable.includes(i.status)),
-      returnWindowDays: env.RETURN_WINDOW_DAYS,
+      returnWindowDays: windowDaysByItem.size
+        ? Math.max(...windowDaysByItem.values())
+        : env.RETURN_WINDOW_DAYS,
     };
     res.json({ success: true, data: body });
   } catch (err) {
@@ -763,6 +796,7 @@ ordersRouter.post('/items/:itemId/return', async (req, res, next) => {
       include: {
         order: { select: { userId: true, orderNumber: true } },
         seller: { select: { userId: true, returnWindowDays: true } },
+        product: { select: { categoryId: true } },
         return: true,
       },
     });
@@ -774,8 +808,7 @@ ordersRouter.post('/items/:itemId/return', async (req, res, next) => {
 
     // Return window enforced server-side (UI hides the button, this is the law).
     // The seller may allow longer than the platform default, never shorter.
-    const policy = await getSettings();
-    const windowDays = item.seller.returnWindowDays ?? policy.returnWindowDays;
+    const windowDays = await returnWindowDaysFor(item.product.categoryId, item.seller.returnWindowDays);
     const windowMs = windowDays * 24 * 60 * 60 * 1000;
     if (!item.deliveredAt || Date.now() - item.deliveredAt.getTime() > windowMs) {
       throw ApiError.badRequest(

@@ -17,7 +17,7 @@ import {
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
-import OrderDrawer, { StatusPill } from '@/components/seller/orders/OrderDrawer';
+import { StatusPill } from '@/components/seller/orders/StatusPill';
 
 const TILE_ICONS: Record<string, string> = {
   NEW: '🆕',
@@ -75,7 +75,6 @@ export default function SellerOrdersPage() {
   const [data, setData] = useState<SellerOrderPage | null>(null);
   const [summary, setSummary] = useState<SellerOrderSummary | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [openOrderId, setOpenOrderId] = useState<string | null>(null);
   const [courier, setCourier] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -368,7 +367,7 @@ export default function SellerOrdersPage() {
           </div>
 
           <div className="overflow-x-auto rounded-b-2xl border border-gray-100 bg-white">
-            <table className="w-full min-w-[900px] text-xs">
+            <table className="w-full min-w-[640px] text-xs">
               <thead>
                 <tr className="text-left uppercase tracking-wide text-gray-500">
                   <th className="px-3 py-2.5">
@@ -403,12 +402,12 @@ export default function SellerOrdersPage() {
                       />
                     </td>
                     <td className="px-3 py-2.5">
-                      <button
-                        onClick={() => setOpenOrderId(row.orderId)}
+                      <Link
+                        href={`/seller/orders/${row.orderId}`}
                         className="font-mono font-semibold text-brand-600 hover:underline"
                       >
                         {row.orderNumber}
-                      </button>
+                      </Link>
                       <p className="text-[11px] text-gray-400">
                         {row.isGift ? '🎁 Gift · ' : ''}
                         {row.deliveryMethod.replace(/_/g, ' ').toLowerCase()}
@@ -416,7 +415,6 @@ export default function SellerOrdersPage() {
                     </td>
                     <td className="px-3 py-2.5">
                       <p className="font-medium text-ink-900">{row.customer.name}</p>
-                      <p className="text-[11px] text-gray-400">+91 {row.customer.phone}</p>
                       <p className="text-[11px] text-gray-400">
                         {row.shipTo.city}, {row.shipTo.pincode}
                       </p>
@@ -479,13 +477,13 @@ export default function SellerOrdersPage() {
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setOpenOrderId(row.orderId)}
+                        <Link
+                          href={`/seller/orders/${row.orderId}`}
                           title="View order"
                           className="rounded-lg border border-gray-300 px-2 py-1 hover:bg-gray-50"
                         >
                           👁
-                        </button>
+                        </Link>
                         <a
                           href={`/seller/orders/labels?ids=${row.lines.map((l) => l.id).join(',')}`}
                           target="_blank"
@@ -708,18 +706,6 @@ export default function SellerOrdersPage() {
           </section>
         </div>
       </div>
-
-      {openOrderId && (
-        <OrderDrawer
-          orderId={openOrderId}
-          couriers={summary?.couriers ?? []}
-          onClose={() => setOpenOrderId(null)}
-          onChanged={() => {
-            void loadOrders();
-            void loadSummary();
-          }}
-        />
-      )}
     </div>
   );
 }

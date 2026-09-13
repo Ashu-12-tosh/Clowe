@@ -94,6 +94,7 @@ function toRow(
     sku: variant.sku,
     size: variant.size,
     color: variant.color,
+    label: variant.label,
     pricePaise: variant.pricePaise,
     mrpPaise: variant.mrpPaise,
     stock: variant.stock,
@@ -139,8 +140,7 @@ async function loadRows(
       ? {
           OR: [
             { sku: { contains: query.q, mode: 'insensitive' } },
-            { color: { contains: query.q, mode: 'insensitive' } },
-            { size: { contains: query.q, mode: 'insensitive' } },
+            { label: { contains: query.q, mode: 'insensitive' } },
             { product: { sellerId, title: { contains: query.q, mode: 'insensitive' } } },
             {
               product: {
@@ -278,6 +278,7 @@ sellerInventoryRouter.get('/summary', async (req, res, next) => {
           sku: r.sku,
           size: r.size,
           color: r.color,
+          label: r.label,
           stock: r.stock,
           lowStockAlert: r.lowStockAlert,
           unitsSold: r.unitsSold,
@@ -405,8 +406,7 @@ sellerInventoryRouter.get('/export', async (req, res, next) => {
       'SKU',
       'Product',
       'Category',
-      'Size',
-      'Colour',
+      'Variant',
       'Stock',
       'Low stock alert',
       'Stock state',
@@ -424,8 +424,7 @@ sellerInventoryRouter.get('/export', async (req, res, next) => {
           row.sku,
           row.title,
           row.categoryName,
-          row.size,
-          row.color,
+          row.label,
           row.stock,
           row.lowStockAlert,
           row.stockState,

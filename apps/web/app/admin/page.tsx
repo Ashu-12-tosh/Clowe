@@ -363,7 +363,7 @@ export default function AdminDashboardPage() {
                   </Link>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[760px] text-xs">
+                  <table className="w-full min-w-[640px] text-xs">
                     <thead>
                       <tr className="text-left uppercase tracking-wide text-gray-500">
                         <th className="px-4 py-2.5 font-semibold">Order</th>

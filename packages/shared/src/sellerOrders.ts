@@ -78,6 +78,8 @@ export interface SellerOrderLine {
   imageUrl: string | null;
   size: string;
   color: string;
+  /** Human variant label, e.g. "Black · L"; "" for single-SKU. */
+  label: string;
   quantity: number;
   pricePaise: number;
   status: string;
@@ -95,20 +97,23 @@ export interface SellerOrderLine {
   canDeliver: boolean;
 }
 
+/** Delivery address as sellers see it - name + address only, never the phone. */
+export interface SellerShipTo {
+  name: string;
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string;
+  pincode: string;
+}
+
 export interface SellerOrderRow {
   orderId: string;
   orderNumber: string;
   placedAt: string;
-  customer: { name: string; email: string | null; phone: string };
-  shipTo: {
-    name: string;
-    phone: string;
-    line1: string;
-    line2: string | null;
-    city: string;
-    state: string;
-    pincode: string;
-  };
+  /** Buyer name only - contact details are never shared with sellers. */
+  customer: { name: string };
+  shipTo: SellerShipTo;
   lines: SellerOrderLine[];
   itemCount: number;
   unitCount: number;
@@ -184,6 +189,14 @@ export interface SellerOrderBulkResult {
   skipped: { itemId: string; reason: string }[];
 }
 
+/** QR printed on labels and invoices - scanning opens the order in the seller panel. */
+export interface SellerQr {
+  /** What the code encodes: the seller-panel URL for this order, unique per document. */
+  url: string;
+  /** PNG data URL, ready for an <img>. */
+  dataUrl: string;
+}
+
 /** Data behind one printable shipping label. */
 export interface SellerShippingLabel {
   orderItemId: string;
@@ -198,8 +211,9 @@ export interface SellerShippingLabel {
   title: string;
   size: string;
   color: string;
+  variantLabel: string;
   quantity: number;
-  shipTo: SellerOrderRow['shipTo'];
+  shipTo: SellerShipTo;
   shipFrom: {
     shopName: string;
     line1: string | null;
@@ -208,6 +222,7 @@ export interface SellerShippingLabel {
     pincode: string | null;
     gstNumber: string | null;
   };
+  qr: SellerQr;
 }
 
 /** Tax invoice for the seller's lines of one order. */
@@ -227,12 +242,14 @@ export interface SellerInvoice {
     gstNumber: string | null;
     panNumber: string | null;
   };
-  billTo: SellerOrderRow['shipTo'];
-  customer: { name: string; phone: string; email: string | null };
+  billTo: SellerShipTo;
+  /** Buyer name only - no contact details reach sellers. */
+  customer: { name: string };
   lines: {
     title: string;
     size: string;
     color: string;
+    variantLabel: string;
     quantity: number;
     /** Price the customer paid per unit (tax inclusive). */
     unitPricePaise: number;
@@ -247,4 +264,5 @@ export interface SellerInvoice {
   /** Same-state supply splits GST into CGST + SGST, otherwise IGST. */
   isIntraState: boolean;
   totalPaise: number;
+  qr: SellerQr;
 }

@@ -51,7 +51,9 @@ export default function SellerLoginPage() {
       });
       saveSession(data);
       reload();
-      router.push('/seller'); // straight to the seller dashboard
+      // Deep links (e.g. a scanned label QR) send the seller back where they started.
+      const next = new URLSearchParams(window.location.search).get('next');
+      router.push(next && next.startsWith('/seller/') ? next : '/seller');
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
       setBusy(false);

@@ -473,7 +473,7 @@ export default function AdminAuditPage() {
 
           {/* --- Table --------------------------------------------------- */}
           <div className="overflow-x-auto rounded-b-2xl border border-gray-100 bg-white">
-            <table className="w-full min-w-[980px] text-xs">
+            <table className="w-full min-w-[660px] text-xs">
               <thead>
                 <tr className="text-left uppercase tracking-wide text-gray-500">
                   <th className="px-3 py-2.5 font-semibold">Log ID</th>

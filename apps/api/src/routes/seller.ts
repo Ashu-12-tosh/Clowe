@@ -4,6 +4,10 @@ import { z } from 'zod';
 import type { NextFunction, Request, Response } from 'express';
 import type { SellerProfile } from '@prisma/client';
 import {
+  MAX_VARIANT_AXES,
+  optionValuesFromJson,
+  variantOptionFields,
+  type CategoryRules,
   adCreateSchema,
   phoneSchema,
   sellerRegisterSchema,
@@ -19,10 +23,14 @@ import {
   type SellerStats,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { categoryRulesFor } from '../services/categoryRules';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { applyReturnDecision, findSellerReturn } from '../services/returnService';
 import { getSettings } from '../services/settingsService';
+import { removeUploadByUrl } from './uploads';
+import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
+import { isListingBelowTryOnAge } from '../services/tryon/ageGate';
 import { expireDueAds } from './ads';
 import {
   SELLER_REFERRAL_REWARD_PAISE,
@@ -161,6 +169,24 @@ sellerRouter.post('/register', async (req, res, next) => {
         `[clowe-api] SELLER REFERRAL USED: referrer=${referrer.id} referred=${profile.id} code=${referralCode}`,
       );
     }
+    // Launch offer: the first 100 shops on Clowe get 50 free AI try-ons.
+    const granted = await prisma.sellerProfile.count({ where: { tryOnFreeGrant: true } });
+    if (granted < 100) {
+      await prisma.$transaction([
+        prisma.sellerProfile.update({
+          where: { id: profile.id },
+          data: { tryOnFreeGrant: true, tryOnCredits: { increment: 50 } },
+        }),
+        prisma.tryOnCreditLedger.create({
+          data: {
+            sellerId: profile.id,
+            delta: 50,
+            reason: 'FREE_GRANT',
+            note: 'Early-seller launch offer',
+          },
+        }),
+      ]);
+    }
     // Role becomes SELLER (they can still shop as a customer).
     await prisma.user.update({
       where: { id: req.auth!.userId },
@@ -246,6 +272,7 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
       rejectionReason: p.rejectionReason,
       imageUrls: p.images.map((i) => i.url),
       videoUrl: p.videoUrl,
+      packingVideoUrl: p.packingVideoUrl,
       attributes: (p.attributes as ProductAttribute[] | null) ?? [],
       highlights: (p.highlights as string[] | null) ?? [],
       taxRatePercent: p.taxRatePercent,
@@ -265,6 +292,8 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
         id: v.id,
         size: v.size,
         color: v.color,
+        optionValues: optionValuesFromJson(v.optionValues),
+        label: v.label,
         sku: v.sku,
         pricePaise: v.pricePaise,
         mrpPaise: v.mrpPaise,
@@ -280,7 +309,7 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
 // Create a product — goes live only after admin approval (status PENDING).
 
 /** Fields shared by create and update — everything the listing form owns. */
-function productDataFrom(input: SellerProductUpsertInput) {
+function productDataFrom(input: SellerProductUpsertInput, rules: CategoryRules) {
   return {
     title: input.title,
     categoryId: input.categoryId,
@@ -289,6 +318,7 @@ function productDataFrom(input: SellerProductUpsertInput) {
     shortDescription: input.shortDescription?.trim() || null,
     description: input.description,
     videoUrl: input.videoUrl?.trim() || null,
+    packingVideoUrl: input.packingVideoUrl?.trim() || null,
     attributes: (input.attributes ?? []) as object,
     highlights: (input.highlights ?? []) as object,
     taxRatePercent: input.taxRatePercent ?? null,
@@ -301,7 +331,14 @@ function productDataFrom(input: SellerProductUpsertInput) {
     metaDescription: input.metaDescription?.trim() || null,
     tags: input.tags ?? [],
     isVisible: input.isVisible ?? true,
-    tryOnEnabled: input.tryOnEnabled ?? true,
+    // Opt-in, and only honoured where the category allows try-on at all —
+    // and never for innerwear, swimwear or sleepwear, whichever category the
+    // seller filed the listing under.
+    tryOnEnabled:
+      (input.tryOnEnabled ?? false) &&
+      rules.tryOnEligible &&
+      !isSensitiveForTryOn(input.title) &&
+      !isListingBelowTryOnAge(input.variants.map((v) => v.optionValues?.size ?? '')),
     lowStockAlert: input.lowStockAlert ?? 5,
     allowBackorders: input.allowBackorders ?? false,
   };
@@ -316,19 +353,81 @@ function basePriceOf(input: SellerProductUpsertInput): number {
   return prices.length > 0 ? Math.min(...prices) : 0;
 }
 
+/** Variant rows with their derived columns; rejects mixed axes and duplicates. */
+function variantRowsFrom(input: SellerProductUpsertInput) {
+  const rows = input.variants.map((v) => ({
+    input: v,
+    fields: variantOptionFields(v.optionValues, [], { size: v.size, color: v.color }),
+  }));
+  const axisSets = new Set(rows.map((r) => Object.keys(r.fields.optionValues).sort().join('|')));
+  if (axisSets.size > 1) {
+    throw ApiError.badRequest(
+      'Every variant must use the same options (e.g. all of them have Colour and Size)',
+      'VARIANT_AXES_MISMATCH',
+    );
+  }
+  if (rows.some((r) => Object.keys(r.fields.optionValues).length > MAX_VARIANT_AXES)) {
+    throw ApiError.badRequest(
+      `A product can vary on at most ${MAX_VARIANT_AXES} options`,
+      'VARIANT_AXES_LIMIT',
+    );
+  }
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (seen.has(r.fields.optionsKey)) {
+      throw ApiError.badRequest(
+        `Duplicate variant: ${r.fields.label || 'two rows with no options'}`,
+        'VARIANT_DUPLICATE',
+      );
+    }
+    seen.add(r.fields.optionsKey);
+  }
+  return rows;
+}
+
+/** The packing clip is part of every reviewed listing - drafts may still skip it. */
+function assertPackingVideo(input: SellerProductUpsertInput) {
+  if (input.mode === 'DRAFT') return;
+  if (!input.packingVideoUrl?.trim()) {
+    throw ApiError.badRequest(
+      'Upload a short video of the product being packed before submitting for review',
+      'PACKING_VIDEO_REQUIRED',
+    );
+  }
+}
+
+/** Spec fields the category marks required must be filled before review. */
+function assertRequiredAttributes(input: SellerProductUpsertInput, rules: CategoryRules) {
+  if (input.mode === 'DRAFT') return;
+  const given = new Map(
+    (input.attributes ?? []).map((a) => [a.name.trim().toLowerCase(), a.value.trim()]),
+  );
+  const missing = rules.attributeSchema
+    .filter((a) => a.required && !given.get(a.label.toLowerCase()))
+    .map((a) => a.label);
+  if (missing.length) {
+    throw ApiError.badRequest(`Please fill in: ${missing.join(', ')}`, 'ATTRIBUTES_REQUIRED');
+  }
+}
+
 sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req, res, next) => {
   try {
     const input = sellerProductUpsertSchema.parse(req.body);
     const category = await prisma.category.findUnique({ where: { id: input.categoryId } });
     if (!category) throw ApiError.badRequest('Category not found', 'CATEGORY_NOT_FOUND');
+    const rules = await categoryRulesFor(category.id);
+    assertRequiredAttributes(input, rules);
+    assertPackingVideo(input);
+    const variantRows = variantRowsFrom(input);
 
     const slug = `${slugify(`${input.brand ?? ''} ${input.title}`)}-${randomBytes(3).toString('hex')}`;
 
     const product = await prisma.product.create({
       data: {
         sellerId: req.seller!.id,
-        ...productDataFrom(input),
+        ...productDataFrom(input, rules),
         slug,
+        packingVideoUploadedAt: input.packingVideoUrl?.trim() ? new Date() : null,
         basePricePaise: basePriceOf(input),
         // Drafts stay private until the seller submits them for review.
         status: input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING',
@@ -336,10 +435,8 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
           create: input.imageUrls.map((url, i) => ({ url, altText: input.title, sortOrder: i })),
         },
         variants: {
-          create: input.variants.map((v) => ({
-            size: v.size,
-            color: v.color,
-            optionValues: { size: v.size, color: v.color },
+          create: variantRows.map(({ input: v, fields }) => ({
+            ...fields,
             sku: v.sku?.trim() || newSku(),
             pricePaise: v.pricePaise,
             mrpPaise: v.mrpPaise ?? null,
@@ -359,14 +456,27 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
   try {
     const input = sellerProductUpsertSchema.parse(req.body);
     const product = await ownProduct(req, req.params.id);
+    const rules = await categoryRulesFor(input.categoryId);
+    assertRequiredAttributes(input, rules);
+    assertPackingVideo(input);
+    const variantRows = variantRowsFrom(input);
 
     const keptIds = input.variants.filter((v) => v.id).map((v) => v.id!);
+
+    // A replaced or removed packing video frees its file straight away; a fresh
+    // upload restarts the 10-day retention clock.
+    const newPackingVideo = input.packingVideoUrl?.trim() || null;
+    const videoChanged = newPackingVideo !== product.packingVideoUrl;
+    if (videoChanged && product.packingVideoUrl) removeUploadByUrl(product.packingVideoUrl);
 
     await prisma.$transaction([
       prisma.product.update({
         where: { id: product.id },
         data: {
-          ...productDataFrom(input),
+          ...productDataFrom(input, rules),
+          ...(videoChanged
+            ? { packingVideoUploadedAt: newPackingVideo ? new Date() : null }
+            : {}),
           basePricePaise: basePriceOf(input),
           // Saving a draft keeps it private; submitting sends it for re-approval.
           status: input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING',
@@ -386,15 +496,13 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
       prisma.productVariant.deleteMany({
         where: { productId: product.id, id: { notIn: keptIds } },
       }),
-      ...input.variants
-        .filter((v) => v.id)
-        .map((v) =>
+      ...variantRows
+        .filter((r) => r.input.id)
+        .map(({ input: v, fields }) =>
           prisma.productVariant.update({
             where: { id: v.id! },
             data: {
-              size: v.size,
-              color: v.color,
-              optionValues: { size: v.size, color: v.color },
+              ...fields,
               ...(v.sku?.trim() ? { sku: v.sku.trim() } : {}),
               pricePaise: v.pricePaise,
               mrpPaise: v.mrpPaise ?? null,
@@ -402,16 +510,14 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
             },
           }),
         ),
-      ...(input.variants.some((v) => !v.id)
+      ...(variantRows.some((r) => !r.input.id)
         ? [
             prisma.productVariant.createMany({
-              data: input.variants
-                .filter((v) => !v.id)
-                .map((v) => ({
+              data: variantRows
+                .filter((r) => !r.input.id)
+                .map(({ input: v, fields }) => ({
                   productId: product.id,
-                  size: v.size,
-                  color: v.color,
-                  optionValues: { size: v.size, color: v.color },
+                  ...fields,
                   sku: v.sku?.trim() || newSku(),
                   pricePaise: v.pricePaise,
                   mrpPaise: v.mrpPaise ?? null,
@@ -551,6 +657,7 @@ function toReturnRow(r: NonNullable<ReturnWithRelations>): SellerReturnRow {
     title: r.orderItem.title,
     size: r.orderItem.size,
     color: r.orderItem.color,
+    variantLabel: r.orderItem.variantLabel,
     quantity: r.orderItem.quantity,
     pricePaise: r.orderItem.pricePaise,
     imageUrl: r.orderItem.product.images[0]?.url ?? null,

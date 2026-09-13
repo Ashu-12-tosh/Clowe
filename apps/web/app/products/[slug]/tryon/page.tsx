@@ -279,7 +279,7 @@ export default function TryOnPage({ params }: { params: { slug: string } }) {
   }
 
   const eligible =
-    product.rootCategorySlug === 'fashion' &&
+    product.tryOnEligible &&
     minPaise !== null &&
     Math.min(...product.variants.map((v) => v.pricePaise)) >= minPaise;
 

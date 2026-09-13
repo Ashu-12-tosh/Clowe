@@ -19,6 +19,7 @@ const NAV: DashNavItem[] = [
   { href: '/seller/customers', label: 'Customers', icon: '👥' },
   { href: '/seller/promotions', label: 'Promotions', icon: '🏷' },
   { href: '/seller/ads', label: 'Advertise', icon: '📣' },
+  { href: '/seller/tryon', label: 'AI Try-On', icon: '✨' },
   { href: '/seller/settings', label: 'Store Settings', icon: '⚙' },
   { href: '/seller/support', label: 'Support', icon: '💬' },
 ];
@@ -102,7 +103,10 @@ export default function SellerLayout({ children }: { children: React.ReactNode }
       <main className="flex min-h-screen flex-col items-center justify-center bg-cream-50 px-4 text-center">
         <p className="font-display text-xl font-bold text-ink-900">Seller area</p>
         <p className="mt-2 text-sm text-gray-600">
-          <Link href="/seller/login" className="font-semibold text-brand-600 hover:underline">
+          <Link
+            href={`/seller/login?next=${encodeURIComponent(pathname)}`}
+            className="font-semibold text-brand-600 hover:underline"
+          >
             Seller login
           </Link>{' '}
           to open your dashboard, or{' '}

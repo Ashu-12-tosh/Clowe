@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import {
+  optionValuesFromJson,
   adminReturnOverrideSchema,
   adDecisionSchema,
   categoryUpsertSchema,
@@ -16,7 +17,14 @@ import {
   updateSettingsSchema,
   voidReferralSchema,
 } from '@clowe/shared';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
+import {
+  chainOf,
+  invalidateCategoryRules,
+  ownRuleFields,
+  rulesFromChain,
+} from '../services/categoryRules';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { sendToUserSafe } from '../services/messaging';
@@ -212,10 +220,13 @@ adminRouter.get('/products/:id', async (req, res, next) => {
       categoryName: p.category.name,
       description: p.description,
       imageUrls: p.images.map((i) => i.url),
+      packingVideoUrl: p.packingVideoUrl,
       variants: p.variants.map((v) => ({
         sku: v.sku,
         size: v.size,
         color: v.color,
+        optionValues: optionValuesFromJson(v.optionValues),
+        label: v.label,
         pricePaise: v.pricePaise,
         mrpPaise: v.mrpPaise,
         stock: v.stock,
@@ -277,22 +288,45 @@ adminRouter.patch('/products/:id', async (req, res, next) => {
 // Category management
 // ---------------------------------------------------------------------------
 
+/** Rule columns from admin input: undefined leaves a field alone, null clears it (= inherit). */
+function ruleDataFrom(input: Partial<z.infer<typeof categoryUpsertSchema>>) {
+  const json = (value: unknown[] | null | undefined) =>
+    value === undefined ? undefined : value === null ? Prisma.DbNull : (value as Prisma.InputJsonValue);
+  return {
+    variantAxes: json(input.variantAxes),
+    attributeSchema: json(input.attributeSchema),
+    tryOnEligible: input.tryOnEligible,
+    sizeGuide: input.sizeGuide,
+    taxRule: input.taxRule,
+    defaultTaxRatePercent: input.defaultTaxRatePercent,
+    hsnCode: input.hsnCode,
+    returnWindowDays: input.returnWindowDays,
+  };
+}
+
 adminRouter.get('/categories', async (_req, res, next) => {
   try {
     const categories = await prisma.category.findMany({
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: { _count: { select: { products: true } } },
     });
-    const rows: AdminCategoryRow[] = categories.map((c) => ({
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      parentId: c.parentId,
-      icon: c.icon,
-      isActive: c.isActive,
-      sortOrder: c.sortOrder,
-      productCount: c._count.products,
-    }));
+    const byId = new Map(categories.map((c) => [c.id, c]));
+    const rows: AdminCategoryRow[] = categories.map((c) => {
+      const chain = chainOf(byId, c.id);
+      return {
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        parentId: c.parentId,
+        icon: c.icon,
+        isActive: c.isActive,
+        sortOrder: c.sortOrder,
+        productCount: c._count.products,
+        depth: chain.length - 1,
+        own: ownRuleFields(c),
+        rules: rulesFromChain(chain),
+      };
+    });
     res.json({ success: true, data: rows });
   } catch (err) {
     next(err);
@@ -305,7 +339,12 @@ adminRouter.post('/categories', async (req, res, next) => {
     if (input.parentId) {
       const parent = await prisma.category.findUnique({ where: { id: input.parentId } });
       if (!parent) throw ApiError.badRequest('Parent category not found');
-      if (parent.parentId) throw ApiError.badRequest('Categories can only be two levels deep');
+      const all = new Map(
+        (await prisma.category.findMany({ select: { id: true, parentId: true } })).map((c) => [c.id, c]),
+      );
+      if (chainOf(all, parent.id).length >= 3) {
+        throw ApiError.badRequest('Categories can be at most three levels deep');
+      }
     }
     // Slug: prefix child slugs with the parent for readability, keep unique.
     let slug = slugify(input.name);
@@ -324,8 +363,10 @@ adminRouter.post('/categories', async (req, res, next) => {
         imageUrl: input.imageUrl,
         icon: input.icon ?? null,
         sortOrder: input.sortOrder ?? 0,
+        ...ruleDataFrom(input),
       },
     });
+    invalidateCategoryRules();
     res.json({ success: true, data: { id: category.id, slug: category.slug } });
   } catch (err) {
     next(err);
@@ -346,8 +387,10 @@ adminRouter.patch('/categories/:id', async (req, res, next) => {
         icon: input.icon,
         isActive: input.isActive,
         sortOrder: input.sortOrder,
+        ...ruleDataFrom(input),
       },
     });
+    invalidateCategoryRules();
     res.json({ success: true, data: { id: category.id } });
   } catch (err) {
     next(err);
@@ -452,6 +495,7 @@ adminRouter.get('/returns', async (req, res, next) => {
       title: r.orderItem.title,
       size: r.orderItem.size,
       color: r.orderItem.color,
+      variantLabel: r.orderItem.variantLabel,
       quantity: r.orderItem.quantity,
       pricePaise: r.orderItem.pricePaise,
       imageUrl: r.orderItem.product.images[0]?.url ?? null,

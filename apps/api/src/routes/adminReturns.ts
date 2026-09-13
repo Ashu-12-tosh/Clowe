@@ -120,6 +120,7 @@ function toRow(r: ReturnRecord): AdminReturnListRow {
       imageUrl: item.product.images[0]?.url ?? null,
       size: item.size,
       color: item.color,
+      variantLabel: item.variantLabel,
       sku: item.variant.sku,
       quantity: item.quantity,
     },

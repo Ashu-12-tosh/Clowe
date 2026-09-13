@@ -15,24 +15,15 @@ type Badge = 'wishlist' | 'notifications' | 'wallet';
 
 const NAV: { href: string; label: string; icon: string; badge?: Badge }[] = [
   { href: '/account', label: 'Dashboard', icon: '🏠' },
-  { href: '/account/orders', label: 'My Orders', icon: '📦' },
   { href: '/wishlist', label: 'Wishlist', icon: '♡', badge: 'wishlist' },
   { href: '/account/addresses', label: 'My Addresses', icon: '📍' },
   { href: '/account/payments', label: 'Payment Methods', icon: '💳' },
   { href: '/account/credits', label: 'Clowe Credits', icon: '👛', badge: 'wallet' },
   { href: '/account/returns', label: 'Returns & Refunds', icon: '↩' },
   { href: '/account/coupons', label: 'My Coupons', icon: '🎟' },
-  { href: '/account/recently-viewed', label: 'Recently Viewed', icon: '🕘' },
-  { href: '/account/notifications', label: 'Notifications', icon: '🔔', badge: 'notifications' },
+  { href: '/notifications', label: 'Notifications', icon: '🔔', badge: 'notifications' },
   { href: '/account/settings', label: 'Account Settings', icon: '⚙' },
   { href: '/account/help', label: 'Help Center', icon: '❓' },
-];
-
-const PREMIUM_PERKS = [
-  'Free & fast delivery',
-  'Priority customer support',
-  'Early access to sales',
-  'Member-only coupons',
 ];
 
 export default function AccountLayout({ children }: { children: React.ReactNode }) {
@@ -161,26 +152,6 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
               Logout
             </button>
           </nav>
-          {!user.isPremium && (
-            <div className="overflow-hidden rounded-2xl bg-ink-950 p-4 text-white">
-              <p className="t-sub-heading text-brand-400">♛ CLOWE Premium</p>
-              <p className="t-caption mt-1 text-gray-300">Unlock exclusive benefits</p>
-              <ul className="mt-3 space-y-1.5">
-                {PREMIUM_PERKS.map((perk) => (
-                  <li key={perk} className="t-caption flex items-start gap-2 text-gray-300">
-                    <span className="text-brand-400">✦</span>
-                    {perk}
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href="/pages/help"
-                className="t-btn mt-4 block rounded-lg bg-brand-600 py-2 text-center text-white transition hover:bg-brand-700"
-              >
-                Explore Premium ›
-              </Link>
-            </div>
-          )}
         </aside>
 
         <div className="min-w-0">{children}</div>

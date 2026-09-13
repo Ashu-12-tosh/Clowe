@@ -25,7 +25,7 @@ import {
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns within 7 days' },
+  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
   { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
@@ -225,7 +225,7 @@ export default function ReturnsPage() {
                 Start one from a delivered item inside an order.
               </p>
               <Link
-                href="/account/orders?status=DELIVERED"
+                href="/orders"
                 className="t-btn mt-4 inline-block rounded-lg bg-ink-900 px-6 py-2.5 text-white hover:bg-ink-800"
               >
                 View delivered orders
@@ -256,10 +256,9 @@ export default function ReturnsPage() {
                     >
                       {row.productTitle}
                     </Link>
-                    <p className="t-caption mt-0.5 text-gray-500">
-                      {row.color}
-                      {row.size !== 'One Size' && ` · Size: ${row.size}`}
-                    </p>
+                    {row.variantLabel && (
+                      <p className="t-caption mt-0.5 text-gray-500">{row.variantLabel}</p>
+                    )}
                     <p className="t-caption mt-1 text-gray-500">
                       Order ID:{' '}
                       <Link
@@ -376,7 +375,7 @@ export default function ReturnsPage() {
               </p>
             )}
             <Link
-              href="/account/orders"
+              href="/orders"
               className="t-btn mt-3 block rounded-lg border border-gray-300 py-2.5 text-center text-ink-900 transition hover:border-brand-600"
             >
               View Refund History
@@ -388,7 +387,7 @@ export default function ReturnsPage() {
             <ul className="mt-3 divide-y divide-gray-100">
               <li>
                 <Link
-                  href="/account/orders?status=DELIVERED"
+                  href="/orders"
                   className="flex items-center gap-2.5 py-3 transition hover:text-brand-600"
                 >
                   <ReturnIcon className="h-4 w-4 shrink-0 text-gray-500" />

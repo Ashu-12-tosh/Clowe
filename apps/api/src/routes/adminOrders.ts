@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import {
+  gstRateFor,
   ADMIN_ORDER_SORTS,
   ADMIN_ORDER_STATUSES,
   ADMIN_ORDER_STATUS_LABELS,
@@ -27,6 +28,7 @@ import {
   type OrderTab,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { categoryRulesMap } from '../services/categoryRules';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import {
@@ -412,6 +414,7 @@ adminOrdersRouter.get('/:id', async (req, res, next) => {
             product: {
               select: {
                 taxRatePercent: true,
+                categoryId: true,
                 images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } },
               },
             },
@@ -436,11 +439,12 @@ adminOrdersRouter.get('/:id', async (req, res, next) => {
 
     // GST is already inside the prices the shopper paid, so this is the tax
     // component of the item total, not something added on top. Rates are
-    // per-listing with the apparel slab as the fallback — the same rule the
+    // per-listing with the category rule as the fallback - the same rule the
     // seller invoice uses.
+    const taxRules = await categoryRulesMap(order.items.map((i) => i.product.categoryId));
     const taxPaise = order.items.reduce((sum, i) => {
       const gross = i.pricePaise * i.quantity;
-      const rate = i.product.taxRatePercent ?? (i.pricePaise <= 100000 ? 5 : 12);
+      const rate = gstRateFor(i.pricePaise, i.product.taxRatePercent, taxRules.get(i.product.categoryId)!);
       return sum + (gross - Math.round(gross / (1 + rate / 100)));
     }, 0);
 
@@ -511,6 +515,7 @@ adminOrdersRouter.get('/:id', async (req, res, next) => {
         imageUrl: i.product.images[0]?.url ?? null,
         size: i.size,
         color: i.color,
+        variantLabel: i.variantLabel,
         sku: i.variant.sku,
         sellerId: i.seller.id,
         sellerName: i.seller.shopName,

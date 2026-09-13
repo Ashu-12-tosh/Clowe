@@ -40,8 +40,9 @@ function Badge({ count }: { count: number }) {
 }
 
 /**
- * Site-wide chrome: utility bar, main header (logo / search / actions with
- * live counts), and the category nav bar with its mega menu.
+ * Site-wide chrome: main header (logo / search / actions with live counts)
+ * and the category nav bar with its mega menu. The old top utility bar is
+ * unmounted; see UtilityBar.tsx.
  */
 export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const router = useRouter();
@@ -55,6 +56,24 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   // causes a hydration mismatch.
   const [speechSupported, setSpeechSupported] = useState(false);
   useEffect(() => setSpeechSupported(getSpeechRecognition() !== null), []);
+
+  // Publish the header's rendered height as --header-h. Anything that has to
+  // stick just below the sticky header (the mobile filter bar on /products)
+  // reads it, so it stays correct if the header's own height changes.
+  const headerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const apply = () => root.style.setProperty('--header-h', `${el.offsetHeight}px`);
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--header-h');
+    };
+  }, []);
 
   // AI voice search: speech → transcript → /api/ai/search-intent → filtered shop page.
   function startVoiceSearch() {
@@ -108,23 +127,11 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   }, [pathname]);
 
   return (
-    <header className="sticky top-0 z-30 bg-white shadow-sm">
-      {/* ---------------- Utility bar ---------------- */}
-      <div className="bg-ink-950 text-[11px] text-gray-300 sm:text-xs">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-1.5">
-          <div className="hidden items-center gap-4 sm:flex">
-            <Link href="/pages/app" className="hover:text-white">📱 Download App</Link>
-            <Link href="/sell" className="hover:text-white">🏪 Become a Seller</Link>
-          </div>
-          <p className="t-announce mx-auto truncate text-center sm:absolute sm:left-1/2 sm:-translate-x-1/2">
-            <span className="font-semibold text-brand-400">Free Shipping</span> on orders above ₹499
-            <span className="mx-1.5 text-gray-500">|</span>7 Days Easy Returns
-          </p>
-          <Link href="/pages/help" className="hidden shrink-0 hover:text-white sm:block">
-            🎧 Help &amp; Support
-          </Link>
-        </div>
-      </div>
+    <header ref={headerRef} className="sticky top-0 z-30 bg-white shadow-sm">
+      {/* The top utility bar (Download App / Become a Seller / shipping note /
+          Help & Support) lives in ./UtilityBar.tsx and is intentionally not
+          rendered. To bring it back: import UtilityBar and render <UtilityBar />
+          here, then re-check the mobile filter-bar offset in app/products/page.tsx. */}
 
       {/* ---------------- Main header ---------------- */}
       <div className="border-b border-gray-100">
@@ -211,7 +218,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           <nav className="flex shrink-0 items-center gap-0.5 text-ink-900 sm:gap-1">
             {user && (
               <Link
-                href="/account/orders"
+                href="/orders"
                 className="hidden items-center gap-1.5 rounded-full px-2.5 py-2 text-sm hover:bg-cream-100 md:flex"
               >
                 📦 <span className="hidden lg:inline">Orders</span>

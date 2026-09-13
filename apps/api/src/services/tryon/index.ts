@@ -24,4 +24,34 @@ function createTryOnProvider(): TryOnProvider {
 }
 
 export const tryOnProvider = createTryOnProvider();
+
+/**
+ * Say which provider is live, and — for FASHN — check the key actually works.
+ *
+ * A wrong key would otherwise only surface as a failed try-on for a real
+ * shopper, so it is worth one cheap unbilled request at boot. Never throws:
+ * try-on is one feature, not a reason to refuse to start.
+ */
+export async function logTryOnProviderStatus(): Promise<void> {
+  if (tryOnProvider.name !== 'fashn') {
+    console.log(
+      '[clowe-api] AI Try-On: mock provider (set FASHN_API_KEY in .env for real try-on)',
+    );
+    return;
+  }
+  console.log(`[clowe-api] AI Try-On: FASHN (${env.FASHN_MODEL}, mode=${env.FASHN_MODE})`);
+  const check = await tryOnProvider.verifyCredentials?.();
+  if (check && !check.ok) {
+    console.error(`[clowe-api] AI Try-On: ${check.detail} — try-ons will fail until this is fixed`);
+  }
+}
+
+export { garmentCategoryFor } from './garmentCategory';
+export { isSensitiveForTryOn } from './sensitiveGarment';
+export {
+  TRYON_MIN_AGE_YEARS,
+  isListingBelowTryOnAge,
+  isSizeBelowTryOnAge,
+} from './ageGate';
+export { TryOnError } from './TryOnProvider';
 export type { TryOnProvider };

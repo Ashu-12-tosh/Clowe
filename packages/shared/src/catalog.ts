@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { CategoryRules } from './categoryRules';
+import type { VariantAxis } from './variants';
 
 // ---------------------------------------------------------------------------
 // Product listing query (shared by API validation and web client)
@@ -30,6 +32,8 @@ export const productListQuerySchema = z.object({
   sizes: z.string().trim().optional(), // e.g. "S,M,L"
   colors: z.string().trim().optional(), // e.g. "Black,Navy"
   brands: z.string().trim().optional(), // e.g. "NovaTech,Aeris"
+  /** Generic option filters, e.g. opt[ram]=16GB&opt[color]=Black. */
+  opt: z.record(z.string().trim().max(60)).optional(),
   minPrice: z.coerce.number().int().min(0).optional(), // rupees
   maxPrice: z.coerce.number().int().min(0).optional(), // rupees
   sort: z.enum(productSortValues).default('newest'),
@@ -49,6 +53,8 @@ export interface CategoryNode {
   imageUrl: string | null;
   /** Emoji/glyph for the category nav bar and mega menu. */
   icon: string | null;
+  /** Resolved marketplace rules (own -> parent -> platform default). */
+  rules: CategoryRules;
   children: CategoryNode[];
 }
 
@@ -128,6 +134,8 @@ export interface ProductListResponse {
   facets: {
     sizes: string[];
     colors: string[];
+    /** Every option axis in scope with its values; sizes/colors above are the size/color axes. */
+    options: { key: string; label: string; values: string[] }[];
     /** Brands in scope with how many products each has. */
     brands: FacetCount[];
     /** Subcategories in scope with their product counts. */
@@ -161,6 +169,10 @@ export interface ProductVariantInfo {
   id: string;
   size: string;
   color: string;
+  /** The option combination this variant is, e.g. { ram: "16GB", storage: "512GB" }. */
+  optionValues: Record<string, string>;
+  /** Human label ("Black · L"); "" for a single-SKU product. */
+  label: string;
   sku: string;
   pricePaise: number;
   mrpPaise: number | null;
@@ -180,6 +192,14 @@ export interface ProductDetail {
    * the catalogue also has electronics above the try-on price floor.
    */
   rootCategorySlug: string;
+  /** Option axes in display order - drives the selectors on the product page. */
+  variantAxes: VariantAxis[];
+  /** Category allows AI Try-On and the seller has it on (price floor is checked separately). */
+  tryOnEligible: boolean;
+  /** Show the size guide (wearable categories with a size axis). */
+  sizeGuide: boolean;
+  /** Days after delivery a return can be requested. */
+  returnWindowDays: number;
   sellerShopName: string;
   /** Who fulfils the order — shown in the "Sold by" card. */
   seller: {
@@ -217,6 +237,8 @@ export interface WishlistEntry {
   /** Top-level category, for the filter chips and Try-On eligibility. */
   rootCategorySlug: string;
   rootCategoryName: string;
+  /** Category allows AI Try-On and the seller has it on. */
+  tryOnEligible: boolean;
   isBestSeller: boolean;
   isNew: boolean;
   /** Cheapest price when saved — a lower price today is a price drop. */

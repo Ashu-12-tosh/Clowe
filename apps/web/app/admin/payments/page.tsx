@@ -527,7 +527,7 @@ export default function AdminPaymentsPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1000px] text-xs">
+              <table className="w-full min-w-[840px] text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-gray-500">
                     <th className="px-3 py-2.5 font-semibold">Transaction ID</th>

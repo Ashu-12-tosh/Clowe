@@ -207,7 +207,7 @@ export default function SellerInventoryPage() {
         <div>
           <h1 className="font-display text-2xl font-bold text-ink-900">Inventory</h1>
           <p className="mt-0.5 text-sm text-gray-500">
-            Stock lives on each size/colour — edit a count inline or update many at once.
+            Stock lives on each variant — edit a count inline or update many at once.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -310,7 +310,7 @@ export default function SellerInventoryPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search SKU, product, size or colour…"
+              placeholder="Search SKU, product or variant…"
               className="min-w-56 flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs outline-none focus:border-brand-600"
             />
             <select
@@ -388,7 +388,7 @@ export default function SellerInventoryPage() {
 
           {/* --- Table --------------------------------------------------- */}
           <div className="overflow-x-auto rounded-b-2xl border border-gray-100 bg-white">
-            <table className="w-full min-w-[900px] text-xs">
+            <table className="w-full min-w-[640px] text-xs">
               <thead>
                 <tr className="text-left uppercase tracking-wide text-gray-500">
                   <th className="px-3 py-2.5">
@@ -466,7 +466,7 @@ export default function SellerInventoryPage() {
                       </td>
                       <td className="px-3 py-2.5 font-mono text-gray-600">{row.sku}</td>
                       <td className="px-3 py-2.5 text-gray-600">
-                        {row.color} / {row.size}
+                        {row.label || 'Single SKU'}
                       </td>
                       <td className="px-3 py-2.5 text-right font-semibold text-ink-900">
                         {formatPaise(row.pricePaise)}
@@ -609,7 +609,7 @@ export default function SellerInventoryPage() {
                     <div className="min-w-0">
                       <p className="truncate text-ink-900">{r.title}</p>
                       <p className="text-[11px] text-gray-400">
-                        {r.color} / {r.size} · {r.unitsSold} sold
+                        {r.label ? ` · ` : ''}{r.unitsSold} sold
                       </p>
                     </div>
                     <span

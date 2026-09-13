@@ -1,18 +1,77 @@
 import { Router } from 'express';
 import type { Prisma } from '@prisma/client';
 import {
+  OPTION_KEY_RE,
+  axesOf,
+  axisLabel,
+  compareOptionValues,
+  optionValuesFromJson,
   productListQuerySchema,
   type AddonProduct,
+  type CategoryRules,
   type ProductDetail,
   type ProductListItem,
   type ProductListResponse,
+  type ProductVariantInfo,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
-import { listingStockFields } from '../utils/productListing';
+import {
+  listingStockFields,
+  productListItemInclude,
+  toProductListItem,
+} from '../utils/productListing';
 import { optionalAuth } from '../middleware/auth';
+import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
+import { isListingBelowTryOnAge } from '../services/tryon/ageGate';
+import {
+  categoryRulesFor,
+  descendantIds,
+  resolveCategory,
+  returnWindowDaysFor,
+} from '../services/categoryRules';
 
 export const productsRouter = Router();
+
+/** What every storefront query starts from. */
+const LIVE: Prisma.ProductWhereInput = {
+  status: 'APPROVED',
+  isVisible: true,
+  seller: { vacationMode: false },
+};
+
+/**
+ * Option filters from the query string: the generic `opt[key]=a,b` form plus
+ * the legacy `sizes` / `colors` params. Values within one axis are OR-ed,
+ * axes are AND-ed.
+ */
+function optionFilters(query: {
+  opt?: Record<string, string>;
+  sizes?: string;
+  colors?: string;
+}): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  const add = (key: string, csv: string | undefined) => {
+    const values = (csv ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (values.length) out[key] = [...new Set([...(out[key] ?? []), ...values])];
+  };
+  add('size', query.sizes);
+  add('color', query.colors);
+  for (const [key, csv] of Object.entries(query.opt ?? {})) {
+    if (OPTION_KEY_RE.test(key)) add(key, csv);
+  }
+  return out;
+}
+
+/** Facet order: the category's axes first, then colour, size, then alphabetical. */
+function facetRank(key: string, rules: CategoryRules | null): number {
+  const preferred = [...(rules?.variantAxes.map((a) => a.key) ?? []), 'color', 'size'];
+  const i = preferred.indexOf(key);
+  return i === -1 ? preferred.length : i;
+}
 
 // Storefront product listing: filters + search + facets + pagination.
 // Only APPROVED products are ever visible here.
@@ -20,24 +79,26 @@ productsRouter.get('/', async (req, res, next) => {
   try {
     const query = productListQuerySchema.parse(req.query);
 
-    // Resolve category slug → self + child category ids.
+    // Resolve category slug → self + every descendant (any depth).
     let categoryIds: string[] | undefined;
+    let scopeRules: CategoryRules | null = null;
     if (query.category) {
-      const category = await prisma.category.findUnique({
-        where: { slug: query.category },
-        include: { children: { select: { id: true } } },
-      });
+      const category = await prisma.category.findUnique({ where: { slug: query.category } });
       if (!category) throw ApiError.notFound('Category not found');
-      categoryIds = [category.id, ...category.children.map((c) => c.id)];
+      categoryIds = await descendantIds(category.id);
+      scopeRules = await categoryRulesFor(category.id);
     }
 
-    const sizes = query.sizes?.split(',').filter(Boolean);
-    const colors = query.colors?.split(',').filter(Boolean);
     const brands = query.brands?.split(',').filter(Boolean);
+    const options = optionFilters(query);
 
+    const optionAnd: Prisma.ProductVariantWhereInput[] = Object.entries(options).map(
+      ([key, values]) => ({
+        OR: values.map((value) => ({ optionValues: { path: [key], equals: value } })),
+      }),
+    );
     const variantFilter: Prisma.ProductVariantWhereInput = {
-      ...(sizes?.length ? { size: { in: sizes } } : {}),
-      ...(colors?.length ? { color: { in: colors, mode: 'insensitive' } } : {}),
+      ...(optionAnd.length ? { AND: optionAnd } : {}),
       ...(query.minPrice != null ? { pricePaise: { gte: query.minPrice * 100 } } : {}),
     };
     if (query.maxPrice != null) {
@@ -48,7 +109,7 @@ productsRouter.get('/', async (req, res, next) => {
     }
 
     const where: Prisma.ProductWhereInput = {
-      status: 'APPROVED', isVisible: true, seller: { vacationMode: false },
+      ...LIVE,
       ...(categoryIds ? { categoryId: { in: categoryIds } } : {}),
       ...(brands?.length ? { brand: { in: brands } } : {}),
       ...(Object.keys(variantFilter).length ? { variants: { some: variantFilter } } : {}),
@@ -75,61 +136,56 @@ productsRouter.get('/', async (req, res, next) => {
     // Facet scope = the category (and other filters), but never a facet's own
     // filter — otherwise picking one brand would hide every other brand.
     const facetScope: Prisma.ProductWhereInput = {
-      status: 'APPROVED', isVisible: true, seller: { vacationMode: false },
+      ...LIVE,
       ...(categoryIds ? { categoryId: { in: categoryIds } } : {}),
     };
 
     const [total, products, facetVariants, priceAgg, brandGroups, categoryGroups, scopeCategories] =
       await Promise.all([
-      prisma.product.count({ where }),
-      prisma.product.findMany({
-        where,
-        orderBy,
-        skip: (query.page - 1) * query.limit,
-        take: query.limit,
-        include: {
-          category: { select: { name: true } },
-          images: { orderBy: { sortOrder: 'asc' }, take: 1 },
-          variants: {
-            select: { id: true, size: true, color: true, pricePaise: true, mrpPaise: true, stock: true },
+        prisma.product.count({ where }),
+        prisma.product.findMany({
+          where,
+          orderBy,
+          skip: (query.page - 1) * query.limit,
+          take: query.limit,
+          include: {
+            category: { select: { name: true } },
+            images: { orderBy: { sortOrder: 'asc' }, take: 1 },
+            variants: {
+              select: {
+                id: true,
+                size: true,
+                color: true,
+                pricePaise: true,
+                mrpPaise: true,
+                stock: true,
+              },
+            },
           },
-        },
-      }),
-      // Facets: what sizes/colors exist in the current category scope.
-      prisma.productVariant.findMany({
-        where: {
-          product: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, ...(categoryIds ? { categoryId: { in: categoryIds } } : {}) },
-        },
-        select: { size: true, color: true },
-        distinct: ['size', 'color'],
-      }),
-      // Price bounds in scope — for the range slider.
-      prisma.productVariant.aggregate({
-        where: {
-          product: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, ...(categoryIds ? { categoryId: { in: categoryIds } } : {}) },
-        },
-        _min: { pricePaise: true },
-        _max: { pricePaise: true },
-      }),
-      // Brand facet with counts.
-      prisma.product.groupBy({
-        by: ['brand'],
-        where: facetScope,
-        _count: { _all: true },
-      }),
-      // Subcategory facet with counts.
-      prisma.product.groupBy({
-        by: ['categoryId'],
-        where: facetScope,
-        _count: { _all: true },
-      }),
-      categoryIds
-        ? prisma.category.findMany({
-            where: { id: { in: categoryIds } },
-            select: { id: true, name: true, slug: true },
-          })
-        : prisma.category.findMany({ select: { id: true, name: true, slug: true } }),
-    ]);
+        }),
+        // Facets: every option axis + value that exists in the category scope.
+        prisma.productVariant.findMany({
+          where: { product: facetScope },
+          select: { optionValues: true },
+          take: 5000,
+        }),
+        // Price bounds in scope — for the range slider.
+        prisma.productVariant.aggregate({
+          where: { product: facetScope },
+          _min: { pricePaise: true },
+          _max: { pricePaise: true },
+        }),
+        // Brand facet with counts.
+        prisma.product.groupBy({ by: ['brand'], where: facetScope, _count: { _all: true } }),
+        // Subcategory facet with counts.
+        prisma.product.groupBy({ by: ['categoryId'], where: facetScope, _count: { _all: true } }),
+        categoryIds
+          ? prisma.category.findMany({
+              where: { id: { in: categoryIds } },
+              select: { id: true, name: true, slug: true },
+            })
+          : prisma.category.findMany({ select: { id: true, name: true, slug: true } }),
+      ]);
 
     const categoryById = new Map(scopeCategories.map((c) => [c.id, c]));
 
@@ -154,6 +210,7 @@ productsRouter.get('/', async (req, res, next) => {
         pricePaise: minVariant.pricePaise,
         mrpPaise: p.mrpPaise ?? minVariant.mrpPaise,
         imageUrl: p.images[0]?.url ?? null,
+        // size/color are display caches of optionValues — "" when the axis is absent.
         sizes: [...new Set(p.variants.map((v) => v.size).filter(Boolean))],
         colors: [...new Set(p.variants.map((v) => v.color).filter(Boolean))],
         // Denormalised rating cache — synced on every review write.
@@ -163,14 +220,35 @@ productsRouter.get('/', async (req, res, next) => {
       };
     });
 
+    // Option facets: axis → distinct values across the scope.
+    const valuesByKey = new Map<string, Set<string>>();
+    for (const v of facetVariants) {
+      for (const [key, value] of Object.entries(optionValuesFromJson(v.optionValues))) {
+        const set = valuesByKey.get(key) ?? new Set<string>();
+        set.add(value);
+        valuesByKey.set(key, set);
+      }
+    }
+    const optionFacets = [...valuesByKey.entries()]
+      .sort(
+        (a, b) =>
+          facetRank(a[0], scopeRules) - facetRank(b[0], scopeRules) || a[0].localeCompare(b[0]),
+      )
+      .map(([key, set]) => ({
+        key,
+        label: scopeRules?.variantAxes.find((a) => a.key === key)?.label ?? axisLabel(key),
+        values: [...set].sort(compareOptionValues),
+      }));
+
     const body: ProductListResponse = {
       items,
       total,
       page: query.page,
       limit: query.limit,
       facets: {
-        sizes: [...new Set(facetVariants.map((v) => v.size))].sort(),
-        colors: [...new Set(facetVariants.map((v) => v.color))].sort(),
+        sizes: optionFacets.find((f) => f.key === 'size')?.values ?? [],
+        colors: optionFacets.find((f) => f.key === 'color')?.values ?? [],
+        options: optionFacets,
         brands: brandGroups
           .filter((g): g is typeof g & { brand: string } => Boolean(g.brand))
           .map((g) => ({ name: g.brand, count: g._count._all }))
@@ -205,7 +283,7 @@ productsRouter.get('/addons', async (req, res, next) => {
 
     const products = await prisma.product.findMany({
       where: {
-        status: 'APPROVED', isVisible: true, seller: { vacationMode: false },
+        ...LIVE,
         ...(exclude.length ? { id: { notIn: exclude } } : {}),
         variants: { some: { stock: { gt: 0 }, pricePaise: { lte: 200000 } } },
       },
@@ -242,6 +320,39 @@ productsRouter.get('/addons', async (req, res, next) => {
   }
 });
 
+// Products by id, in the order asked for. Powers the "Recently viewed" rail,
+// whose ids live in the visitor's own browser, so it works logged out too.
+// Declared before /:slug so "by-ids" isn't read as a product slug.
+productsRouter.get('/by-ids', async (req, res, next) => {
+  try {
+    const ids = [
+      ...new Set(
+        String(req.query.ids ?? '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      ),
+    ].slice(0, 24);
+    if (ids.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+    const products = await prisma.product.findMany({
+      where: { ...LIVE, id: { in: ids } },
+      include: productListItemInclude,
+    });
+    const byId = new Map(products.map((p) => [p.id, p]));
+    // Answer in the order asked for; ids that no longer resolve just drop out.
+    const items: ProductListItem[] = ids.flatMap((id) => {
+      const product = byId.get(id);
+      return product ? [toProductListItem(product)] : [];
+    });
+    res.json({ success: true, data: items });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Product detail by slug. optionalAuth so a logged-in view lands in the
 // shopper's "Recently viewed" list as well as the trending signal.
 productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
@@ -249,7 +360,7 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
     const product = await prisma.product.findUnique({
       where: { slug: req.params.slug },
       include: {
-        category: { select: { name: true, slug: true, parent: { select: { slug: true } } } },
+        category: { select: { name: true, slug: true } },
         seller: {
           select: {
             shopName: true,
@@ -258,10 +369,12 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
             status: true,
             slug: true,
             vacationMode: true,
+            returnWindowDays: true,
+            tryOnCredits: true,
           },
         },
         images: { orderBy: { sortOrder: 'asc' } },
-        variants: { orderBy: [{ color: 'asc' }, { size: 'asc' }] },
+        variants: true,
       },
     });
     // Hidden listings 404 like an unapproved one — the seller's own toggle.
@@ -288,6 +401,28 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
       ])
       .catch(() => {});
 
+    const resolved = await resolveCategory(product.categoryId);
+    const variants: ProductVariantInfo[] = product.variants.map((v) => ({
+      id: v.id,
+      size: v.size,
+      color: v.color,
+      optionValues: optionValuesFromJson(v.optionValues),
+      label: v.label,
+      sku: v.sku,
+      pricePaise: v.pricePaise,
+      mrpPaise: v.mrpPaise,
+      stock: v.stock,
+    }));
+    const variantAxes = axesOf(variants, resolved.rules.variantAxes);
+    // Order variants along the axes so size buttons read S, M, L rather than L, M, S.
+    variants.sort((a, b) => {
+      for (const axis of variantAxes) {
+        const diff = compareOptionValues(a.optionValues[axis.key] ?? '', b.optionValues[axis.key] ?? '');
+        if (diff !== 0) return diff;
+      }
+      return a.pricePaise - b.pricePaise;
+    });
+
     const body: ProductDetail = {
       id: product.id,
       slug: product.slug,
@@ -295,7 +430,19 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
       description: product.description,
       brand: product.brand,
       category: { name: product.category.name, slug: product.category.slug },
-      rootCategorySlug: product.category.parent?.slug ?? product.category.slug,
+      rootCategorySlug: resolved.rootSlug || product.category.slug,
+      variantAxes,
+      // Mirrors the guards on POST /api/tryon so the "Try On Me" button is
+      // only offered where a run would actually be accepted.
+      tryOnEligible:
+        resolved.rules.tryOnEligible &&
+        product.tryOnEnabled &&
+        !isSensitiveForTryOn(product.category.name, product.title) &&
+        !isListingBelowTryOnAge(product.variants.map((v) => v.size)) &&
+        product.seller.tryOnCredits > 0 &&
+        (product.tryOnLimit == null || product.tryOnUsed < product.tryOnLimit),
+      sizeGuide: resolved.rules.sizeGuide && variantAxes.some((a) => a.key === 'size'),
+      returnWindowDays: await returnWindowDaysFor(product.categoryId, product.seller.returnWindowDays),
       sellerShopName: product.seller.shopName,
       seller: {
         shopName: product.seller.shopName,
@@ -305,15 +452,7 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
         slug: product.seller.slug,
       },
       images: product.images.map((i) => ({ url: i.url, altText: i.altText })),
-      variants: product.variants.map((v) => ({
-        id: v.id,
-        size: v.size,
-        color: v.color,
-        sku: v.sku,
-        pricePaise: v.pricePaise,
-        mrpPaise: v.mrpPaise,
-        stock: v.stock,
-      })),
+      variants,
       ratingAvg: product.ratingCount > 0 ? product.ratingAvg : null,
       ratingCount: product.ratingCount,
       soldCount: product.soldCount,

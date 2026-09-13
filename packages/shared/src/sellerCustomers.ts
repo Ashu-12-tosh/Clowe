@@ -49,8 +49,6 @@ export const CUSTOMER_SORT_LABELS: Record<CustomerSort, string> = {
 export interface SellerCustomerRow {
   userId: string;
   name: string;
-  email: string | null;
-  phone: string;
   /** Most recent shipping city seen on their orders. */
   city: string | null;
   state: string | null;

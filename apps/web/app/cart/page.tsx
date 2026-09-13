@@ -9,7 +9,6 @@ import { BADGES_EVENT } from '@/components/Header';
 import CartSuggestions from '@/components/cart/CartSuggestions';
 import CouponPanel from '@/components/cart/CouponPanel';
 import {
-  BoltIcon,
   BoxIcon,
   ChevronIcon,
   HeadsetIcon,
@@ -26,14 +25,14 @@ const MAX_QTY = 10;
 
 const WHY_SHOP = [
   { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns within 7 days' },
+  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
   { Icon: HeadsetIcon, title: '24/7 Customer Support', text: 'We are here for you' },
 ];
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns within 7 days' },
+  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
   { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
@@ -305,7 +304,7 @@ export default function CartPage() {
                 const busy = busyLines.has(line.id);
                 const outOfStock = line.stock === 0;
                 const shortStock = !outOfStock && line.stock < line.quantity;
-                const tryOn = line.rootCategorySlug === 'fashion';
+                const tryOn = line.tryOnEligible;
                 return (
                   <li
                     key={line.id}
@@ -345,15 +344,11 @@ export default function CartPage() {
                         >
                           {line.title}
                         </Link>
-                        <p className="mt-1 text-xs text-gray-500">
-                          {line.size !== 'One Size' && (
-                            <>
-                              Size: <span className="font-medium text-gray-700">{line.size}</span>
-                              <span className="mx-1.5 text-gray-300">|</span>
-                            </>
-                          )}
-                          Color: <span className="font-medium text-gray-700">{line.color}</span>
-                        </p>
+                        {line.label && (
+                          <p className="mt-1 text-xs text-gray-500">
+                            <span className="font-medium text-gray-700">{line.label}</span>
+                          </p>
+                        )}
                         {tryOn && (
                           <span className="mt-1.5 inline-flex items-center gap-1 rounded border border-brand-100 bg-brand-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-700">
                             ✨ AI Try-On
@@ -623,13 +618,6 @@ export default function CartPage() {
                 >
                   <LockIcon className="h-4 w-4" />
                   Proceed to Checkout
-                </Link>
-                <Link
-                  href="/checkout?express=1"
-                  className="flex items-center justify-center gap-2 rounded-lg border-2 border-brand-600 py-3 text-sm font-bold text-brand-600 transition hover:bg-brand-50"
-                >
-                  <BoltIcon className="h-4 w-4" />
-                  Buy Now
                 </Link>
               </div>
             )}

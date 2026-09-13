@@ -109,7 +109,7 @@ function TrackPageInner() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{item.title}</p>
                     <p className="text-xs text-gray-500">
-                      {item.color} / {item.size} · qty {item.quantity}
+                      {item.variantLabel ? ` · ` : ''}qty {item.quantity}
                     </p>
                     {item.courierName && (
                       <p className="mt-0.5 text-xs text-gray-600">

@@ -91,6 +91,15 @@ function InvoiceView() {
                 <br />
                 Placed {new Date(invoice.placedAt).toLocaleDateString('en-IN')}
               </p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={invoice.qr.dataUrl}
+                alt="QR code - open this order in the seller panel"
+                className="ml-auto mt-2 h-20 w-20"
+              />
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+                Scan for order details
+              </p>
             </div>
           </header>
 
@@ -103,8 +112,6 @@ function InvoiceView() {
                 {invoice.billTo.line2 && <>, {invoice.billTo.line2}</>}
                 <br />
                 {invoice.billTo.city}, {invoice.billTo.state} — {invoice.billTo.pincode}
-                <br />
-                Phone: {invoice.billTo.phone}
               </p>
             </div>
             <div>
@@ -135,9 +142,9 @@ function InvoiceView() {
                 <tr key={i} className="border-b border-gray-100">
                   <td className="py-2">
                     {line.title}
-                    <span className="block text-[11px] text-gray-500">
-                      {line.color} / {line.size}
-                    </span>
+                    {line.variantLabel && (
+                      <span className="block text-[11px] text-gray-500">{line.variantLabel}</span>
+                    )}
                   </td>
                   <td className="py-2 text-right">{line.quantity}</td>
                   <td className="py-2 text-right">{money(line.unitPricePaise)}</td>

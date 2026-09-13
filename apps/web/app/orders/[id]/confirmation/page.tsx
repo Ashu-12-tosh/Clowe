@@ -30,7 +30,7 @@ const STEPS = [
 ] as const;
 
 const HAPPINESS = [
-  { Icon: ReturnIcon, title: '7 Days', text: 'Easy Returns' },
+  { Icon: ReturnIcon, title: 'Easy Returns', text: 'On eligible items' },
   { Icon: BoxIcon, title: '100% Original', text: 'Products' },
   { Icon: ShieldCheckIcon, title: 'Secure', text: 'Payments' },
   { Icon: HeadsetIcon, title: '24/7', text: 'Customer Support' },
@@ -38,16 +38,10 @@ const HAPPINESS = [
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns within 7 days' },
+  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
   { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
-];
-
-const PREMIUM_PERKS = [
-  { Icon: TruckIcon, title: 'Free & Fast Delivery' },
-  { Icon: CardIcon, title: 'Extra offers on all orders' },
-  { Icon: HeadsetIcon, title: 'Priority Customer Support' },
 ];
 
 function fmtDateTime(iso: string): string {
@@ -120,7 +114,7 @@ export default function OrderConfirmationPage({ params }: { params: { id: string
       <main className="mx-auto max-w-2xl px-4 py-20 text-center">
         <h1 className="t-page-title text-ink-900">Order not found</h1>
         <Link
-          href="/account/orders"
+          href="/orders"
           className="t-btn mt-6 inline-block rounded-lg bg-ink-900 px-8 py-3 text-white hover:bg-ink-800"
         >
           My Orders
@@ -145,7 +139,6 @@ export default function OrderConfirmationPage({ params }: { params: { id: string
   const cancelled = order.status === 'CANCELLED';
   const eta = etaLabel(order.etaFrom, order.etaTo);
   const orderedIds = order.items.map((i) => i.productSlug);
-  const savings = order.discountPaise;
   const itemCount = order.items.reduce((sum, i) => sum + i.quantity, 0);
   const paymentLabel =
     order.payment?.provider === 'mock' ? 'Mock gateway (dev)' : (order.payment?.provider ?? '—');
@@ -300,7 +293,7 @@ export default function OrderConfirmationPage({ params }: { params: { id: string
                 </p>
                 <p className="t-caption text-gray-600">
                   You can track your order anytime from{' '}
-                  <Link href="/account/orders" className="font-semibold text-brand-600 hover:underline">
+                  <Link href="/orders" className="font-semibold text-brand-600 hover:underline">
                     My Orders ›
                   </Link>
                 </p>
@@ -485,38 +478,6 @@ export default function OrderConfirmationPage({ params }: { params: { id: string
               </span>
               <span className="t-cart-subtotal text-ink-900">{formatPaise(order.totalPaise)}</span>
             </div>
-          </div>
-
-          {/* Premium */}
-          <div className="overflow-hidden rounded-2xl bg-ink-950 p-5 text-white">
-            <p className="t-sub-heading text-brand-400">♛ CLOWE Premium</p>
-            {savings > 0 && (
-              <p className="t-card-label mt-2">
-                You saved <span className="text-brand-400">{formatPaise(savings)}</span> on this
-                order!
-              </p>
-            )}
-            <p className="t-caption mt-1 text-gray-400">
-              {user?.isPremium
-                ? 'Your Premium benefits are already active.'
-                : 'Enjoy more benefits with CLOWE Premium.'}
-            </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              {PREMIUM_PERKS.map(({ Icon, title }) => (
-                <div key={title} className="flex items-start gap-2">
-                  <Icon className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />
-                  <p className="t-caption text-gray-300">{title}</p>
-                </div>
-              ))}
-            </div>
-            {!user?.isPremium && (
-              <Link
-                href="/pages/help"
-                className="t-btn mt-4 block rounded-lg bg-brand-600 py-2.5 text-center text-white transition hover:bg-brand-700"
-              >
-                Explore Premium ›
-              </Link>
-            )}
           </div>
 
           {/* Happiness */}

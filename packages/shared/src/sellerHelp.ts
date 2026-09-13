@@ -55,7 +55,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
 
 You can Save as Draft at any point — a draft stays private and does not need admin approval, so you can finish it later. Publishing runs full validation: a title of at least 3 characters, a description of at least 20 characters, at least one image and at least one variant.
 
-Every size × colour combination is its own variant with its own price, MRP, SKU and stock. Leave the SKU blank and Clowe generates one. New and edited listings go to the admin for approval before they appear on the storefront.`,
+Every option combination (colour × size, storage × RAM…) is its own variant with its own price, MRP, SKU and stock. Leave the SKU blank and Clowe generates one. New and edited listings go to the admin for approval before they appear on the storefront.`,
   },
   {
     id: 'listing-visibility',
@@ -77,7 +77,7 @@ Every size × colour combination is its own variant with its own price, MRP, SKU
     title: 'Updating stock and low-stock alerts',
     summary: 'Inline edits, bulk updates and what "reserved" means.',
     tags: ['stock', 'inventory', 'low stock', 'reserved', 'bulk'],
-    body: `Stock lives on the variant, so Inventory lists one row per size/colour. Edit a number inline and press Enter, or tick several rows and use Set to / Add / Remove for a bulk change. A relative adjustment never takes a variant below zero.
+    body: `Stock lives on the variant, so Inventory lists one row per variant. Edit a number inline and press Enter, or tick several rows and use Set to / Add / Remove for a bulk change. A relative adjustment never takes a variant below zero.
 
 Low stock alert is per product — a variant at or below that number is flagged as Low stock. Reserved means units on paid orders you have not shipped yet: they are still counted in stock but already spoken for.`,
   },
@@ -197,7 +197,7 @@ Ad spend is not charged upfront: it is recovered from your next payout. If a pay
     tags: ['try-on', 'ai', 'virtual', 'eligibility'],
     body: `AI Try-On lets shoppers see your item on their own photo. It shows on a product when the platform's minimum-price rule is met and you have left Enable AI Try-On ticked on the listing (step 7 of the wizard).
 
-It suits apparel, footwear and eyewear. Untick it for anything where a virtual try-on would look wrong. Try-On runs cost you nothing — the marketplace pays the provider.`,
+It is available in wearable categories such as apparel, footwear and eyewear. Untick it for anything where a virtual try-on would look wrong. Try-On runs cost you nothing — the marketplace pays the provider.`,
   },
   {
     id: 'kyc',

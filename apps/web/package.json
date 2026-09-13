@@ -4,9 +4,9 @@
   "private": true,
   "description": "Clowe web storefront — Next.js App Router + Tailwind CSS",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbo -p 4300",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 4300",
     "lint": "next lint"
   },
   "dependencies": {

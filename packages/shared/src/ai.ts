@@ -27,7 +27,7 @@ export const aiDescriptionSchema = z.object({
   title: z.string().trim().min(3).max(120),
   brand: z.string().trim().max(40).optional(),
   categoryName: z.string().trim().max(60).optional(),
-  /** Free-form basics: fabric, fit, occasion… */
+  /** Free-form basics: key specs, material, what is in the box… */
   keywords: z.string().trim().max(200).optional(),
 });
 export type AiDescriptionInput = z.infer<typeof aiDescriptionSchema>;

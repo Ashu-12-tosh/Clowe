@@ -117,8 +117,7 @@ export default function InvoicePage({ params }: { params: { id: string } }) {
                 <td className="t-table-cell py-2.5 text-ink-900">
                   {item.title}
                   <span className="t-caption block text-gray-500">
-                    {item.size !== 'One Size' ? `${item.size} · ` : ''}
-                    {item.color} · sold by {item.shopName}
+                    {item.variantLabel ? ` · ` : ''}sold by {item.shopName}
                   </span>
                 </td>
                 <td className="t-table-cell py-2.5 text-gray-600">{item.quantity}</td>

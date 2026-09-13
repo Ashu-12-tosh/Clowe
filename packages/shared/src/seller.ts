@@ -1,4 +1,6 @@
+import { imageUrlSchema } from './imageUrl';
 import { z } from 'zod';
+import { optionValuesSchema } from './variants';
 
 // ---------------------------------------------------------------------------
 // Seller registration (KYC-lite)
@@ -52,8 +54,11 @@ export interface SellerProfileInfo {
 export const sellerVariantInputSchema = z.object({
   /** Present when editing an existing variant; absent for new ones. */
   id: z.string().optional(),
-  size: z.string().trim().min(1).max(12),
-  color: z.string().trim().min(1).max(30),
+  /** Option combination, e.g. { size: "L", color: "Black" } or { ram: "16GB" }. Empty = single SKU. */
+  optionValues: optionValuesSchema.default({}),
+  /** Legacy clients only - folded into optionValues when that is empty. */
+  size: z.string().trim().max(60).optional(),
+  color: z.string().trim().max(60).optional(),
   pricePaise: z.number().int().min(100, 'Price must be at least ₹1'),
   mrpPaise: z.number().int().min(100).nullable().optional(),
   stock: z.number().int().min(0),
@@ -77,7 +82,7 @@ export const SHIPPING_TEMPLATE_LABELS: Record<ShippingTemplateValue, string> = {
   HEAVY: 'Heavy / bulky (5–8 days)',
 };
 
-/** GST slabs a seller may pick; null means "use the apparel slab rule". */
+/** GST slabs a seller may pick; null means "use the category default". */
 export const TAX_RATES = [0, 5, 12, 18, 28] as const;
 
 /** One row of the spec sheet. */
@@ -86,23 +91,6 @@ export const productAttributeSchema = z.object({
   value: z.string().trim().min(1).max(120),
 });
 export type ProductAttribute = z.infer<typeof productAttributeSchema>;
-
-/**
- * Attribute names to offer per top-level category, so a seller starts from a
- * sensible spec sheet instead of a blank box. Keyed by root category slug;
- * ATTRIBUTE_SUGGESTIONS.default applies when nothing matches.
- */
-export const ATTRIBUTE_SUGGESTIONS: Record<string, string[]> = {
-  default: ['Material', 'Colour family', 'Country of origin', 'Warranty'],
-  electronics: ['Power output', 'Connector type', 'Compatible devices', 'Warranty', 'In the box'],
-  fashion: ['Fabric', 'Fit', 'Pattern', 'Sleeve length', 'Occasion', 'Wash care'],
-  men: ['Fabric', 'Fit', 'Pattern', 'Sleeve length', 'Occasion', 'Wash care'],
-  women: ['Fabric', 'Fit', 'Pattern', 'Sleeve length', 'Occasion', 'Wash care'],
-  kids: ['Fabric', 'Fit', 'Age group', 'Wash care'],
-  footwear: ['Upper material', 'Sole material', 'Closure', 'Occasion'],
-  beauty: ['Skin type', 'Formulation', 'Net quantity', 'Shelf life'],
-  home: ['Material', 'Dimensions', 'Care instructions', 'Set contents'],
-};
 
 /** Draft = private work in progress; Pending = submitted for admin review. */
 export const PRODUCT_SAVE_MODES = ['DRAFT', 'SUBMIT'] as const;
@@ -116,8 +104,10 @@ export const sellerProductUpsertSchema = z
     brandId: z.string().optional(),
     shortDescription: z.string().trim().max(200).optional(),
     description: z.string().trim().max(5000),
-    imageUrls: z.array(z.string().url()).max(8),
+    imageUrls: z.array(imageUrlSchema).max(8),
     videoUrl: z.string().trim().url().max(300).optional().or(z.literal('')),
+    /** Packing-process clip - required to submit for review; auto-removed after 10 days. */
+    packingVideoUrl: z.string().trim().url().max(300).optional().or(z.literal('')),
     attributes: z.array(productAttributeSchema).max(20).optional(),
     highlights: z.array(z.string().trim().min(3).max(120)).max(8).optional(),
     variants: z.array(sellerVariantInputSchema).max(60),
@@ -177,6 +167,8 @@ export interface SellerProductDetail {
   rejectionReason: string | null;
   imageUrls: string[];
   videoUrl: string | null;
+  /** Packing video (null once the 10-day retention lapses). */
+  packingVideoUrl: string | null;
   attributes: ProductAttribute[];
   highlights: string[];
   taxRatePercent: number | null;
@@ -194,6 +186,9 @@ export interface SellerProductDetail {
   allowBackorders: boolean;
   variants: {
     id: string;
+    /** Option combination; size/color are display caches of it. */
+    optionValues: Record<string, string>;
+    label: string;
     size: string;
     color: string;
     sku: string;
@@ -216,6 +211,7 @@ export interface SellerReturnRow {
   orderItemId: string;
   orderNumber: string;
   title: string;
+  variantLabel: string;
   size: string;
   color: string;
   quantity: number;

@@ -385,7 +385,7 @@ export default function SellerReturnsPage() {
 
           {/* --- Table --------------------------------------------------- */}
           <div className="overflow-x-auto rounded-b-2xl border border-gray-100 bg-white">
-            <table className="w-full min-w-[940px] text-xs">
+            <table className="w-full min-w-[720px] text-xs">
               <thead>
                 <tr className="text-left uppercase tracking-wide text-gray-500">
                   <th className="px-3 py-2.5">
@@ -445,7 +445,6 @@ export default function SellerReturnsPage() {
                     </td>
                     <td className="px-3 py-2.5">
                       <p className="font-medium text-ink-900">{row.customerName}</p>
-                      <p className="text-[11px] text-gray-400">+91 {row.customerPhone}</p>
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2">
@@ -462,7 +461,7 @@ export default function SellerReturnsPage() {
                         <div className="min-w-0">
                           <p className="max-w-40 truncate text-ink-900">{row.title}</p>
                           <p className="text-[11px] text-gray-400">
-                            {row.color} / {row.size} · ×{row.quantity}
+                            {row.variantLabel ? ` · ` : ''}×{row.quantity}
                           </p>
                         </div>
                       </div>

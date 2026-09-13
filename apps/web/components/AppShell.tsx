@@ -9,7 +9,6 @@ import Header from './Header';
 import Footer from './Footer';
 
 const ACCOUNT_LINKS = [
-  { label: 'My Orders', href: '/account/orders', icon: '📦' },
   { label: 'Wishlist', href: '/wishlist', icon: '♡' },
   { label: 'Cart', href: '/cart', icon: '🛍' },
   { label: 'My Account', href: '/account', icon: '👤' },
@@ -123,7 +122,7 @@ function MobileDrawer({ onNavigate }: { onNavigate: () => void }) {
 }
 
 /**
- * App-wide chrome: top utility bar + header + category nav, content, footer.
+ * App-wide chrome: header + category nav, content, footer.
  * Mobile gets a slide-in drawer with the category tree. Pure layout.
  */
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -133,9 +132,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Close the mobile drawer on navigation.
   useEffect(() => setDrawerOpen(false), [pathname]);
 
-  // Standalone areas render their own chrome: the login page, and the
-  // admin/seller dashboards (which have dedicated shells — no shopping nav).
-  if (pathname === '/login' || pathname.startsWith('/admin') || pathname.startsWith('/seller')) {
+  // Standalone areas render their own chrome: the login page, the admin/seller
+  // dashboards (dedicated shells) and the notifications feed (deliberately bare).
+  if (
+    pathname === '/login' ||
+    pathname.startsWith('/notifications') ||
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/seller')
+  ) {
     return <>{children}</>;
   }
 
