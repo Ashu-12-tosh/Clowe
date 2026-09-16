@@ -11,5 +11,8 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Tests sit next to the code they cover but are not part of the published
+  // package — Vitest compiles them itself.
+  "exclude": ["src/**/*.test.ts"]
 }
