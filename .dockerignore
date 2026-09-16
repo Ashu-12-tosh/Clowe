@@ -1,0 +1,53 @@
+# Build context exclusions. Both images build from the repo root
+# (docker-compose.prod.yml sets `context: .` for api and web), so this one
+# file at the root covers both — there is no per-app context to scope.
+#
+# The reason this file exists: apps/api/Dockerfile does `COPY apps/api apps/api`
+# and apps/web/Dockerfile does `COPY apps/web apps/web`. Without these rules
+# that pulls apps/api/.env — the FASHN key, the JWT secret and the database
+# password — into the builder layer. The final image is a clean second stage
+# and never showed them, but `docker history` and any registry holding the
+# builder cache did.
+#
+# Patterns are matched against the whole path from the context root, so a bare
+# `node_modules` would only match the one at the root. Hence `**/`.
+
+# --- secrets: the reason this file exists -----------------------------------
+**/.env
+**/.env.*
+
+# --- dependencies and build output: reinstalled and rebuilt inside the image -
+**/node_modules
+**/dist
+**/.next
+**/out
+**/*.tsbuildinfo
+
+# --- version control --------------------------------------------------------
+.git
+.gitignore
+.gitattributes
+
+# --- logs, test output, editor and OS noise ---------------------------------
+**/*.log
+**/coverage
+**/.nyc_output
+**/.DS_Store
+**/Thumbs.db
+.vscode
+.idea
+
+# --- local runtime state: dev file storage, never part of a build -----------
+# apps/api/uploads is a named volume in production; anything here is local.
+uploads
+apps/api/uploads
+**/tmp
+backups
+
+# --- host-only tooling ------------------------------------------------------
+# Compose and nginx configure the stack from outside; copying them in would
+# only invalidate layer cache when they change.
+docker-compose*.yml
+Dockerfile*
+nginx
+*.md
