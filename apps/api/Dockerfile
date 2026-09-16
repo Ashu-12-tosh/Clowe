@@ -3,6 +3,15 @@
 FROM node:20-alpine AS build
 WORKDIR /repo
 
+# Prisma chooses its engine binaries by detecting the OpenSSL version, and it
+# does that twice: once here when npm ci runs its postinstall, and again in the
+# runtime stage when the CLI starts. Alpine 3.23 ships OpenSSL 3 but not the
+# `openssl` package, so the detection finds nothing, warns, and falls back to
+# the OpenSSL 1.1 engines — which need libssl.so.1.1, a library Alpine dropped
+# in 3.17 and publishes no compat package for. The container then dies at boot
+# on `prisma migrate deploy` with a schema engine that cannot load.
+RUN apk add --no-cache openssl
+
 # Install all workspace deps (cached while package files are unchanged)
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
@@ -23,6 +32,9 @@ RUN npm prune --omit=dev
 FROM node:20-alpine
 WORKDIR /repo
 ENV NODE_ENV=production
+
+# Same detection runs again here, for the schema engine that migrate deploy uses.
+RUN apk add --no-cache openssl
 
 COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/packages/shared/dist ./packages/shared/dist
