@@ -55,7 +55,15 @@ export const searchIntentSchema = z.object({
 export interface SearchIntent {
   q: string;
   category: string | null; // category slug
-  maxPrice: number | null; // rupees
+  /**
+   * Upper price bound in PAISE, matching how prices are stored everywhere else.
+   *
+   * The model is still asked for rupees — asking it to multiply by 100 gets
+   * silently wrong answers that look plausible — and the conversion happens
+   * once, in the handler, right where the reply is parsed. The unit is in the
+   * name so no caller has to remember which side of that boundary it is on.
+   */
+  maxPricePaise: number | null;
   colors: string[];
 }
 

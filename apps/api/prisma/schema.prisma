@@ -760,6 +760,11 @@ model Product {
   metaTitle       String?
   metaDescription String?
   tags            String[]      @default([])
+  /// Weighted tsvector kept up to date by the database itself (see the
+  /// product_search_fts migration). Declared here only so Prisma stops
+  /// treating it as drift — without this line every future `migrate dev`
+  /// generates a DROP for it and silently removes full-text search.
+  searchVector    Unsupported("tsvector")?
   // Seller's own switch — hides an approved listing without archiving it.
   isVisible       Boolean       @default(true)
   // Seller opt-in for AI Try-On; only honoured in try-on eligible categories.

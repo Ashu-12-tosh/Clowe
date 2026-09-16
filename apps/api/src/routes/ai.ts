@@ -145,9 +145,10 @@ aiRouter.post('/search-intent', async (req, res, next) => {
         typeof parsed?.category === 'string' && validSlugs.has(parsed.category)
           ? parsed.category
           : null,
-      maxPrice:
+      // The prompt asks for rupees; this is the one place it becomes paise.
+      maxPricePaise:
         typeof parsed?.maxPrice === 'number' && parsed.maxPrice > 0
-          ? Math.round(parsed.maxPrice)
+          ? Math.round(parsed.maxPrice) * 100
           : null,
       colors: Array.isArray(parsed?.colors) ? (parsed.colors as string[]).slice(0, 4) : [],
     };

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ParsedSearchQuery } from './searchQuery';
 import type { CategoryRules } from './categoryRules';
 import type { VariantAxis } from './variants';
 
@@ -142,7 +143,65 @@ export interface ProductListResponse {
     categories: (FacetCount & { slug: string })[];
     /** Price bounds (paise) across the scope — drives the range slider. */
     priceRange: { minPaise: number; maxPaise: number } | null;
+    /** Rating buckets ("4★ & up") with counts. Only built for search requests. */
+    ratings?: RatingFacet[];
+    /** Price buckets for the "under ₹X" shortcuts. Only built for search requests. */
+    priceBuckets?: PriceBucketFacet[];
   };
+  /** Present only when `q` was given — how the query was understood and matched. */
+  search?: SearchMeta;
+}
+
+/** "4★ & up" and how many products clear it. */
+export interface RatingFacet {
+  /** Inclusive lower bound, 1-5. */
+  minRating: number;
+  count: number;
+}
+
+/** A price shortcut such as "Under ₹15,000". Bounds are paise. */
+export interface PriceBucketFacet {
+  label: string;
+  minPaise: number | null;
+  maxPaise: number | null;
+  count: number;
+}
+
+/** A filter the search dropped to avoid returning nothing. */
+export const searchRelaxableValues = ['minPrice', 'maxPrice', 'brands', 'onSale', 'keywords'] as const;
+export type SearchRelaxable = (typeof searchRelaxableValues)[number];
+
+export interface SearchRelaxation {
+  /** Dropped in the order listed, least important first. */
+  dropped: SearchRelaxable[];
+  /** Ready to show: "No exact matches — showing phones under ₹18,000 instead." */
+  message: string;
+}
+
+/**
+ * How a search request was understood and answered.
+ *
+ * Exists so the UI never has to guess: it can render the parsed filters as
+ * removable chips, say why a result from another category appeared, and admit
+ * when it had to loosen the query rather than quietly showing something else.
+ */
+export interface SearchMeta {
+  /** Raw string as typed. */
+  raw: string;
+  /** What the parser pulled out — drives the filter chips. */
+  parsed: ParsedSearchQuery;
+  /** How the rows were found. 'trigram' means the text was matched fuzzily. */
+  strategy: 'fts' | 'trigram' | 'filters-only' | 'none';
+  /** Set when filters had to be loosened; null when the query matched as asked. */
+  relaxed: SearchRelaxation | null;
+  /**
+   * How many returned products sit outside the category the parser guessed.
+   *
+   * The guess only ranks, never filters, so results from elsewhere are
+   * expected and correct — this is what lets the UI explain one instead of
+   * looking broken.
+   */
+  outsideInferredCategory: number;
 }
 
 export interface FacetCount {

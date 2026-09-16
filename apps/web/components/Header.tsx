@@ -92,7 +92,11 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           const params = new URLSearchParams();
           if (intent.q) params.set('q', intent.q);
           if (intent.category) params.set('category', intent.category);
-          if (intent.maxPrice) params.set('maxPrice', String(intent.maxPrice));
+          // The listing endpoint takes maxPrice in rupees on the wire; the
+          // intent carries paise. Divide here, at the one boundary that needs it.
+          if (intent.maxPricePaise) {
+            params.set('maxPrice', String(Math.round(intent.maxPricePaise / 100)));
+          }
           if (intent.colors.length) params.set('colors', intent.colors.join(','));
           router.push(`/products?${params.toString()}`);
         })

@@ -24,6 +24,7 @@ import {
 import { optionalAuth } from '../middleware/auth';
 import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
 import { isListingBelowTryOnAge } from '../services/tryon/ageGate';
+import { searchFacets, searchProducts } from '../services/productSearch';
 import {
   categoryRulesFor,
   descendantIds,
@@ -113,16 +114,55 @@ productsRouter.get('/', async (req, res, next) => {
       ...(categoryIds ? { categoryId: { in: categoryIds } } : {}),
       ...(brands?.length ? { brand: { in: brands } } : {}),
       ...(Object.keys(variantFilter).length ? { variants: { some: variantFilter } } : {}),
-      ...(query.q
-        ? {
-            OR: [
-              { title: { contains: query.q, mode: 'insensitive' } },
-              { brand: { contains: query.q, mode: 'insensitive' } },
-              { description: { contains: query.q, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
     };
+
+    // A search request takes a different path: the words are parsed into
+    // filters and the rows are ranked by relevance. Browsing without `q` is
+    // untouched and still runs the query built above.
+    if (query.q) {
+      const search = await searchProducts({
+        raw: query.q,
+        baseWhere: where,
+        sort: query.sort,
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      });
+
+      const found = await prisma.product.findMany({
+        where: { id: { in: search.ids } },
+        include: {
+          category: { select: { name: true } },
+          images: { orderBy: { sortOrder: 'asc' }, take: 1 },
+          variants: {
+            select: { id: true, size: true, color: true, pricePaise: true, mrpPaise: true, stock: true },
+          },
+        },
+      });
+      // findMany loses the ranking, so put the rows back in the ranked order.
+      const byId = new Map(found.map((p) => [p.id, p]));
+      const rankedItems = search.ids.flatMap((id) => {
+        const product = byId.get(id);
+        return product ? [toProductListItem(product)] : [];
+      });
+
+      const extraFacets = await searchFacets(where);
+      const searchBody: ProductListResponse = {
+        items: rankedItems,
+        total: search.total,
+        page: query.page,
+        limit: query.limit,
+        facets: {
+          sizes: [],
+          colors: [],
+          options: [],
+          priceRange: null,
+          ...extraFacets,
+        },
+        search: search.meta,
+      };
+      res.json({ success: true, data: searchBody });
+      return;
+    }
 
     const ORDER_BY: Record<typeof query.sort, Prisma.ProductOrderByWithRelationInput> = {
       popularity: { soldCount: 'desc' },
