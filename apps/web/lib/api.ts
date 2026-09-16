@@ -120,7 +120,17 @@ export class ApiRequestError extends Error {
   }
 }
 
-async function rawRequest(path: string, options: { method?: string; body?: unknown; auth?: boolean }) {
+/** Options every request accepts. `signal` lets a caller cancel a stale one. */
+export interface ApiOptions {
+  method?: string;
+  body?: unknown;
+  auth?: boolean;
+  /** Abort an in-flight request — type-ahead uses this so an older reply
+      cannot land after a newer one and repaint with stale results. */
+  signal?: AbortSignal;
+}
+
+async function rawRequest(path: string, options: ApiOptions) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (options.auth) {
     const token = localStorage.getItem(ACCESS_KEY);
@@ -131,14 +141,12 @@ async function rawRequest(path: string, options: { method?: string; body?: unkno
     credentials: 'include',
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
+    signal: options.signal,
   });
   return { res, json: await res.json() };
 }
 
-export async function api<T>(
-  path: string,
-  options: { method?: string; body?: unknown; auth?: boolean } = {},
-): Promise<T> {
+export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
   let { res, json } = await rawRequest(path, options);
 
   // Access token expired? Silently rotate via the refresh cookie and retry

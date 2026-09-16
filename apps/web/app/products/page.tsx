@@ -3,10 +3,14 @@
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { CategoryNode, ProductListResponse, ProductSort } from '@clowe/shared';
+import type { CategoryNode, ProductListResponse, ProductSort, SearchDroppable } from '@clowe/shared';
 import { api } from '@/lib/api';
 import { fetchWishlistIds } from '@/lib/wishlist';
 import ProductCard from '@/components/ProductCard';
+import SearchSummary from '@/components/search/SearchSummary';
+
+/** Every chip 'Clear all' removes. Kept local: it is a UI affordance, not a contract. */
+const ALL_DROPPABLE: SearchDroppable[] = ['minPrice','maxPrice','brands','onSale','category','sort'];
 import { trackAdClick, useSponsoredAds } from '@/components/SponsoredAds';
 import PriceRangeSlider from '@/components/PriceRangeSlider';
 import { colorToHex } from '@/lib/colors';
@@ -62,6 +66,9 @@ function ProductsPageInner() {
   const minPrice = searchParams.get('minPrice') ?? '';
   const maxPrice = searchParams.get('maxPrice') ?? '';
   const sort = (searchParams.get('sort') ?? 'newest') as ProductSort;
+  const dropped = (searchParams.get('drop') ?? '')
+    .split(',')
+    .filter(Boolean) as SearchDroppable[];
   const page = Number(searchParams.get('page') ?? '1');
 
   // Sponsored products render inline at the top of category listings —
@@ -327,10 +334,74 @@ function ProductsPageInner() {
             </div>
           )}
 
+          {data?.search && (
+            <SearchSummary
+              meta={data.search}
+              dropped={dropped}
+              categoryName={
+                data.search.parsed.filters.inferredCategorySlug
+                  ? (categories.find(
+                      (c) => c.slug === data.search!.parsed.filters.inferredCategorySlug,
+                    )?.name ?? null)
+                  : null
+              }
+              onDrop={(key) =>
+                setParams({ drop: [...new Set([...dropped, key])].join(',') })
+              }
+              onClearAll={() =>
+                setParams({ drop: [...new Set([...dropped, ...ALL_DROPPABLE])].join(',') })
+              }
+            />
+          )}
+
           {data && data.items.length === 0 && (
-            <p className="mt-10 text-center text-sm text-gray-500">
-              No products match these filters.
-            </p>
+            <div className="mt-10 text-center">
+              <p className="text-sm font-semibold text-ink-900">
+                {q ? `Nothing matches "${q}".` : 'No products match these filters.'}
+              </p>
+              <p className="mt-1 text-sm text-gray-500">
+                {q
+                  ? 'Try fewer words, check the spelling, or drop a filter.'
+                  : 'Try removing a filter to widen the search.'}
+              </p>
+              <div className="mt-4 flex flex-wrap justify-center gap-2">
+                {/* A dead end is the one thing a zero-result page must not be. */}
+                {dropped.length < ALL_DROPPABLE.length && data.search && (
+                  <button
+                    onClick={() =>
+                      setParams({ drop: [...new Set([...dropped, ...ALL_DROPPABLE])].join(',') })
+                    }
+                    className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-ink-900 hover:border-brand-600"
+                  >
+                    Search without the filters
+                  </button>
+                )}
+                <button
+                  onClick={() => router.push('/products')}
+                  className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-ink-900 hover:border-brand-600"
+                >
+                  Browse everything
+                </button>
+              </div>
+              {categories.length > 0 && (
+                <div className="mt-6">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    Or jump to a department
+                  </p>
+                  <div className="mt-2 flex flex-wrap justify-center gap-2">
+                    {categories.slice(0, 6).map((c) => (
+                      <button
+                        key={c.slug}
+                        onClick={() => router.push(`/products?category=${c.slug}`)}
+                        className="rounded-full border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:border-brand-600 hover:text-brand-700"
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {data && (data.items.length > 0 || sponsoredAds.length > 0) && (

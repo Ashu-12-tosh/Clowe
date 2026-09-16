@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import type { AuthUser, MyCounts, SearchIntent } from '@clowe/shared';
 import { api, getStoredUser, logoutSession } from '@/lib/api';
 import CategoryNav from './CategoryNav';
+import SearchBar from './search/SearchBar';
 
 // Web Speech API (prefixed in Chrome/Safari).
 interface SpeechRecognitionLike {
@@ -156,66 +157,16 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             <span className="t-tagline mt-0.5 hidden text-brand-600 sm:block">Shop Your Style</span>
           </Link>
 
-          {/* Search — plain box: icon, input, clear, Search. Voice search sits
-              beside it as its own AI button rather than crowding the bar. */}
+          {/* Search. The combobox owns its own dropdown, keyboard handling and
+              request cancellation; voice search feeds it a transcript through
+              the same input so spoken and typed queries are parsed alike. */}
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <form
-              className="min-w-0 flex-1"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const query = q.trim();
-                router.push(query ? `/products?q=${encodeURIComponent(query)}` : '/products');
-              }}
-            >
-              <div className="mx-auto flex w-full max-w-2xl overflow-hidden rounded-xl border border-gray-200 bg-white focus-within:border-brand-600">
-                <div className="relative min-w-0 flex-1">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-gray-400">
-                    ⌕
-                  </span>
-                  <input
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                    placeholder={
-                      listening ? '🎙 Listening… speak now' : 'Search for products, brands and more...'
-                    }
-                    aria-label="Search"
-                    className="t-search w-full bg-transparent py-2.5 pl-9 pr-8 outline-none"
-                  />
-                  {q && (
-                    <button
-                      type="button"
-                      onClick={() => setQ('')}
-                      aria-label="Clear search"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-base leading-none text-gray-400 transition hover:text-ink-900"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-                <button
-                  type="submit"
-                  className="t-btn shrink-0 bg-ink-900 px-5 text-white transition hover:bg-ink-800"
-                >
-                  Search
-                </button>
-              </div>
-            </form>
-
-            {speechSupported && (
-              <button
-                type="button"
-                onClick={startVoiceSearch}
-                disabled={listening}
-                title="Search by voice (AI)"
-                className={`hidden shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-bold transition lg:flex ${
-                  listening
-                    ? 'animate-pulse border-red-300 text-red-500'
-                    : 'border-brand-200 text-brand-700 hover:border-brand-600 hover:bg-brand-50'
-                }`}
-              >
-                🎙 AI Search
-              </button>
-            )}
+            <SearchBar
+              initialQuery={q}
+              onVoiceSearch={startVoiceSearch}
+              voiceActive={listening}
+              voiceSupported={speechSupported}
+            />
           </div>
 
           {/* Actions — two states: guest vs logged in */}

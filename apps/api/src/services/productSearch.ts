@@ -5,6 +5,7 @@ import {
   type ParsedSearchQuery,
   type SearchCatalog,
   type SearchMeta,
+  type SearchDroppable,
   type SearchRelaxable,
   type SearchRelaxation,
 } from '@clowe/shared';
@@ -191,6 +192,8 @@ export function buildTsQuery(keywords: string): string {
 
 export interface ProductSearchInput {
   raw: string;
+  /** Parsed filters the shopper dismissed by removing their chip. */
+  drop?: SearchDroppable[];
   /** Category the shopper picked. Filters. Undefined when they picked none. */
   explicitCategoryIds?: string[];
   /** Extra constraints the caller already built (option axes, explicit price). */
@@ -266,7 +269,25 @@ function buildFilterWhere(
  */
 export async function searchProducts(input: ProductSearchInput): Promise<ProductSearchResult> {
   const catalog = await searchCatalog();
-  const parsed = parseSearchQuery(input.raw, catalog);
+  const parsedFull = parseSearchQuery(input.raw, catalog);
+
+  // Dismissed chips are removed after parsing rather than by editing `q`.
+  // The query text stays intact, so a category the words imply stays an
+  // inference — dropping the price chip cannot quietly promote it to a filter.
+  const drop = new Set(input.drop ?? []);
+  const parsed: ParsedSearchQuery = {
+    ...parsedFull,
+    sort: drop.has('sort') ? null : parsedFull.sort,
+    filters: {
+      ...parsedFull.filters,
+      ...(drop.has('minPrice') ? { minPricePaise: undefined } : {}),
+      ...(drop.has('maxPrice') ? { maxPricePaise: undefined } : {}),
+      ...(drop.has('brands') ? { brands: [] } : {}),
+      ...(drop.has('onSale') ? { onSale: undefined } : {}),
+      ...(drop.has('category') ? { inferredCategorySlug: undefined } : {}),
+    },
+  };
+
   const tsQuery = buildTsQuery(parsed.cleanedKeywords);
 
   // The guessed category, resolved to the ids it covers — for ranking only.

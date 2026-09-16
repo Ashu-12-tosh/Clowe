@@ -25,6 +25,7 @@ import { optionalAuth } from '../middleware/auth';
 import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
 import { isListingBelowTryOnAge } from '../services/tryon/ageGate';
 import { searchFacets, searchProducts } from '../services/productSearch';
+import { searchDroppableValues, type SearchDroppable } from '@clowe/shared';
 import {
   categoryRulesFor,
   descendantIds,
@@ -122,6 +123,12 @@ productsRouter.get('/', async (req, res, next) => {
     if (query.q) {
       const search = await searchProducts({
         raw: query.q,
+        drop: (query.drop ?? '')
+          .split(',')
+          .map((key) => key.trim())
+          .filter((key): key is SearchDroppable =>
+            (searchDroppableValues as readonly string[]).includes(key),
+          ),
         baseWhere: where,
         sort: query.sort,
         skip: (query.page - 1) * query.limit,

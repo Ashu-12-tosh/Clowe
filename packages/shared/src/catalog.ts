@@ -38,6 +38,17 @@ export const productListQuerySchema = z.object({
   minPrice: z.coerce.number().int().min(0).optional(), // rupees
   maxPrice: z.coerce.number().int().min(0).optional(), // rupees
   sort: z.enum(productSortValues).default('newest'),
+  /**
+   * Filters parsed out of `q` that the shopper has dismissed, comma separated.
+   *
+   * Removing a chip must not turn the rest of the query into explicit filters.
+   * The parser infers a category from words like "phone", and that inference
+   * is only ever allowed to rank — this catalog files smartphones under two
+   * parents, so promoting the guess to a filter would hide half of them. So
+   * `q` is sent back unchanged and the dismissed keys are named here, letting
+   * the server re-parse and then drop exactly what was dismissed.
+   */
+  drop: z.string().trim().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(48).default(12),
 });
@@ -169,6 +180,17 @@ export interface PriceBucketFacet {
 
 /** A filter the search dropped to avoid returning nothing. */
 export const searchRelaxableValues = ['minPrice', 'maxPrice', 'brands', 'onSale', 'keywords'] as const;
+
+/** Parsed filters a shopper can dismiss from the results page. */
+export const searchDroppableValues = [
+  'minPrice',
+  'maxPrice',
+  'brands',
+  'onSale',
+  'category',
+  'sort',
+] as const;
+export type SearchDroppable = (typeof searchDroppableValues)[number];
 export type SearchRelaxable = (typeof searchRelaxableValues)[number];
 
 export interface SearchRelaxation {
