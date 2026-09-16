@@ -16,13 +16,17 @@ const apiProxyTarget = process.env.API_PROXY_TARGET ?? 'http://localhost:4000';
  *   NEXT_PUBLIC_API_URL  — every browser request goes to it. A localhost value
  *     means the site loads and then nothing works, for everyone.
  *
- * Guarding on "unset" alone is not enough: Next deletes empty-string env vars
- * and then fills them from .env, which is present in the build context. So a
- * `docker build` with the build args omitted would inherit the developer's
- * localhost values and produce an image that looks fine. The check therefore
- * rejects localhost too, and runs only when the Dockerfile marks the build as
- * one that produces a deployable image (CLOWE_DEPLOY_BUILD=1). A plain local
- * `npm run build` is untouched and keeps working off the localhost fallback.
+ * The check covers both ways the value can be wrong. Unset is the Docker case:
+ * the root .dockerignore keeps .env out of the build context, so an omitted
+ * build arg arrives as nothing at all. Localhost is the case where a value is
+ * supplied but points at the build machine — SITE_URL left at localhost in
+ * .env.production, or a deploy build run on a developer's box, where .env is
+ * read straight off disk. Either one produces an image that looks fine and is
+ * not.
+ *
+ * It runs only when the Dockerfile marks the build as one that produces a
+ * deployable image (CLOWE_DEPLOY_BUILD=1). A plain local `npm run build` is
+ * untouched and keeps working off the localhost fallback.
  */
 function assertDeployableUrl(name) {
   const value = (process.env[name] ?? '').trim();

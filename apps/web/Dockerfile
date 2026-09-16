@@ -9,10 +9,11 @@
 # to rebuild. NEXT_PUBLIC_SITE_URL ends up in sitemap.xml, robots.txt and the OG
 # tags; NEXT_PUBLIC_API_URL is the host every browser request goes to.
 #
-# Omitting them does not leave them blank: Next drops empty env vars and falls
-# back to the .env in the build context, so the image would silently ship with
-# the builder's localhost URLs. CLOWE_DEPLOY_BUILD below turns that into a build
-# failure (see the guard in next.config.mjs).
+# Omitting them does not leave them blank, and nothing fills them in: the root
+# .dockerignore keeps every .env out of the build context, so Next has no file
+# to fall back to and the vars are simply unset. CLOWE_DEPLOY_BUILD below makes
+# the build fail on that (see the guard in next.config.mjs), which also rejects
+# a localhost value if one is passed in explicitly.
 FROM node:20-alpine AS build
 WORKDIR /repo
 
