@@ -46,3 +46,15 @@ export const aiLimiter = rateLimit({
   limit: 120,
   message: limitError('AI request limit reached. Please try again later.'),
 });
+
+/**
+ * Search suggestions. Fires per keystroke, so the ceiling is high — it exists
+ * to stop a scraper walking the catalog, not to police normal typing. The
+ * client debounces at ~200ms, which keeps a fast typist well inside this.
+ */
+export const suggestLimiter = rateLimit({
+  ...common,
+  windowMs: 60 * 1000,
+  limit: 120,
+  message: limitError('Too many search requests — please slow down.'),
+});

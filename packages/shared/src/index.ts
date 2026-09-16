@@ -22,6 +22,7 @@ export interface ApiResponse<T> {
 export * from './auth';
 export * from './imageUrl';
 export * from './catalog';
+export * from './search';
 export * from './searchQuery';
 export * from './seller';
 export * from './sellerCatalog';

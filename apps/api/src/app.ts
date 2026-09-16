@@ -8,6 +8,7 @@ import { prisma } from './db';
 import { authRouter } from './routes/auth';
 import { categoriesRouter } from './routes/categories';
 import { productsRouter } from './routes/products';
+import { searchRouter } from './routes/search';
 import { wishlistRouter } from './routes/wishlist';
 import { sellerRouter } from './routes/seller';
 import { adminRouter } from './routes/admin';
@@ -112,6 +113,7 @@ export function createApp() {
   app.use('/api/categories', categoriesRouter);
   app.use('/api/stores', storesRouter);
   app.use('/api/products', productsRouter);
+  app.use('/api/search', searchRouter);
   app.use('/api/delivery', deliveryRouter);
   app.use('/api/wishlist', wishlistRouter);
   // Mounted before /api/seller so the order-management routes win.

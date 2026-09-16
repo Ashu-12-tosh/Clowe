@@ -11,5 +11,8 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Tests and their fixtures live beside the code but are not shipped —
+  // Vitest compiles them itself, and the production image has no test deps.
+  "exclude": ["src/**/*.test.ts", "src/test"]
 }

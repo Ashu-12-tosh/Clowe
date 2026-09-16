@@ -14,6 +14,7 @@
     "build": "npm run build --workspace=@clowe/shared && npm run build --workspace=@clowe/api && npm run build --workspace=@clowe/web",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
     "db:generate": "npm run db:generate --workspace=@clowe/api",
@@ -22,7 +23,9 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,css}\""
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
     "npm-run-all": "^4.1.5",
+    "pg": "^8.23.0",
     "prettier": "^3.3.3",
     "vitest": "^5.0.0"
   },
