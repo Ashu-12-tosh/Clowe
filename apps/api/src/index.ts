@@ -2,6 +2,7 @@ import { env } from './env';
 import { createApp } from './app';
 import { startPackingVideoCleanup } from './services/packingVideoCleanup';
 import { logTryOnProviderStatus } from './services/tryon';
+import { startSearchLogCleanup } from './services/searchAnalytics';
 
 const app = createApp();
 
@@ -14,3 +15,6 @@ app.listen(env.PORT, () => {
 
 // Packing videos expire after 10 days - swept at boot and hourly after that.
 startPackingVideoCleanup();
+
+// Logged searches expire too - swept at boot and daily after that.
+startSearchLogCleanup();

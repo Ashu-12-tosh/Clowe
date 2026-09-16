@@ -16,6 +16,7 @@ const NAV: DashNavItem[] = [
   { href: '/admin/deals', label: 'Deals', icon: '⚡' },
   { href: '/admin/newsletter', label: 'Newsletter', icon: '✉' },
   { href: '/admin/tryon', label: 'AI Try-On Monitor', icon: '✦' },
+  { href: '/admin/search', label: 'Search', icon: '⌕' },
   { href: '/admin/users', label: 'Users', icon: '👥' },
   { href: '/admin/orders', label: 'Orders', icon: '📦' },
   { href: '/admin/payments', label: 'Payments', icon: '💳' },

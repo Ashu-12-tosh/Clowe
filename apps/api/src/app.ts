@@ -34,6 +34,7 @@ import { adminContentRouter } from './routes/adminContent';
 import { adminTryonRouter } from './routes/adminTryon';
 import { adminSellersRouter } from './routes/adminSellers';
 import { adminAuditRouter } from './routes/adminAudit';
+import { adminSearchRouter } from './routes/adminSearch';
 import { adminSupportDeskRouter } from './routes/adminSupportDesk';
 import { adminOverviewRouter } from './routes/adminOverview';
 import { adminInventoryRouter } from './routes/adminInventory';
@@ -135,6 +136,7 @@ export function createApp() {
   app.use('/api/admin/tryon', adminTryonRouter);
   app.use('/api/admin/sellers', adminSellersRouter);
   app.use('/api/admin/audit', adminAuditRouter);
+  app.use('/api/admin/search', adminSearchRouter);
   app.use('/api/admin/support-desk', adminSupportDeskRouter);
   app.use('/api/admin/overview', adminOverviewRouter);
   app.use('/api/admin/inventory', adminInventoryRouter);

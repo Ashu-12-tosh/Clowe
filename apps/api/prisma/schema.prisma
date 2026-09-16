@@ -1764,3 +1764,42 @@ model TryOnCreditLedger {
   @@index([sellerId, createdAt])
   @@map("tryon_credit_ledger")
 }
+
+/// One results-page search, kept only in aggregate.
+///
+/// Deliberately holds nothing that identifies a person: no user id, no IP, no
+/// session, no user agent. Which individual searched for what is a liability;
+/// what the catalog fails to answer is the asset. Rows expire on a schedule
+/// (see searchQueryCleanup) so the table cannot grow without bound.
+///
+/// Suggest-endpoint keystrokes are never logged — that fires per character and
+/// would fill this with prefixes of real queries.
+model SearchQuery {
+  id String @id @default(cuid())
+
+  /// Exactly what was typed, trimmed. The one field that could in principle
+  /// carry something personal, and the only one the feature cannot work
+  /// without: improving the synonym map means reading the actual words.
+  query String
+  /// Lowercased, whitespace-collapsed — what identical searches group on.
+  normalized String
+
+  /// What the parser made of it: price bounds in paise, brands, inferred
+  /// category, sort. Stored so a zero-result row can be diagnosed without
+  /// re-running the parser, which may have changed since.
+  parsedFilters Json?
+
+  /// How many products came back. 0 is the interesting case.
+  resultCount Int
+  /// fts | trigram | filters-only | none — which path answered.
+  strategy String
+  /// Whether a filter had to be dropped to return anything.
+  relaxed Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([normalized])
+  @@index([resultCount, createdAt])
+  @@index([createdAt])
+  @@map("search_queries")
+}

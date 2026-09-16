@@ -25,6 +25,7 @@ import { optionalAuth } from '../middleware/auth';
 import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
 import { isListingBelowTryOnAge } from '../services/tryon/ageGate';
 import { searchFacets, searchProducts } from '../services/productSearch';
+import { logSearch } from '../services/searchAnalytics';
 import { searchDroppableValues, type SearchDroppable } from '@clowe/shared';
 import {
   categoryRulesFor,
@@ -168,6 +169,9 @@ productsRouter.get('/', async (req, res, next) => {
         search: search.meta,
       };
       res.json({ success: true, data: searchBody });
+      // After the response. Not awaited, cannot throw — a lost data point must
+      // never cost a shopper a search.
+      logSearch(query.q, search.meta, search.total);
       return;
     }
 
