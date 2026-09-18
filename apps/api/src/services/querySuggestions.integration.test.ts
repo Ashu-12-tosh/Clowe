@@ -104,13 +104,24 @@ describe('every suggested phrase leads somewhere', () => {
 });
 
 describe('phrases that would only look meaningful are rejected', () => {
-  it('an exact category name, which reorders the whole catalog and filters nothing', async () => {
-    // The results page reads "smartphones" as a category guess that ranks and
-    // never filters, and returns everything. Non-empty, and meaningless.
-    expect(await verifyPhrase('smartphones', liveCount)).toEqual({ ok: false, reason: 'no-narrowing' });
-    for (const name of ['smartphones', 'mobiles', 'electronics', 'books']) {
-      expect(phraseOf(name)).toBeUndefined();
-    }
+  it('a phrase that narrows nothing — an intent word on its own', async () => {
+    // Sorts the whole catalog and filters none of it. Non-empty, and meaningless.
+    expect(await verifyPhrase('best', liveCount)).toEqual({ ok: false, reason: 'no-narrowing' });
+  });
+
+  it('a category name narrows now, so it is judged like any other word', async () => {
+    // "smartphones" used to return the whole catalog. It narrows to both
+    // Smartphones trees now, and its products are titled that way, so it is
+    // offered.
+    expect((await verifyPhrase('smartphones', liveCount)).ok).toBe(true);
+    expect(phraseOf('smartphones')).toBeDefined();
+    expect(phraseOf('mobiles')).toBeDefined();
+    // These narrow too, but nothing in them is titled with the name, so the
+    // title check keeps them out.
+    expect(phraseOf('electronics')).toBeUndefined();
+    expect(phraseOf('books')).toBeUndefined();
+    // And an empty category is empty.
+    expect(await verifyPhrase('bedding', liveCount)).toEqual({ ok: false, reason: 'empty' });
   });
 
   it('a bound nothing sits under', async () => {

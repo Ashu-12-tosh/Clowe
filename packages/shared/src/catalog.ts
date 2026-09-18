@@ -212,8 +212,12 @@ export interface SearchMeta {
   raw: string;
   /** What the parser pulled out — drives the filter chips. */
   parsed: ParsedSearchQuery;
-  /** How the rows were found. 'trigram' means the text was matched fuzzily. */
-  strategy: 'fts' | 'trigram' | 'filters-only' | 'none';
+  /**
+   * How the rows were found. 'trigram' means the text was matched fuzzily.
+   * 'category' means the query was a category name and nothing else to search
+   * for, so it was matched as that category and as words, either one enough.
+   */
+  strategy: 'fts' | 'trigram' | 'category' | 'filters-only' | 'none';
   /** Set when filters had to be loosened; null when the query matched as asked. */
   relaxed: SearchRelaxation | null;
   /**

@@ -85,7 +85,7 @@ export type RejectReason =
   | 'relaxed'
   /** Only came back through typo tolerance: the words as written match nothing. */
   | 'typo'
-  /** Came back with the whole catalog reordered — the phrase filtered nothing. */
+  /** Came back with the whole catalog reordered — nothing in the phrase narrowed it. */
   | 'no-narrowing'
   /**
    * Results that are mostly not the thing named: outside the category the word
@@ -163,13 +163,14 @@ export async function verifyPhrase(phrase: string, liveCount: number): Promise<V
   if (meta.relaxed) return { ok: false, reason: 'relaxed' };
   if (meta.strategy === 'trigram') return { ok: false, reason: 'typo' };
 
-  // An exact category name parses into a guess that ranks and never filters,
-  // leaving no words to search — so "smartphones" "returns" all 245 products.
-  // Non-empty, and still meaningless.
+  // Words, a category name standing in for them, or a hard filter has to have
+  // narrowed the set. A query of nothing but an intent word, for instance,
+  // returns the whole catalog reordered — non-empty, and meaningless.
   const f = meta.parsed.filters;
+  const narrowedByTopic = meta.strategy === 'fts' || meta.strategy === 'category';
   const narrowedByFilter =
     f.brands.length > 0 || f.minPricePaise != null || f.maxPricePaise != null || Boolean(f.onSale);
-  if ((meta.strategy !== 'fts' && !narrowedByFilter) || result.total >= liveCount) {
+  if ((!narrowedByTopic && !narrowedByFilter) || result.total >= liveCount) {
     return { ok: false, reason: 'no-narrowing' };
   }
 
@@ -434,7 +435,11 @@ async function build(version: number): Promise<QuerySuggestionSnapshot> {
 
   const groups = await prisma.searchQuery.groupBy({
     by: ['normalized'],
-    where: { resultCount: { gt: 0 }, relaxed: false, strategy: { in: ['fts', 'filters-only'] } },
+    where: {
+      resultCount: { gt: 0 },
+      relaxed: false,
+      strategy: { in: ['fts', 'category', 'filters-only'] },
+    },
     _count: { _all: true },
   });
   for (const group of groups) {

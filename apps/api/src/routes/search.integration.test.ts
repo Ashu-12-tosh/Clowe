@@ -532,3 +532,117 @@ describe('a sort picked from the dropdown beats the one in the words', () => {
     expect(body.search?.sortSource).toBe('chosen');
   });
 });
+
+// ---------------------------------------------------------------------------
+
+/**
+ * A category name that is the whole topic of a query.
+ *
+ * Parsing turns an exact category name into a guess that only ranks. With no
+ * words left to search, ranking alone narrowed nothing: "bedding" returned the
+ * entire catalog. The name is now matched two ways — as every category of that
+ * name, and as words through the synonym map — and either is enough. The guess
+ * of which category was meant still only ranks.
+ */
+describe('a category name that is the whole query narrows to it', () => {
+  const PHONES = [
+    FIXTURE.phoneCheapInMobiles,
+    FIXTURE.phoneWordedPlainly,
+    FIXTURE.phoneExpensive,
+    FIXTURE.phoneCheapInElectronics,
+    FIXTURE.phoneTopRatedInElectronics,
+  ];
+  const IN_MOBILES = [FIXTURE.phoneCheapInMobiles, FIXTURE.phoneWordedPlainly, FIXTURE.phoneExpensive];
+  const IN_ELECTRONICS = [FIXTURE.phoneCheapInElectronics, FIXTURE.phoneTopRatedInElectronics];
+  const q = (text: string) => `q=${encodeURIComponent(text)}&limit=48`;
+
+  it('returns that category, not the catalog', async () => {
+    const body = await search(q('smartphones'));
+    expect(body.search?.strategy).toBe('category');
+    // Both categories named Smartphones, and nothing else.
+    expect(slugs(body).sort()).toEqual([...PHONES].sort());
+  });
+
+  it('returns nothing for an empty category, instead of everything', async () => {
+    const body = await search(q('bedding'));
+    expect(body.total).toBe(0);
+  });
+
+  it('"mobiles" returns every phone across both trees', async () => {
+    // The case that ruled out filtering on the category alone: Mobiles holds
+    // only some of the phones, and the rest are filed under Electronics. Read
+    // as words too, "mobiles" is a word for phones, and finds them all.
+    const body = await search(q('mobiles'));
+    for (const phone of PHONES) expect(slugs(body)).toContain(phone);
+    expect(slugs(body)).not.toContain(FIXTURE.hiddenDraft);
+    expect(slugs(body)).not.toContain(FIXTURE.hiddenInvisible);
+  });
+
+  it('ranks what matched both ways above what matched one way', async () => {
+    const order = slugs(await search(q('mobiles')));
+    const lastBothWays = Math.max(...IN_MOBILES.map((s) => order.indexOf(s)));
+    const firstOneWay = Math.min(...IN_ELECTRONICS.map((s) => order.indexOf(s)));
+    expect(lastBothWays).toBeLessThan(firstOneWay);
+  });
+
+  it('ranks a product that only mentions the name in its description below the category', async () => {
+    // Everything filed under Books, then the belt whose description says "book
+    // bag". The words half is where noise comes from; it has to stay below.
+    const order = slugs(await search(q('books')));
+    expect(order).toContain(FIXTURE.book);
+    expect(order[order.length - 1]).toBe(FIXTURE.partialIntentWord);
+  });
+
+  it('counts the other tree as outside "Mobiles", and both Smartphones as inside', async () => {
+    expect((await search(q('mobiles'))).search?.outsideInferredCategory).toBe(IN_ELECTRONICS.length);
+    expect((await search(q('smartphones'))).search?.outsideInferredCategory).toBe(0);
+  });
+
+  it('"smartphones under 15k" narrows instead of returning everything under ₹15k', async () => {
+    const body = await search(q('smartphones under 15k'));
+    expect(slugs(body).sort()).toEqual(
+      [FIXTURE.phoneCheapInMobiles, FIXTURE.phoneWordedPlainly, FIXTURE.phoneCheapInElectronics].sort(),
+    );
+    // All under ₹15k, and none of them a smartphone.
+    for (const other of [FIXTURE.book, FIXTURE.partialIntentWord, FIXTURE.headphoneNotAPhone]) {
+      expect(slugs(body)).not.toContain(other);
+    }
+  });
+
+  it('"zephyr smartphones" does not return Zephyr jackets', async () => {
+    const body = await search(q('zephyr smartphones'));
+    expect(slugs(body).sort()).toEqual([FIXTURE.phoneCheapInMobiles, FIXTURE.phoneExpensive].sort());
+    expect(slugs(body)).not.toContain(FIXTURE.ratedNone); // the jacket
+    expect(slugs(body)).not.toContain(FIXTURE.ratedGoodHighCount); // the shirt
+  });
+
+  it('price relaxation drops the price, never the category', async () => {
+    // The ₹600 book is the only thing under ₹1,000. Loosening the category
+    // would have returned it; loosening the price returns smartphones.
+    const body = await search(q('smartphones under 1k'));
+    expect(body.search?.relaxed?.dropped).toEqual(['maxPrice']);
+    expect(slugs(body)).not.toContain(FIXTURE.book);
+    expect(slugs(body).sort()).toEqual([...PHONES].sort());
+  });
+
+  it('an applied sort still leads', async () => {
+    // Top rated is filed under Electronics, so for "mobiles" it matched one way
+    // only (its title) and relevance would put it after the Mobiles phones.
+    const body = await search(q('best mobiles'));
+    expect(slugs(body)[0]).toBe(FIXTURE.phoneTopRatedInElectronics);
+    expect(body.search?.appliedSort).toBe('rating');
+  });
+
+  it('"phone" still goes down the keyword path, unchanged', async () => {
+    // Not a category name: parsing leaves the keyword "smartphone", so the
+    // guessed category only ranks, exactly as before.
+    const body = await search(q('phone'));
+    expect(body.search?.strategy).toBe('fts');
+    expect(body.search?.parsed.cleanedKeywords).toBe('smartphone');
+    expect(body.search?.parsed.filters.inferredCategorySlug).toBe('mobiles');
+    expect(slugs(body).sort()).toEqual([...PHONES].sort());
+    expect(body.search?.outsideInferredCategory).toBe(IN_ELECTRONICS.length);
+    // Relevance: the guessed tree first.
+    expect(IN_MOBILES).toContain(slugs(body)[0]);
+  });
+});

@@ -41,7 +41,11 @@ export default function SearchSummary({
   // the chip goes with it: "Top rated" beside a dropdown reading "Cheapest
   // first" would be the same contradiction this exists to remove.
   const skip: SearchDroppable[] = meta.sortSource === 'chosen' ? [...dropped, 'sort'] : dropped;
-  const chips = describeParsedQuery(meta.parsed, { categoryName, skip });
+  const chips = describeParsedQuery(meta.parsed, {
+    categoryName,
+    skip,
+    categoryIsTopic: meta.strategy === 'category',
+  });
 
   const hasNotice = meta.relaxed !== null || meta.outsideInferredCategory > 0;
   if (chips.length === 0 && !hasNotice) return null;

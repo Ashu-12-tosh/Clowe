@@ -176,6 +176,10 @@ const PRODUCTS: ProductSpec[] = [
     title: 'Nexo Leather Belt',
     brand: 'Nexo',
     categorySlug: 'electronics',
+    // Mentions "book" only in passing. For a search of the Books category that
+    // makes it a words-only, description-only match — the noise that has to
+    // rank below every product actually filed under Books.
+    description: 'Full-grain leather. Rolls up small enough for a book bag.',
     pricePaise: 150_000,
     ratingAvg: 4.2,
     ratingCount: 60,
@@ -228,6 +232,9 @@ const CATEGORIES = [
   { slug: 'books', name: 'Books', parent: null },
   { slug: 'electronics-smartphones', name: 'Smartphones', parent: 'electronics' },
   { slug: 'mobiles-smartphones', name: 'Smartphones', parent: 'mobiles' },
+  // Empty on purpose, like Bedding in the live catalog. Searching its name has
+  // to return nothing — before, it returned every product with a guess on top.
+  { slug: 'bedding', name: 'Bedding', parent: null },
 ];
 
 /** Brands the parser can match. Deliberately no "Samsung" — typo tests rely on that. */

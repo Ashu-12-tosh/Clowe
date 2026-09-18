@@ -552,7 +552,15 @@ function formatPaiseLabel(paise: number): string {
  */
 export function describeParsedQuery(
   parsed: ParsedSearchQuery,
-  options: { categoryName?: string | null; skip?: readonly SearchDroppable[] } = {},
+  options: {
+    categoryName?: string | null;
+    skip?: readonly SearchDroppable[];
+    /**
+     * The category name was the whole query, so it narrowed the results
+     * rather than only ranking them (SearchMeta strategy 'category').
+     */
+    categoryIsTopic?: boolean;
+  } = {},
 ): SearchChip[] {
   const skip = new Set(options.skip ?? []);
   const { filters, sort } = parsed;
@@ -562,7 +570,9 @@ export function describeParsedQuery(
     chips.push({
       key: 'category',
       label: options.categoryName ?? filters.inferredCategorySlug,
-      hint: 'ranked first, not filtered',
+      hint: options.categoryIsTopic
+        ? 'searched as a category and as words'
+        : 'ranked first, not filtered',
     });
   }
   if (filters.maxPricePaise != null && !skip.has('maxPrice')) {

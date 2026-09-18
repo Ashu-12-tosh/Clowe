@@ -329,12 +329,22 @@ export async function searchProducts(input: ProductSearchInput): Promise<Product
     if (match) inferredIds = await descendantIds(match.id);
   }
 
+  // A category name with nothing else to search for is the topic of the
+  // query, and narrows it. See resolveCategoryTopic.
+  const topic =
+    !parsed.cleanedKeywords && parsed.filters.inferredCategorySlug
+      ? await resolveCategoryTopic(parsed.filters.inferredCategorySlug)
+      : null;
+
   const dropped: SearchRelaxable[] = [];
   let rows: { id: string; outside: boolean }[] = [];
   let total = 0;
-  let strategy: SearchMeta['strategy'] = tsQuery ? 'fts' : 'filters-only';
+  let strategy: SearchMeta['strategy'] = topic ? 'category' : tsQuery ? 'fts' : 'filters-only';
 
-  // Try the query as asked, then loosen one filter at a time.
+  // Try the query as asked, then loosen one filter at a time. The topic is
+  // never loosened — not the keywords, and not a category name standing in
+  // for them — or "smartphones under 1k" would fall back to the whole
+  // catalog instead of to smartphones at any price.
   for (let step = 0; step <= RELAXATION_ORDER.length; step++) {
     const filterWhere = buildFilterWhere(parsed, dropped);
     const where: Prisma.ProductWhereInput = { ...input.baseWhere, ...filterWhere };
@@ -344,7 +354,9 @@ export async function searchProducts(input: ProductSearchInput): Promise<Product
     const candidateIds = candidates.map((c) => c.id);
 
     if (candidateIds.length > 0) {
-      const ranked = useKeywords
+      const ranked = topic
+        ? await rankCategoryTopic(candidateIds, topic, appliedSort, input, catalog)
+        : useKeywords
         ? await rankByText(
             candidateIds,
             tsQuery,
@@ -357,13 +369,16 @@ export async function searchProducts(input: ProductSearchInput): Promise<Product
         : await rankWithoutText(candidateIds, inferredIds, appliedSort, input, catalog);
 
       if (ranked.matched.length > 0) {
-        strategy = useKeywords ? ranked.strategy : 'filters-only';
+        strategy = ranked.strategy;
         total = ranked.matched.length;
-        const inferredCategorySet = new Set(inferredIds);
+        // "Outside" is measured against what the query was about: the guessed
+        // category when there were words, every category of the typed name
+        // when the name was the topic — so both Smartphones trees count as in.
+        const home = topic ? topic.categoryIds : inferredIds;
+        const homeSet = new Set(home);
         rows = ranked.matched.slice(input.skip, input.skip + input.take).map((id) => ({
           id,
-          outside:
-            inferredIds.length > 0 && !inferredCategorySet.has(ranked.categoryOf.get(id) ?? ''),
+          outside: home.length > 0 && !homeSet.has(ranked.categoryOf.get(id) ?? ''),
         }));
         break;
       }
@@ -397,6 +412,113 @@ export async function searchProducts(input: ProductSearchInput): Promise<Product
       outsideInferredCategory: rows.filter((r) => r.outside).length,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// A category name as the whole topic of a query
+// ---------------------------------------------------------------------------
+
+interface CategoryTopic {
+  /** The name as the catalog spells it, for the words half. */
+  name: string;
+  /** Every category bearing that name, and everything under each of them. */
+  categoryIds: string[];
+  /** The name as a keyword query, through the synonym map; '' if nothing survives. */
+  tsQuery: string;
+}
+
+/**
+ * What a category name covers when it is all that is left of a query.
+ *
+ * Parsing turns an exact category name into a guess that only ranks. That is
+ * right when there are words to search — "phone" still finds phones in both
+ * smartphone trees and just ranks the guessed one first. With nothing else to
+ * search, though, ranking alone narrowed nothing: "bedding" returned all 245
+ * products with a T-shirt on top.
+ *
+ * So the name is read generously, two ways at once, and a product qualifies by
+ * either:
+ *
+ *   As a category: every category with that name, not only the one the parser
+ *   picked, and everything under them. This catalog has two "Smartphones";
+ *   filtering on the guessed one would hide the other tree's 8 phones.
+ *
+ *   As words: the name through the synonym map, like any keyword. "mobiles" is
+ *   a category holding 6 of the 14 phones and also a word for phones. Read only
+ *   as a category it hides the other 8 — which is what ruled out filtering on
+ *   the category alone.
+ *
+ * The filter applies to what the shopper typed. The parser's guess of which
+ * category they meant still only ranks. Price, brand and intent can sit beside
+ * the name ("smartphones under 15k", "zephyr smartphones") and still leave it
+ * the topic: without this, those returned everything under 15k, and every
+ * Zephyr jacket.
+ */
+async function resolveCategoryTopic(slug: string): Promise<CategoryTopic | null> {
+  const guessed = await prisma.category.findUnique({ where: { slug }, select: { name: true } });
+  if (!guessed) return null;
+  const sameName = await prisma.category.findMany({
+    where: { name: { equals: guessed.name, mode: 'insensitive' }, isActive: true },
+    select: { id: true },
+  });
+  const { descendantIds } = await import('./categoryRules');
+  const ids = new Set<string>();
+  for (const category of sameName) {
+    for (const id of await descendantIds(category.id)) ids.add(id);
+  }
+  return { name: guessed.name, categoryIds: [...ids], tsQuery: buildTsQuery(guessed.name) };
+}
+
+/**
+ * Ordering for a category-name query, in four tiers, then by how well the words
+ * matched. An applied sort still leads, as everywhere else.
+ *
+ *   3  in the category, and the name matches its text — a laptop under Laptops.
+ *   2  outside the category, but the name is in its title — a phone filed
+ *      under Electronics for "mobiles", a headset under Gaming for "headphones".
+ *   1  in the category, name nowhere in its text — "Aeris Halo Over-Ear" under
+ *      Headphones.
+ *   0  outside the category, name only in a description or tag.
+ *
+ * Tier 0 is where word-search noise lives: the care label that made "washing
+ * machine" match a T-shirt. Keeping it under every category member is the
+ * point. Tier 2 sits above tier 1 because a title naming the thing is stronger
+ * than bare membership — otherwise "mobiles" would list the Mobiles tree's
+ * tablets and cases above the eight phones filed in the other tree.
+ */
+async function rankCategoryTopic(
+  candidateIds: string[],
+  topic: CategoryTopic,
+  applied: ProductSort | null,
+  input: ProductSearchInput,
+  catalog: CachedCatalog,
+): Promise<Ranked> {
+  const inCategory = Prisma.sql`p."categoryId" = ANY(${topic.categoryIds}::text[])`;
+  const query = Prisma.sql`to_tsquery('english', ${topic.tsQuery})`;
+  const inWords = topic.tsQuery ? Prisma.sql`p."searchVector" @@ ${query}` : Prisma.sql`FALSE`;
+  const inTitle = topic.tsQuery
+    ? Prisma.sql`to_tsvector('english', p.title) @@ ${query}`
+    : Prisma.sql`FALSE`;
+  const tier = Prisma.sql`CASE
+    WHEN ${inCategory} AND ${inWords} THEN 3
+    WHEN ${inTitle} THEN 2
+    WHEN ${inCategory} THEN 1
+    ELSE 0
+  END`;
+
+  // No rank term when the name has no searchable words: a bare 0 in ORDER BY
+  // is read by Postgres as a column position, and fails.
+  const relevance = [Prisma.sql`${tier} DESC`];
+  if (topic.tsQuery) relevance.push(Prisma.sql`ts_rank(p."searchVector", ${query}) DESC`);
+
+  const rows = await prisma.$queryRaw<{ id: string; categoryId: string }[]>`
+    SELECT p.id, p."categoryId"
+    FROM products p
+    WHERE p.id = ANY(${candidateIds}::text[])
+      AND (${inCategory} OR ${inWords})
+    ORDER BY ${orderSql(relevance, applied, input, catalog)}
+  `;
+  return { matched: rows.map((r) => r.id), categoryOf: mapCategories(rows), strategy: 'category' };
 }
 
 /** Bayesian rating expression, shared by both ranking paths. */
