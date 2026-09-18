@@ -235,7 +235,7 @@ function describeRelaxation(dropped: SearchRelaxable[], parsed: ParsedSearchQuer
  * `dropped` names the filters to leave out; everything else is applied. The
  * inferred category is never in here — it only ever reaches the ranking.
  */
-function buildFilterWhere(
+export function buildFilterWhere(
   parsed: ParsedSearchQuery,
   dropped: SearchRelaxable[],
 ): Prisma.ProductWhereInput {

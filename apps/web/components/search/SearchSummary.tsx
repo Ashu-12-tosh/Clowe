@@ -17,23 +17,7 @@
  * second category tree — the bug this design exists to prevent.
  */
 
-import type { SearchDroppable, SearchMeta } from '@clowe/shared';
-import { formatPaise } from '@/lib/format';
-
-interface Chip {
-  key: SearchDroppable;
-  label: string;
-  /** Inferred chips carry a hint that they widen rather than narrow. */
-  hint?: string;
-}
-
-const SORT_LABELS: Record<string, string> = {
-  rating: 'Top rated',
-  popularity: 'Popular',
-  price_asc: 'Cheapest first',
-  price_desc: 'Most expensive first',
-  newest: 'Newest',
-};
+import { describeParsedQuery, type SearchDroppable, type SearchMeta } from '@clowe/shared';
 
 export default function SearchSummary({
   meta,
@@ -50,31 +34,9 @@ export default function SearchSummary({
   onDrop: (key: SearchDroppable) => void;
   onClearAll: () => void;
 }) {
-  const { filters, sort } = meta.parsed;
-  const chips: Chip[] = [];
-
-  if (filters.inferredCategorySlug && !dropped.includes('category')) {
-    chips.push({
-      key: 'category',
-      label: categoryName ?? filters.inferredCategorySlug,
-      hint: 'ranked first, not filtered',
-    });
-  }
-  if (filters.maxPricePaise != null && !dropped.includes('maxPrice')) {
-    chips.push({ key: 'maxPrice', label: `Under ${formatPaise(filters.maxPricePaise)}` });
-  }
-  if (filters.minPricePaise != null && !dropped.includes('minPrice')) {
-    chips.push({ key: 'minPrice', label: `Over ${formatPaise(filters.minPricePaise)}` });
-  }
-  if (filters.brands.length > 0 && !dropped.includes('brands')) {
-    chips.push({ key: 'brands', label: filters.brands.join(', ') });
-  }
-  if (filters.onSale && !dropped.includes('onSale')) {
-    chips.push({ key: 'onSale', label: 'On sale' });
-  }
-  if (sort && !dropped.includes('sort')) {
-    chips.push({ key: 'sort', label: SORT_LABELS[sort] ?? sort });
-  }
+  // Built in @clowe/shared so this page and the search dropdown cannot word
+  // the same filter two different ways.
+  const chips = describeParsedQuery(meta.parsed, { categoryName, skip: dropped });
 
   const hasNotice = meta.relaxed !== null || meta.outsideInferredCategory > 0;
   if (chips.length === 0 && !hasNotice) return null;

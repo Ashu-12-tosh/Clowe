@@ -1,6 +1,7 @@
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient } from '@prisma/client';
+import { describeParsedQuery } from '@clowe/shared';
 import type { ProductListResponse, SuggestResponse } from '@clowe/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
@@ -288,5 +289,174 @@ describe('suggestions', () => {
   it('echoes the query so a stale response can be discarded', async () => {
     const data = await suggest('zep');
     expect(data.q).toBe('zep');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+const chipLabels = (data: SuggestResponse) => (data.understood?.chips ?? []).map((c) => c.label);
+const titles = (data: SuggestResponse) => data.products.map((p) => p.title);
+const suggestedSlugs = (data: SuggestResponse) => data.products.map((p) => p.slug);
+
+/**
+ * The type-ahead runs the parser too, but sees the phrase one character at a
+ * time. Two failure modes sit on either side of that, and both have happened:
+ * not parsing at all, which made "best phone" return nothing here while the
+ * page behind it returned phones; and parsing too eagerly, which would strip
+ * the "best" out of someone three letters into typing it.
+ *
+ * These eight cases are the states a shopper passes through typing "best
+ * phone", in order.
+ */
+describe('typing towards an intent word', () => {
+  it('"b" is a letter, not a filter', async () => {
+    const data = await suggest('b');
+    expect(data.understood).toBeNull();
+    expect(data.categories.map((c) => c.name)).toContain('Books');
+  });
+
+  it('"be" still matches text', async () => {
+    const data = await suggest('be');
+    expect(data.understood).toBeNull();
+    expect(suggestedSlugs(data)).toContain(FIXTURE.partialIntentWord);
+  });
+
+  it('"bes" is still letters, and says so by finding nothing', async () => {
+    const data = await suggest('bes');
+    // Nothing in this catalog contains "bes". The point of the assertion is the
+    // null: the word was kept as a prefix and simply did not match, rather than
+    // being swallowed as a half-recognised "best".
+    expect(data.understood).toBeNull();
+    expect(data.products).toHaveLength(0);
+  });
+
+  it('"best" is a whole intent word, so it becomes a sort', async () => {
+    const data = await suggest('best');
+    expect(chipLabels(data)).toContain('Top rated');
+  });
+
+  it('"best " means the same thing as "best"', async () => {
+    const withSpace = await suggest('best ');
+    const without = await suggest('best');
+    expect(chipLabels(withSpace)).toEqual(chipLabels(without));
+    expect(suggestedSlugs(withSpace)).toEqual(suggestedSlugs(without));
+  });
+
+  it('"best p" keeps the trailing fragment as a prefix', async () => {
+    const data = await suggest('best p');
+    expect(chipLabels(data)).toContain('Top rated');
+    // Every product shown is there because of the "p", not because of "best".
+    expect(titles(data).length).toBeGreaterThan(0);
+    for (const title of titles(data)) expect(title.toLowerCase()).toContain('p');
+  });
+
+  it('"best ph" narrows as more of the word arrives', async () => {
+    const data = await suggest('best ph');
+    expect(chipLabels(data)).toContain('Top rated');
+    for (const title of titles(data)) expect(title.toLowerCase()).toContain('ph');
+  });
+
+  it('"best phone" suggests phones', async () => {
+    const data = await suggest('best phone');
+    expect(chipLabels(data)).toContain('Top rated');
+    const slugs = suggestedSlugs(data);
+    expect(slugs).toContain(FIXTURE.phoneCheapInMobiles);
+    // Alias expansion, same as the results page: a product titled "Phone" and
+    // one titled "Smartphone" both belong to the same query.
+    expect(slugs).toContain(FIXTURE.phoneWordedPlainly);
+  });
+});
+
+describe('a space is what finishes a word', () => {
+  it('an unspaced trailing word stays a search term', async () => {
+    const data = await suggest('phone cheap');
+    expect(chipLabels(data)).not.toContain('Cheapest first');
+  });
+
+  it('the same word followed by a space becomes a sort', async () => {
+    const data = await suggest('phone cheap ');
+    expect(chipLabels(data)).toContain('Cheapest first');
+  });
+});
+
+describe('a query that is all intent still answers', () => {
+  it('"best" shows top-rated products rather than nothing', async () => {
+    const data = await suggest('best');
+    expect(data.products.length).toBeGreaterThan(0);
+    expect(data.understood?.productsLabel).toBe('Top rated');
+  });
+
+  it('ranks them on evidence, the way the results page ranks "best"', async () => {
+    const data = await suggest('best');
+    const slugs = suggestedSlugs(data);
+    // 4.5 from nine thousand reviews beats 4.7 from three — the same Bayesian
+    // blend the results page uses, because both go through searchProducts.
+    expect(slugs[0]).toBe(FIXTURE.ratedGoodHighCount);
+    expect(slugs.indexOf(FIXTURE.ratedGoodHighCount)).toBeLessThan(
+      slugs.indexOf(FIXTURE.ratedHighLowCount),
+    );
+    // No reviews is an absence of evidence, not an average verdict.
+    expect(slugs).not.toContain(FIXTURE.ratedNone);
+  });
+});
+
+describe('a price is a filter, not a search term', () => {
+  it('never prefix-matches the amount', async () => {
+    const data = await suggest('phone under 15k');
+    // No title contains "15k"; if the amount had reached the prefix matcher
+    // this group would be empty instead of full of phones.
+    expect(data.products.length).toBeGreaterThan(0);
+    for (const title of titles(data)) expect(title.toLowerCase()).not.toContain('15k');
+  });
+
+  it('applies the bound it understood', async () => {
+    const slugs = suggestedSlugs(await suggest('phone under 15k'));
+    expect(slugs).toContain(FIXTURE.phoneCheapInMobiles);
+    expect(slugs).toContain(FIXTURE.phoneCheapInElectronics);
+    expect(slugs).not.toContain(FIXTURE.phoneExpensive);
+  });
+
+  it('does not offer headphones to someone searching for phones', async () => {
+    const slugs = suggestedSlugs(await suggest('phone under 15k'));
+    // "phone" is a substring of "Headphones" but not a word in it, and this one
+    // is cheap enough that the price bound cannot be what excludes it.
+    expect(slugs).not.toContain(FIXTURE.headphoneNotAPhone);
+    expect(slugs).toContain(FIXTURE.phoneCheapInMobiles);
+  });
+
+  it('says what it understood, so the amount does not just vanish', async () => {
+    const labels = chipLabels(await suggest('phone under 15k'));
+    expect(labels).toContain('Under ₹15,000');
+    expect(labels).toContain('Mobiles');
+  });
+
+  it('keeps showing products while the amount is half-typed', async () => {
+    // "phone under 1" is a real keystroke on the way to "15k", and a ₹1 cap
+    // matches nothing. Flashing "Nothing matches" mid-word is the behaviour
+    // this endpoint exists to avoid.
+    const data = await suggest('phone under 1');
+    expect(chipLabels(data)).toContain('Under ₹1');
+    expect(data.products.length).toBeGreaterThan(0);
+  });
+});
+
+describe('the dropdown and the results page agree', () => {
+  it('extracts the same filters from the same phrase', async () => {
+    const phrase = 'best phone under 15k';
+    const page = await search('q=' + encodeURIComponent(phrase));
+    const data = await suggest(phrase);
+    // Both sides render their chips with describeParsedQuery, so a difference
+    // here means the two endpoints parsed the phrase differently.
+    const fromPage = describeParsedQuery(page.search!.parsed, { categoryName: 'Mobiles' });
+    expect(chipLabels(data)).toEqual(fromPage.map((c) => c.label));
+  });
+
+  it('suggests only products the same search would return', async () => {
+    const phrase = 'phone under 15k';
+    const page = await search('q=' + encodeURIComponent(phrase) + '&limit=48');
+    const fromPage = new Set(slugs(page));
+    for (const slug of suggestedSlugs(await suggest(phrase))) {
+      expect(fromPage.has(slug)).toBe(true);
+    }
   });
 });

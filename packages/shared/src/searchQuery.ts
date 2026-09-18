@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { productSortValues, type ProductSort } from './catalog';
+import { productSortValues, type ProductSort, type SearchDroppable } from './catalog';
 
 /**
  * Turns what a shopper actually types into structured filters.
@@ -358,4 +358,218 @@ export function parseSearchQuery(raw: string, catalog: SearchCatalog): ParsedSea
     filters,
     sort,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Type-ahead: the same parse, on a phrase that is still being typed
+// ---------------------------------------------------------------------------
+
+/**
+ * One thing to match product text against. Every term must appear; within a
+ * term any alternative will do, so "phone" and "smartphone" are one term with
+ * two spellings while "wireless headphone" is two terms.
+ */
+export interface SuggestTerm {
+  any: string[];
+  /**
+   * Whether the term has to land on a word boundary.
+   *
+   * True for words the shopper has finished, because "phone" is a word inside
+   * "Smartphone" and is not one inside "Headphones" — the results page draws
+   * the same line, since Postgres stems those to 'phone' and 'headphon'.
+   * Matching loosely here is how a search for phones fills up with headphones.
+   *
+   * False for the fragment still being typed. "sma" is not a word yet and has
+   * to be free to land mid-word, or suggestions would disappear until the
+   * shopper finished the word they were already halfway through.
+   */
+  whole: boolean;
+}
+
+export type SuggestTerms = SuggestTerm[];
+
+export interface ParsedSuggestQuery {
+  /** Filters and sort taken from the part of the input that is finished. */
+  parsed: ParsedSearchQuery;
+  terms: SuggestTerms;
+  /** The token still being typed; '' when the input ended on a space. */
+  trailing: string;
+}
+
+/** Phrases the parser removes as a single bare token. */
+const SINGLE_TOKEN_PHRASES = new Set<string>([
+  ...INTENT_TO_SORT.map((entry) => entry.phrase),
+  ...DISCOUNT_PHRASES,
+]);
+
+/**
+ * Each leftover keyword becomes its own required group, plus the spelling the
+ * shopper actually used.
+ *
+ * The parser rewrites aliases to a canonical word so full-text search has one
+ * term to rank on, but the canonical is not always how the catalog is written:
+ * "tshirt" appears in one product title here and "T-Shirt" in five. Prefix
+ * matching is a substring test, not a stemmer, so searching only the canonical
+ * would miss them.
+ *
+ * Only an alias present in the original input is added back. Expanding to the
+ * whole family instead would quietly match "tee" inside "canteen" for someone
+ * who typed "tshirt" and never asked for either.
+ */
+function toTerms(cleanedKeywords: string, source: string): SuggestTerms {
+  const haystack = ' ' + source.toLowerCase() + ' ';
+  return cleanedKeywords
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      const any = [word];
+      const entry = SEARCH_SYNONYMS.find((candidate) => candidate.canonical === word);
+      for (const alias of entry?.aliases ?? []) {
+        const re = new RegExp('\\b' + escapeRegex(alias) + '\\b');
+        if (alias !== word && re.test(haystack)) any.push(alias);
+      }
+      return { any, whole: true };
+    });
+}
+
+/**
+ * Widen a finished token to the word the catalog actually uses.
+ *
+ * Only an exact alias expands. "ph" is nobody's alias and must stay a literal
+ * prefix, or half-typed words would start matching things the shopper has not
+ * asked for yet. The alias is kept alongside the canonical form because it is
+ * often a substring of it ("phone" inside "Smartphone") and sometimes is not
+ * ("tv" appears nowhere inside "Television").
+ */
+function aliasGroup(token: string): SuggestTerm {
+  const lower = token.toLowerCase();
+  for (const entry of SEARCH_SYNONYMS) {
+    if (entry.aliases.includes(lower)) {
+      const any = entry.canonical === lower ? [lower] : [lower, entry.canonical];
+      return { any, whole: false };
+    }
+  }
+  return { any: [lower], whole: false };
+}
+
+/**
+ * parseSearchQuery, adapted to input that is still being typed.
+ *
+ * The results page and the dropdown have to agree about what a phrase means —
+ * that is the whole reason the parser exists — but the dropdown sees the phrase
+ * one character at a time, and a parser that strips "best" would also strip the
+ * "best" a shopper is three letters into typing.
+ *
+ * So a token counts as finished only when a space follows it. Everything up to
+ * the last space is parsed; the run after it stays a literal prefix term. Two
+ * exceptions, both narrow:
+ *
+ *   The whole input being one intent word ("best") is finished by definition —
+ *   there is nothing before it for it to be a part of. Its sort is taken, and
+ *   the word is ALSO kept as a prefix term, so a category genuinely called
+ *   "Tops" still surfaces while typing "top".
+ *
+ *   A price phrase is anchored by its preposition and needs a whole amount, so
+ *   it cannot fire on a half-typed word. If the trailing token is what produced
+ *   a bound, it belongs to the price rather than to the prefix — "under 15k" is
+ *   a filter, and matching titles against "15k" would find nothing.
+ */
+export function parseSuggestQuery(raw: string, catalog: SearchCatalog): ParsedSuggestQuery {
+  const input = raw ?? '';
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return { parsed: parseSearchQuery('', catalog), terms: [], trailing: '' };
+  }
+
+  const endsOnSpace = /\s$/.test(input);
+  const tokens = trimmed.split(/\s+/);
+  const trailing = endsOnSpace ? '' : (tokens[tokens.length - 1] ?? '');
+  let settled = endsOnSpace ? trimmed : tokens.slice(0, -1).join(' ');
+
+  // Exception one: the whole input is a single intent or discount word.
+  if (trailing && !settled && SINGLE_TOKEN_PHRASES.has(trailing.toLowerCase())) {
+    settled = trimmed;
+  }
+
+  const settledParse = parseSearchQuery(settled, catalog);
+
+  // Exception two: the trailing token completed a price phrase.
+  if (trailing) {
+    const fullParse = parseSearchQuery(trimmed, catalog);
+    const gainedBound =
+      (fullParse.filters.maxPricePaise != null && settledParse.filters.maxPricePaise == null) ||
+      (fullParse.filters.minPricePaise != null && settledParse.filters.minPricePaise == null);
+    if (gainedBound) {
+      return { parsed: fullParse, terms: toTerms(fullParse.cleanedKeywords, trimmed), trailing: '' };
+    }
+  }
+
+  const terms = toTerms(settledParse.cleanedKeywords, settled);
+  if (trailing) terms.push(aliasGroup(trailing));
+  return { parsed: settledParse, terms, trailing };
+}
+
+// ---------------------------------------------------------------------------
+// Describing a parse back to the shopper
+// ---------------------------------------------------------------------------
+
+export const SEARCH_SORT_LABELS: Record<ProductSort, string> = {
+  popularity: 'Popular',
+  newest: 'Newest',
+  price_asc: 'Cheapest first',
+  price_desc: 'Most expensive first',
+  rating: 'Top rated',
+};
+
+export interface SearchChip {
+  key: SearchDroppable;
+  label: string;
+  /** Inferred chips widen rather than narrow; the UI says so on hover. */
+  hint?: string;
+}
+
+/** Paise as Indian rupees, e.g. 149900 -> "₹1,499". */
+function formatPaiseLabel(paise: number): string {
+  return '₹' + (paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+}
+
+/**
+ * What the parser took out of the query, as chips.
+ *
+ * Lives here rather than in either caller because the results page and the
+ * dropdown both show it, and two copies would eventually word the same filter
+ * two different ways — a smaller version of the bug the parser exists to
+ * prevent.
+ */
+export function describeParsedQuery(
+  parsed: ParsedSearchQuery,
+  options: { categoryName?: string | null; skip?: readonly SearchDroppable[] } = {},
+): SearchChip[] {
+  const skip = new Set(options.skip ?? []);
+  const { filters, sort } = parsed;
+  const chips: SearchChip[] = [];
+
+  if (filters.inferredCategorySlug && !skip.has('category')) {
+    chips.push({
+      key: 'category',
+      label: options.categoryName ?? filters.inferredCategorySlug,
+      hint: 'ranked first, not filtered',
+    });
+  }
+  if (filters.maxPricePaise != null && !skip.has('maxPrice')) {
+    chips.push({ key: 'maxPrice', label: 'Under ' + formatPaiseLabel(filters.maxPricePaise) });
+  }
+  if (filters.minPricePaise != null && !skip.has('minPrice')) {
+    chips.push({ key: 'minPrice', label: 'Over ' + formatPaiseLabel(filters.minPricePaise) });
+  }
+  if (filters.brands.length > 0 && !skip.has('brands')) {
+    chips.push({ key: 'brands', label: filters.brands.join(', ') });
+  }
+  if (filters.onSale && !skip.has('onSale')) {
+    chips.push({ key: 'onSale', label: 'On sale' });
+  }
+  if (sort && !skip.has('sort')) {
+    chips.push({ key: 'sort', label: SEARCH_SORT_LABELS[sort] ?? sort });
+  }
+  return chips;
 }

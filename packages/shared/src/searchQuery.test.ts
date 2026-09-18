@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSearchQuery, type SearchCatalog } from './searchQuery';
+import { parseSearchQuery, parseSuggestQuery, type SearchCatalog } from './searchQuery';
 
 /**
  * A stand-in for what the backend will inject from the database. Deliberately
@@ -287,5 +287,123 @@ describe('the common case: nothing to parse', () => {
 
   it('keeps a plain model number as keywords', () => {
     expect(parse('galaxy s24 ultra').cleanedKeywords).toBe('galaxy s24 ultra');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Type-ahead: the same parse, one character at a time
+// ---------------------------------------------------------------------------
+
+const suggest = (raw: string) => parseSuggestQuery(raw, catalog);
+
+/** Just the alternatives, for assertions that do not care about word boundaries. */
+const words = (raw: string) => suggest(raw).terms.map((term) => term.any);
+
+/**
+ * The eight states of typing "best phone", in order.
+ *
+ * The rule under test: a token is finished only when a space follows it, so
+ * "bes" keeps its letters and "best " becomes a sort. Getting this wrong in
+ * either direction breaks something a shopper sees — no suggestions for a
+ * finished phrase, or suggestions vanishing three letters into a word.
+ */
+describe('typing towards an intent word', () => {
+  it('"b" is one letter and nothing else', () => {
+    expect(suggest('b').parsed.sort).toBeNull();
+    expect(words('b')).toEqual([['b']]);
+  });
+
+  it('"be" is two letters and nothing else', () => {
+    expect(suggest('be').parsed.sort).toBeNull();
+    expect(words('be')).toEqual([['be']]);
+  });
+
+  it('"bes" is not yet "best"', () => {
+    expect(suggest('bes').parsed.sort).toBeNull();
+    expect(words('bes')).toEqual([['bes']]);
+  });
+
+  it('"best" on its own is a finished intent word', () => {
+    const { parsed, terms } = suggest('best');
+    expect(parsed.sort).toBe('rating');
+    // Kept as a prefix term too: a catalog with a brand called "Best Co" should
+    // still offer it. Unfinished, so it may land mid-word.
+    expect(words('best')).toEqual([['best']]);
+    expect(terms[0]?.whole).toBe(false);
+  });
+
+  it('"best " is the same, with nothing left to match on', () => {
+    const { parsed, terms } = suggest('best ');
+    expect(parsed.sort).toBe('rating');
+    expect(terms).toEqual([]);
+  });
+
+  it('"best p" keeps the fragment', () => {
+    expect(suggest('best p').parsed.sort).toBe('rating');
+    expect(words('best p')).toEqual([['p']]);
+  });
+
+  it('"best ph" keeps the longer fragment', () => {
+    expect(suggest('best ph').parsed.sort).toBe('rating');
+    expect(words('best ph')).toEqual([['ph']]);
+  });
+
+  it('"best phone" expands the finished word to what the catalog calls it', () => {
+    expect(suggest('best phone').parsed.sort).toBe('rating');
+    expect(words('best phone')).toEqual([['phone', 'smartphone']]);
+  });
+});
+
+describe('the space is what finishes a word', () => {
+  it('an unspaced trailing intent word stays a search term', () => {
+    expect(suggest('phone cheap').parsed.sort).toBeNull();
+    expect(words('phone cheap')).toContainEqual(['cheap']);
+  });
+
+  it('the same word with a space after it becomes a sort', () => {
+    expect(suggest('phone cheap ').parsed.sort).toBe('price_asc');
+    expect(words('phone cheap ')).not.toContainEqual(['cheap']);
+  });
+
+  it('a real category beats the ranking word it is a prefix of', () => {
+    // "top" is a ranking word and "Tops" is a category. The word is unfinished,
+    // so it stays a term and the dropdown can still offer the category.
+    expect(words('top')).toEqual([['top']]);
+  });
+});
+
+describe('a price bound is never a prefix term', () => {
+  it('takes the amount as a filter once the phrase is complete', () => {
+    const { parsed } = suggest('phone under 15k');
+    expect(parsed.filters.maxPricePaise).toBe(1_500_000);
+    expect(parsed.filters.maxPricePaise).not.toBe(15_000);
+    expect(words('phone under 15k').flat()).not.toContain('15k');
+  });
+
+  it('keeps the spelling the shopper used alongside the canonical word', () => {
+    const { terms } = suggest('phone under 15k');
+    expect(words('phone under 15k')).toEqual([['smartphone', 'phone']]);
+    // A finished word: "phone" must be a word in the title, so a search for
+    // phones does not fill up with headphones.
+    expect(terms[0]?.whole).toBe(true);
+  });
+
+  it('follows a half-typed amount rather than searching for it', () => {
+    expect(suggest('phone under 1').parsed.filters.maxPricePaise).toBe(100);
+    expect(words('phone under 1').flat()).not.toContain('1');
+  });
+
+  it('leaves a bare number alone when no bound word precedes it', () => {
+    expect(suggest('zephyr 12').parsed.filters.maxPricePaise).toBeUndefined();
+    expect(words('zephyr 12')).toContainEqual(['12']);
+  });
+});
+
+describe('nothing typed', () => {
+  it('has no terms and no filters', () => {
+    const { parsed, terms } = suggest('');
+    expect(terms).toEqual([]);
+    expect(parsed.sort).toBeNull();
+    expect(parsed.cleanedKeywords).toBe('');
   });
 });

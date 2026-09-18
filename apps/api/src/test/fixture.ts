@@ -29,6 +29,24 @@ export const FIXTURE = {
   ratedNone: 'fx-rated-none',
   /** Only book, for the explicit ?category= filter. */
   book: 'fx-book',
+  /**
+   * Titled to sit under the half-typed intent word "best".
+   *
+   * "be" must keep matching this while "best " becomes a sort — the type-ahead
+   * sees a phrase one character at a time, and stripping a partial intent word
+   * would silently kill prefix matching for anyone typing towards it.
+   */
+  partialIntentWord: 'fx-belt',
+  /**
+   * Contains "phone" inside "Headphones", and costs little enough to pass any
+   * price bound a phone query carries.
+   *
+   * So the only thing that can keep it out of a phone search is the rule that a
+   * finished word has to be a word: substring matching would offer it, and the
+   * results page's tsquery would not, which is exactly the kind of disagreement
+   * between the two endpoints this fixture exists to catch.
+   */
+  headphoneNotAPhone: 'fx-headphone',
   /** status=DRAFT: must never appear in results or suggestions. */
   hiddenDraft: 'fx-hidden-draft',
   /** isVisible=false: must never appear either. */
@@ -128,6 +146,26 @@ const PRODUCTS: ProductSpec[] = [
     ratingAvg: 4.1,
     ratingCount: 120,
     soldCount: 80,
+  },
+  {
+    slug: FIXTURE.partialIntentWord,
+    title: 'Nexo Leather Belt',
+    brand: 'Nexo',
+    categorySlug: 'electronics',
+    pricePaise: 150_000,
+    ratingAvg: 4.2,
+    ratingCount: 60,
+    soldCount: 90,
+  },
+  {
+    slug: FIXTURE.headphoneNotAPhone,
+    title: 'Aeris Studio Headphones',
+    brand: 'Nexo',
+    categorySlug: 'electronics',
+    pricePaise: 500_000, // Well under a "under 15k" cap.
+    ratingAvg: 4.3,
+    ratingCount: 210,
+    soldCount: 150,
   },
   {
     slug: FIXTURE.hiddenDraft,

@@ -100,7 +100,10 @@ export default function SearchBar({
 
   useEffect(() => {
     if (!open) return;
-    const trimmed = query.trim();
+    // Sent untrimmed on purpose. A trailing space is the only signal that the
+    // last word is finished, and the parser needs it: "best " is a finished
+    // intent word, "best" is four letters someone may still be typing.
+    const sent = query;
 
     const timer = setTimeout(() => {
       // Abort whatever is still in flight. Without this the dropdown can be
@@ -110,13 +113,14 @@ export default function SearchBar({
       abortRef.current = controller;
       setLoading(true);
 
-      api<SuggestResponse>(`/api/search/suggest?q=${encodeURIComponent(trimmed)}`, {
+      api<SuggestResponse>(`/api/search/suggest?q=${encodeURIComponent(sent)}`, {
         signal: controller.signal,
       })
         .then((data) => {
           // Second guard: the server echoes the query it answered, so a reply
-          // that raced past an abort still cannot overwrite newer text.
-          if (controller.signal.aborted || data.q.trim() !== trimmed) return;
+          // that raced past an abort still cannot overwrite newer text. Compared
+          // exactly, since "best" and "best " are different requests.
+          if (controller.signal.aborted || data.q !== sent) return;
           setSuggestions(data);
           setActiveIndex(-1);
         })
@@ -185,16 +189,26 @@ export default function SearchBar({
     return out;
   }, [query, suggestions, recent]);
 
+  /** What the parser made of the query, for the chips and the product heading. */
+  const understood = query.trim() ? (suggestions?.understood ?? null) : null;
+
   /** Group boundaries, so headings render without breaking the flat index. */
   const rows = useMemo(() => {
     const out: { option: Option; index: number; heading: string | null }[] = [];
     let previous: Option['kind'] | null = null;
     options.forEach((option, index) => {
-      out.push({ option, index, heading: option.kind === previous ? null : GROUP_LABELS[option.kind] });
+      // "Products" would imply these matched the letters typed. When the query
+      // was all intent — "best" — they did not, and the heading says what they
+      // actually are.
+      const label =
+        option.kind === 'product' && understood?.productsLabel
+          ? understood.productsLabel
+          : GROUP_LABELS[option.kind];
+      out.push({ option, index, heading: option.kind === previous ? null : label });
       previous = option.kind;
     });
     return out;
-  }, [options]);
+  }, [options, understood]);
 
   // -- Actions --------------------------------------------------------------
 
@@ -370,6 +384,25 @@ export default function SearchBar({
           // roughly half a phone viewport.
           className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 max-h-[min(60vh,26rem)] overflow-y-auto overscroll-contain rounded-xl border border-gray-100 bg-white py-1 shadow-2xl"
         >
+          {understood && understood.chips.length > 0 && (
+            // Not removable here — the results page owns that, and a chip that
+            // looked dismissible but only closed the dropdown would be worse
+            // than none. This is only so "under 15k" does not vanish without
+            // explanation between typing it and seeing phones.
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-gray-100 px-3 pb-2 pt-2">
+              <span className="text-[11px] text-gray-400">Understood:</span>
+              {understood.chips.map((chip) => (
+                <span
+                  key={chip.key}
+                  title={chip.hint}
+                  className="rounded-full border border-brand-200 bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700"
+                >
+                  {chip.label}
+                </span>
+              ))}
+            </div>
+          )}
+
           {options.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-gray-500">
               Nothing matches “{typed}”.

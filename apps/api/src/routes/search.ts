@@ -1,15 +1,21 @@
 import { Router } from 'express';
+import type { Prisma } from '@prisma/client';
 import {
+  SEARCH_SORT_LABELS,
   SUGGEST_GROUP_LIMIT,
+  describeParsedQuery,
+  parseSuggestQuery,
   suggestQuerySchema,
   type BrandSuggestion,
   type CategorySuggestion,
   type ProductSuggestion,
   type SuggestResponse,
+  type SuggestTerms,
+  type SuggestUnderstood,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { suggestLimiter } from '../middleware/rateLimits';
-import { searchCatalog } from '../services/productSearch';
+import { buildFilterWhere, searchCatalog, searchProducts } from '../services/productSearch';
 
 export const searchRouter = Router();
 searchRouter.use(suggestLimiter);
@@ -69,19 +75,25 @@ async function trendingProducts(): Promise<ProductSuggestion[]> {
     where: LIVE,
     orderBy: { soldCount: 'desc' },
     take: SUGGEST_GROUP_LIMIT,
-    select: {
-      id: true,
-      title: true,
-      slug: true,
-      basePricePaise: true,
-      images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } },
-      variants: { orderBy: { pricePaise: 'asc' }, take: 1, select: { pricePaise: true } },
-    },
+    select: SUGGEST_SELECT,
   });
   const value = rows.map(toSuggestion);
   trendingCache = { value, expires: Date.now() + SUGGEST_TTL_MS };
   return value;
 }
+
+// ---------------------------------------------------------------------------
+// Rows
+// ---------------------------------------------------------------------------
+
+const SUGGEST_SELECT = {
+  id: true,
+  title: true,
+  slug: true,
+  basePricePaise: true,
+  images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } },
+  variants: { orderBy: { pricePaise: 'asc' }, take: 1, select: { pricePaise: true } },
+} satisfies Prisma.ProductSelect;
 
 interface SuggestRow {
   id: string;
@@ -103,86 +115,43 @@ function toSuggestion(row: SuggestRow): ProductSuggestion {
 }
 
 // ---------------------------------------------------------------------------
-// Suggest
+// Matching
 // ---------------------------------------------------------------------------
 
 /**
- * Type-ahead suggestions, grouped.
+ * A substring filter the database can answer from the trigram index.
  *
- * Prefix matching, not full-text: someone who has typed "sma" has not finished
- * a word, and tsquery ranking would be both slower and wrong for a fragment.
- * The results page does the ranked search; this only has to guess what is
- * being typed.
+ * Deliberately looser than the real rule: a whole-word term still comes back
+ * with its mid-word matches, and matchesAllTerms drops those afterwards.
+ * Postgres can index "contains" here but not a word-boundary regex, so the
+ * narrowing that needs a regex happens in memory over a few dozen rows.
  */
-searchRouter.get('/suggest', async (req, res, next) => {
-  try {
-    const { q } = suggestQuerySchema.parse(req.query);
-    const needle = q.toLowerCase().trim();
+function titleWhere(terms: SuggestTerms): Prisma.ProductWhereInput {
+  return {
+    AND: terms.map((term) => ({
+      OR: term.any.map((word) => ({ title: { contains: word, mode: 'insensitive' as const } })),
+    })),
+  };
+}
 
-    // Nothing typed yet: the dropdown opens on best sellers.
-    if (!needle) {
-      const body: SuggestResponse = {
-        q,
-        products: [],
-        categories: [],
-        brands: [],
-        trending: await trendingProducts(),
-      };
-      res.json({ success: true, data: body });
-      return;
-    }
+const boundaryCache = new Map<string, RegExp>();
 
-    const cached = cacheGet(needle);
-    if (cached) {
-      res.json({ success: true, data: { ...cached, q } });
-      return;
-    }
-
-    const catalog = await searchCatalog();
-
-    // Brands and categories come from the cached catalog — no query needed for
-    // 36 brands and 67 categories.
-    const brands: BrandSuggestion[] = catalog.brands
-      .filter((name) => name.toLowerCase().includes(needle))
-      .sort((a, b) => rankPrefix(a, needle) - rankPrefix(b, needle) || a.localeCompare(b))
-      .slice(0, SUGGEST_GROUP_LIMIT)
-      .map((name) => ({ name }));
-
-    const categories: CategorySuggestion[] = catalog.categoryPaths
-      .filter((c) => c.name.toLowerCase().includes(needle))
-      .sort((a, b) => rankPrefix(a.name, needle) - rankPrefix(b.name, needle) || a.name.localeCompare(b.name))
-      .slice(0, SUGGEST_GROUP_LIMIT);
-
-    // Only the product lookup hits the database. ILIKE '%needle%' rides the
-    // trigram GIN index added with the search migration.
-    const rows = await prisma.product.findMany({
-      where: { ...LIVE, title: { contains: needle, mode: 'insensitive' } },
-      // Over-fetch a little so the in-memory prefix ranking has something to
-      // choose from, then cut to the group limit.
-      take: SUGGEST_GROUP_LIMIT * 4,
-      orderBy: { soldCount: 'desc' },
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        basePricePaise: true,
-        images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } },
-        variants: { orderBy: { pricePaise: 'asc' }, take: 1, select: { pricePaise: true } },
-      },
-    });
-
-    const products = rows
-      .sort((a, b) => rankPrefix(a.title, needle) - rankPrefix(b.title, needle))
-      .slice(0, SUGGEST_GROUP_LIMIT)
-      .map(toSuggestion);
-
-    const body: SuggestResponse = { q, products, categories, brands, trending: [] };
-    cacheSet(needle, body);
-    res.json({ success: true, data: body });
-  } catch (err) {
-    next(err);
+function boundary(word: string): RegExp {
+  let re = boundaryCache.get(word);
+  if (!re) {
+    re = new RegExp('\\b' + word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    boundaryCache.set(word, re);
   }
-});
+  return re;
+}
+
+/** The real rule: finished words must land on a word boundary, fragments need not. */
+function matchesAllTerms(text: string, terms: SuggestTerms): boolean {
+  const lower = text.toLowerCase();
+  return terms.every((term) =>
+    term.any.some((word) => (term.whole ? boundary(word).test(lower) : lower.includes(word))),
+  );
+}
 
 /**
  * Lower is better: a title starting with what was typed beats one where the
@@ -195,3 +164,162 @@ function rankPrefix(text: string, needle: string): number {
   if (new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(lower)) return 1;
   return 2;
 }
+
+/** Best rank any of the terms achieves — one strong match is enough to lead. */
+function rankTerms(text: string, terms: SuggestTerms): number {
+  let best = 3;
+  for (const term of terms) {
+    for (const word of term.any) best = Math.min(best, rankPrefix(text, word));
+  }
+  return best;
+}
+
+async function lookupProducts(
+  where: Prisma.ProductWhereInput,
+  terms: SuggestTerms,
+): Promise<ProductSuggestion[]> {
+  const rows = await prisma.product.findMany({
+    where,
+    // Over-fetch: the where clause is a substring superset of what actually
+    // qualifies, and the prefix ranking needs something to choose from once the
+    // mid-word matches have been dropped.
+    take: SUGGEST_GROUP_LIMIT * 10,
+    orderBy: { soldCount: 'desc' },
+    select: SUGGEST_SELECT,
+  });
+  return rows
+    .filter((row) => matchesAllTerms(row.title, terms))
+    .sort((a, b) => rankTerms(a.title, terms) - rankTerms(b.title, terms))
+    .slice(0, SUGGEST_GROUP_LIMIT)
+    .map(toSuggestion);
+}
+
+/** Hydrate ranked ids without losing the order they came back in. */
+async function hydrateRanked(ids: string[]): Promise<ProductSuggestion[]> {
+  if (ids.length === 0) return [];
+  const rows = await prisma.product.findMany({ where: { id: { in: ids } }, select: SUGGEST_SELECT });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [toSuggestion(row)] : [];
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Suggest
+// ---------------------------------------------------------------------------
+
+/**
+ * Type-ahead suggestions, grouped.
+ *
+ * Runs the same parser as the results page, so a phrase cannot mean one thing
+ * in the dropdown and another on the page it leads to — "best phone" used to
+ * return nothing here while the page behind it returned phones, because the
+ * whole string was matched literally.
+ *
+ * What the parser does NOT get to do here is strip a word that is still being
+ * typed; see parseSuggestQuery for where that line is drawn. What is left after
+ * parsing is matched as a prefix, not ranked by full text: someone who has
+ * typed "sma" has not finished a word, and tsquery ranking would be both slower
+ * and wrong for a fragment.
+ */
+searchRouter.get('/suggest', async (req, res, next) => {
+  try {
+    const { q } = suggestQuerySchema.parse(req.query);
+
+    // Nothing typed yet: the dropdown opens on best sellers.
+    if (!q.trim()) {
+      const body: SuggestResponse = {
+        q,
+        products: [],
+        categories: [],
+        brands: [],
+        trending: await trendingProducts(),
+        understood: null,
+      };
+      res.json({ success: true, data: body });
+      return;
+    }
+
+    // The trailing space is part of the key: "best" and "best " mean different
+    // things, so they cannot share a cache entry.
+    const key = q.toLowerCase();
+    const cached = cacheGet(key);
+    if (cached) {
+      res.json({ success: true, data: { ...cached, q } });
+      return;
+    }
+
+    const catalog = await searchCatalog();
+    const { parsed, terms } = parseSuggestQuery(q, catalog);
+
+    const categoryName = parsed.filters.inferredCategorySlug
+      ? (catalog.categoryPaths.find((c) => c.slug === parsed.filters.inferredCategorySlug)?.name ??
+        null)
+      : null;
+    const chips = describeParsedQuery(parsed, { categoryName });
+
+    // Brands and categories are names, not listings: the parser's price and
+    // stock filters have nothing to say about them, so only the words apply.
+    const brands: BrandSuggestion[] = terms.length
+      ? catalog.brands
+          .filter((name) => matchesAllTerms(name, terms))
+          .sort((a, b) => rankTerms(a, terms) - rankTerms(b, terms) || a.localeCompare(b))
+          .slice(0, SUGGEST_GROUP_LIMIT)
+          .map((name) => ({ name }))
+      : [];
+
+    const categories: CategorySuggestion[] = terms.length
+      ? catalog.categoryPaths
+          .filter((c) => matchesAllTerms(c.name, terms))
+          .sort(
+            (a, b) => rankTerms(a.name, terms) - rankTerms(b.name, terms) || a.name.localeCompare(b.name),
+          )
+          .slice(0, SUGGEST_GROUP_LIMIT)
+      : [];
+
+    let products: ProductSuggestion[] = [];
+    let productsLabel: string | null = null;
+
+    if (terms.length > 0) {
+      // Same filter semantics as the results page — buildFilterWhere is the one
+      // definition of what "under 15k" or "on sale" narrows to.
+      const filters = buildFilterWhere(parsed, []);
+      products = await lookupProducts({ ...LIVE, ...filters, ...titleWhere(terms) }, terms);
+
+      // A bound that is still being typed ("phone under 15" on the way to 15k)
+      // can exclude everything for a keystroke or two. Showing the words without
+      // the half-finished filter beats flashing "Nothing matches" at someone who
+      // is mid-word — the same "never return nothing" rule the results page
+      // follows when it relaxes a filter.
+      if (products.length === 0 && Object.keys(filters).length > 0) {
+        products = await lookupProducts({ ...LIVE, ...titleWhere(terms) }, terms);
+      }
+    }
+
+    // The query said something but left nothing to prefix-match on: "best" asks
+    // for the top-rated products, so show those rather than "Nothing matches".
+    // Ranked by searchProducts so the order is the results page's order and not
+    // a second opinion about what "best" means.
+    if (products.length === 0 && brands.length === 0 && categories.length === 0 && chips.length > 0) {
+      const ranked = await searchProducts({
+        raw: q,
+        baseWhere: LIVE,
+        sort: parsed.sort ?? 'popularity',
+        skip: 0,
+        take: SUGGEST_GROUP_LIMIT,
+      });
+      products = await hydrateRanked(ranked.ids);
+      productsLabel = parsed.sort ? SEARCH_SORT_LABELS[parsed.sort] : (chips[0]?.label ?? null);
+    }
+
+    const understood: SuggestUnderstood | null =
+      chips.length > 0 || productsLabel ? { chips, productsLabel } : null;
+
+    const body: SuggestResponse = { q, products, categories, brands, trending: [], understood };
+    cacheSet(key, body);
+    res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});

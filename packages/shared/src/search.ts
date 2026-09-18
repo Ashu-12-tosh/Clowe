@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { SearchChip } from './searchQuery';
 
 /**
  * Search-as-you-type suggestions.
@@ -9,8 +10,16 @@ import { z } from 'zod';
  */
 
 export const suggestQuerySchema = z.object({
-  /** Partial text. One character is enough to get suggestions. */
-  q: z.string().trim().max(100).default(''),
+  /**
+   * Partial text. One character is enough to get suggestions.
+   *
+   * Deliberately NOT trimmed. A trailing space is the only signal that the last
+   * word is finished, and the parser needs it: "best" is still being typed and
+   * keeps its letters as a prefix, while "best " is a finished intent word and
+   * becomes a sort. Trimming here would erase that distinction before anything
+   * could act on it.
+   */
+  q: z.string().max(100).default(''),
 });
 export type SuggestQuery = z.infer<typeof suggestQuerySchema>;
 
@@ -41,6 +50,26 @@ export interface BrandSuggestion {
   name: string;
 }
 
+/**
+ * What the parser made of the query, for the dropdown to show.
+ *
+ * Without this the shopper types "phone under 15k", sees phones, and has no
+ * idea where "under 15k" went — the same unexplained substitution the results
+ * page shows chips to avoid.
+ */
+export interface SuggestUnderstood {
+  /** Same chips, same wording, as the results page — both call describeParsedQuery. */
+  chips: SearchChip[];
+  /**
+   * Heading for the product group when those products are not a text match.
+   *
+   * "best" leaves nothing to prefix-match on, so the group is the top-rated
+   * products the query actually asked for, and it says so rather than sitting
+   * under a "Products" heading that would imply it matched the letters.
+   */
+  productsLabel: string | null;
+}
+
 export interface SuggestResponse {
   /** Echo of what was searched, so a stale response can be discarded. */
   q: string;
@@ -56,6 +85,8 @@ export interface SuggestResponse {
    * a genuine popular-queries group can be added beside this one.
    */
   trending: ProductSuggestion[];
+  /** null when the query parsed into nothing but literal text. */
+  understood: SuggestUnderstood | null;
 }
 
 /** Each group is capped so the dropdown stays scannable on a phone. */
