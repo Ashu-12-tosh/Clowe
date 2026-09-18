@@ -15,20 +15,22 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { suggestLimiter } from '../middleware/rateLimits';
-import { buildFilterWhere, searchCatalog, searchProducts } from '../services/productSearch';
+import {
+  LIVE_PRODUCT_WHERE,
+  buildFilterWhere,
+  searchCatalog,
+  searchProducts,
+} from '../services/productSearch';
+import { querySuggestionVersion, suggestQueries } from '../services/querySuggestions';
 
 export const searchRouter = Router();
 searchRouter.use(suggestLimiter);
 
 /**
  * Same visibility rule the storefront listing uses. A suggestion that leads to
- * a 404 is worse than no suggestion, so this must not drift from products.ts.
+ * a 404 is worse than no suggestion.
  */
-const LIVE = {
-  status: 'APPROVED' as const,
-  isVisible: true,
-  seller: { vacationMode: false },
-};
+const LIVE = LIVE_PRODUCT_WHERE;
 
 // ---------------------------------------------------------------------------
 // Caches
@@ -231,6 +233,7 @@ searchRouter.get('/suggest', async (req, res, next) => {
     if (!q.trim()) {
       const body: SuggestResponse = {
         q,
+        queries: [],
         products: [],
         categories: [],
         brands: [],
@@ -242,8 +245,10 @@ searchRouter.get('/suggest', async (req, res, next) => {
     }
 
     // The trailing space is part of the key: "best" and "best " mean different
-    // things, so they cannot share a cache entry.
-    const key = q.toLowerCase();
+    // things, so they cannot share a cache entry. So is the phrase snapshot's
+    // version, so a rebuilt set of query suggestions is not hidden behind a
+    // response cached from the one before it.
+    const key = `${querySuggestionVersion()}|${q.toLowerCase()}`;
     const cached = cacheGet(key);
     if (cached) {
       res.json({ success: true, data: { ...cached, q } });
@@ -316,7 +321,19 @@ searchRouter.get('/suggest', async (req, res, next) => {
     const understood: SuggestUnderstood | null =
       chips.length > 0 || productsLabel ? { chips, productsLabel } : null;
 
-    const body: SuggestResponse = { q, products, categories, brands, trending: [], understood };
+    // An in-memory prefix scan over a prebuilt, prechecked list — generating
+    // phrases, or checking that they return results, never happens here.
+    const queries = suggestQueries(q);
+
+    const body: SuggestResponse = {
+      q,
+      queries,
+      products,
+      categories,
+      brands,
+      trending: [],
+      understood,
+    };
     cacheSet(key, body);
     res.json({ success: true, data: body });
   } catch (err) {

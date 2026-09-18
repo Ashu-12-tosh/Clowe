@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { SuggestResponse } from '@clowe/shared';
+import { splitCompletion, type SuggestResponse } from '@clowe/shared';
 import { api } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { clearRecentSearches, getRecentSearches, recordRecentSearch } from '@/lib/recentSearches';
@@ -29,6 +29,7 @@ const DEBOUNCE_MS = 200;
 
 /** One row in the flattened list the keyboard walks. */
 type Option =
+  | { kind: 'query'; label: string; href: string }
   | { kind: 'product'; label: string; href: string; imageUrl: string | null; pricePaise: number }
   | { kind: 'category'; label: string; href: string; parentName: string | null }
   | { kind: 'brand'; label: string; href: string }
@@ -36,12 +37,50 @@ type Option =
   | { kind: 'trending'; label: string; href: string; imageUrl: string | null; pricePaise: number };
 
 const GROUP_LABELS: Record<Option['kind'], string> = {
+  // No heading: the magnifier on each row already says these are searches,
+  // and Amazon's list reads the same way.
+  query: '',
   product: 'Products',
   category: 'Categories',
   brand: 'Brands',
   recent: 'Recent searches',
   trending: 'Popular right now',
 };
+
+/** Marks a row as a search to run, not a product to open. */
+function MagnifierIcon() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-4 w-4"
+    >
+      <circle cx="8.5" cy="8.5" r="5.5" />
+      <path d="m13 13 4 4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/**
+ * A query suggestion drawn the way Amazon draws one: what was typed in plain
+ * text, the completion in bold, so the eye lands on the part that is new.
+ *
+ * The inverse of product highlighting, where the bold run is what matched.
+ * Slices the phrase rather than echoing the input, so it reads as one phrase
+ * whatever casing or spacing was typed, and stays text either way.
+ */
+function Completion({ phrase, typed }: { phrase: string; typed: string }) {
+  const { typed: head, completion } = splitCompletion(phrase, typed);
+  return (
+    <>
+      {head && <span className="text-gray-600">{head}</span>}
+      <span className="font-bold text-ink-900">{completion}</span>
+    </>
+  );
+}
 
 /**
  * Bold the matched run without ever building markup from user input.
@@ -162,6 +201,11 @@ export default function SearchBar({
       return out;
     }
 
+    // Searches first, products below — the order Amazon uses, because most
+    // people typing "best" want a better query more than a specific product.
+    for (const s of suggestions?.queries ?? []) {
+      out.push({ kind: 'query', label: s.text, href: `/products?q=${encodeURIComponent(s.text)}` });
+    }
     for (const p of suggestions?.products ?? []) {
       out.push({
         kind: 'product',
@@ -232,7 +276,12 @@ export default function SearchBar({
   const choose = useCallback(
     (option: Option) => {
       // A chosen suggestion is still a search this shopper made.
-      if (option.kind === 'recent' || option.kind === 'brand') recordRecentSearch(option.label);
+      if (option.kind === 'recent' || option.kind === 'brand' || option.kind === 'query') {
+        recordRecentSearch(option.label);
+      }
+      // A chosen search replaces what was typed, so the box shows the search the
+      // page is showing rather than the three letters that led to it.
+      if (option.kind === 'query' || option.kind === 'recent') setQuery(option.label);
       setRecent(getRecentSearches());
       close();
       inputRef.current?.blur();
@@ -456,6 +505,19 @@ export default function SearchBar({
                     index === activeIndex ? 'bg-cream-100' : ''
                   }`}
                 >
+                  {option.kind === 'query' && (
+                    <>
+                      <span className="flex w-10 shrink-0 justify-center text-gray-400">
+                        <MagnifierIcon />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {/* The raw input, not the trimmed one: a trailing space is
+                            part of what was typed and belongs in the plain half. */}
+                        <Completion phrase={option.label} typed={query} />
+                      </span>
+                    </>
+                  )}
+
                   {(option.kind === 'product' || option.kind === 'trending') && (
                     <>
                       {option.imageUrl ? (

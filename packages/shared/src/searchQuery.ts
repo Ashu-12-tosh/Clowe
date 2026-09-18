@@ -106,6 +106,15 @@ const INTENT_TO_SORT: { phrase: string; sort: ProductSort }[] = [
   { phrase: 'newest', sort: 'newest' },
 ];
 
+/**
+ * Intent words the search dropdown builds suggested phrases from.
+ *
+ * A subset of INTENT_TO_SORT — the ones shoppers actually lead a query with —
+ * declared here, beside the parser, so the phrase generator cannot build a
+ * phrase out of a word this parser does not understand.
+ */
+export const SUGGESTION_INTENT_WORDS = ['best', 'top rated', 'cheapest', 'latest'] as const;
+
 const DISCOUNT_PHRASES = [
   'on sale',
   'discounted',

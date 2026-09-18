@@ -64,6 +64,8 @@ interface ProductSpec {
   soldCount: number;
   status?: ProductStatus;
   isVisible?: boolean;
+  /** Defaults to a line naming the title; set where the words matter. */
+  description?: string;
 }
 
 const PRODUCTS: ProductSpec[] = [
@@ -110,6 +112,10 @@ const PRODUCTS: ProductSpec[] = [
   {
     slug: FIXTURE.ratedHighLowCount,
     title: 'Zephyr Cotton Crew Tee',
+    // A real-world care label. Full-text search reads descriptions, so this tee
+    // is a hit for "washing machine" — which is fine on the results page and
+    // must never become a suggested search for washing machines.
+    description: 'Soft combed cotton. Machine wash cold, tumble dry low.',
     brand: 'Zephyr',
     categorySlug: 'books', // category is irrelevant to the rating assertions
     pricePaise: 200_000,
@@ -259,7 +265,7 @@ export async function seedFixture(prisma: PrismaClient): Promise<void> {
         categoryId: categoryIds.get(spec.categorySlug)!,
         title: spec.title,
         slug: spec.slug,
-        description: `${spec.title} from the search test fixture.`,
+        description: spec.description ?? `${spec.title} from the search test fixture.`,
         brand: spec.brand,
         basePricePaise: spec.pricePaise,
         ratingAvg: spec.ratingAvg,

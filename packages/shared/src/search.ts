@@ -70,9 +70,26 @@ export interface SuggestUnderstood {
   productsLabel: string | null;
 }
 
+/**
+ * A whole search, offered as a completion of what was typed — Amazon's
+ * "best" -> "best phone under 20k".
+ */
+export interface QuerySuggestion {
+  /** The phrase, lowercase, exactly as it will be searched. */
+  text: string;
+  /**
+   * 'logged': shoppers searched it, often enough and with results.
+   * 'catalog': built from the catalog. Either way it was run through the
+   * results page's own search before being offered, and came back non-empty.
+   */
+  source: 'logged' | 'catalog';
+}
+
 export interface SuggestResponse {
   /** Echo of what was searched, so a stale response can be discarded. */
   q: string;
+  /** Searches that complete the typed text, best first. Shown above products. */
+  queries: QuerySuggestion[];
   products: ProductSuggestion[];
   categories: CategorySuggestion[];
   brands: BrandSuggestion[];
@@ -91,3 +108,32 @@ export interface SuggestResponse {
 
 /** Each group is capped so the dropdown stays scannable on a phone. */
 export const SUGGEST_GROUP_LIMIT = 5;
+
+/** Query suggestions get a little more room: on Amazon they are most of the list. */
+export const QUERY_SUGGESTION_LIMIT = 6;
+
+/**
+ * Typed text in the form query suggestions are matched against.
+ *
+ * Lowercased with whitespace runs collapsed, like the search log — but one
+ * trailing space is kept. It is the only sign the last word is finished, and
+ * "best " should complete to "best phone" without also offering "bestseller".
+ */
+export function normalizeSuggestInput(raw: string): string {
+  return (raw ?? '').toLowerCase().replace(/\s+/g, ' ').replace(/^ /, '');
+}
+
+/**
+ * Split a suggested phrase into the part the shopper typed and the part being
+ * suggested, so the dropdown can draw the first plain and the second bold.
+ *
+ * The typed part is sliced from the phrase itself rather than echoed from the
+ * input, so whatever casing or spacing was typed, the row reads as one phrase.
+ */
+export function splitCompletion(phrase: string, typed: string): { typed: string; completion: string } {
+  const prefix = normalizeSuggestInput(typed);
+  if (prefix && phrase.startsWith(prefix)) {
+    return { typed: phrase.slice(0, prefix.length), completion: phrase.slice(prefix.length) };
+  }
+  return { typed: '', completion: phrase };
+}

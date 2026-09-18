@@ -3,6 +3,7 @@ import { createApp } from './app';
 import { startPackingVideoCleanup } from './services/packingVideoCleanup';
 import { logTryOnProviderStatus } from './services/tryon';
 import { startSearchLogCleanup } from './services/searchAnalytics';
+import { startQuerySuggestionRefresh } from './services/querySuggestions';
 
 const app = createApp();
 
@@ -18,3 +19,7 @@ startPackingVideoCleanup();
 
 // Logged searches expire too - swept at boot and daily after that.
 startSearchLogCleanup();
+
+// Query suggestions are built from the catalog and the search log in the
+// background - at boot, then every 15 minutes - and never per keystroke.
+startQuerySuggestionRefresh();

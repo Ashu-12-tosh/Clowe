@@ -12,6 +12,18 @@ import {
 import { prisma } from '../db';
 
 /**
+ * What the storefront treats as buyable: approved, switched on by its seller,
+ * and the seller not away. The suggest endpoint and the phrase generator both
+ * filter on this, so neither can offer something the listing would not show.
+ * Must match LIVE in routes/products.ts.
+ */
+export const LIVE_PRODUCT_WHERE = {
+  status: 'APPROVED' as const,
+  isVisible: true,
+  seller: { vacationMode: false },
+} satisfies Prisma.ProductWhereInput;
+
+/**
  * Keyword search over the storefront catalog.
  *
  * The shape of a request is: parse the words into structured filters, apply
