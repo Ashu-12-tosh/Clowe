@@ -19,6 +19,14 @@ export const FIXTURE = {
   phoneCheapInElectronics: 'fx-phone-cheap-electronics',
   /** Titled "Phone", never "Smartphone": proves alias expansion widens the match. */
   phoneWordedPlainly: 'fx-phone-plain-word',
+  /**
+   * The best-rated phone, filed in the tree "phone" does NOT infer.
+   *
+   * Every other phone that wins a sort sits in the Mobiles tree, where the
+   * guess already ranks first, so a sort that only broke ties inside the boost
+   * would still look right. This one only reaches the top if the sort leads.
+   */
+  phoneTopRatedInElectronics: 'fx-phone-top-rated-electronics',
   /** Far above the cap, so a "under 500" query has to relax to reach it. */
   phoneExpensive: 'fx-phone-expensive',
   /** High rating off three reviews — must not outrank the well-reviewed one. */
@@ -98,6 +106,16 @@ const PRODUCTS: ProductSpec[] = [
     ratingAvg: 4.0,
     ratingCount: 300,
     soldCount: 200,
+  },
+  {
+    slug: FIXTURE.phoneTopRatedInElectronics,
+    title: 'Vertex Pro 5G Smartphone',
+    brand: 'Vertex',
+    categorySlug: 'electronics-smartphones',
+    pricePaise: 3_000_000, // ₹30,000 — above every "under 15k" test.
+    ratingAvg: 4.7,
+    ratingCount: 7_000,
+    soldCount: 300,
   },
   {
     slug: FIXTURE.phoneExpensive,

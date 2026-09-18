@@ -217,6 +217,18 @@ export interface SearchMeta {
   /** Set when filters had to be loosened; null when the query matched as asked. */
   relaxed: SearchRelaxation | null;
   /**
+   * The order the results are actually in; null means relevance. The sort
+   * dropdown shows this, so it can never claim an order the page is not in.
+   */
+  appliedSort: ProductSort | null;
+  /**
+   * Where appliedSort came from. 'chosen': picked from the dropdown, and it
+   * beats anything the words implied — the same way a picked category beats
+   * an inferred one. 'parsed': implied by the words ("best", "cheapest").
+   * 'relevance': neither, so the best matches come first.
+   */
+  sortSource: 'chosen' | 'parsed' | 'relevance';
+  /**
    * How many returned products sit outside the category the parser guessed.
    *
    * The guess only ranks, never filters, so results from elsewhere are

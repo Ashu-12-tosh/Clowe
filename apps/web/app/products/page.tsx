@@ -3,7 +3,13 @@
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { CategoryNode, ProductListResponse, ProductSort, SearchDroppable } from '@clowe/shared';
+import {
+  SEARCH_SORT_LABELS,
+  type CategoryNode,
+  type ProductListResponse,
+  type ProductSort,
+  type SearchDroppable,
+} from '@clowe/shared';
 import { api } from '@/lib/api';
 import { fetchWishlistIds } from '@/lib/wishlist';
 import ProductCard from '@/components/ProductCard';
@@ -65,7 +71,31 @@ function ProductsPageInner() {
   const activeOptionCount = Object.values(optionFilters).reduce((n, v) => n + v.length, 0);
   const minPrice = searchParams.get('minPrice') ?? '';
   const maxPrice = searchParams.get('maxPrice') ?? '';
-  const sort = (searchParams.get('sort') ?? 'newest') as ProductSort;
+  // Only what the shopper picked. With nothing picked, a search is in whatever
+  // order the server applied — the words' sort ("best" -> top rated), or
+  // relevance — so the dropdown reads that back instead of a default the
+  // results are not in. Browsing without a search keeps its old default.
+  const chosenSort = searchParams.get('sort') as ProductSort | null;
+  const sortValue: string =
+    chosenSort ?? (q ? (data?.search?.appliedSort ?? 'relevance') : 'newest');
+
+  // Every order a search can be in has an option, so the dropdown always has
+  // a true answer. Labels are the ones the chips use, so "Top rated" in a chip
+  // and in the dropdown are visibly the same thing.
+  const sortOptions: { value: string; label: string }[] = [
+    ...(q ? [{ value: 'relevance', label: 'Relevance' }] : []),
+    ...(q ? (['rating', 'popularity'] as const) : ([] as const)).map((value) => ({
+      value,
+      label: SEARCH_SORT_LABELS[value],
+    })),
+    ...(['newest', 'price_asc', 'price_desc'] as const).map((value) => ({
+      value,
+      label: SEARCH_SORT_LABELS[value],
+    })),
+  ];
+  // "Relevance" is the absence of a sort, so picking it clears the parameter.
+  const pickSort = (value: string) =>
+    setParams({ sort: value === 'relevance' ? '' : value });
   const dropped = (searchParams.get('drop') ?? '')
     .split(',')
     .filter(Boolean) as SearchDroppable[];
@@ -274,13 +304,16 @@ function ProductsPageInner() {
             </div>
             {/* Desktop sort (mobile uses the chip bar below) */}
             <select
-              value={sort}
-              onChange={(e) => setParams({ sort: e.target.value })}
+              aria-label="Sort"
+              value={sortValue}
+              onChange={(e) => pickSort(e.target.value)}
               className="hidden rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm outline-none md:block"
             >
-              <option value="newest">Newest</option>
-              <option value="price_asc">Price: low to high</option>
-              <option value="price_desc">Price: high to low</option>
+              {sortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -302,13 +335,16 @@ function ProductsPageInner() {
               )}
             </button>
             <select
-              value={sort}
-              onChange={(e) => setParams({ sort: e.target.value })}
+              aria-label="Sort"
+              value={sortValue}
+              onChange={(e) => pickSort(e.target.value)}
               className="shrink-0 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-ink-900 outline-none"
             >
-              <option value="newest">Sort: Newest</option>
-              <option value="price_asc">Price: low → high</option>
-              <option value="price_desc">Price: high → low</option>
+              {sortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
             {hasAnyFilter && (
               <Link

@@ -132,6 +132,9 @@ productsRouter.get('/', async (req, res, next) => {
           ),
         baseWhere: where,
         sort: query.sort,
+        // The schema fills in a default, so the only way to tell a picked sort
+        // from that default is whether the request carried one at all.
+        sortChosen: req.query.sort !== undefined,
         skip: (query.page - 1) * query.limit,
         take: query.limit,
       });

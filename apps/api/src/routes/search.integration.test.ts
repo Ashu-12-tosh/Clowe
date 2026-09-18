@@ -389,9 +389,10 @@ describe('a query that is all intent still answers', () => {
   it('ranks them on evidence, the way the results page ranks "best"', async () => {
     const data = await suggest('best');
     const slugs = suggestedSlugs(data);
-    // 4.5 from nine thousand reviews beats 4.7 from three — the same Bayesian
-    // blend the results page uses, because both go through searchProducts.
-    expect(slugs[0]).toBe(FIXTURE.ratedGoodHighCount);
+    // 4.7 from seven thousand reviews leads; 4.5 from nine thousand beats 4.7
+    // from three — the same Bayesian blend the results page uses, because both
+    // go through searchProducts.
+    expect(slugs[0]).toBe(FIXTURE.phoneTopRatedInElectronics);
     expect(slugs.indexOf(FIXTURE.ratedGoodHighCount)).toBeLessThan(
       slugs.indexOf(FIXTURE.ratedHighLowCount),
     );
@@ -458,5 +459,76 @@ describe('the dropdown and the results page agree', () => {
     for (const slug of suggestedSlugs(await suggest(phrase))) {
       expect(fromPage.has(slug)).toBe(true);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+/**
+ * The sort a search is in. It used to be displayed and not applied: "best
+ * phone" showed a Top rated chip over results in relevance order, and even a
+ * sort picked from the dropdown only broke ties inside the category boost, so
+ * "cheapest first" put the cheapest phone behind every phone in the guessed
+ * tree. These pin the order itself, not just what the page says about it.
+ */
+describe('the parsed sort is applied, not just displayed', () => {
+  it('"best phone" is in rating order, across both smartphone trees', async () => {
+    const body = await search(`q=${encodeURIComponent('best phone')}`);
+    // Best rated, and filed in the tree "phone" does not infer. A sort that
+    // only broke ties inside the boost would have put it fourth.
+    expect(slugs(body)[0]).toBe(FIXTURE.phoneTopRatedInElectronics);
+    expect(body.search?.appliedSort).toBe('rating');
+    expect(body.search?.sortSource).toBe('parsed');
+  });
+
+  it('"cheapest phone" is in price order from the first result to the last', async () => {
+    const body = await search(`q=${encodeURIComponent('cheapest phone')}`);
+    const prices = body.items.map((item) => item.pricePaise);
+    expect(prices.length).toBeGreaterThan(2);
+    expect(prices).toEqual([...prices].sort((a, b) => a - b));
+    expect(body.search?.appliedSort).toBe('price_asc');
+  });
+
+  it('a search with no sort in its words is in relevance order, and says so', async () => {
+    const body = await search(`q=${encodeURIComponent('phone')}`);
+    expect(body.search?.appliedSort).toBeNull();
+    expect(body.search?.sortSource).toBe('relevance');
+    // Relevance still ranks the guessed category first.
+    const first = body.items[0]?.slug;
+    expect([FIXTURE.phoneCheapInMobiles, FIXTURE.phoneWordedPlainly, FIXTURE.phoneExpensive]).toContain(first);
+  });
+
+  it('removing the sort chip goes back to relevance', async () => {
+    const body = await search(`q=${encodeURIComponent('best phone')}&drop=sort`);
+    expect(body.search?.appliedSort).toBeNull();
+    expect(body.search?.sortSource).toBe('relevance');
+    expect(slugs(body)[0]).not.toBe(FIXTURE.phoneTopRatedInElectronics);
+  });
+});
+
+describe('a sort picked from the dropdown beats the one in the words', () => {
+  it('"best phone" sorted cheapest-first is cheapest-first', async () => {
+    const body = await search(`q=${encodeURIComponent('best phone')}&sort=price_asc`);
+    const prices = body.items.map((item) => item.pricePaise);
+    expect(prices).toEqual([...prices].sort((a, b) => a - b));
+    expect(body.search?.appliedSort).toBe('price_asc');
+    expect(body.search?.sortSource).toBe('chosen');
+  });
+
+  it('still reports what the words implied, so the page can explain the override', async () => {
+    const body = await search(`q=${encodeURIComponent('best phone')}&sort=price_asc`);
+    expect(body.search?.parsed.sort).toBe('rating');
+  });
+
+  it('a picked sort orders across both trees too, not just within the guessed one', async () => {
+    const body = await search(`q=${encodeURIComponent('phone')}&sort=rating`);
+    expect(slugs(body)[0]).toBe(FIXTURE.phoneTopRatedInElectronics);
+    expect(body.search?.sortSource).toBe('chosen');
+  });
+
+  it('picking the listing default still counts as picking it', async () => {
+    const body = await search(`q=${encodeURIComponent('best phone')}&sort=newest`);
+    expect(body.search?.appliedSort).toBe('newest');
+    expect(body.search?.sortSource).toBe('chosen');
   });
 });

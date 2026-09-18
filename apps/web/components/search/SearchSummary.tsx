@@ -36,7 +36,12 @@ export default function SearchSummary({
 }) {
   // Built in @clowe/shared so this page and the search dropdown cannot word
   // the same filter two different ways.
-  const chips = describeParsedQuery(meta.parsed, { categoryName, skip: dropped });
+  //
+  // A sort picked from the dropdown overrides the one the words implied, and
+  // the chip goes with it: "Top rated" beside a dropdown reading "Cheapest
+  // first" would be the same contradiction this exists to remove.
+  const skip: SearchDroppable[] = meta.sortSource === 'chosen' ? [...dropped, 'sort'] : dropped;
+  const chips = describeParsedQuery(meta.parsed, { categoryName, skip });
 
   const hasNotice = meta.relaxed !== null || meta.outsideInferredCategory > 0;
   if (chips.length === 0 && !hasNotice) return null;

@@ -139,13 +139,14 @@ describe('phrases that would only look meaningful are rejected', () => {
 
 describe('price bounds come from the prices in the catalog', () => {
   it('offers only bounds some phone actually sits under', () => {
-    // Live phones here cost ₹3,000, ₹12,000, ₹13,000 and ₹80,000. The quartiles
-    // land on ₹3,000 and ₹12,000, the second rounded up to how people say it.
+    // Live phones here cost ₹3,000, ₹12,000, ₹13,000, ₹30,000 and ₹80,000. The
+    // quartiles land on ₹12,000, ₹13,000 and ₹30,000; the first two round up to
+    // the same ₹15,000, which is offered once.
     const bounds = built.phrases
       .filter((p) => p.text.startsWith('phone under '))
       .map((p) => p.text)
       .sort();
-    expect(bounds).toEqual(['phone under 15k', 'phone under 3k']);
+    expect(bounds).toEqual(['phone under 15k', 'phone under 30k']);
   });
 
   it('never offers a bound below the cheapest phone', () => {
@@ -189,7 +190,7 @@ describe('the dropdown', () => {
 
   it('"phone under" completes to a price the catalog supports', async () => {
     const data = await suggest('phone under');
-    expect(texts(data)).toEqual(expect.arrayContaining(['phone under 3k', 'phone under 15k']));
+    expect(texts(data)).toEqual(expect.arrayContaining(['phone under 15k', 'phone under 30k']));
   });
 
   it('"cheap" completes to cheapest-first searches', async () => {

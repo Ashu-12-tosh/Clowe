@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import {
   SEARCH_SYNONYMS,
   parseSearchQuery,
+  type ProductSort,
   type ParsedSearchQuery,
   type SearchCatalog,
   type SearchMeta,
@@ -211,6 +212,12 @@ export interface ProductSearchInput {
   /** Extra constraints the caller already built (option axes, explicit price). */
   baseWhere: Prisma.ProductWhereInput;
   sort: 'popularity' | 'newest' | 'price_asc' | 'price_desc' | 'rating';
+  /**
+   * Whether `sort` was picked by the shopper rather than being the default.
+   * A picked sort beats one the words imply; a default loses to it and only
+   * breaks ties.
+   */
+  sortChosen?: boolean;
   skip: number;
   take: number;
 }
@@ -302,6 +309,15 @@ export async function searchProducts(input: ProductSearchInput): Promise<Product
 
   const tsQuery = buildTsQuery(parsed.cleanedKeywords);
 
+  // The dropdown beats the words, the words beat the default. parsed.sort is
+  // already null if the shopper removed its chip.
+  const appliedSort: ProductSort | null = input.sortChosen ? input.sort : parsed.sort;
+  const sortSource: SearchMeta['sortSource'] = input.sortChosen
+    ? 'chosen'
+    : parsed.sort
+      ? 'parsed'
+      : 'relevance';
+
   // The guessed category, resolved to the ids it covers — for ranking only.
   let inferredIds: string[] = [];
   if (parsed.filters.inferredCategorySlug) {
@@ -329,8 +345,16 @@ export async function searchProducts(input: ProductSearchInput): Promise<Product
 
     if (candidateIds.length > 0) {
       const ranked = useKeywords
-        ? await rankByText(candidateIds, tsQuery, parsed.cleanedKeywords, inferredIds, input, catalog)
-        : await rankWithoutText(candidateIds, inferredIds, input, catalog);
+        ? await rankByText(
+            candidateIds,
+            tsQuery,
+            parsed.cleanedKeywords,
+            inferredIds,
+            appliedSort,
+            input,
+            catalog,
+          )
+        : await rankWithoutText(candidateIds, inferredIds, appliedSort, input, catalog);
 
       if (ranked.matched.length > 0) {
         strategy = useKeywords ? ranked.strategy : 'filters-only';
@@ -368,6 +392,8 @@ export async function searchProducts(input: ProductSearchInput): Promise<Product
       parsed,
       strategy: total === 0 ? 'none' : strategy,
       relaxed,
+      appliedSort,
+      sortSource,
       outsideInferredCategory: rows.filter((r) => r.outside).length,
     },
   };
@@ -412,25 +438,49 @@ interface Ranked {
   strategy: SearchMeta['strategy'];
 }
 
+/**
+ * ORDER BY for one ranking path.
+ *
+ * A sort in effect — chosen from the dropdown, or implied by the words — leads,
+ * and relevance only breaks its ties. With neither, relevance leads and the
+ * listing's default breaks ties.
+ *
+ * Sort-as-tie-breaker was the old arrangement, and it applied nothing: the
+ * category boost and ts_rank almost never tie, so "phone" sorted cheapest-first
+ * put the cheapest phone seventh — and "best phone" put the best-rated phone
+ * seventh too, behind six from whichever smartphone tree the guess preferred.
+ */
+function orderSql(
+  relevance: Prisma.Sql[],
+  applied: ProductSort | null,
+  input: ProductSearchInput,
+  catalog: CachedCatalog,
+): Prisma.Sql {
+  const parts = applied
+    ? [sortSql(applied, catalog.meanRating), ...relevance]
+    : [...relevance, sortSql(input.sort, catalog.meanRating)];
+  return Prisma.join(parts, ', ');
+}
+
 /** Full-text ranking, falling back to trigram similarity when it finds nothing. */
 async function rankByText(
   candidateIds: string[],
   tsQuery: string,
   rawKeywords: string,
   inferredIds: string[],
+  applied: ProductSort | null,
   input: ProductSearchInput,
   catalog: CachedCatalog,
 ): Promise<Ranked> {
   const boost = Prisma.sql`CASE WHEN p."categoryId" = ANY(${inferredIds}::text[]) THEN 1 ELSE 0 END`;
+  const rank = Prisma.sql`ts_rank(p."searchVector", to_tsquery('english', ${tsQuery}))`;
 
   const fts = await prisma.$queryRaw<{ id: string; categoryId: string }[]>`
     SELECT p.id, p."categoryId"
     FROM products p
     WHERE p.id = ANY(${candidateIds}::text[])
       AND p."searchVector" @@ to_tsquery('english', ${tsQuery})
-    ORDER BY ${boost} DESC,
-             ts_rank(p."searchVector", to_tsquery('english', ${tsQuery})) DESC,
-             ${sortSql(input.sort, catalog.meanRating)}
+    ORDER BY ${orderSql([Prisma.sql`${boost} DESC`, Prisma.sql`${rank} DESC`], applied, input, catalog)}
   `;
   if (fts.length > 0) {
     return { matched: fts.map((r) => r.id), categoryOf: mapCategories(fts), strategy: 'fts' };
@@ -440,20 +490,16 @@ async function rankByText(
   const needle = rawKeywords.toLowerCase().trim();
   if (!needle) return { matched: [], categoryOf: new Map(), strategy: 'none' };
 
+  const similarity = Prisma.sql`GREATEST(
+    word_similarity(${needle}, lower(p.title)),
+    word_similarity(${needle}, lower(coalesce(p.brand, '')))
+  )`;
   const fuzzy = await prisma.$queryRaw<{ id: string; categoryId: string }[]>`
     SELECT p.id, p."categoryId"
     FROM products p
     WHERE p.id = ANY(${candidateIds}::text[])
-      AND GREATEST(
-            word_similarity(${needle}, lower(p.title)),
-            word_similarity(${needle}, lower(coalesce(p.brand, '')))
-          ) >= ${TRIGRAM_THRESHOLD}
-    ORDER BY ${boost} DESC,
-             GREATEST(
-               word_similarity(${needle}, lower(p.title)),
-               word_similarity(${needle}, lower(coalesce(p.brand, '')))
-             ) DESC,
-             ${sortSql(input.sort, catalog.meanRating)}
+      AND ${similarity} >= ${TRIGRAM_THRESHOLD}
+    ORDER BY ${orderSql([Prisma.sql`${boost} DESC`, Prisma.sql`${similarity} DESC`], applied, input, catalog)}
   `;
   return {
     matched: fuzzy.map((r) => r.id),
@@ -466,6 +512,7 @@ async function rankByText(
 async function rankWithoutText(
   candidateIds: string[],
   inferredIds: string[],
+  applied: ProductSort | null,
   input: ProductSearchInput,
   catalog: CachedCatalog,
 ): Promise<Ranked> {
@@ -474,7 +521,7 @@ async function rankWithoutText(
     SELECT p.id, p."categoryId"
     FROM products p
     WHERE p.id = ANY(${candidateIds}::text[])
-    ORDER BY ${boost} DESC, ${sortSql(input.sort, catalog.meanRating)}
+    ORDER BY ${orderSql([Prisma.sql`${boost} DESC`], applied, input, catalog)}
   `;
   return { matched: rows.map((r) => r.id), categoryOf: mapCategories(rows), strategy: 'filters-only' };
 }
