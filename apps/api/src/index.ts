@@ -2,6 +2,7 @@ import { env } from './env';
 import { createApp } from './app';
 import { startPackingVideoCleanup } from './services/packingVideoCleanup';
 import { logTryOnProviderStatus } from './services/tryon';
+import { logKycProviderStatus } from './services/kyc';
 import { startSearchLogCleanup } from './services/searchAnalytics';
 import { startQuerySuggestionRefresh } from './services/querySuggestions';
 
@@ -12,6 +13,7 @@ app.listen(env.PORT, () => {
   console.log(`[clowe-api] health check: http://localhost:${env.PORT}/api/health`);
   // Reports the live try-on provider, and warns at boot if the key is bad.
   void logTryOnProviderStatus();
+  logKycProviderStatus();
 });
 
 // Packing videos expire after 10 days - swept at boot and hourly after that.

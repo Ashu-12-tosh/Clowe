@@ -52,6 +52,29 @@ export const aiLimiter = rateLimit({
  * to stop a scraper walking the catalog, not to police normal typing. The
  * client debounces at ~200ms, which keeps a fast typist well inside this.
  */
+/**
+ * Seller KYC verification. Every check is a paid call to the provider, so this
+ * is a budget, not a courtesy: five runs an hour per seller, counted per
+ * account rather than per IP so a phone switching networks is still one seller.
+ * Cached answers make most runs free anyway; this stops the ones that are not.
+ */
+export const kycVerifyLimiter = rateLimit({
+  ...common,
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  keyGenerator: (req) => `kyc-seller:${req.auth?.userId ?? 'anonymous'}`,
+  message: limitError('Too many verification attempts. Please try again in an hour.'),
+});
+
+/** An admin re-running checks across many sellers needs more room than one seller. */
+export const kycAdminRunLimiter = rateLimit({
+  ...common,
+  windowMs: 60 * 60 * 1000,
+  limit: 60,
+  keyGenerator: (req) => `kyc-admin:${req.auth?.userId ?? 'anonymous'}`,
+  message: limitError('Too many verification re-runs. Please try again later.'),
+});
+
 export const suggestLimiter = rateLimit({
   ...common,
   windowMs: 60 * 1000,

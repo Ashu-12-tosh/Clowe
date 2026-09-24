@@ -1,4 +1,8 @@
-import type { PlatformSettings, PublicSettings } from '@clowe/shared';
+import {
+  DEFAULT_KYC_NAME_MATCH_MIN_SCORE,
+  type PlatformSettings,
+  type PublicSettings,
+} from '@clowe/shared';
 import { prisma } from '../db';
 import { env } from '../env';
 
@@ -15,6 +19,7 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   payoutHoldDays: env.RETURN_WINDOW_DAYS,
   returnWindowDays: env.RETURN_WINDOW_DAYS,
   auditRetentionDays: 365,
+  kycNameMatchMinScore: DEFAULT_KYC_NAME_MATCH_MIN_SCORE,
   socialLinks: { facebook: '', twitter: '', instagram: '' },
   adPricing: {
     HOME_BANNER: { '7': 49900, '15': 89900, '30': 149900 },
@@ -69,6 +74,9 @@ export async function getSettings(): Promise<PlatformSettings> {
     auditRetentionDays:
       (byKey.get('auditRetentionDays') as number | undefined) ??
       DEFAULT_SETTINGS.auditRetentionDays,
+    kycNameMatchMinScore:
+      (byKey.get('kycNameMatchMinScore') as number | undefined) ??
+      DEFAULT_SETTINGS.kycNameMatchMinScore,
     socialLinks:
       (byKey.get('socialLinks') as PlatformSettings['socialLinks'] | undefined) ??
       DEFAULT_SETTINGS.socialLinks,

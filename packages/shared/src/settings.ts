@@ -51,6 +51,12 @@ export interface PlatformSettings {
   returnWindowDays: number;
   /** How long audit entries are kept before they can be purged. */
   auditRetentionDays: number;
+  /**
+   * KYC name-match score (0–100, the provider's own) a check must reach to
+   * count as matching. Stored scores are judged against it on every read, so
+   * moving it re-grades every seller without re-verifying anyone.
+   */
+  kycNameMatchMinScore: number;
   /** Social links shown in the footer; empty string = "coming soon". */
   socialLinks: { facebook: string; twitter: string; instagram: string };
   adPricing: AdPricing;
@@ -79,6 +85,7 @@ export const updateSettingsSchema = z.object({
   payoutTdsPercent: z.number().min(0).max(20).optional(),
   payoutMinPaise: z.number().int().min(0).optional(),
   payoutHoldDays: z.number().int().min(0).max(90).optional(),
+  kycNameMatchMinScore: z.number().int().min(0).max(100).optional(),
   socialLinks: z
     .object({
       facebook: z.string().trim().url().or(z.literal('')),

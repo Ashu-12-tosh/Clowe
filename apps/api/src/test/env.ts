@@ -19,3 +19,4 @@ process.env.JWT_ACCESS_SECRET ??= 'integration-test-secret-not-a-real-key';
 process.env.TRYON_PROVIDER = 'mock';
 process.env.AI_PROVIDER = 'mock';
 process.env.OTP_PROVIDER = 'mock';
+process.env.KYC_PROVIDER = 'mock';

@@ -19,6 +19,7 @@ const toPaise = (rupees: string) => Math.max(0, Math.round(Number(rupees || '0')
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [tryonMin, setTryonMin] = useState('');
+  const [kycMinScore, setKycMinScore] = useState('');
   const [social, setSocial] = useState({ facebook: '', twitter: '', instagram: '' });
   const [adPrices, setAdPrices] = useState<Record<string, string>>({});
   const [payout, setPayout] = useState({
@@ -37,6 +38,7 @@ export default function AdminSettingsPage() {
       .then((s) => {
         setSettings(s);
         setTryonMin(toRupees(s.tryonMinPricePaise));
+        setKycMinScore(String(s.kycNameMatchMinScore));
         setSocial(s.socialLinks);
         const prices: Record<string, string> = {};
         for (const pl of AD_PLACEMENTS)
@@ -78,6 +80,7 @@ export default function AdminSettingsPage() {
           payoutTdsPercent: Number(payout.tds) || 0,
           payoutMinPaise: toPaise(payout.minRupees),
           payoutHoldDays: Math.max(0, Math.round(Number(payout.holdDays) || 0)),
+          kycNameMatchMinScore: Math.min(100, Math.max(0, Math.round(Number(kycMinScore) || 0))),
         },
         auth: true,
       });
@@ -120,6 +123,25 @@ export default function AdminSettingsPage() {
         />
         <p className="mt-1 text-xs text-gray-400">
           The Try On Me button appears only on products at or above this price. Enforced server-side too.
+        </p>
+      </div>
+
+      {/* Seller KYC */}
+      <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
+        <h2 className="text-sm font-bold">🪪 Seller KYC</h2>
+        <label className="mt-3 block text-sm font-medium">Minimum name-match score (0–100)</label>
+        <input
+          type="number"
+          min={0}
+          max={100}
+          value={kycMinScore}
+          onChange={(e) => setKycMinScore(e.target.value)}
+          className={`mt-1 ${field}`}
+        />
+        <p className="mt-1 text-xs text-gray-400">
+          PAN and bank-account names scoring below this are flagged before approval. Bands: 100 direct
+          match, 85–99 good partial, 60–84 moderate partial, 34–59 poor partial, 0–33 no match. Changing
+          it re-grades every seller at once — nothing is re-verified or re-billed.
         </p>
       </div>
 

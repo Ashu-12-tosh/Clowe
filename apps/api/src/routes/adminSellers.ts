@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import {
   ADMIN_SELLER_SORTS,
+  KYC_CHECK_TYPES,
   KYC_STATUSES,
   KYC_STATUS_LABELS,
   SELLER_STATUSES,
@@ -10,6 +11,8 @@ import {
   adminSellerActionSchema,
   adminSellerKycSchema,
   adminSellerNoteSchema,
+  kycApprovalWarnings,
+  panGstinMismatch,
   type AdminSellerDetail,
   type AdminSellerListRow,
   type AdminSellerPage,
@@ -22,6 +25,13 @@ import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { sendToUserSafe } from '../services/messaging';
+import { kycAdminRunLimiter } from '../middleware/rateLimits';
+import {
+  KycCheckRunningError,
+  getSellerKycSummary,
+  runSellerKyc,
+  sellersWithFraudFlag,
+} from '../services/kyc/sellerKyc';
 
 export const adminSellersRouter = Router();
 adminSellersRouter.use(requireAuth, requireRole('ADMIN'));
@@ -158,6 +168,11 @@ function toRow(
     ratingAvg,
     suspensionReason: seller.suspensionReason,
     rejectionReason: seller.rejectionReason,
+    kycAlerts: {
+      panGstinMismatch: panGstinMismatch(seller.panNumber, seller.gstNumber),
+      // Needs a query; the list route and the detail fill it in.
+      fraudAccount: false,
+    },
   };
 }
 
@@ -261,8 +276,11 @@ adminSellersRouter.get('/', async (req, res, next) => {
   try {
     const query = listQuery.parse(req.query);
     const rows = await loadRows(query);
+    const pageRows = rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize);
+    const fraud = await sellersWithFraudFlag(pageRows.map((r) => r.id));
+    for (const row of pageRows) row.kycAlerts.fraudAccount = fraud.has(row.id);
     const body: AdminSellerPage = {
-      rows: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize),
+      rows: pageRows,
       total: rows.length,
       page: query.page,
       pageSize: query.pageSize,
@@ -432,6 +450,31 @@ adminSellersRouter.patch('/:id/status', async (req, res, next) => {
     const reason = 'reason' in input ? input.reason : null;
     const blocking = step.status === 'SUSPENDED' || step.status === 'BANNED';
 
+    // KYC never blocks approval — the admin decides — but with problems
+    // outstanding, the request has to say it has seen them. Otherwise it is
+    // refused with the list, so the confirmation always shows what is true
+    // at the moment of approving rather than when the page was loaded.
+    // It applies to a seller's first approval by any route — reinstating a
+    // rejected application approves it too — but not to reinstating a seller
+    // who was approved before and then suspended.
+    let kycWarnings: string[] = [];
+    const firstApproval = step.status === 'APPROVED' && seller.approvedAt === null;
+    if (firstApproval) {
+      kycWarnings = kycApprovalWarnings(await getSellerKycSummary(seller.id));
+      const acknowledged = 'acknowledgeKycWarnings' in input && input.acknowledgeKycWarnings === true;
+      if (kycWarnings.length > 0 && !acknowledged) {
+        res.status(409).json({
+          success: false,
+          error: {
+            code: 'KYC_WARNINGS_UNACKNOWLEDGED',
+            message: `Approving with KYC problems outstanding:\n${kycWarnings.map((w) => `• ${w}`).join('\n')}`,
+            warnings: kycWarnings,
+          },
+        });
+        return;
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       await tx.sellerProfile.update({
         where: { id: seller.id },
@@ -454,6 +497,17 @@ adminSellersRouter.patch('/:id/status', async (req, res, next) => {
         await tx.product.updateMany({
           where: { sellerId: seller.id, status: 'APPROVED' },
           data: { isVisible: true },
+        });
+      }
+      // Approving past KYC warnings leaves a record of exactly what was waved
+      // through, on the seller's notes where the next admin will see it.
+      if (kycWarnings.length > 0) {
+        await tx.sellerNote.create({
+          data: {
+            sellerId: seller.id,
+            authorId: req.auth!.userId,
+            body: `Approved with KYC warnings acknowledged:\n${kycWarnings.map((w) => `• ${w}`).join('\n')}`,
+          },
         });
       }
       await tx.notification.create({
@@ -523,6 +577,27 @@ adminSellersRouter.patch('/:id/kyc', async (req, res, next) => {
 });
 
 /** Internal note — admin-only, never shown to the seller. */
+/**
+ * Re-run KYC checks for a seller: an admin retrying after an ERROR.
+ * Still only calls the provider for checks with no answer: re-running a
+ * verified PAN costs nothing because it does not happen.
+ */
+adminSellersRouter.post('/:id/kyc-checks', kycAdminRunLimiter, async (req, res, next) => {
+  try {
+    const { check } = z.object({ check: z.enum(KYC_CHECK_TYPES).optional() }).parse(req.body ?? {});
+    const exists = await prisma.sellerProfile.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!exists) throw ApiError.notFound('Seller not found');
+    const kyc = await runSellerKyc(exists.id, check ? [check] : undefined);
+    res.json({ success: true, data: { kyc, kycApprovalWarnings: kycApprovalWarnings(kyc) } });
+  } catch (err) {
+    if (err instanceof KycCheckRunningError) {
+      next(new ApiError(409, 'KYC_CHECK_RUNNING', 'Verification is already running for this seller.'));
+      return;
+    }
+    next(err);
+  }
+});
+
 adminSellersRouter.post('/:id/notes', async (req, res, next) => {
   try {
     const input = adminSellerNoteSchema.parse(req.body);
@@ -665,6 +740,7 @@ adminSellersRouter.get('/:id', async (req, res, next) => {
     const onTime = withEta.filter((i) => i.deliveredAt! <= i.order.etaTo!).length;
 
     const reviewCount = rating?.count ?? 0;
+    const kyc = await getSellerKycSummary(seller.id);
     const body: AdminSellerDetail = {
       ...toRow(
         seller,
@@ -683,6 +759,9 @@ adminSellersRouter.get('/:id', async (req, res, next) => {
       bankIfsc: seller.bankIfsc,
       kycReviewedAt: seller.kycReviewedAt?.toISOString() ?? null,
       approvedAt: seller.approvedAt?.toISOString() ?? null,
+      panName: seller.panName,
+      kyc,
+      kycApprovalWarnings: kycApprovalWarnings(kyc),
       performance: {
         unitsSold: roll?.unitsSold ?? 0,
         returnRate:
@@ -715,6 +794,7 @@ adminSellersRouter.get('/:id', async (req, res, next) => {
         createdAt: n.createdAt.toISOString(),
       })),
     };
+    body.kycAlerts.fraudAccount = kyc.fraudAccount;
     res.json({ success: true, data: body });
   } catch (err) {
     next(err);

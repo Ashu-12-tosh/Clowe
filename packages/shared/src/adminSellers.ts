@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { SellerKycSummary } from './kyc';
 
 // ---------------------------------------------------------------------------
 // Admin seller management
@@ -78,6 +79,11 @@ export interface AdminSellerListRow {
   ratingAvg: number | null;
   suspensionReason: string | null;
   rejectionReason: string | null;
+  /**
+   * Fraud signals found by KYC, shown in the list as well as the detail so
+   * they cannot be missed by an admin who never opens the seller.
+   */
+  kycAlerts: { panGstinMismatch: boolean; fraudAccount: boolean };
 }
 
 export interface AdminSellerPage {
@@ -99,6 +105,11 @@ export interface AdminSellerDetail extends AdminSellerListRow {
   bankIfsc: string | null;
   kycReviewedAt: string | null;
   approvedAt: string | null;
+  panName: string | null;
+  /** Every automated KYC check: status, score, band, provider, time. */
+  kyc: SellerKycSummary;
+  /** What the approval confirmation must say. Empty = nothing to warn about. */
+  kycApprovalWarnings: string[];
   /** Performance the admin judges the shop on. */
   performance: {
     unitsSold: number;
@@ -140,7 +151,15 @@ export interface AdminSellerSummary {
 }
 
 export const adminSellerActionSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('approve') }),
+  z.object({
+    action: z.literal('approve'),
+    /**
+     * Approval is not blocked by KYC, but it is not blind either: with
+     * warnings outstanding the request must say it has seen them, or it is
+     * refused with the list.
+     */
+    acknowledgeKycWarnings: z.boolean().optional(),
+  }),
   z.object({
     action: z.literal('reject'),
     reason: z.string().trim().min(5, 'Give the seller a reason').max(300),
@@ -153,7 +172,11 @@ export const adminSellerActionSchema = z.discriminatedUnion('action', [
     action: z.literal('ban'),
     reason: z.string().trim().min(5, 'Give the seller a reason').max(300),
   }),
-  z.object({ action: z.literal('reinstate') }),
+  z.object({
+    action: z.literal('reinstate'),
+    /** Reinstating a rejected seller is their first approval; the same rule applies. */
+    acknowledgeKycWarnings: z.boolean().optional(),
+  }),
 ]);
 export type AdminSellerActionInput = z.infer<typeof adminSellerActionSchema>;
 

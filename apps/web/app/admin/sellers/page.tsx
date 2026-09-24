@@ -345,6 +345,22 @@ function SellersView() {
                   >
                     {row.kycLabel}
                   </span>
+                  {row.kycAlerts.panGstinMismatch && (
+                    <span
+                      title="The GSTIN carries a different PAN from the one on file"
+                      className="mt-1 block whitespace-nowrap text-[11px] font-bold text-red-600"
+                    >
+                      ⚠ PAN–GSTIN mismatch
+                    </span>
+                  )}
+                  {row.kycAlerts.fraudAccount && (
+                    <span
+                      title="The verification provider flagged the bank account as fraudulent"
+                      className="mt-1 block whitespace-nowrap text-[11px] font-bold text-red-600"
+                    >
+                      ⚠ Fraud-flagged bank
+                    </span>
+                  )}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5 text-gray-500">
                   {new Date(row.joinedAt).toLocaleDateString('en-IN', {

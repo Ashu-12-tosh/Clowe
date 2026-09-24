@@ -23,6 +23,7 @@ import {
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadImages } from '@/lib/api';
 import StorePreview from '@/components/seller/store/StorePreview';
+import KycVerificationCard from '@/components/seller/KycVerificationCard';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -157,6 +158,7 @@ export default function SellerStoreSettingsPage() {
           businessType: form.businessType ?? '',
           gstNumber: form.gstNumber ?? '',
           panNumber: form.panNumber ?? '',
+          panName: form.panName ?? '',
           addressLine1: form.addressLine1 ?? '',
           addressLine2: form.addressLine2 ?? '',
           landmark: form.landmark ?? '',
@@ -587,8 +589,8 @@ export default function SellerStoreSettingsPage() {
             >
               {form.kycStatus === 'VERIFIED' && (
                 <p className="mb-3 rounded-lg bg-cream-50 px-3 py-2 text-[11px] text-gray-600">
-                  GSTIN and PAN are locked now that your shop is verified. Raise a support ticket if
-                  they need to change.
+                  GSTIN, PAN and the name on your PAN are locked now that your shop is verified. Raise
+                  a support ticket if they need to change.
                 </p>
               )}
               <div className="grid gap-4 sm:grid-cols-2">
@@ -620,6 +622,14 @@ export default function SellerStoreSettingsPage() {
                     onChange={(e) => patch({ panNumber: e.target.value.toUpperCase() })}
                     disabled={form.kycStatus === 'VERIFIED'}
                     className={`${field} uppercase disabled:bg-gray-50`}
+                  />
+                </Field>
+                <Field label="Name as on PAN" hint="Exactly as printed on the card — this is what we verify">
+                  <input
+                    value={form.panName ?? ''}
+                    onChange={(e) => patch({ panName: e.target.value })}
+                    disabled={form.kycStatus === 'VERIFIED'}
+                    className={`${field} disabled:bg-gray-50`}
                   />
                 </Field>
                 <Field label="Address line 1">
@@ -668,6 +678,8 @@ export default function SellerStoreSettingsPage() {
             </Section>
           )}
 
+          {tab === 'BUSINESS' && <KycVerificationCard refresh={data.settings} />}
+
           {/* --- Bank ---------------------------------------------------- */}
           {tab === 'BANK' && (
             <Section
@@ -701,7 +713,7 @@ export default function SellerStoreSettingsPage() {
                 Manage payout methods →
               </Link>
               <p className="mt-2 text-[11px] text-gray-400">
-                Money only moves to a verified method. Full account numbers are never stored here.
+                Money only moves to a verified method.
               </p>
             </Section>
           )}

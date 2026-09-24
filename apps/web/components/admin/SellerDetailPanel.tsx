@@ -13,6 +13,7 @@ import {
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
+import SellerKycPanel, { KycFraudBanner } from './SellerKycPanel';
 
 export const SELLER_STATUS_STYLES: Record<AdminSellerStatus, string> = {
   APPROVED: 'bg-green-100 text-green-700',
@@ -90,7 +91,23 @@ export default function SellerDetailPanel({
     setBusy(true);
     setError('');
     try {
-      await api(`/api/admin/sellers/${sellerId}/status`, { method: 'PATCH', body, auth: true });
+      try {
+        await api(`/api/admin/sellers/${sellerId}/status`, { method: 'PATCH', body, auth: true });
+      } catch (err) {
+        // KYC problems outstanding: the server refuses with each one spelled
+        // out as it stands now. Approving past them is the admin's call, made
+        // with that list in front of them, and it is kept in the notes.
+        if (!(err instanceof ApiRequestError && err.code === 'KYC_WARNINGS_UNACKNOWLEDGED')) throw err;
+        const go = confirm(
+          `${err.message}\n\nApprove ${detail?.shopName} anyway? This list is saved to the seller's notes.`,
+        );
+        if (!go) return;
+        await api(`/api/admin/sellers/${sellerId}/status`, {
+          method: 'PATCH',
+          body: { ...body, acknowledgeKycWarnings: true },
+          auth: true,
+        });
+      }
       await load();
       onChanged();
     } catch (err) {
@@ -191,6 +208,8 @@ export default function SellerDetailPanel({
               </p>
             )}
 
+            <KycFraudBanner kyc={detail.kyc} />
+
             <div className="mt-4 flex gap-1 border-b border-gray-100">
               {(['OVERVIEW', 'PERFORMANCE', 'ORDERS', 'NOTES'] as Tab[]).map((t) => (
                 <button
@@ -209,6 +228,26 @@ export default function SellerDetailPanel({
                 </button>
               ))}
             </div>
+
+            {tab === 'OVERVIEW' && (
+              <SellerKycPanel
+                sellerId={detail.id}
+                kyc={detail.kyc}
+                subjects={{
+                  PAN: detail.panNumber
+                    ? `${detail.panNumber} · ${detail.panName ?? 'no name on PAN given'}`
+                    : null,
+                  GSTIN: detail.gstNumber,
+                  BANK: detail.bankAccountNo
+                    ? `${detail.bankAccountNo} · ${detail.bankIfsc ?? ''} · ${detail.bankAccountName ?? 'no holder name given'}`
+                    : null,
+                }}
+                onChanged={async () => {
+                  await load();
+                  onChanged();
+                }}
+              />
+            )}
 
             {tab === 'OVERVIEW' && (
               <dl className="mt-3 divide-y divide-gray-50 text-xs">
@@ -455,6 +494,18 @@ export default function SellerDetailPanel({
                   📦 Their products
                 </Link>
               </div>
+              {!detail.approvedAt &&
+                (detail.status === 'PENDING' || detail.status === 'REJECTED') &&
+                detail.kycApprovalWarnings.length > 0 && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                    <p className="font-semibold">Approving this seller means accepting:</p>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                      {detail.kycApprovalWarnings.map((w) => (
+                        <li key={w}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               <p className="mt-2 text-[11px] text-gray-400">
                 Suspending or banning hides every live listing from the storefront immediately;
                 reinstating brings them back.

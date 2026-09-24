@@ -29,6 +29,29 @@ enum SellerStatus {
   BANNED // permanent — the shop and its listings stay off the storefront
 }
 
+enum KycCheckType {
+  PAN
+  GSTIN
+  BANK
+}
+
+// VERIFIED and FAILED are the provider's answers and are never asked again.
+// ERROR is the absence of one; only a deliberate retry calls the provider again.
+enum KycCheckOutcome {
+  VERIFIED
+  FAILED
+  ERROR
+}
+
+// The verification provider's own name-match bands, best first.
+enum NameMatchBand {
+  DIRECT_MATCH
+  GOOD_PARTIAL_MATCH
+  MODERATE_PARTIAL_MATCH
+  POOR_PARTIAL_MATCH
+  NO_MATCH
+}
+
 // Where the shop's KYC paperwork stands, set by the admin during review.
 enum SellerKycStatus {
   PENDING_DOCS
@@ -338,6 +361,8 @@ model SellerProfile {
   // KYC-lite fields
   gstNumber       String?
   panNumber       String?
+  // Name exactly as printed on the PAN; what the PAN check scores against.
+  panName           String?
   bankAccountName String?
   bankAccountNo   String?
   bankIfsc        String?
@@ -352,6 +377,10 @@ model SellerProfile {
   businessType    String?
   kycStatus       SellerKycStatus @default(PENDING_DOCS)
   kycReviewedAt   DateTime?
+  // Set while automated KYC checks run, so a double-click or a second API
+  // instance cannot pay for the same verification twice. Cleared when done;
+  // a stale value (crashed run) is taken over after a couple of minutes.
+  kycCheckStartedAt DateTime?
   // Why the shop was suspended or banned (shown to the seller).
   suspensionReason String?
   suspendedAt      DateTime?
@@ -424,6 +453,7 @@ model SellerProfile {
   promotions        Promotion[]
   notes             SellerNote[]
   tickets           SupportTicket[]
+  kycChecks         SellerKycCheck[]
 
   @@map("seller_profiles")
 }
@@ -489,6 +519,40 @@ model SellerNote {
 
   @@index([sellerId, createdAt])
   @@map("seller_notes")
+}
+
+/// One call to the KYC verification provider, append-only.
+///
+/// Every row is a call that may have been billed, so the table doubles as a
+/// ledger of what verification cost. The latest row per check is its status.
+///
+/// What it holds is the outcome — status, score, band, provider, time — and
+/// never the provider's response: no registered names, no bank-side account
+/// holder, nothing the provider returned beyond the verdict.
+model SellerKycCheck {
+  id          String          @id @default(cuid())
+  sellerId    String
+  seller      SellerProfile   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  kind        KycCheckType
+  outcome     KycCheckOutcome
+  /// Our own reason code (PAN_INVALID, FRAUD_ACCOUNT, PROVIDER_BALANCE…), never provider text.
+  reason      String?
+  /// The provider's 0–100 name match, and its band. Null when no name was checked.
+  nameScore   Int?
+  nameBand    NameMatchBand?
+  /// Which provider answered. Answers from one never count for another: a
+  /// mock "verified" must not stand once the real provider is switched on.
+  provider    String
+  /// HMAC of what was checked — the PAN, the GSTIN, or account number + IFSC.
+  /// Tells whether the details on file changed since, without keeping a
+  /// second copy of the number.
+  subject     String
+  /// HMAC of the name sent for matching; null when none was sent.
+  nameSubject String?
+  createdAt   DateTime        @default(now())
+
+  @@index([sellerId, kind, createdAt])
+  @@map("seller_kyc_checks")
 }
 
 // Where a seller's money is sent. Account numbers are stored masked — the

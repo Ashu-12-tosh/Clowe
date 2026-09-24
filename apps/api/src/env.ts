@@ -8,6 +8,21 @@ import { z } from 'zod';
 // thing in either app.
 dotenv.config({ path: ['.env.local', '.env'] });
 
+/**
+ * An optional variable that may arrive as an empty string. docker-compose
+ * passes `${VAR:-}` for an unset variable, which is "" rather than absent, and
+ * "" must mean "not configured" — not a malformed value that stops the server
+ * booting. A value that is actually set is still validated in full.
+ */
+const blankAsUnset = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), schema);
+
+/** An optional API key or secret: blank is unset; anything else must be non-empty. */
+const optionalSecret = blankAsUnset(z.string().trim().min(1).optional());
+
+/** Used outside production so a dev machine needs no extra setup. */
+export const DEV_KYC_FINGERPRINT_SECRET = 'dev-only-kyc-fingerprint-secret-change-me';
+
 // Validate environment up-front so a misconfigured server fails fast.
 const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
@@ -26,7 +41,7 @@ const envSchema = z.object({
   OTP_MAX_ATTEMPTS: z.coerce.number().default(5),
 
   // Phone number that gets the ADMIN role via the seed script.
-  ADMIN_PHONE: z.string().regex(/^[6-9]\d{9}$/).optional(),
+  ADMIN_PHONE: blankAsUnset(z.string().regex(/^[6-9]\d{9}$/).optional()),
 
   // --- Payments ---
   // 'mock' settles payments via a fake pay button (dev). 'razorpay' uses test/live keys.
@@ -42,7 +57,7 @@ const envSchema = z.object({
   // --- AI Try-On ---
   // 'auto': use FASHN when FASHN_API_KEY is set, otherwise the free mock.
   TRYON_PROVIDER: z.enum(['auto', 'mock', 'fashn']).default('auto'),
-  FASHN_API_KEY: z.string().trim().min(1).optional(),
+  FASHN_API_KEY: optionalSecret,
   // FASHN model. 'tryon-v1.6' is 1 credit per image; 'tryon-max' is higher
   // quality and costs more credits per run.
   FASHN_MODEL: z.string().default('tryon-v1.6'),
@@ -69,6 +84,26 @@ const envSchema = z.object({
   // 'mock' fabricates AWB numbers. Shiprocket/Delhivery later.
   SHIPPING_PROVIDER: z.enum(['mock']).default('mock'),
 
+  // --- Seller KYC verification (PAN, GSTIN, bank account) ---
+  // 'auto': Cashfree when its verification credentials are set, otherwise the
+  // free mock — so adding the keys switches over with no code change.
+  KYC_PROVIDER: z.enum(['auto', 'mock', 'cashfree']).default('auto'),
+  // Each Cashfree product has its own environment, so one can go live while
+  // another is still in sandbox — payouts will get CASHFREE_PAYOUT_ENV beside
+  // this one. Sandbox never bills.
+  CASHFREE_VERIFICATION_ENV: z.enum(['sandbox', 'production']).default('sandbox'),
+  // Cashfree issues separate API keys per product; these are the Verification
+  // Suite's (Secure ID), named so payments' and payouts' keys can sit beside them.
+  CASHFREE_VERIFICATION_CLIENT_ID: optionalSecret,
+  CASHFREE_VERIFICATION_CLIENT_SECRET: optionalSecret,
+  // Only for signature 2FA (no static IP to allowlist): the PEM public key
+  // Cashfree issues, on one line with literal \n where the line breaks go.
+  CASHFREE_VERIFICATION_PUBLIC_KEY: optionalSecret,
+  // Keys the fingerprints that tell whether a PAN, GSTIN or bank account on
+  // file changed since it was verified. Rotating it makes every fingerprint
+  // look new, and so re-bills every verification: set once, leave alone.
+  KYC_FINGERPRINT_SECRET: optionalSecret,
+
   // --- File storage (local disk in dev; S3-compatible later) ---
   UPLOAD_DIR: z.string().default('uploads'),
   // Public base URL of this API, used to build absolute image URLs.
@@ -78,7 +113,20 @@ const envSchema = z.object({
   WEB_PUBLIC_URL: z.string().optional(),
 });
 
-export const env = envSchema.parse(process.env);
+export const env = envSchema
+  .superRefine((e, ctx) => {
+    if (e.NODE_ENV === 'production' && (!e.KYC_FINGERPRINT_SECRET || e.KYC_FINGERPRINT_SECRET.length < 32)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['KYC_FINGERPRINT_SECRET'],
+        message: 'KYC_FINGERPRINT_SECRET (32+ characters) is required in production',
+      });
+    }
+  })
+  .parse(process.env);
+
+/** The fingerprint key actually in use: the configured one, or the dev default. */
+export const kycFingerprintSecret = env.KYC_FINGERPRINT_SECRET ?? DEV_KYC_FINGERPRINT_SECRET;
 
 export const corsOrigins = env.CORS_ORIGINS.split(',').map((o) => o.trim());
 export const webPublicUrl = env.WEB_PUBLIC_URL ?? corsOrigins[0];

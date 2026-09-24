@@ -627,6 +627,9 @@ adminRouter.put('/settings', async (req, res, next) => {
       'payoutTdsPercent',
       'payoutMinPaise',
       'payoutHoldDays',
+      // KYC name matches are judged against this on every read, so moving it
+      // re-grades sellers without re-verifying (and re-paying for) anyone.
+      'kycNameMatchMinScore',
     ] as const) {
       if (input[key] !== undefined) await setSetting(key, input[key]);
     }

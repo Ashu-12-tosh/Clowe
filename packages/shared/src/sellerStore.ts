@@ -85,6 +85,7 @@ export interface SellerStoreSettings {
   businessType: string | null;
   gstNumber: string | null;
   panNumber: string | null;
+  panName: string | null;
   addressLine1: string | null;
   addressLine2: string | null;
   landmark: string | null;
@@ -223,6 +224,16 @@ export const storeBusinessSchema = z.object({
     .regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, 'PAN looks like ABCDE1234F')
     .optional()
     .or(z.literal('')),
+  /**
+   * The name exactly as printed on the PAN — the owner for a proprietorship,
+   * the company for a company. The PAN check scores against this.
+   */
+  panName: z
+    .string()
+    .trim()
+    .max(100)
+    .regex(/^[A-Za-z0-9 .&/-]*$/, 'Use only letters, digits, spaces and . & / -')
+    .optional(),
   addressLine1: z.string().trim().max(120).optional(),
   addressLine2: z.string().trim().max(120).optional(),
   landmark: z.string().trim().max(80).optional(),

@@ -52,6 +52,7 @@ import { sellerInventoryRouter } from './routes/sellerInventory';
 import { sellerSupportRouter } from './routes/sellerSupport';
 import { sellerStoreRouter } from './routes/sellerStore';
 import { sellerTryonRouter } from './routes/sellerTryon';
+import { sellerKycRouter } from './routes/sellerKyc';
 import { storesRouter } from './routes/stores';
 import { adminSupportRouter } from './routes/adminSupport';
 import { errorHandler } from './middleware/error';
@@ -130,6 +131,7 @@ export function createApp() {
   app.use('/api/seller/support', sellerSupportRouter);
   app.use('/api/seller/store', sellerStoreRouter);
   app.use('/api/seller/tryon', sellerTryonRouter);
+  app.use('/api/seller/kyc', sellerKycRouter);
   app.use('/api/seller', sellerRouter);
   // Specific admin routers first — a catch-all /api/admin mount would
   // otherwise answer (or 404) their paths before they are reached.

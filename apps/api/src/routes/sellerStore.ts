@@ -109,6 +109,7 @@ async function toSettings(seller: SellerProfile): Promise<SellerStoreSettings> {
     businessType: seller.businessType,
     gstNumber: seller.gstNumber,
     panNumber: seller.panNumber,
+    panName: seller.panName,
     addressLine1: seller.addressLine1,
     addressLine2: seller.addressLine2,
     landmark: seller.landmark,
@@ -386,9 +387,10 @@ sellerStoreRouter.put('/business', async (req, res, next) => {
     if (locked) {
       const changingGst = input.gstNumber && input.gstNumber !== seller.gstNumber;
       const changingPan = input.panNumber && input.panNumber !== seller.panNumber;
-      if (changingGst || changingPan) {
+      const changingPanName = input.panName && input.panName !== seller.panName;
+      if (changingGst || changingPan || changingPanName) {
         throw ApiError.badRequest(
-          'GSTIN and PAN are locked after verification — raise a support ticket to change them',
+          'GSTIN and PAN details are locked after verification — raise a support ticket to change them',
           'KYC_LOCKED',
         );
       }
@@ -398,7 +400,13 @@ sellerStoreRouter.put('/business', async (req, res, next) => {
       where: { id: seller.id },
       data: {
         businessType: input.businessType || null,
-        ...(locked ? {} : { gstNumber: input.gstNumber || null, panNumber: input.panNumber || null }),
+        ...(locked
+          ? {}
+          : {
+              gstNumber: input.gstNumber || null,
+              panNumber: input.panNumber || null,
+              ...(input.panName !== undefined ? { panName: input.panName || null } : {}),
+            }),
         addressLine1: input.addressLine1?.trim() || null,
         addressLine2: input.addressLine2?.trim() || null,
         landmark: input.landmark?.trim() || null,
