@@ -2,6 +2,14 @@
 
 Deploys the full stack with Docker Compose: **Postgres + API + Next.js web + Nginx**, all on one VPS. Works on any Ubuntu VPS (Hostinger KVM 2 or better recommended: 2+ vCPU, 4+ GB RAM).
 
+> **Doing the deploy right now?** Work through **[DEPLOY_RUNBOOK.md](DEPLOY_RUNBOOK.md)**
+> instead — the same deploy as a paste-through checklist, with the expected
+> output at every step, an up-front check that the database can create its
+> extensions (if it cannot, the API never starts), rollback procedures, and
+> exactly which features are non-functional until real provider keys are set.
+>
+> This file is the reference: what each piece is and why it is shaped this way.
+
 ---
 
 ## 1. Prepare the VPS
