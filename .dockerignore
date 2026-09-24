@@ -28,6 +28,14 @@
 .gitignore
 .gitattributes
 
+# --- tests: they sit beside the code and must never ship --------------------
+# apps/api/tsconfig.json already excludes these from the compiled output, but
+# the runtime image now copies apps/api/src verbatim (prisma/seed.ts imports
+# src/utils/crypto), so a rule that only governs tsc is no longer enough.
+# Keeping them out of the context means no stage can copy them by accident.
+**/*.test.ts
+apps/api/src/test
+
 # --- logs, test output, editor and OS noise ---------------------------------
 **/*.log
 **/coverage

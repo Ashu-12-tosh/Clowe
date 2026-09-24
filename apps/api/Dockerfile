@@ -42,6 +42,12 @@ COPY --from=build /repo/packages/shared/package.json ./packages/shared/
 COPY --from=build /repo/apps/api/dist ./apps/api/dist
 COPY --from=build /repo/apps/api/package.json ./apps/api/
 COPY --from=build /repo/apps/api/prisma ./apps/api/prisma
+# The seed is a production-time operation — it creates the admin account — and
+# prisma/seed.ts imports src/utils/crypto, which is TypeScript the compiled
+# dist/ does not expose. Without src/ the documented seed command dies on
+# `Cannot find module '../src/utils/crypto'`. Tests are kept out of the build
+# context (see .dockerignore), so this copies source only.
+COPY --from=build /repo/apps/api/src ./apps/api/src
 
 WORKDIR /repo/apps/api
 EXPOSE 4000

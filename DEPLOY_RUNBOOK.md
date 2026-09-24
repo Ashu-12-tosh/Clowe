@@ -87,6 +87,15 @@ cd /root/clowe
 > `clowe_certbot_certs`. The backup script and the certbot commands below all
 > assume `clowe`. If you clone somewhere else, adjust those names.
 
+> **If you ever run tests or a local build on this server**, run
+> `npm ci && npm run db:generate` first. A fresh clone has no generated Prisma
+> client, so `npm run build` fails with
+> `Module '"@prisma/client"' has no exported member 'StockMovementType'` and
+> three test files fail to import `@clowe/shared`. Neither is a real fault, and
+> **none of it affects the deploy** — the Dockerfile runs `prisma generate` and
+> builds `@clowe/shared` itself, which is why the images build from a bare
+> clone. This note is only so the errors do not look like a broken checkout.
+
 ### 0.4 — A shortcut for the rest of this file
 
 Every compose command needs the same two flags. Set this once:
@@ -159,7 +168,7 @@ dc exec db psql -U clowe -d clowe -c \
 
 ```
  extname
----------
+----------
  pg_trgm
  unaccent
 (2 rows)
@@ -195,7 +204,7 @@ row should read `(healthy)`.
 
 ❌ **If you see `is not running`:** `dc logs db` will say why. A password
 changed after the volume was first created is the usual cause — see
-[§7.4](#74-the-database-is-wrong-and-you-have-a-backup).
+[§7.4](#74--the-database-is-wrong-and-you-have-a-backup).
 
 ---
 
@@ -264,7 +273,7 @@ You do **not** set these by hand. `docker-compose.prod.yml` passes both from
 
 The build fails loudly rather than shipping a wrong image: `next.config.mjs`
 rejects an unset value *and* a `localhost` one whenever the Dockerfile marks
-the build as deployable. See the ❌ in [§3.2](#32-build-and-start-everything).
+the build as deployable. See the ❌ in [§3.2](#32--build-and-start-everything).
 
 ---
 
@@ -272,20 +281,37 @@ the build as deployable. See the ❌ in [§3.2](#32-build-and-start-everything).
 
 ### 3.1 — Set your domain in the Nginx config
 
-```sh
-nano nginx/nginx.conf
-```
-
-Replace both occurrences of `yourdomain.com` on the `server_name` line with
-your domain. Leave the commented-out HTTPS block alone — Step 6 handles it.
-
-✅ **Correct result:**
+`yourdomain.com` appears in **five** places, not two. Three of them are inside
+the commented-out HTTPS block — including the certificate paths — and they
+matter in [§6](#6-https). Replace every one of them now, while it is a single
+command, rather than discovering the ones you missed when nginx refuses to
+start with the site behind it.
 
 ```sh
-grep server_name nginx/nginx.conf
+sed -i 's/yourdomain\.com/YOUR_DOMAIN_HERE/g' nginx/nginx.conf
 ```
 
-shows your real domain, not `yourdomain.com`.
+Substitute your real domain for `YOUR_DOMAIN_HERE` (bare domain, no `https://`,
+no trailing slash). Leave the block commented out — §6 uncomments it.
+
+✅ **Correct result — this must print nothing at all:**
+
+```sh
+grep -n 'yourdomain.com' nginx/nginx.conf
+```
+
+❌ **If it prints any line:** that occurrence was missed. Re-run the `sed`
+above. Do not continue with any left — §6 will fail on them.
+
+Confirm the replacement landed where it should:
+
+```sh
+grep -nE 'server_name|ssl_certificate' nginx/nginx.conf
+```
+
+✅ **Correct result:** four lines, all naming your domain — the active
+`server_name`, and the commented `server_name` plus two `ssl_certificate`
+paths in the HTTPS block.
 
 ### 3.2 — Build and start everything
 
@@ -348,12 +374,35 @@ After any `.env.production` edit: `dc up -d api` to pick it up.
 dc exec api npx tsx prisma/seed.ts
 ```
 
-✅ **Correct result:** lines ending with `[seed] Categories ready: ...`,
-`[seed] Products created: ...`, `[seed] Rating cache synced ...`.
+✅ **Correct result:** one npm warning, then the seed log. The first line is
+the one that matters — it means you have an admin account:
 
-❌ **If it says `tsx: not found`:** the production image prunes dev
-dependencies. Seed from your laptop against the VPS database instead — the
-workaround is in [DEPLOYMENT.md §5](DEPLOYMENT.md).
+```
+npm warn exec The following package was not found and will be installed: tsx@4.23.15
+[seed] Admin ready: +91 9999999999 (id: cmuf37eoc0000nhbp3ntlen02)
+[seed] Demo seller ready: Clowe Demo Store (phone 9000000001)
+[seed] Categories ready: 13
+[seed] Products created: 24
+...
+[seed] Rating cache synced for 8 reviewed products
+```
+
+That npm warning is normal, not a problem: `tsx` is a dev dependency and the
+production image prunes those, so `npx` fetches it on demand. It needs
+outbound network — see the first failure below.
+
+❌ **If it says `npm error code EAI_AGAIN` and `request to
+https://registry.npmjs.org/tsx failed`:** the VPS cannot reach the npm
+registry, so `npx` could not fetch `tsx`. Check outbound DNS and network
+(`docker run --rm alpine ping -c1 registry.npmjs.org`). If the host genuinely
+has no outbound access, seed from a repo checkout against the database
+instead — the workaround is in [DEPLOYMENT.md §5](DEPLOYMENT.md), and if you
+run it from your own machine, reach the database over an **SSH tunnel** rather
+than publishing Postgres to the internet.
+
+❌ **If it says `Error: Cannot find module '../src/utils/crypto'`:** your API
+image was built before the fix that ships `apps/api/src`. Rebuild it:
+`dc up -d --build api`, then re-run the seed.
 
 ❌ **If it says `[seed] ADMIN_PHONE not set in .env — skipping admin
 creation`:** you have no admin account. Set `ADMIN_PHONE` in
@@ -383,7 +432,7 @@ curl -s http://localhost/api/health
 `dc logs db`.
 
 ❌ **`502 Bad Gateway`:** the API container is down. `dc ps`, then
-[§3.3](#33-confirm-all-four-containers-stayed-up).
+[§3.3](#33--confirm-all-four-containers-stayed-up).
 
 ❌ **`Connection refused`:** nginx is down. `dc logs nginx` — almost always a
 syntax error from editing `nginx.conf` in §3.1.
@@ -470,7 +519,7 @@ for a new one.
 
 ❌ **You log in but `/admin` returns 403:** the seed did not give your number
 the ADMIN role. Confirm `ADMIN_PHONE` matches what you typed exactly, then
-re-run [§3.4](#34-seed-the-admin-account-and-demo-catalog) — the seed promotes
+re-run [§3.4](#34--seed-the-admin-account-and-demo-catalog) — the seed promotes
 an existing user to ADMIN, so it is safe to re-run.
 
 ---
@@ -526,15 +575,61 @@ nginx. Check `ufw status` allows 80, and `dc ps` shows nginx up.
 ❌ **`too many certificates already issued`:** Let's Encrypt rate limit — 5 per
 domain per week. Wait, or use `--dry-run` while debugging.
 
-Then enable it:
+Then enable it. The domains inside the HTTPS block were already replaced in
+[§3.1](#31--set-your-domain-in-the-nginx-config), so this is only uncommenting:
 
 ```sh
 nano nginx/nginx.conf     # uncomment the 443 server block and the HTTP→HTTPS redirect
+```
+
+**Test the config before restarting.** nginx is still serving the site with the
+old config at this point, so a mistake caught here costs nothing:
+
+```sh
+dc exec nginx nginx -t
+```
+
+✅ **Correct result:**
+
+```
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+```
+
+❌ **If it says `cannot load certificate ... No such file or directory`:** the
+certificate paths in the 443 block still say `yourdomain.com`. Go back to
+[§3.1](#31--set-your-domain-in-the-nginx-config) and re-run the `sed`. **Do not
+restart nginx until `nginx -t` passes** — see the warning below for why.
+
+Only once the test passes:
+
+```sh
 dc restart nginx
 curl -sI https://yourdomain.com | head -1
 ```
 
 ✅ **Correct result:** `HTTP/2 200`
+
+❌ **If nginx will not start and the site is now down on plain HTTP as well:**
+this is the expected consequence, not a second failure. nginx holds **both**
+port 80 and port 443, so a config it cannot load takes the whole site with it.
+
+```sh
+dc logs nginx --tail 20      # read the actual reason
+```
+
+Almost always `cannot load certificate "/etc/letsencrypt/live/yourdomain.com/
+fullchain.pem"` — the §3.1 replacement missed the HTTPS block.
+
+**Get HTTP back first, diagnose after:**
+
+```sh
+nano nginx/nginx.conf        # re-comment the 443 block AND the HTTP→HTTPS redirect
+dc restart nginx
+curl -s http://localhost/api/health
+```
+
+✅ Site is back on HTTP. Now fix the domain in the HTTPS block, run
+`dc exec nginx nginx -t` until it passes, and only then restart again.
 
 Add renewal to `crontab -e` (certificates last 90 days):
 
@@ -595,7 +690,7 @@ forward-only — `migrate deploy` has no `down`. What this means in practice:
   about.
 - **A migration that removed or renamed something is different.** Old code will
   break against the new schema, and the only clean fix is restoring the
-  database from a backup — [§7.4](#74-the-database-is-wrong-and-you-have-a-backup).
+  database from a backup — [§7.4](#74--the-database-is-wrong-and-you-have-a-backup).
 - The FTS migration keeps a commented-out down-migration at the bottom of its
   `.sql` file if you ever need to unwind it by hand.
 
@@ -664,14 +759,21 @@ The API says which providers are live at boot:
 dc logs api | grep 'clowe-api\]' | head -20
 ```
 
-✅ **Expected on mocks:**
+✅ **Expected on mocks — all five lines, in this order:**
 
 ```
 [clowe-api] listening on http://localhost:4000 (production)
+[clowe-api] health check: http://localhost:4000/api/health
+[clowe-api] AI Try-On: mock provider (set FASHN_API_KEY in .env for real try-on)
 [clowe-api] KYC: mock provider — checks are not real (set the Cashfree verification keys)
+[clowe-api] query suggestions: 0 phrases (0 logged) from 90 checked in 763ms
 ```
 
-That KYC warning is correct and expected. It is telling you the truth.
+Both provider lines are correct and expected. They are telling you the truth:
+those checks are not real until the keys are set.
+
+The `query suggestions` line reports 0 phrases on a fresh deploy because
+nobody has searched yet — the counts fill in on their own as the site is used.
 
 ### Uploaded images live on this VPS and nowhere else
 
