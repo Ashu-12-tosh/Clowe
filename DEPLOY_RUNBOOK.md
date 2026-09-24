@@ -673,6 +673,29 @@ dc logs api | grep 'clowe-api\]' | head -20
 
 That KYC warning is correct and expected. It is telling you the truth.
 
+### Uploaded images live on this VPS and nowhere else
+
+Not a mock — uploads work properly — but worth knowing while you are on the
+server. There is no Cloudinary, S3 or other object storage wired up, and no
+environment variable turns one on. Product images, seller documents and
+packing videos are written by `multer` straight to disk at `UPLOAD_DIR`
+(`/repo/apps/api/uploads` in the container), held in the `uploads_data`
+Docker volume, and served back from the API at `${SITE_URL}/uploads/...`.
+
+What that means in practice:
+
+- The volume survives `dc down`, rebuilds and `git pull` deploys. It does
+  **not** survive `dc down -v`, and it does not survive losing the VPS.
+- **The nightly backup in [§5](#5-backups--set-this-up-before-you-have-data-worth-losing)
+  is the only copy.** It writes `uploads-<stamp>.tar.gz` alongside the
+  database dump — so do not skip §5, and do copy the backups off the machine.
+- Images are the one kind of data here that cannot be regenerated. A lost
+  database can be re-seeded; a lost upload is gone.
+
+Moving `uploads/` to S3-compatible storage is post-launch work — the interface
+point is `apps/api/src/routes/uploads.ts`. See
+[PROJECT_STATUS.md](PROJECT_STATUS.md) §"After going live".
+
 ### ⚠️ OTP login: only you can log in
 
 **Say it plainly: until an SMS provider is written, the site is live but nobody
