@@ -17,7 +17,6 @@ import {
   type OrderListRow,
 } from '@clowe/shared';
 import { prisma } from '../db';
-import { getSettings } from '../services/settingsService';
 import { recordRedemptions } from '../services/promotionService';
 import { env } from '../env';
 import { returnWindowDaysFor } from '../services/categoryRules';

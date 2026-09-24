@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RETURN_REASONS, type ReturnReasonValue } from './checkout';
+import type { ReturnReasonValue } from './checkout';
 
 // ---------------------------------------------------------------------------
 // Returns & refund management (admin)
