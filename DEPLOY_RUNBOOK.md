@@ -589,11 +589,15 @@ old config at this point, so a mistake caught here costs nothing:
 dc exec nginx nginx -t
 ```
 
-✅ **Correct result:**
+✅ **Correct result — the last line is the one that counts:**
 
 ```
 nginx: configuration file /etc/nginx/nginx.conf test is successful
 ```
+
+A line above it reading `nginx: [warn] the "listen ... http2" directive is
+deprecated` is harmless — nginx 1.27 still honours it, and HTTP/2 works. Only
+`[emerg]` and a failing last line mean the config is bad.
 
 ❌ **If it says `cannot load certificate ... No such file or directory`:** the
 certificate paths in the 443 block still say `yourdomain.com`. Go back to
@@ -609,11 +613,16 @@ curl -sI https://yourdomain.com | head -1
 
 ✅ **Correct result:** `HTTP/2 200`
 
-❌ **If nginx will not start and the site is now down on plain HTTP as well:**
-this is the expected consequence, not a second failure. nginx holds **both**
-port 80 and port 443, so a config it cannot load takes the whole site with it.
+❌ **If the site is now down on plain HTTP as well:** this is the expected
+consequence, not a second failure. nginx holds **both** port 80 and port 443,
+so a config it cannot load takes the whole site with it. `curl` returns
+nothing at all rather than an error page.
+
+`dc ps` will show nginx as `Restarting (1)`, not stopped — the container keeps
+retrying the bad config, so do not read "restarting" as "recovering":
 
 ```sh
+dc ps nginx                  # expect: Restarting (1) N seconds ago
 dc logs nginx --tail 20      # read the actual reason
 ```
 
