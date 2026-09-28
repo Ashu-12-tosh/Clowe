@@ -463,6 +463,22 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
 
     const keptIds = input.variants.filter((v) => v.id).map((v) => v.id!);
 
+    // Owning the product is not the same as owning the variant. Variant ids
+    // arrive in the request body, and every one of them is public — the
+    // storefront returns them on the product page so the cart can reference
+    // them — so a seller could otherwise put a rival's variant id in a request
+    // against their own product and rewrite that variant's price, stock or SKU.
+    // Refused rather than quietly skipped, so a client holding a stale variant
+    // is told instead of believing an edit landed.
+    const ownVariantIds = new Set(product.variants.map((v) => v.id));
+    const foreignIds = keptIds.filter((id) => !ownVariantIds.has(id));
+    if (foreignIds.length > 0) {
+      throw ApiError.notFound(
+        'One of those variants does not belong to this product',
+        'VARIANT_NOT_ON_PRODUCT',
+      );
+    }
+
     // A replaced or removed packing video frees its file straight away; a fresh
     // upload restarts the 10-day retention clock.
     const newPackingVideo = input.packingVideoUrl?.trim() || null;
@@ -499,8 +515,12 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
       ...variantRows
         .filter((r) => r.input.id)
         .map(({ input: v, fields }) =>
-          prisma.productVariant.update({
-            where: { id: v.id! },
+          // updateMany rather than update, so the productId sits in the where
+          // clause: a variant belonging to another product matches nothing and
+          // is written to zero times, even if the guard above is ever lost in a
+          // refactor. This is the same scoping the deleteMany above already has.
+          prisma.productVariant.updateMany({
+            where: { id: v.id!, productId: product.id },
             data: {
               ...fields,
               ...(v.sku?.trim() ? { sku: v.sku.trim() } : {}),
