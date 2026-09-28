@@ -139,7 +139,10 @@ export default function HomePage() {
       </div>
 
       {/* 2 ─ Trust strip */}
-      <section className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {/* One per row on a phone. Two columns left ~72px for the label, which
+          `truncate` then cut to "Free Shi…" — a trust strip that cannot be
+          read is worse than one that costs a little scroll. */}
+      <section className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {TRUST_ITEMS.map((item) => (
           <div
             key={item.title}
@@ -147,8 +150,8 @@ export default function HomePage() {
           >
             <span className="text-2xl">{item.icon}</span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-ink-900">{item.title}</p>
-              <p className="truncate text-xs text-gray-500">{item.text}</p>
+              <p className="text-sm font-bold text-ink-900">{item.title}</p>
+              <p className="text-xs text-gray-500">{item.text}</p>
             </div>
           </div>
         ))}
@@ -360,7 +363,7 @@ export default function HomePage() {
               <span className="text-2xl">{item.icon}</span>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-ink-900">{item.title}</p>
-                <p className="truncate text-xs text-gray-500">{item.text}</p>
+                <p className="text-xs text-gray-500">{item.text}</p>
               </div>
             </div>
           ))}
