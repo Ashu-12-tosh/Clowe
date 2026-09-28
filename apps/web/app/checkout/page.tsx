@@ -677,7 +677,9 @@ export default function CheckoutPage() {
               <div className="mt-3 flex items-start gap-2.5 border-t border-gray-100 pt-3">
                 <TruckIcon className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
                 <div className="min-w-0 text-xs text-gray-600">
-                  <p className="truncate">
+                  {/* Not truncated: this is the address the parcel is going
+                      to, and a shopper checking it needs the whole line. */}
+                  <p>
                     Delivering to: {shipTo.line1}, {shipTo.city}
                   </p>
                   <p className="mt-0.5 text-gray-500">
