@@ -111,13 +111,30 @@ export default function CategoryNav() {
         )}
       </div>
 
-      {/* Mobile: horizontal scroll strip */}
-      <div className="scrollbar-none flex items-center gap-4 overflow-x-auto px-4 lg:hidden">
-        {tree.map((cat) => (
-          <Link key={cat.id} href={`/category/${cat.slug}`} className={linkClass(cat.slug)}>
-            <span className="whitespace-nowrap">{cat.name}</span>
-          </Link>
-        ))}
+      {/* Mobile: horizontal scroll strip.
+
+          The strip already scrolled — roughly 660px of it is off-screen at
+          360 — but `scrollbar-none` hides the only sign of that, so a label
+          cut mid-word ("Home & Kitch…") read as a broken layout rather than
+          as more to the right. The fade restores that signal without touching
+          the scrolling itself.
+
+          It is deliberately static: making it disappear at the end of the
+          scroll needs a scroll listener on a strip that works today, and a
+          fade that lingers one swipe too long is a far smaller problem than
+          the one it fixes. */}
+      <div className="relative lg:hidden">
+        <div className="scrollbar-none flex items-center gap-4 overflow-x-auto px-4">
+          {tree.map((cat) => (
+            <Link key={cat.id} href={`/category/${cat.slug}`} className={linkClass(cat.slug)}>
+              <span className="whitespace-nowrap">{cat.name}</span>
+            </Link>
+          ))}
+        </div>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-white via-white/80 to-transparent"
+        />
       </div>
 
       {/* Mega menu */}
