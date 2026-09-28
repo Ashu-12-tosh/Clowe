@@ -248,7 +248,12 @@ sellerRouter.get('/profile', requireSeller, (req, res) => {
 async function ownProduct(req: Request, id: string) {
   const product = await prisma.product.findUnique({
     where: { id },
-    include: { images: { orderBy: { sortOrder: 'asc' } }, variants: true },
+    include: {
+      images: { orderBy: { sortOrder: 'asc' } },
+      // The edit form needs each variant's own pictures to show them grouped,
+      // and the ownership guard on PUT reads variants from here too.
+      variants: { include: { images: { orderBy: { sortOrder: 'asc' } } } },
+    },
   });
   if (!product || product.sellerId !== req.seller!.id) {
     throw ApiError.notFound('Product not found');
@@ -298,6 +303,7 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
         pricePaise: v.pricePaise,
         mrpPaise: v.mrpPaise,
         stock: v.stock,
+        imageUrls: v.images.map((i) => i.url),
       })),
     };
     res.json({ success: true, data: body });
@@ -397,6 +403,47 @@ function assertPackingVideo(input: SellerProductUpsertInput) {
 }
 
 /** Spec fields the category marks required must be filled before review. */
+/**
+ * Every colour must have pictures before a listing goes for review.
+ *
+ * A colour is the one thing the product gallery genuinely misrepresents — a
+ * Navy jacket shown in Black photos is wrong in a way a size never is. So the
+ * requirement is scoped to listings that vary on colour; a product that only
+ * varies on size keeps using the product gallery, which is already mandatory
+ * to submit and so can never be empty.
+ *
+ * This cannot live in the Zod schema, and the reason is worth stating: an
+ * absent `imageUrls` means "leave the stored pictures alone", so the payload
+ * on its own does not say whether a variant has images. Only the route knows,
+ * because only the route has loaded what is stored. `stored` is empty on
+ * create, where the payload is the whole truth.
+ */
+function assertVariantImages(
+  input: SellerProductUpsertInput,
+  stored: Map<string, number>,
+) {
+  if (input.mode !== 'SUBMIT') return; // a draft may be half-finished
+  const colourKeyOf = (v: SellerProductUpsertInput['variants'][number]) =>
+    Object.keys(v.optionValues ?? {}).find((k) => /colou?r/i.test(k));
+  const colourKey = input.variants.map(colourKeyOf).find(Boolean);
+  if (!colourKey) return; // no colour axis — the product gallery is the answer
+
+  const missing = new Set<string>();
+  for (const v of input.variants) {
+    const colour = (v.optionValues?.[colourKey] ?? '').trim();
+    if (!colour) continue;
+    // Payload wins when present; otherwise fall back to what is stored.
+    const count = v.imageUrls !== undefined ? v.imageUrls.length : (v.id ? (stored.get(v.id) ?? 0) : 0);
+    if (count === 0) missing.add(colour);
+  }
+  if (missing.size > 0) {
+    throw ApiError.badRequest(
+      `Add at least one image for ${[...missing].join(', ')} — each colour needs its own pictures`,
+      'VARIANT_IMAGES_REQUIRED',
+    );
+  }
+}
+
 function assertRequiredAttributes(input: SellerProductUpsertInput, rules: CategoryRules) {
   if (input.mode === 'DRAFT') return;
   const given = new Map(
@@ -418,6 +465,7 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
     const rules = await categoryRulesFor(category.id);
     assertRequiredAttributes(input, rules);
     assertPackingVideo(input);
+    assertVariantImages(input, new Map());
     const variantRows = variantRowsFrom(input);
 
     const slug = `${slugify(`${input.brand ?? ''} ${input.title}`)}-${randomBytes(3).toString('hex')}`;
@@ -441,6 +489,17 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
             pricePaise: v.pricePaise,
             mrpPaise: v.mrpPaise ?? null,
             stock: v.stock,
+            ...(v.imageUrls?.length
+              ? {
+                  images: {
+                    create: v.imageUrls.map((url, i) => ({
+                      url,
+                      altText: input.title,
+                      sortOrder: i,
+                    })),
+                  },
+                }
+              : {}),
           })),
         },
       },
@@ -459,6 +518,10 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
     const rules = await categoryRulesFor(input.categoryId);
     assertRequiredAttributes(input, rules);
     assertPackingVideo(input);
+    assertVariantImages(
+      input,
+      new Map(product.variants.map((v) => [v.id, v.images.length])),
+    );
     const variantRows = variantRowsFrom(input);
 
     const keptIds = input.variants.filter((v) => v.id).map((v) => v.id!);
@@ -530,22 +593,50 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
             },
           }),
         ),
-      ...(variantRows.some((r) => !r.input.id)
-        ? [
-            prisma.productVariant.createMany({
-              data: variantRows
-                .filter((r) => !r.input.id)
-                .map(({ input: v, fields }) => ({
-                  productId: product.id,
-                  ...fields,
-                  sku: v.sku?.trim() || newSku(),
-                  pricePaise: v.pricePaise,
-                  mrpPaise: v.mrpPaise ?? null,
-                  stock: v.stock,
-                })),
-            }),
-          ]
-        : []),
+      // Variant images, only for the variants whose set the form actually sent.
+      // An omitted imageUrls leaves the rows alone, which is what stops an
+      // unrelated edit — a price change, a re-colour — from wiping pictures.
+      ...variantRows
+        .filter((r) => r.input.id && r.input.imageUrls !== undefined)
+        .flatMap(({ input: v }) => [
+          prisma.productVariantImage.deleteMany({ where: { variantId: v.id! } }),
+          prisma.productVariantImage.createMany({
+            data: (v.imageUrls ?? []).map((url, i) => ({
+              variantId: v.id!,
+              url,
+              altText: input.title,
+              sortOrder: i,
+            })),
+          }),
+        ]),
+      // New variants are created one at a time rather than with createMany, so
+      // each can carry its own images in the same write — createMany cannot do
+      // nested creates, and the ids do not exist yet to attach them afterwards.
+      ...variantRows
+        .filter((r) => !r.input.id)
+        .map(({ input: v, fields }) =>
+          prisma.productVariant.create({
+            data: {
+              productId: product.id,
+              ...fields,
+              sku: v.sku?.trim() || newSku(),
+              pricePaise: v.pricePaise,
+              mrpPaise: v.mrpPaise ?? null,
+              stock: v.stock,
+              ...(v.imageUrls?.length
+                ? {
+                    images: {
+                      create: v.imageUrls.map((url, i) => ({
+                        url,
+                        altText: input.title,
+                        sortOrder: i,
+                      })),
+                    },
+                  }
+                : {}),
+            },
+          }),
+        ),
     ]);
     res.json({
       success: true,

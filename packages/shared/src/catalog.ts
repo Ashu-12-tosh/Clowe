@@ -283,6 +283,12 @@ export interface ProductVariantInfo {
   pricePaise: number;
   mrpPaise: number | null;
   stock: number;
+  /**
+   * Pictures of this variant specifically. Empty is the ordinary case and
+   * means "show the product's own images" — most listings photograph the
+   * product once, and only colour is worth re-shooting.
+   */
+  images: { url: string; altText: string | null }[];
 }
 
 export interface ProductDetail {

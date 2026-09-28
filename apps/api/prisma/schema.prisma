@@ -931,6 +931,8 @@ model ProductVariant {
 
   cartItems  CartItem[]
   orderItems OrderItem[]
+  // Pictures for this variant specifically; empty means it shows the product's.
+  images     ProductVariantImage[]
   // Where this variant's stock sits, and the ledger of how it moved.
   stockLocations     StockLocation[]
   stockMovements     StockMovement[]
@@ -950,6 +952,32 @@ model ProductImage {
   sortOrder Int     @default(0)
 
   @@map("product_images")
+}
+
+/// Pictures of one variant, kept in their own table rather than as a nullable
+/// column on product_images.
+///
+/// Forty-odd queries across the API load `product.images` — card thumbnails,
+/// the suggest dropdown, order rows, the PDP gallery — almost all of them
+/// `take: 1` ordered by sortOrder. A variantId column on that table would put
+/// variant pictures into every one of those results, so each would need a
+/// `where: { variantId: null }` it does not have today, and the next such query
+/// someone writes would silently pick up the wrong thumbnail.
+///
+/// A separate table cannot leak that way: `product.images` keeps meaning
+/// exactly what it means now, and a variant's pictures are reachable only by
+/// asking a variant for them. The cost is one small table; the alternative was
+/// a rule to remember in forty places.
+model ProductVariantImage {
+  id        String         @id @default(cuid())
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  sortOrder Int            @default(0)
+
+  @@index([variantId, sortOrder])
+  @@map("product_variant_images")
 }
 
 // ---------------------------------------------------------------------------

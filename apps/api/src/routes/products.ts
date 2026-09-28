@@ -429,8 +429,10 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
             tryOnCredits: true,
           },
         },
+        // The product's own gallery, untouched: variant pictures live in their
+        // own table precisely so this keeps meaning what it always meant.
         images: { orderBy: { sortOrder: 'asc' } },
-        variants: true,
+        variants: { include: { images: { orderBy: { sortOrder: 'asc' } } } },
       },
     });
     // Hidden listings 404 like an unapproved one — the seller's own toggle.
@@ -468,6 +470,7 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
       pricePaise: v.pricePaise,
       mrpPaise: v.mrpPaise,
       stock: v.stock,
+      images: v.images.map((i) => ({ url: i.url, altText: i.altText })),
     }));
     const variantAxes = axesOf(variants, resolved.rules.variantAxes);
     // Order variants along the axes so size buttons read S, M, L rather than L, M, S.

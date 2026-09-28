@@ -69,6 +69,17 @@ export const sellerVariantInputSchema = z.object({
     .max(40)
     .regex(/^[A-Za-z0-9._-]*$/, 'SKU can use letters, numbers, dot, dash and underscore')
     .optional(),
+  /**
+   * Pictures for this variant, replacing whatever it has.
+   *
+   * Omitted is not the same as empty, and the difference is what keeps a save
+   * from destroying work. Omitted means "leave this variant's images alone";
+   * `[]` means "the seller cleared them". The form only sends the field for a
+   * colour it actually edited, so re-colouring a variant, or editing a price,
+   * can never discard pictures somebody uploaded — only an explicit edit to
+   * that colour's images can.
+   */
+  imageUrls: z.array(imageUrlSchema).max(6).optional(),
 });
 export type SellerVariantInput = z.infer<typeof sellerVariantInputSchema>;
 
@@ -195,6 +206,8 @@ export interface SellerProductDetail {
     pricePaise: number;
     mrpPaise: number | null;
     stock: number;
+    /** This variant's own pictures; empty means it shows the product's. */
+    imageUrls: string[];
   }[];
 }
 

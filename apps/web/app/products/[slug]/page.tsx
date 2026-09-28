@@ -151,6 +151,21 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
   }, [product, axes, selection]);
   const off = selected ? discountPercent(selected.pricePaise, selected.mrpPaise) : null;
 
+  /**
+   * What the gallery shows: the selected variant's own pictures, falling back
+   * to the product's when it has none. The fallback is the ordinary path —
+   * most listings are photographed once, and only colour is worth re-shooting.
+   */
+  const gallery = useMemo(
+    () => (selected?.images.length ? selected.images : (product?.images ?? [])),
+    [selected, product],
+  );
+
+  // Switching to a colour with two pictures while looking at thumbnail four
+  // would otherwise land on nothing. Only fires when the gallery actually
+  // changes identity, so picking a size within one colour keeps your place.
+  useEffect(() => setImageIndex(0), [gallery]);
+
   /** Distinct values of one axis, in the API's (sorted) order. */
   const valuesFor = (key: string): string[] =>
     [...new Set(product?.variants.map((v) => v.optionValues[key]).filter(Boolean) ?? [])];
@@ -274,9 +289,9 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
       <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_20rem]">
         {/* ── Gallery ────────────────────────────────────────────────────── */}
         <div className="flex gap-3">
-          {product.images.length > 1 && (
+          {gallery.length > 1 && (
             <div className="scrollbar-none flex max-h-[32rem] w-16 shrink-0 flex-col gap-2 overflow-y-auto">
-              {product.images.map((img, i) => (
+              {gallery.map((img, i) => (
                 <button
                   key={img.url}
                   onClick={() => setImageIndex(i)}
@@ -293,8 +308,8 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
           )}
 
           <div className="relative min-w-0 flex-1">
-            {product.images[imageIndex] && (
-              <ZoomImage src={product.images[imageIndex].url} alt={product.title} />
+            {gallery[imageIndex] && (
+              <ZoomImage src={gallery[imageIndex].url} alt={product.title} />
             )}
             {product.isBestSeller && (
               <span className="absolute left-3 top-3 rounded-md bg-brand-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-brand-700">
@@ -488,10 +503,10 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
                     Try On Now
                   </button>
                 </div>
-                {product.images[0] && (
+                {gallery[0] && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={product.images[0].url}
+                    src={gallery[0].url}
                     alt=""
                     loading="lazy"
                     className="h-24 w-20 shrink-0 rounded-lg border border-brand-200 object-cover"
