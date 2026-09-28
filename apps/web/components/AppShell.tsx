@@ -144,7 +144,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    // pb on phones reserves the strip the floating support button occupies
+    // (fixed, bottom-5, ~60px tall). Without it the button sits on whatever
+    // happens to be at the bottom of the viewport and the last row of the
+    // page can never be scrolled clear of it. Desktop has the room already,
+    // so the padding stops at lg and that layout is untouched.
+    <div className="flex min-h-screen flex-col pb-20 lg:pb-0">
       <Header onMenuClick={() => setDrawerOpen(true)} />
 
       {/* Mobile drawer */}
