@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   MAX_VARIANT_AXES,
@@ -39,6 +39,8 @@ const STEPS = [
 type StepKey = (typeof STEPS)[number]['key'];
 
 const MAX_IMAGES = 8;
+/** Per variant; the API caps this too. */
+const MAX_VARIANT_IMAGES = 6;
 
 /** Rules used until a category is picked / the tree has loaded. */
 const NO_RULES: CategoryRules = {
@@ -60,9 +62,27 @@ interface VariantRow {
   price: string; // rupees, as typed
   mrp: string;
   stock: string;
+  /** This variant's own pictures; empty means it shows the product's. */
+  imageUrls: string[];
+  /**
+   * Whether the seller touched this variant's images in this session.
+   *
+   * Only a dirty row sends `imageUrls`, and an omitted field tells the API to
+   * leave the stored pictures alone. That is what makes it impossible for an
+   * unrelated edit — a price change, or moving a variant from Blue to Pink
+   * where Pink already has images — to quietly throw somebody's uploads away.
+   */
+  imagesDirty?: boolean;
 }
 
-const emptyRow: VariantRow = { options: {}, sku: '', price: '', mrp: '', stock: '10' };
+const emptyRow: VariantRow = {
+  options: {},
+  sku: '',
+  price: '',
+  mrp: '',
+  stock: '10',
+  imageUrls: [],
+};
 
 /** Root → … → node for a category id; [] when the id is not in the tree. */
 function pathTo(tree: CategoryNode[], id: string): CategoryNode[] {
@@ -151,6 +171,7 @@ export default function ProductForm({ initial }: Props) {
       price: String(v.pricePaise / 100),
       mrp: v.mrpPaise != null ? String(v.mrpPaise / 100) : '',
       stock: String(v.stock),
+      imageUrls: [...v.imageUrls],
     })) ?? [{ ...emptyRow }],
   );
 
@@ -203,6 +224,128 @@ export default function ProductForm({ initial }: Props) {
 
   const activeAxes = useMemo(() => (hasVariants ? axes : []), [hasVariants, axes]);
 
+  // --- Images by option value -------------------------------------------
+  // Pictures vary by colour, never by size: a 5-colour x 4-size listing has 20
+  // variants and 5 things worth photographing. So the uploader is grouped by
+  // one axis and fans out to every variant sharing that value, while the table
+  // above stays six columns wide.
+  /** Which colour group's picker is open, by label; null when none. */
+  const [pickerFor, setPickerFor] = useState<{ label: string; top: number; left: number } | null>(
+    null,
+  );
+  const [uploadingGroup, setUploadingGroup] = useState<string | null>(null);
+
+  /** Colour when the listing has one, else the first axis few enough to shoot. */
+  const imageAxis = useMemo(() => {
+    const distinct = (key: string) =>
+      new Set(rows.map((r) => (r.options[key] ?? '').trim()).filter(Boolean)).size;
+    const colour = activeAxes.find((a) => /colou?r/i.test(a.key) || /colou?r/i.test(a.label));
+    if (colour && distinct(colour.key) > 0) return colour;
+    return activeAxes.find((a) => distinct(a.key) > 0 && distinct(a.key) <= 8) ?? null;
+  }, [activeAxes, rows]);
+
+  const sameUrls = (a: string[], b: string[]) =>
+    a.length === b.length && a.every((u, i) => u === b[i]);
+
+  /**
+   * One uploader per axis value, or per variant when no axis is suitable.
+   * `mixed` marks a group whose variants disagree — which happens when one is
+   * re-coloured into a value that already had pictures. Nothing is merged or
+   * dropped on sight of it; the seller is offered a button and decides.
+   */
+  const imageGroups = useMemo(() => {
+    const groupsFrom = (keyOf: (i: number) => string | null) => {
+      const map = new Map<string, number[]>();
+      rows.forEach((_, i) => {
+        const key = keyOf(i);
+        if (key === null) return;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(i);
+      });
+      return [...map.entries()].map(([label, idxs]) => {
+        const urls = rows[idxs[0]!]!.imageUrls;
+        return {
+          label,
+          idxs,
+          urls,
+          mixed: idxs.some((i) => !sameUrls(rows[i]!.imageUrls, urls)),
+        };
+      });
+    };
+    if (imageAxis) {
+      return groupsFrom((i) => (rows[i]!.options[imageAxis.key] ?? '').trim() || null);
+    }
+    // No axis worth grouping by. Per-variant is fine for a handful; beyond that
+    // it would be forty uploaders, and the honest answer is to add an axis.
+    if (rows.length > 8) return null;
+    return groupsFrom((i) => {
+      const row = rows[i]!;
+      const fromOptions = activeAxes
+        .map((a) => (row.options[a.key] ?? '').trim())
+        .filter(Boolean)
+        .join(' · ');
+      return fromOptions || row.sku.trim() || `Variant ${i + 1}`;
+    });
+  }, [rows, imageAxis, activeAxes]);
+
+  /**
+   * Legacy listings have no variant pictures at all, and a colour now needs
+   * them to pass review. Rather than block the edit, seed each empty colour
+   * from the product gallery and mark it dirty, so the seller sees exactly
+   * what will be saved and can replace it — the listing heals on its next
+   * edit instead of refusing one. Runs once; a seller who then clears a
+   * colour is not overruled on the next render.
+   */
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    if (prefilledRef.current || !initial || !imageAxis || imageGroups === null) return;
+    const empty = imageGroups.filter((g) => g.urls.length === 0);
+    if (empty.length === 0) {
+      prefilledRef.current = true;
+      return;
+    }
+    if (imageUrls.length === 0) return; // nothing to seed from yet
+    prefilledRef.current = true;
+    const seed = imageUrls.slice(0, MAX_VARIANT_IMAGES);
+    const targets = new Set(empty.flatMap((g) => g.idxs));
+    setRows((prev) =>
+      prev.map((row, i) =>
+        targets.has(i) ? { ...row, imageUrls: seed, imagesDirty: true } : row,
+      ),
+    );
+  }, [initial, imageAxis, imageGroups, imageUrls]);
+
+  /** Row index -> its group, so a cell can find its own without rescanning. */
+  const groupByRow = useMemo(() => {
+    const m = new Map<number, NonNullable<typeof imageGroups>[number]>();
+    (imageGroups ?? []).forEach((g) => g.idxs.forEach((i) => m.set(i, g)));
+    return m;
+  }, [imageGroups]);
+
+  /** Write a set to every variant in the group and mark them dirty. */
+  function setGroupImages(idxs: number[], urls: string[]) {
+    setRows((prev) =>
+      prev.map((row, i) =>
+        idxs.includes(i) ? { ...row, imageUrls: urls, imagesDirty: true } : row,
+      ),
+    );
+  }
+
+  async function onUploadForGroup(group: { label: string; idxs: number[]; urls: string[] }, files: FileList | null) {
+    const list = files ? [...files] : [];
+    if (list.length === 0) return;
+    setError('');
+    setUploadingGroup(group.label);
+    try {
+      const uploaded = await uploadImages(list);
+      setGroupImages(group.idxs, [...group.urls, ...uploaded].slice(0, MAX_VARIANT_IMAGES));
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Upload failed');
+    } finally {
+      setUploadingGroup(null);
+    }
+  }
+
   const tags = useMemo(
     () =>
       tagsText
@@ -228,6 +371,11 @@ export default function ProductForm({ initial }: Props) {
           pricePaise: Math.round(Number(r.price) * 100),
           mrpPaise: r.mrp.trim() ? Math.round(Number(r.mrp) * 100) : null,
           stock: Math.max(0, Math.round(Number(r.stock) || 0)),
+          // Sent only when the seller edited this variant's pictures. Leaving
+          // the key off entirely is meaningful: the API reads an absent
+          // imageUrls as "do not touch what is stored", so saving a price
+          // never disturbs images, and a new row with none stays empty.
+          ...(r.imagesDirty ? { imageUrls: r.imageUrls } : {}),
         })),
     [rows, activeAxes],
   );
@@ -1003,19 +1151,20 @@ export default function ProductForm({ initial }: Props) {
             )}
 
             <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="w-full min-w-[584px] table-fixed text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
                     {activeAxes.map((a) => (
-                      <th key={a.key} className="pb-2 pr-2">
+                      <th key={a.key} className="w-[90px] pb-2 pr-2">
                         {a.label} *
                       </th>
                     ))}
-                    <th className="pb-2 pr-2">SKU</th>
-                    <th className="pb-2 pr-2">Price (₹) *</th>
-                    <th className="pb-2 pr-2">MRP (₹)</th>
-                    <th className="pb-2 pr-2">Stock</th>
-                    <th className="pb-2" />
+                    <th className="w-[80px] pb-2 pr-2">SKU</th>
+                    <th className="w-[92px] pb-2 pr-2">Price (₹) *</th>
+                    <th className="w-[88px] pb-2 pr-2">MRP (₹)</th>
+                    <th className="w-[64px] pb-2 pr-2">Stock</th>
+                    <th className="w-[56px] pb-2 pr-2">Images</th>
+                    <th className="w-[24px] pb-2" />
                   </tr>
                 </thead>
                 <tbody>
@@ -1070,6 +1219,66 @@ export default function ProductForm({ initial }: Props) {
                           className={field}
                         />
                       </td>
+                      {/* Images. A 56px entry point, not an uploader: pictures
+                          are written per colour, so this opens one picker for
+                          the whole colour and the picker says so in its
+                          heading. The picker itself is rendered once, outside
+                          this scroll container — an absolute popover inside it
+                          both widened the table and, keyed by colour, opened on
+                          every row of that colour at once. */}
+                      <td className="pr-2 pt-1">
+                        {(() => {
+                          const g = groupByRow.get(i);
+                          if (!g) {
+                            return (
+                              <span
+                                className="block text-center text-xs text-gray-300"
+                                title="Fill in this row's options first"
+                              >
+                                &mdash;
+                              </span>
+                            );
+                          }
+                          return (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                const r = e.currentTarget.getBoundingClientRect();
+                                setPickerFor(
+                                  pickerFor?.label === g.label
+                                    ? null
+                                    : { label: g.label, top: r.bottom + 6, left: r.right - 288 },
+                                );
+                              }}
+                              aria-expanded={pickerFor?.label === g.label}
+                              aria-label={`Images for ${g.label}`}
+                              className={`relative flex h-9 w-12 items-center justify-center overflow-hidden rounded-md border ${
+                                g.urls.length === 0
+                                  ? 'border-dashed border-gray-300 text-gray-400 hover:border-brand-600 hover:text-brand-600'
+                                  : 'border-gray-200'
+                              }`}
+                            >
+                              {g.urls[0] ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={g.urls[0]} alt="" className="h-full w-full object-cover" />
+                              ) : (
+                                <span className="text-base leading-none">&#xff0b;</span>
+                              )}
+                              {g.urls.length > 1 && (
+                                <span className="absolute bottom-0 right-0 rounded-tl bg-ink-900/80 px-1 text-[10px] font-semibold leading-tight text-white">
+                                  +{g.urls.length - 1}
+                                </span>
+                              )}
+                              {g.mixed && (
+                                <span
+                                  className="absolute right-0 top-0 h-2 w-2 rounded-full bg-amber-500"
+                                  title="Variants of this colour have different images"
+                                />
+                              )}
+                            </button>
+                          );
+                        })()}
+                      </td>
                       <td className="pt-1">
                         <button
                           type="button"
@@ -1095,6 +1304,98 @@ export default function ProductForm({ initial }: Props) {
                 ) : null,
               )}
             </div>
+
+
+            {/* The one picker. Fixed-positioned from the cell it was opened
+                from, so the scroll container above cannot clip it or be made
+                wider by it, and only ever one exists however many rows share
+                the colour. */}
+            {pickerFor &&
+              (() => {
+                const g = (imageGroups ?? []).find((x) => x.label === pickerFor.label);
+                if (!g) return null;
+                return (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Close images"
+                      onClick={() => setPickerFor(null)}
+                      className="fixed inset-0 z-40 cursor-default"
+                    />
+                    <div
+                      style={{ top: pickerFor.top, left: Math.max(8, pickerFor.left) }}
+                      className="fixed z-50 w-72 rounded-xl border border-gray-200 bg-white p-3 text-left shadow-2xl"
+                    >
+                      <p className="text-sm font-bold text-ink-900">Images for {g.label}</p>
+                      <p className="mt-0.5 text-xs font-semibold text-brand-600">
+                        {g.idxs.length === 1
+                          ? 'Applies to this variant'
+                          : `Applies to all ${g.idxs.length} ${g.label} variants`}
+                      </p>
+
+                      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                        {g.urls.map((url) => (
+                          <span key={url} className="relative">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={url}
+                              alt=""
+                              className="h-14 w-14 rounded-lg border border-gray-200 object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setGroupImages(
+                                  g.idxs,
+                                  g.urls.filter((u) => u !== url),
+                                )
+                              }
+                              aria-label={`Remove image from ${g.label}`}
+                              className="absolute -right-1.5 -top-1.5 h-4 w-4 rounded-full bg-ink-900 text-[10px] leading-none text-white"
+                            >
+                              &times;
+                            </button>
+                          </span>
+                        ))}
+                        {g.urls.length < MAX_VARIANT_IMAGES && (
+                          <label className="flex h-14 w-14 cursor-pointer items-center justify-center rounded-lg border border-dashed border-gray-300 text-lg text-gray-400 hover:border-brand-600 hover:text-brand-600">
+                            {uploadingGroup === g.label ? '…' : '＋'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              className="hidden"
+                              onChange={(e) => {
+                                void onUploadForGroup(g, e.target.files);
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+                        )}
+                      </div>
+
+                      {g.urls.length === 0 && (
+                        <p className="mt-2 text-[11px] text-gray-500">
+                          Empty uses the listing&rsquo;s main images. A colour needs its own
+                          before you can submit for review.
+                        </p>
+                      )}
+                      {g.mixed && (
+                        <p className="mt-2 text-[11px] text-amber-700">
+                          Variants of this colour have different images.{' '}
+                          <button
+                            type="button"
+                            onClick={() => setGroupImages(g.idxs, g.urls)}
+                            className="font-semibold underline"
+                          >
+                            Use these for all {g.idxs.length}
+                          </button>
+                        </p>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
 
             {hasVariants ? (
               <button
