@@ -98,8 +98,38 @@ ordersRouter.post('/checkout', async (req, res, next) => {
     // Variant → seller mapping for order items.
     const variants = await prisma.productVariant.findMany({
       where: { id: { in: orderLines.map((l) => l.variantId) } },
-      include: { product: { select: { sellerId: true } } },
+      include: {
+        product: {
+          select: {
+            sellerId: true,
+            title: true,
+            status: true,
+            isVisible: true,
+            seller: { select: { status: true, vacationMode: true } },
+          },
+        },
+      },
     });
+
+    // A cart is not a promise. Everything below was checked when the item went
+    // in, and the same conditions have to hold when it is paid for: suspending
+    // a seller hides their listings, but a cart filled the hour before still
+    // pointed at them, so the shop kept taking money after it was stopped. The
+    // coupon is re-validated a few lines down for the same reason.
+    const unsellable = variants.filter(
+      (v) =>
+        v.product.status !== 'APPROVED' ||
+        !v.product.isVisible ||
+        v.product.seller.vacationMode ||
+        v.product.seller.status !== 'APPROVED',
+    );
+    if (unsellable.length > 0) {
+      throw ApiError.badRequest(
+        `${unsellable[0]!.product.title} is no longer available — remove it from your cart to continue.`,
+        'ITEM_UNAVAILABLE',
+      );
+    }
+
     const sellerByVariant = new Map(variants.map((v) => [v.id, v.product.sellerId]));
     const variantById = new Map(variants.map((v) => [v.id, v]));
 

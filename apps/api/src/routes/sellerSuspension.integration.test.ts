@@ -188,6 +188,53 @@ describe('a suspended seller can still', () => {
   });
 });
 
+describe('a cart is not a promise', () => {
+  it('cannot be checked out once the seller is suspended', async () => {
+    // The same hole with money in it. Suspending a seller hides the listing,
+    // but a cart filled the hour before still pointed at the variant, and
+    // checkout never re-read whether it was still sellable — so the shop kept
+    // taking payments after it was stopped.
+    const s = await makeSeller(SellerStatus.SUSPENDED);
+    seq += 1;
+    const buyer = await prisma.user.create({
+      data: {
+        phone: `94000${String(seq).padStart(5, '0')}`,
+        name: `Suspension Buyer ${seq}`,
+        referralCode: `SUS-B-${seq}`,
+      },
+    });
+    const address = await prisma.address.create({
+      data: {
+        userId: buyer.id,
+        name: 'Suspension Buyer',
+        phone: '9400000000',
+        line1: '1 Test Street',
+        city: 'Mumbai',
+        state: 'Maharashtra',
+        pincode: '400001',
+      },
+    });
+    const cart = await prisma.cart.create({ data: { userId: buyer.id } });
+    await prisma.cartItem.create({
+      data: { cartId: cart.id, variantId: s.variant.id, quantity: 1, selected: true },
+    });
+
+    const buyerToken = signAccessToken({ sub: buyer.id, role: 'CUSTOMER' });
+    const { status, json } = await call('POST', '/api/orders/checkout', buyerToken, {
+      addressId: address.id,
+      paymentMethod: 'UPI',
+      deliveryMethod: 'STANDARD',
+    });
+
+    expect(status).toBe(400);
+    expect(json.error?.code).toBe('ITEM_UNAVAILABLE');
+
+    // No order, and so no money owed to a shop that is stopped.
+    const orders = await prisma.order.count({ where: { userId: buyer.id } });
+    expect(orders).toBe(0);
+  });
+});
+
 describe('a pending seller is not a suspended one', () => {
   it('can still complete their store profile on the way to approval', async () => {
     // The obvious fix was requireApprovedSeller everywhere. It would have shut
