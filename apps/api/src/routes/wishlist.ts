@@ -6,7 +6,7 @@ import { prisma } from '../db';
 import { categoryRulesMap } from '../services/categoryRules';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { listingStockFields, defaultVariantOf } from '../utils/productListing';
+import { listingStockFields, defaultVariantOf, pricesVary } from '../utils/productListing';
 
 export const wishlistRouter = Router();
 
@@ -55,6 +55,7 @@ function toEntry(row: WishlistRow, rules: Map<string, CategoryRules>): WishlistE
       categoryName: p.category.name,
       pricePaise: cheapest.pricePaise,
       mrpPaise: p.mrpPaise ?? cheapest.mrpPaise,
+      priceVaries: pricesVary(p.variants),
       imageUrl: p.images[0]?.url ?? null,
       sizes: [...new Set(p.variants.map((v) => v.size).filter(Boolean))],
       colors: [...new Set(p.variants.map((v) => v.color).filter(Boolean))],

@@ -17,6 +17,20 @@ export function defaultVariantOf<T extends VariantLike>(variants: T[]): T | null
     .reduce<T | null>((min, v) => (!min || v.pricePaise < min.pricePaise ? v : min), null);
 }
 
+/**
+ * Whether the variants disagree on price — what turns a card's "₹499" into
+ * "from ₹499".
+ *
+ * Shared rather than rewritten per surface: listings, ads and the wishlist all
+ * build the same card, and a card that says "from" in one place and not another
+ * for the same product is worse than either answer on its own.
+ */
+export function pricesVary(variants: { pricePaise: number }[]): boolean {
+  if (variants.length < 2) return false;
+  const first = variants[0]!.pricePaise;
+  return variants.some((v) => v.pricePaise !== first);
+}
+
 /** The `defaultVariantId` / `inStock` pair every ProductListItem carries. */
 export function listingStockFields<T extends VariantLike>(
   variants: T[],
@@ -74,6 +88,7 @@ export function toProductListItem(p: ListingProduct): ProductListItem {
     categoryName: p.category.name,
     pricePaise: cheapest.pricePaise,
     mrpPaise: p.mrpPaise ?? cheapest.mrpPaise,
+    priceVaries: pricesVary(p.variants),
     imageUrl: p.images[0]?.url ?? null,
     // size/color are display caches of optionValues — "" when the axis is absent.
     sizes: [...new Set(p.variants.map((v) => v.size).filter(Boolean))],

@@ -20,6 +20,7 @@ import {
   listingStockFields,
   productListItemInclude,
   toProductListItem,
+  pricesVary,
 } from '../utils/productListing';
 import { optionalAuth } from '../middleware/auth';
 import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
@@ -263,6 +264,7 @@ productsRouter.get('/', async (req, res, next) => {
         categoryName: p.category.name,
         pricePaise: minVariant.pricePaise,
         mrpPaise: p.mrpPaise ?? minVariant.mrpPaise,
+        priceVaries: pricesVary(p.variants),
         imageUrl: p.images[0]?.url ?? null,
         // size/color are display caches of optionValues — "" when the axis is absent.
         sizes: [...new Set(p.variants.map((v) => v.size).filter(Boolean))],

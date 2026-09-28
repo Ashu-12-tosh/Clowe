@@ -131,3 +131,22 @@ of it spent waiting on the Docker build and DNS.
 - FASHN and Claude keys to turn the AI features real.
 - Set the KYC name-match threshold from real seller data rather than the
   default of 85.
+
+---
+
+## Logged, not scheduled
+
+**Price filter and price sort disagree on which variant they mean.** The filter
+matches a product when *any* variant falls in the range
+(`routes/products.ts`, `variantFilter`), while the sort and the displayed price
+use the *cheapest* (`productSearch.ts` sorts on `basePricePaise`, which
+`basePriceOf()` keeps as the minimum variant price).
+
+So a shirt with a ₹500 size and a ₹2,000 size appears in a "₹1,500–₹2,500"
+filter and then displays ₹500 — reading as a ₹500 product wrongly included.
+Both halves are individually defensible, which is why it has survived: the
+filter answers "is there something here I can buy in my budget", the sort
+answers "what does this cost from". They just are not the same question.
+
+Not urgent — it needs a decision about which question the listing is answering
+before it needs code.

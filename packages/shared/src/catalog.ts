@@ -124,6 +124,15 @@ export interface ProductListItem {
   /** Lowest variant price / MRP, in paise. */
   pricePaise: number;
   mrpPaise: number | null;
+  /**
+   * Whether the variants disagree on price, so a card can read "from ₹499"
+   * instead of a bare ₹499 that only one size actually costs.
+   *
+   * Deliberately a flag beside pricePaise rather than a change to it: the
+   * suggest dropdown and the search facets read the cheapest variant and must
+   * keep reading exactly that.
+   */
+  priceVaries: boolean;
   imageUrl: string | null;
   sizes: string[];
   colors: string[];

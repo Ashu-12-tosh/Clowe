@@ -58,6 +58,13 @@ export default function ProductCard({
         </p>
         <div className="mt-1.5 flex items-center justify-between gap-2">
           <div className="flex items-baseline gap-1.5">
+            {/* The price shown is the cheapest variant's. When the others cost
+                more, say "from" — a bare ₹499 on a listing that only sells one
+                size at ₹499 reads as the price of the thing, not of its
+                cheapest corner. */}
+            {product.priceVaries && (
+              <span className="text-[11px] font-medium text-gray-500">from</span>
+            )}
             <span className="t-price text-brand-600">
               {formatPaise(product.pricePaise)}
             </span>

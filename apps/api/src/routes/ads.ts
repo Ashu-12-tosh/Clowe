@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AD_PLACEMENTS, type ActiveAd } from '@clowe/shared';
 import { prisma } from '../db';
-import { listingStockFields } from '../utils/productListing';
+import { listingStockFields, pricesVary } from '../utils/productListing';
 
 export const adsRouter = Router();
 
@@ -98,6 +98,7 @@ adsRouter.get('/active', async (req, res, next) => {
           categoryName: p.category.name,
           pricePaise: minVariant.pricePaise,
           mrpPaise: minVariant.mrpPaise,
+          priceVaries: pricesVary(p.variants),
           imageUrl: p.images[0]?.url ?? null,
           sizes: [...new Set(p.variants.map((v) => v.size))],
           colors: [...new Set(p.variants.map((v) => v.color))],
