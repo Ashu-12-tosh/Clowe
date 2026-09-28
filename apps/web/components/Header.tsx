@@ -52,6 +52,10 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [counts, setCounts] = useState<MyCounts>({ cart: 0, wishlist: 0, notifications: 0 });
   const [listening, setListening] = useState(false);
+  // Phone-width search: the box is an icon until tapped, then a full-screen
+  // overlay. Below md the inline box had ~14px to live in (logo and the action
+  // icons are shrink-0, so the flexible search absorbed the whole shortfall).
+  const [searchOpen, setSearchOpen] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   // Detect speech support only after mount — rendering the mic server-side
   // causes a hydration mismatch.
@@ -108,6 +112,23 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     recognition.start();
   }
 
+  // While the phone search overlay is up, hold the page behind it still —
+  // otherwise a scroll gesture aimed at the suggestion list drags the
+  // storefront underneath. Also drop the overlay if the viewport grows past
+  // md (rotation), where it is display:none and its close button is too.
+  useEffect(() => {
+    if (!searchOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const mq = window.matchMedia('(min-width: 768px)');
+    const onChange = () => mq.matches && setSearchOpen(false);
+    mq.addEventListener('change', onChange);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      mq.removeEventListener('change', onChange);
+    };
+  }, [searchOpen]);
+
   // Login state + badge counts — refreshed on navigation, tab focus, and the
   // custom event dispatched after cart/wishlist writes.
   useEffect(() => {
@@ -160,7 +181,8 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           {/* Search. The combobox owns its own dropdown, keyboard handling and
               request cancellation; voice search feeds it a transcript through
               the same input so spoken and typed queries are parsed alike. */}
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+          {/* md and up: the box sits inline and takes the free space — unchanged. */}
+          <div className="hidden min-w-0 flex-1 items-center gap-2 md:flex">
             <SearchBar
               initialQuery={q}
               onVoiceSearch={startVoiceSearch}
@@ -168,6 +190,18 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               voiceSupported={speechSupported}
             />
           </div>
+
+          {/* Below md: an icon. ml-auto stands in for the flex-1 box that is
+              hidden here, so the icon and the actions stay right-aligned. */}
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Search"
+            aria-expanded={searchOpen}
+            className="ml-auto rounded-lg p-1.5 text-xl leading-none text-ink-900 hover:bg-cream-100 md:hidden"
+          >
+            ⌕
+          </button>
 
           {/* Actions — two states: guest vs logged in */}
           <nav className="flex shrink-0 items-center gap-0.5 text-ink-900 sm:gap-1">
@@ -249,6 +283,49 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       <Suspense fallback={<div className="hidden h-10 border-b border-gray-100 lg:block" />}>
         <CategoryNav />
       </Suspense>
+
+      {/* ---------------- Phone search overlay ----------------
+          The same SearchBar the desktop header renders, given a full-width
+          container instead of 14px. Reused rather than reimplemented: the
+          debounce, request aborting, grouped dropdown, keyboard walking and
+          ARIA wiring all live in that one component, and a second mobile-only
+          search box would drift from it within a release or two.
+
+          Only mounted while open, so the hidden desktop instance is the only
+          other one alive and it is idle (it fetches on focus/typing). */}
+      {searchOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Search"
+          // SearchBar's own Escape closes the dropdown and keeps what was
+          // typed, calling preventDefault when it does. Honouring that flag is
+          // what keeps Escape two-stage: dropdown first, overlay second.
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && !e.defaultPrevented) setSearchOpen(false);
+          }}
+          className="fixed inset-0 z-50 bg-white md:hidden"
+        >
+          <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-2.5">
+            <button
+              type="button"
+              onClick={() => setSearchOpen(false)}
+              aria-label="Close search"
+              className="shrink-0 rounded-lg p-1.5 text-xl leading-none text-ink-900 hover:bg-cream-100"
+            >
+              ←
+            </button>
+            <SearchBar
+              initialQuery={q}
+              onVoiceSearch={startVoiceSearch}
+              voiceActive={listening}
+              voiceSupported={speechSupported}
+              autoFocus
+              onNavigate={() => setSearchOpen(false)}
+            />
+          </div>
+        </div>
+      )}
     </header>
   );
 }

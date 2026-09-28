@@ -107,11 +107,22 @@ export default function SearchBar({
   onVoiceSearch,
   voiceActive,
   voiceSupported,
+  autoFocus = false,
+  onNavigate,
 }: {
   initialQuery?: string;
   onVoiceSearch?: () => void;
   voiceActive?: boolean;
   voiceSupported?: boolean;
+  /** Focus the input on mount — the mobile overlay opens straight into typing. */
+  autoFocus?: boolean;
+  /**
+   * Fired once a search has been committed and the router is navigating, so a
+   * container that opened this box (the mobile overlay) can close itself.
+   * Deliberately not called by close(): Escape and outside-clicks dismiss the
+   * dropdown while leaving the box open, and the overlay owns that decision.
+   */
+  onNavigate?: () => void;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
@@ -130,6 +141,13 @@ export default function SearchBar({
   // Voice search hands us a transcript through the same input, so the parser
   // and the dropdown treat spoken and typed queries identically.
   useEffect(() => setQuery(initialQuery), [initialQuery]);
+
+  // The mobile overlay mounts this already open, so the shopper lands in the
+  // field with the keyboard up rather than having to tap a second time. Focus
+  // alone is enough to show the list — onFocus opens it.
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus();
+  }, [autoFocus]);
 
   useEffect(() => {
     setRecent(getRecentSearches());
@@ -269,8 +287,9 @@ export default function SearchBar({
       close();
       inputRef.current?.blur(); // dismisses the on-screen keyboard on mobile
       router.push(trimmed ? `/products?q=${encodeURIComponent(trimmed)}` : '/products');
+      onNavigate?.();
     },
-    [close, router],
+    [close, router, onNavigate],
   );
 
   const choose = useCallback(
@@ -286,8 +305,9 @@ export default function SearchBar({
       close();
       inputRef.current?.blur();
       router.push(option.href);
+      onNavigate?.();
     },
-    [close, router],
+    [close, router, onNavigate],
   );
 
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
