@@ -19,10 +19,10 @@ import { env } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { applyReturnDecision } from '../services/returnService';
-import { requireSeller } from './seller';
+import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerReturnsRouter = Router();
-sellerReturnsRouter.use(requireAuth, requireSeller);
+sellerReturnsRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 
 /** A seller's return volume is small enough to rank in memory. */
 const SCAN_CAP = 2000;

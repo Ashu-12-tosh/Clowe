@@ -20,10 +20,10 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { requireSeller } from './seller';
+import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerCustomersRouter = Router();
-sellerCustomersRouter.use(requireAuth, requireSeller);
+sellerCustomersRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 
 /** A shopper with no order in this many days is drifting away. */
 const AT_RISK_DAYS = 90;

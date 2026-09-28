@@ -26,10 +26,10 @@ import {
   requestPayout,
   sumFees,
 } from '../services/payoutService';
-import { requireSeller } from './seller';
+import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerPayoutsRouter = Router();
-sellerPayoutsRouter.use(requireAuth, requireSeller);
+sellerPayoutsRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 
 // ---------------------------------------------------------------------------
 // Helpers

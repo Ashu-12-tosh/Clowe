@@ -42,6 +42,11 @@ export interface SellerProfileInfo {
   description: string | null;
   status: SellerStatusValue;
   rejectionReason: string | null;
+  /**
+   * Why the shop was suspended, shown to the seller. Read-only access that
+   * cannot say what went wrong is not an appeal path, just a locked door.
+   */
+  suspensionReason: string | null;
   city: string | null;
   state: string | null;
   createdAt: string;

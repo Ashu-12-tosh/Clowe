@@ -13,10 +13,10 @@ import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { getSettings } from '../services/settingsService';
 import { availableBalance, feesFor } from '../services/payoutService';
-import { requireSeller } from './seller';
+import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerDashboardRouter = Router();
-sellerDashboardRouter.use(requireAuth, requireSeller);
+sellerDashboardRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 
 const ITEM_CAP = 20000;
 

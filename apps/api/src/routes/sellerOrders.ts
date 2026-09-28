@@ -30,7 +30,7 @@ import { ApiError } from '../utils/ApiError';
 import { shippingProvider } from '../services/shipping';
 import { sendMessageSafe } from '../services/messaging';
 import { checkSellerReferralReward } from '../services/sellerReferralService';
-import { requireSeller } from './seller';
+import { blockSuspendedWrites, requireSeller } from './seller';
 import {
   aggregateStatus,
   settleCodIfDelivered,
@@ -38,7 +38,7 @@ import {
 } from '../services/orderStatusService';
 
 export const sellerOrdersRouter = Router();
-sellerOrdersRouter.use(requireAuth, requireSeller);
+sellerOrdersRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 
 /** Ceiling on orders scanned when sorting/aggregating in memory. */
 const SCAN_CAP = 5000;

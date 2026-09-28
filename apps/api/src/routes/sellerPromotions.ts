@@ -18,10 +18,10 @@ import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { promotionStatus } from '../services/promotionService';
-import { requireSeller } from './seller';
+import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerPromotionsRouter = Router();
-sellerPromotionsRouter.use(requireAuth, requireSeller);
+sellerPromotionsRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 
 const listQuery = z.object({
   tab: z.enum(PROMOTION_TABS).default('ALL'),

@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/auth';
 import { kycVerifyLimiter } from '../middleware/rateLimits';
 import { KycCheckRunningError, getSellerKycSummary, runSellerKyc } from '../services/kyc/sellerKyc';
 import { ApiError } from '../utils/ApiError';
-import { requireSeller } from './seller';
+import { blockSuspendedWrites, requireSeller } from './seller';
 
 /**
  * The seller's own KYC checks.
@@ -17,7 +17,7 @@ import { requireSeller } from './seller';
  * to tune against would only help someone fit a borrowed name to a PAN.
  */
 export const sellerKycRouter = Router();
-sellerKycRouter.use(requireAuth, requireSeller);
+sellerKycRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 
 sellerKycRouter.get('/', async (req, res, next) => {
   try {

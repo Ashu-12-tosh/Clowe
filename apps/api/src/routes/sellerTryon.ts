@@ -13,11 +13,11 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { requireSeller } from './seller';
+import { blockSuspendedWrites, requireSeller } from './seller';
 import { categoryRulesMap } from '../services/categoryRules';
 
 export const sellerTryonRouter = Router();
-sellerTryonRouter.use(requireAuth, requireSeller);
+sellerTryonRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 
 /** Hard cap on rows pulled into memory for the aggregates. */
 const ROW_CAP = 10000;

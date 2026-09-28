@@ -183,6 +183,22 @@ async function nextReference(): Promise<string> {
  * request can't settle the same line twice.
  */
 export async function requestPayout(sellerId: string, methodId?: string) {
+  // Checked here and not only at the route. This is the one call in the seller
+  // API that moves money out, and a suspension exists largely to stop exactly
+  // that; making it depend on a middleware staying attached to a router is the
+  // arrangement that let a suspended shop keep trading in the first place.
+  const seller = await prisma.sellerProfile.findUnique({
+    where: { id: sellerId },
+    select: { status: true },
+  });
+  if (!seller) throw ApiError.notFound('Seller not found');
+  if (seller.status !== 'APPROVED') {
+    throw ApiError.forbidden(
+      'Payouts are on hold while your shop is not active.',
+      'SELLER_NOT_PAYABLE',
+    );
+  }
+
   const settings = await getSettings();
 
   const method = methodId

@@ -14,10 +14,10 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { requireSeller } from './seller';
+import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerProductsRouter = Router();
-sellerProductsRouter.use(requireAuth, requireSeller);
+sellerProductsRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 
 /** A seller's catalogue is small enough to rank in memory. */
 const SCAN_CAP = 2000;

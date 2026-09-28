@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import type { NextFunction, Request, Response } from 'express';
-import type { SellerProfile } from '@prisma/client';
+import type { SellerProfile, SellerStatus } from '@prisma/client';
 import {
   MAX_VARIANT_AXES,
   optionValuesFromJson,
@@ -66,6 +66,46 @@ export async function requireSeller(req: Request, _res: Response, next: NextFunc
   }
 }
 
+/**
+ * Statuses that stop a seller changing anything. REJECTED is in here with the
+ * other two because a rejected application is not an account to trade from.
+ */
+const BLOCKED_SELLER_STATUSES = new Set<SellerStatus>(['SUSPENDED', 'BANNED', 'REJECTED']);
+
+/**
+ * Blocks writes by a seller who is suspended, banned or rejected — reads stay
+ * open so they can still see their orders, their money and why they were
+ * stopped.
+ *
+ * Keyed on the HTTP method rather than a list of routes on purpose. A route
+ * added to any of these routers next month is covered without anyone
+ * remembering to cover it, which is the same reason the variant write carries
+ * its owner in the where clause instead of trusting a guard above it.
+ *
+ * Deliberately not `requireApprovedSeller`: PENDING is not suspended. A new
+ * seller has to write their store profile, business details and KYC in order
+ * to become approved, and demanding approval for those would lock the door
+ * they are supposed to walk through.
+ *
+ * Not applied to the support router. Suspending someone and removing the way
+ * to contest it at the same time is not a suspension, it is a dead end.
+ */
+export function blockSuspendedWrites(req: Request, _res: Response, next: NextFunction) {
+  if (req.method === 'GET') return next();
+  const status = req.seller!.status;
+  if (BLOCKED_SELLER_STATUSES.has(status)) {
+    return next(
+      ApiError.forbidden(
+        status === 'REJECTED'
+          ? 'Your seller application was not approved, so this cannot be changed.'
+          : `Your shop is ${status.toLowerCase()}, so this cannot be changed. Contact support if you think that is wrong.`,
+        'SELLER_BLOCKED',
+      ),
+    );
+  }
+  next();
+}
+
 /** Listing products requires an APPROVED (not just registered) seller. */
 function requireApprovedSeller(req: Request, _res: Response, next: NextFunction) {
   if (req.seller!.status !== 'APPROVED') {
@@ -86,6 +126,7 @@ function toProfileInfo(p: SellerProfile): SellerProfileInfo {
     description: p.description,
     status: p.status,
     rejectionReason: p.rejectionReason,
+    suspensionReason: p.suspensionReason,
     city: p.city,
     state: p.state,
     createdAt: p.createdAt.toISOString(),
@@ -659,7 +700,7 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
 });
 
 // Archive (soft delete) a product.
-sellerRouter.delete('/products/:id', requireSeller, async (req, res, next) => {
+sellerRouter.delete('/products/:id', requireSeller, blockSuspendedWrites, async (req, res, next) => {
   try {
     const product = await ownProduct(req, req.params.id);
     await prisma.product.update({ where: { id: product.id }, data: { status: 'ARCHIVED' } });
@@ -854,7 +895,7 @@ sellerRouter.get('/returns/:id', requireSeller, async (req, res, next) => {
 //   approve:  REQUESTED → APPROVED (pickup gets scheduled)
 //   reject:   REQUESTED → REJECTED (reason shown to customer; item back to DELIVERED)
 //   received: APPROVED  → RECEIVED (+ auto refund when condition is OK)
-sellerRouter.patch('/returns/:id', requireSeller, async (req, res, next) => {
+sellerRouter.patch('/returns/:id', requireSeller, blockSuspendedWrites, async (req, res, next) => {
   try {
     const input = sellerReturnActionSchema.parse(req.body);
     const updated = await applyReturnDecision(req.seller!.id, req.params.id, input);

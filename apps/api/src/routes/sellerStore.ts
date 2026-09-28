@@ -27,10 +27,10 @@ import { shippingProvider } from '../services/shipping';
 import { payoutProvider } from '../services/payouts';
 import { aiProvider } from '../services/ai';
 import { tryOnProvider } from '../services/tryon';
-import { requireSeller } from './seller';
+import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerStoreRouter = Router();
-sellerStoreRouter.use(requireAuth, requireSeller);
+sellerStoreRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 
 const DEFAULT_HOURS: Record<Weekday, WorkingHours> = {
   mon: { open: '09:00', close: '21:00', closed: false },

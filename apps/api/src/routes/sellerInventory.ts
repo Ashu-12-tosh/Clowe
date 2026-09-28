@@ -17,10 +17,10 @@ import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { ensureDefaultWarehouse, setVariantTotal } from '../services/stockService';
-import { requireSeller } from './seller';
+import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerInventoryRouter = Router();
-sellerInventoryRouter.use(requireAuth, requireSeller);
+sellerInventoryRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 
 const SCAN_CAP = 5000;
 const VIEW_WINDOW_DAYS = 30;
