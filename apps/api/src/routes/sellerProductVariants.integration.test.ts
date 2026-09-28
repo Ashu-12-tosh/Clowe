@@ -175,6 +175,36 @@ describe('PUT /api/seller/products/:id — variant ownership', () => {
     expect(after!.productId).toBe(moved.id);
   });
 
+  it("refuses to overwrite another seller's variant images", async () => {
+    // The images write is a second write keyed by the same body-supplied id.
+    // It is scoped independently of the guard above precisely so this holds
+    // even if that guard is ever lost, and this pins the behaviour either way.
+    const attacker = await makeSellerWithProduct('img-attacker');
+    const victim = await makeSellerWithProduct('img-victim');
+    await prisma.productVariantImage.create({
+      data: { variantId: victim.variant.id, url: '/uploads/victim-original.jpg', sortOrder: 0 },
+    });
+
+    const { status, json } = await putProduct(attacker.token, attacker.product.id, [
+      {
+        id: victim.variant.id,
+        optionValues: { size: 'M' },
+        pricePaise: 100,
+        stock: 0,
+        imageUrls: ['/uploads/attacker-replacement.jpg'],
+      },
+    ]);
+
+    expect(status).toBe(404);
+    expect(json.error?.code).toBe('VARIANT_NOT_ON_PRODUCT');
+
+    const after = await prisma.productVariantImage.findMany({
+      where: { variantId: victim.variant.id },
+    });
+    expect(after).toHaveLength(1);
+    expect(after[0]!.url).toBe('/uploads/victim-original.jpg');
+  });
+
   it('still lets a seller edit a variant that is genuinely theirs', async () => {
     // The guard is worthless if it also blocks the ordinary edit, so the happy
     // path is pinned here alongside the refusals.

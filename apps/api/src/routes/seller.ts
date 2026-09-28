@@ -596,10 +596,21 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
       // Variant images, only for the variants whose set the form actually sent.
       // An omitted imageUrls leaves the rows alone, which is what stops an
       // unrelated edit — a price change, a re-colour — from wiping pictures.
+      //
+      // Both halves are scoped independently of the guard above. The guard
+      // already rejects a foreign id, so this is belt and braces — but the
+      // cross-seller write this file was fixed for happened exactly because a
+      // delete carried the constraint and the write beside it did not, and a
+      // pair that is only safe while some earlier check survives is the same
+      // arrangement wearing a different hat.
       ...variantRows
-        .filter((r) => r.input.id && r.input.imageUrls !== undefined)
+        .filter(
+          (r) => r.input.id && ownVariantIds.has(r.input.id) && r.input.imageUrls !== undefined,
+        )
         .flatMap(({ input: v }) => [
-          prisma.productVariantImage.deleteMany({ where: { variantId: v.id! } }),
+          prisma.productVariantImage.deleteMany({
+            where: { variantId: v.id!, variant: { productId: product.id } },
+          }),
           prisma.productVariantImage.createMany({
             data: (v.imageUrls ?? []).map((url, i) => ({
               variantId: v.id!,
