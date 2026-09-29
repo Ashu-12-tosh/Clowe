@@ -190,4 +190,105 @@ describe('with coupons switched off', () => {
     await prisma.order.delete({ where: { id: order.id } });
   });
 
+  it('stops a seller creating a coded promotion, and says why', async () => {
+    const seller = await makeSeller();
+    const { status, json } = await call(
+      'POST',
+      '/api/seller/promotions',
+      seller.token,
+      promotionBody({ code: 'SAVE10' }),
+    );
+    expect(status).toBe(400);
+    expect(json.error?.code).toBe('PROMO_CODES_DISABLED');
+  });
+
+  it('still lets a seller create an automatic promotion — Promotions keep working', async () => {
+    const seller = await makeSeller();
+    const { status } = await call(
+      'POST',
+      '/api/seller/promotions',
+      seller.token,
+      promotionBody(),
+    );
+    expect(status).toBe(200);
+  });
+
+  it('lets a seller edit an existing coded promotion, and clear its code', async () => {
+    // Blocking every save that carried a code would trap a seller in a
+    // promotion they could not change. The block is on introducing one.
+    const seller = await makeSeller();
+    const existing = await prisma.promotion.create({
+      data: {
+        sellerId: seller.sellerId,
+        name: 'Legacy coded promo',
+        code: `LEGACY${seq}`,
+        scope: 'STORE',
+        kind: 'PERCENT',
+        value: 10,
+        startAt: new Date(Date.now() + 60_000),
+        endAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        state: 'DRAFT',
+      },
+    });
+
+    const kept = await call(
+      'PUT',
+      `/api/seller/promotions/${existing.id}`,
+      seller.token,
+      promotionBody({ code: existing.code, name: 'Renamed but same code' }),
+    );
+    expect(kept.status).toBe(200);
+
+    const cleared = await call(
+      'PUT',
+      `/api/seller/promotions/${existing.id}`,
+      seller.token,
+      promotionBody({ name: 'Now automatic' }),
+    );
+    expect(cleared.status).toBe(200);
+    const after = await prisma.promotion.findUnique({ where: { id: existing.id } });
+    expect(after!.code).toBeNull();
+  });
+
+  it('marks an existing coded promotion as dormant rather than letting it die quietly', async () => {
+    const seller = await makeSeller();
+    await prisma.promotion.create({
+      data: {
+        sellerId: seller.sellerId,
+        name: 'Dormant coded promo',
+        code: `DORMANT${seq}`,
+        scope: 'STORE',
+        kind: 'PERCENT',
+        value: 10,
+        startAt: new Date(Date.now() - 60_000),
+        endAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        state: 'ACTIVE',
+      },
+    });
+    const { status, json } = await call('GET', '/api/seller/promotions', seller.token);
+    expect(status).toBe(200);
+    const rows = (json.data as unknown as { rows: { code: string | null; codeDormant: boolean }[] })
+      .rows;
+    const coded = rows.find((r) => r.code?.startsWith('DORMANT'));
+    expect(coded?.codeDormant).toBe(true);
+  });
+});
+
+describe('with coupons switched back on', () => {
+  it('behaves as it always did — the switch actually switches', async () => {
+    await setSetting('couponsEnabled', true);
+    const shopper = await makeShopper();
+
+    const browse = await call('GET', '/api/cart/coupons', shopper.token);
+    expect((browse.json.data as unknown as unknown[]).length).toBeGreaterThan(0);
+
+    const seller = await makeSeller();
+    const coded = await call(
+      'POST',
+      '/api/seller/promotions',
+      seller.token,
+      promotionBody({ code: `BACKON${seq}` }),
+    );
+    expect(coded.status).toBe(200);
+  });
 });

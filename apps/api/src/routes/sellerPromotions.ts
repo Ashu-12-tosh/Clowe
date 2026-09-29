@@ -17,6 +17,7 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
+import { getSettings } from '../services/settingsService';
 import { promotionStatus } from '../services/promotionService';
 import { blockSuspendedWrites, requireSeller } from './seller';
 
@@ -59,6 +60,7 @@ async function performanceByPromotion(
 function toRow(
   promotion: PromotionRecord,
   performance: { salesPaise: number; orderCount: number } | undefined,
+  couponsEnabled: boolean,
 ): SellerPromotionRow {
   const salesGeneratedPaise = performance?.salesPaise ?? 0;
   return {
@@ -85,6 +87,7 @@ function toRow(
         ? Math.round((salesGeneratedPaise / promotion.discountGivenPaise) * 100) / 100
         : null,
     status: promotionStatus(promotion),
+    codeDormant: Boolean(promotion.code) && !couponsEnabled,
     isFeatured: promotion.isFeatured,
     productIds: promotion.productIds,
     categoryIds: promotion.categoryIds,
@@ -127,7 +130,8 @@ async function loadRows(sellerId: string, q?: string): Promise<SellerPromotionRo
     }),
     performanceByPromotion(sellerId),
   ]);
-  return promotions.map((p) => toRow(p, performance.get(p.id)));
+  const { couponsEnabled } = await getSettings();
+  return promotions.map((p) => toRow(p, performance.get(p.id), couponsEnabled));
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +168,7 @@ function changePercent(current: number, previous: number): number | null {
 sellerPromotionsRouter.get('/summary', async (req, res, next) => {
   try {
     const sellerId = req.seller!.id;
+    const { couponsEnabled } = await getSettings();
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -293,13 +298,38 @@ async function assertOwnTargets(
   }
 }
 
+/**
+ * A promo code is redeemed through the same box a platform coupon is, so with
+ * coupons switched off there is no way for a shopper to type one.
+ *
+ * Refused at the point a code is *introduced*, not merely present: a seller
+ * who already has a coded promotion must still be able to edit its dates, its
+ * value, or remove the code — blocking every save that carries one would trap
+ * them in a promotion they cannot change.
+ *
+ * The message says why and that it is temporary. A bare "invalid" would read
+ * as the feature being broken rather than off, and the seller would not know
+ * the useful thing: an automatic promotion works today and converts better.
+ */
+async function assertPromoCodesAllowed() {
+  if ((await getSettings()).couponsEnabled) return;
+  throw ApiError.badRequest(
+    'Promo codes are switched off on Clowe at the moment, so this promotion cannot have one. ' +
+      'It will come back — in the meantime, save it without a code and it applies automatically ' +
+      'to everything in scope, which converts better anyway.',
+    'PROMO_CODES_DISABLED',
+  );
+}
+
 sellerPromotionsRouter.post('/', async (req, res, next) => {
   try {
     const sellerId = req.seller!.id;
+    const { couponsEnabled } = await getSettings();
     const input = promotionUpsertSchema.parse(req.body);
     await assertOwnTargets(sellerId, input);
 
     if (input.code) {
+      await assertPromoCodesAllowed();
       const clash = await prisma.promotion.findUnique({ where: { code: input.code.toUpperCase() } });
       const couponClash = await prisma.coupon.findUnique({
         where: { code: input.code.toUpperCase() },
@@ -312,7 +342,7 @@ sellerPromotionsRouter.post('/', async (req, res, next) => {
     const created = await prisma.promotion.create({
       data: { ...dataFrom(input), sellerId },
     });
-    res.json({ success: true, data: toRow(created, undefined) });
+    res.json({ success: true, data: toRow(created, undefined, couponsEnabled) });
   } catch (err) {
     next(err);
   }
@@ -321,6 +351,7 @@ sellerPromotionsRouter.post('/', async (req, res, next) => {
 sellerPromotionsRouter.put('/:id', async (req, res, next) => {
   try {
     const sellerId = req.seller!.id;
+    const { couponsEnabled } = await getSettings();
     const existing = await prisma.promotion.findFirst({ where: { id: req.params.id, sellerId } });
     if (!existing) throw ApiError.notFound('Promotion not found');
 
@@ -328,7 +359,9 @@ sellerPromotionsRouter.put('/:id', async (req, res, next) => {
     await assertOwnTargets(sellerId, input);
 
     const nextCode = input.code ? input.code.toUpperCase() : null;
+    // Introducing or changing a code, not merely carrying the existing one.
     if (nextCode && nextCode !== existing.code) {
+      await assertPromoCodesAllowed();
       const clash = await prisma.promotion.findUnique({ where: { code: nextCode } });
       const couponClash = await prisma.coupon.findUnique({ where: { code: nextCode } });
       if (clash || couponClash) throw ApiError.badRequest('That code is already in use', 'CODE_TAKEN');
@@ -340,7 +373,7 @@ sellerPromotionsRouter.put('/:id', async (req, res, next) => {
     const { sellerId: _ignored, ...data } = dataFrom(input);
     const updated = await prisma.promotion.update({ where: { id: existing.id }, data });
     const performance = await performanceByPromotion(sellerId);
-    res.json({ success: true, data: toRow(updated, performance.get(updated.id)) });
+    res.json({ success: true, data: toRow(updated, performance.get(updated.id), couponsEnabled) });
   } catch (err) {
     next(err);
   }
@@ -350,13 +383,14 @@ sellerPromotionsRouter.put('/:id', async (req, res, next) => {
 sellerPromotionsRouter.patch('/:id/state', async (req, res, next) => {
   try {
     const sellerId = req.seller!.id;
+    const { couponsEnabled } = await getSettings();
     const { state } = promotionStateSchema.parse(req.body);
     const existing = await prisma.promotion.findFirst({ where: { id: req.params.id, sellerId } });
     if (!existing) throw ApiError.notFound('Promotion not found');
 
     const updated = await prisma.promotion.update({ where: { id: existing.id }, data: { state } });
     const performance = await performanceByPromotion(sellerId);
-    res.json({ success: true, data: toRow(updated, performance.get(updated.id)) });
+    res.json({ success: true, data: toRow(updated, performance.get(updated.id), couponsEnabled) });
   } catch (err) {
     next(err);
   }
@@ -365,6 +399,7 @@ sellerPromotionsRouter.patch('/:id/state', async (req, res, next) => {
 sellerPromotionsRouter.delete('/:id', async (req, res, next) => {
   try {
     const sellerId = req.seller!.id;
+    const { couponsEnabled } = await getSettings();
     const existing = await prisma.promotion.findFirst({
       where: { id: req.params.id, sellerId },
       include: { _count: { select: { redemptions: true } } },
@@ -379,7 +414,7 @@ sellerPromotionsRouter.delete('/:id', async (req, res, next) => {
         data: { state: 'PAUSED', endAt: new Date() },
       });
       const performance = await performanceByPromotion(sellerId);
-      res.json({ success: true, data: toRow(updated, performance.get(updated.id)) });
+      res.json({ success: true, data: toRow(updated, performance.get(updated.id), couponsEnabled) });
       return;
     }
 
@@ -397,6 +432,7 @@ sellerPromotionsRouter.delete('/:id', async (req, res, next) => {
 sellerPromotionsRouter.get('/:id', async (req, res, next) => {
   try {
     const sellerId = req.seller!.id;
+    const { couponsEnabled } = await getSettings();
     const promotion = await prisma.promotion.findFirst({
       where: { id: req.params.id, sellerId },
       include: {
@@ -414,7 +450,7 @@ sellerPromotionsRouter.get('/:id', async (req, res, next) => {
 
     const performance = await performanceByPromotion(sellerId);
     const body: SellerPromotionDetail = {
-      ...toRow(promotion, performance.get(promotion.id)),
+      ...toRow(promotion, performance.get(promotion.id), couponsEnabled),
       redemptions: promotion.redemptions.map((r) => ({
         id: r.id,
         orderNumber: r.order.orderNumber,

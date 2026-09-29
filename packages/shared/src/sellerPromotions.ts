@@ -52,6 +52,14 @@ export interface SellerPromotionRow {
   name: string;
   description: string | null;
   code: string | null;
+  /**
+   * This promotion has a code while promo codes are switched off platform-wide,
+   * so nothing can redeem it. Surfaced as a flag rather than a status so the
+   * tabs and filters keep meaning what they mean — and surfaced at all because
+   * a promotion that silently never applies is the failure this is here to
+   * prevent.
+   */
+  codeDormant: boolean;
   scope: PromotionScopeValue;
   scopeLabel: string;
   kind: PromotionKindValue;
