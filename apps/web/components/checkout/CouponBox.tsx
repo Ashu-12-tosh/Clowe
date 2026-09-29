@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { AppliedCoupon, CartView, CouponOffer } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
+import { useCouponsEnabled } from '@/lib/coupons';
 import { TagIcon } from '@/components/cart/CartIcons';
 
 interface Props {
@@ -21,6 +22,10 @@ function offerHeadline(offer: CouponOffer): string {
 
 /** Step 4 of checkout: apply a code, or pick one from the live offer list. */
 export default function CouponBox({ applied, subtotalPaise, onCartChange }: Props) {
+  // Hides itself rather than making every page that renders it ask first.
+  // null is "not known yet", so nothing flashes before the answer lands.
+  const couponsEnabled = useCouponsEnabled();
+
   const [code, setCode] = useState('');
   const [offers, setOffers] = useState<CouponOffer[]>([]);
   const [showOffers, setShowOffers] = useState(false);
@@ -70,6 +75,8 @@ export default function CouponBox({ applied, subtotalPaise, onCartChange }: Prop
       setBusy(false);
     }
   }
+
+  if (!couponsEnabled) return null;
 
   return (
     <div>

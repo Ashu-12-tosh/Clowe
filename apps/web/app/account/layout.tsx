@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useCouponsEnabled } from '@/lib/coupons';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { AuthUser, MyCounts } from '@clowe/shared';
@@ -27,6 +28,8 @@ const NAV: { href: string; label: string; icon: string; badge?: Badge }[] = [
 ];
 
 export default function AccountLayout({ children }: { children: React.ReactNode }) {
+  const couponsEnabled = useCouponsEnabled();
+
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -103,7 +106,8 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
 
           {/* Nav */}
           <nav className="overflow-hidden rounded-2xl border border-gray-100 bg-white py-1.5">
-            {NAV.map((item) => {
+            {NAV.filter((item) => item.href !== '/account/coupons' || couponsEnabled)
+              .map((item) => {
               const active =
                 item.href === '/account'
                   ? pathname === '/account'

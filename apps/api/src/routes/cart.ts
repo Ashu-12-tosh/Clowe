@@ -12,6 +12,7 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { categoryRulesMap } from '../services/categoryRules';
+import { getSettings } from '../services/settingsService';
 import { applyPromotions } from '../services/promotionService';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -71,6 +72,11 @@ export async function validateCoupon(
   subtotalPaise: number,
   userId?: string,
 ): Promise<{ coupon: CouponRow; discountPaise: number } | { error: string }> {
+  // The single point every coupon is resolved through, so switching the
+  // feature off reaches a cart that already carried a code: the caller above
+  // treats an error as a stale code and drops it, which is exactly the right
+  // behaviour here and needed no new path.
+  if (!(await getSettings()).couponsEnabled) return { error: 'Coupons are not available right now' };
   const coupon = await prisma.coupon.findUnique({ where: { code: code.toUpperCase() } });
   if (!coupon || !coupon.isActive) return { error: 'That coupon code is not valid' };
 
@@ -412,6 +418,11 @@ cartRouter.delete('/', async (req, res, next) => {
 
 cartRouter.post('/coupon', async (req, res, next) => {
   try {
+    // Refused on the server, not merely hidden in the UI: with the feature off
+    // a hand-made request must not be able to discount an order either.
+    if (!(await getSettings()).couponsEnabled) {
+      throw ApiError.badRequest('Coupons are not available right now.', 'COUPONS_DISABLED');
+    }
     const { code } = couponApplySchema.parse(req.body);
     const userId = req.auth!.userId;
     const cart = await getOrCreateCart(userId);
@@ -487,6 +498,10 @@ cartRouter.get('/delivery-options', async (req, res, next) => {
 // usable, publicly listable codes.
 cartRouter.get('/coupons', async (_req, res, next) => {
   try {
+    if (!(await getSettings()).couponsEnabled) {
+      res.json({ success: true, data: [] });
+      return;
+    }
     const now = new Date();
     const coupons = await prisma.coupon.findMany({
       where: {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCouponsEnabled } from '@/lib/coupons';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -123,6 +124,7 @@ function HowToUse({ onClose }: { onClose: () => void }) {
 }
 
 export default function CouponsPage() {
+  const couponsEnabled = useCouponsEnabled();
   const router = useRouter();
   const [data, setData] = useState<MyCouponsResponse | null>(null);
   const [filter, setFilter] = useState<FilterKey>('all');
@@ -211,8 +213,24 @@ export default function CouponsPage() {
     ? user.prefs.email || user.prefs.sms || user.prefs.whatsapp
     : false;
 
-  if (!data) {
+  // Reachable from an old bookmark or a link sent before the feature was
+  // switched off. Says so plainly rather than rendering an empty list, which
+  // would read as the shopper having lost their coupons.
+  if (couponsEnabled === false) {
     return (
+      <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center">
+        <h1 className="text-lg font-bold text-ink-900">Coupons aren&rsquo;t available right now</h1>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-gray-500">
+          We&rsquo;ve paused coupons for the moment. Any discount already applied to an
+          order you&rsquo;ve placed is unaffected and still shows on that order.
+        </p>
+      </div>
+    );
+  }
+
+  if (!data) {
+
+  return (
       <div className="animate-pulse space-y-4">
         <div className="h-12 w-64 rounded-lg bg-cream-100" />
         <div className="h-96 rounded-2xl bg-cream-100" />

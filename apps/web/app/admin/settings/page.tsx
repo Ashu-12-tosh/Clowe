@@ -29,6 +29,7 @@ export default function AdminSettingsPage() {
     minRupees: '',
     holdDays: '',
   });
+  const [couponsEnabled, setCouponsEnabled] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -39,6 +40,7 @@ export default function AdminSettingsPage() {
         setSettings(s);
         setTryonMin(toRupees(s.tryonMinPricePaise));
         setKycMinScore(String(s.kycNameMatchMinScore));
+        setCouponsEnabled(s.couponsEnabled);
         setSocial(s.socialLinks);
         const prices: Record<string, string> = {};
         for (const pl of AD_PLACEMENTS)
@@ -81,6 +83,7 @@ export default function AdminSettingsPage() {
           payoutMinPaise: toPaise(payout.minRupees),
           payoutHoldDays: Math.max(0, Math.round(Number(payout.holdDays) || 0)),
           kycNameMatchMinScore: Math.min(100, Math.max(0, Math.round(Number(kycMinScore) || 0))),
+          couponsEnabled,
         },
         auth: true,
       });
@@ -142,6 +145,27 @@ export default function AdminSettingsPage() {
           PAN and bank-account names scoring below this are flagged before approval. Bands: 100 direct
           match, 85–99 good partial, 60–84 moderate partial, 34–59 poor partial, 0–33 no match. Changing
           it re-grades every seller at once — nothing is re-verified or re-billed.
+        </p>
+      </div>
+
+      {/* Coupons */}
+      <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
+        <h2 className="text-sm font-bold">&#127903; Coupons</h2>
+        <label className="mt-2 flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={couponsEnabled}
+            onChange={(e) => setCouponsEnabled(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>Offer coupons to shoppers</span>
+        </label>
+        <p className="mt-1 text-xs text-gray-400">
+          Off hides the checkout and cart coupon boxes and &ldquo;My Coupons&rdquo;, and the API
+          stops honouring codes. Nothing is deleted &mdash; the coupons, their history and the
+          discount on past orders all stay, and switching this back on restores the feature
+          as it was. It also governs seller promo codes, which are redeemed through the same
+          box, so sellers cannot create a code while this is off.
         </p>
       </div>
 

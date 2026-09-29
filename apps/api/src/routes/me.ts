@@ -16,6 +16,7 @@ import {
   type SavedPaymentMethodInfo,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { getSettings } from '../services/settingsService';
 import { env } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -124,6 +125,8 @@ meRouter.get('/overview', async (req, res, next) => {
         prisma.user.findUnique({ where: { id: userId } }),
         prisma.order.count({ where: { userId } }),
         prisma.wishlist.count({ where: { userId, product: { status: 'APPROVED' } } }),
+        // Counted only when the feature is on; the tile is hidden either way,
+        // but a number nobody can act on is worse than no number.
         prisma.coupon.count({
           where: {
             isActive: true,
@@ -174,7 +177,9 @@ meRouter.get('/overview', async (req, res, next) => {
         wishlist,
         walletPaise: creditsToPaise(user.creditsBalance),
         walletCredits: user.creditsBalance,
-        coupons: couponCount,
+        // Zero, not hidden, when the feature is off: the tile is gone from the
+        // page anyway, and a count of things nobody can use is just noise.
+        coupons: (await getSettings()).couponsEnabled ? couponCount : 0,
         returns: returnCount,
       },
       recentOrders: recentOrders.map((o) => {
@@ -400,6 +405,14 @@ meRouter.delete('/payment-methods/:id', async (req, res, next) => {
  */
 meRouter.get('/coupons', async (req, res, next) => {
   try {
+    if (!(await getSettings()).couponsEnabled) {
+      const empty: MyCouponsResponse = {
+        coupons: [],
+        summary: { total: 0, available: 0, used: 0, expired: 0, totalSavingsPaise: 0 },
+      };
+      res.json({ success: true, data: empty });
+      return;
+    }
     const userId = req.auth!.userId;
     const now = new Date();
 

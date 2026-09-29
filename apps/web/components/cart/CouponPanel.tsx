@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { AppliedCoupon, CartView, CouponOffer } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
+import { useCouponsEnabled } from '@/lib/coupons';
 import { TagIcon } from './CartIcons';
 
 interface Props {
@@ -26,6 +27,10 @@ function offerHeadline(offer: CouponOffer): string {
  * remove action, or a code box plus the live list of usable offers.
  */
 export default function CouponPanel({ applied, subtotalPaise, onCartChange }: Props) {
+  // Hides itself rather than making every page that renders it ask first.
+  // null is "not known yet", so nothing flashes before the answer lands.
+  const couponsEnabled = useCouponsEnabled();
+
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
   const [offers, setOffers] = useState<CouponOffer[]>([]);
@@ -77,7 +82,9 @@ export default function CouponPanel({ applied, subtotalPaise, onCartChange }: Pr
   }
 
   if (applied) {
-    return (
+    if (!couponsEnabled) return null;
+
+  return (
       <div className="rounded-xl border border-dashed border-green-300 bg-green-50 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">

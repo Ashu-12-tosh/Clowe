@@ -20,6 +20,10 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   returnWindowDays: env.RETURN_WINDOW_DAYS,
   auditRetentionDays: 365,
   kycNameMatchMinScore: DEFAULT_KYC_NAME_MATCH_MIN_SCORE,
+  // Off. Coupons are built and seeded but not offered; flipping this to true
+  // — here or from admin settings — brings the whole feature back with no
+  // other change.
+  couponsEnabled: false,
   socialLinks: { facebook: '', twitter: '', instagram: '' },
   adPricing: {
     HOME_BANNER: { '7': 49900, '15': 89900, '30': 149900 },
@@ -77,6 +81,8 @@ export async function getSettings(): Promise<PlatformSettings> {
     kycNameMatchMinScore:
       (byKey.get('kycNameMatchMinScore') as number | undefined) ??
       DEFAULT_SETTINGS.kycNameMatchMinScore,
+    couponsEnabled:
+      (byKey.get('couponsEnabled') as boolean | undefined) ?? DEFAULT_SETTINGS.couponsEnabled,
     socialLinks:
       (byKey.get('socialLinks') as PlatformSettings['socialLinks'] | undefined) ??
       DEFAULT_SETTINGS.socialLinks,
@@ -95,6 +101,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     tryonMinPricePaise: s.tryonMinPricePaise,
     socialLinks: s.socialLinks,
     pdpOffers: s.pdpOffers,
+    couponsEnabled: s.couponsEnabled,
   };
 }
 

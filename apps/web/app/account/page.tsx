@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useCouponsEnabled } from '@/lib/coupons';
 import Link from 'next/link';
 import type { AccountOverview } from '@clowe/shared';
 import { api } from '@/lib/api';
@@ -48,6 +49,7 @@ function formatDate(iso: string): string {
 }
 
 export default function AccountOverviewPage() {
+  const couponsEnabled = useCouponsEnabled();
   const [data, setData] = useState<AccountOverview | null>(null);
   const [error, setError] = useState('');
 
@@ -89,7 +91,9 @@ export default function AccountOverviewPage() {
       href: '/account/credits',
       icon: '👛',
     },
-    { label: 'Coupons', value: String(data.stats.coupons), href: '/account/coupons', icon: '🎟' },
+    ...(couponsEnabled
+      ? [{ label: 'Coupons', value: String(data.stats.coupons), href: '/account/coupons', icon: '🎟' }]
+      : []),
   ];
 
   return (

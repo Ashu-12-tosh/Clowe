@@ -62,6 +62,21 @@ export interface PlatformSettings {
   adPricing: AdPricing;
   /** Bank/EMI offers shown on every product page. */
   pdpOffers: PdpOffer[];
+  /**
+   * Whether platform coupons are offered to shoppers at all.
+   *
+   * Off hides every way in — the checkout box, the cart panel, "My Coupons" —
+   * and the API stops honouring codes, so it is not merely a hidden button.
+   * Nothing is deleted: the table, the seeded codes, the routes and the
+   * discount already recorded against past orders all stay exactly as they
+   * are, and turning this back on restores the feature rather than rebuilding
+   * it.
+   *
+   * It also governs seller promo codes, because a promotion's code is redeemed
+   * through the same box. With coupons off there is no way to type one, so
+   * sellers are stopped from creating a code that could never be used.
+   */
+  couponsEnabled: boolean;
 }
 
 /** Subset that anonymous visitors may read. */
@@ -69,6 +84,7 @@ export interface PublicSettings {
   tryonMinPricePaise: number;
   socialLinks: PlatformSettings['socialLinks'];
   pdpOffers: PdpOffer[];
+  couponsEnabled: boolean;
 }
 
 const adPriceRow = z.object({
@@ -86,6 +102,7 @@ export const updateSettingsSchema = z.object({
   payoutMinPaise: z.number().int().min(0).optional(),
   payoutHoldDays: z.number().int().min(0).max(90).optional(),
   kycNameMatchMinScore: z.number().int().min(0).max(100).optional(),
+  couponsEnabled: z.boolean().optional(),
   socialLinks: z
     .object({
       facebook: z.string().trim().url().or(z.literal('')),
