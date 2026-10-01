@@ -634,6 +634,11 @@ adminRouter.put('/settings', async (req, res, next) => {
       'dispatchWindowHours',
       'lateDispatchPenaltyPaise',
       'penaltyEnabled',
+      // Listing economics — the pricing calculator's fixed fees and GST rate.
+      'gstRatePercent',
+      'platformFeePaise',
+      'deliveryFeePaise',
+      'closingFeePaise',
       // KYC name matches are judged against this on every read, so moving it
       // re-grades sellers without re-verifying (and re-paying for) anyone.
       'kycNameMatchMinScore',

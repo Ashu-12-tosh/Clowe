@@ -9,6 +9,7 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
+import { economicsRates } from './economicsRates';
 import { getSettings } from './settingsService';
 
 // ---------------------------------------------------------------------------
@@ -34,6 +35,8 @@ export const DELIVERY_ENTRY_TYPES: readonly SellerLedgerTypeValue[] = [
   'COMMISSION',
   'PLATFORM_FEE',
   'GATEWAY_FEE',
+  'DELIVERY_FEE',
+  'CLOSING_FEE',
   'TDS',
 ];
 
@@ -117,11 +120,7 @@ export async function postDeliveryEntries(orderItemId: string, db: Db = prisma):
   const economics = computeListingEconomics({
     sellerPricePaise: item.pricePaise,
     quantity: item.quantity,
-    rates: {
-      commissionPercent: settings.payoutCommissionPercent,
-      gatewayPercent: settings.payoutGatewayPercent,
-      tdsPercent: settings.payoutTdsPercent,
-    },
+    rates: economicsRates(settings),
   });
 
   const rows = economics.lines

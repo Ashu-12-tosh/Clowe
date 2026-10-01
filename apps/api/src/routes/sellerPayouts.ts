@@ -198,7 +198,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       if (!item.deliveredAt) continue;
       const bucket = days.get(dayKey(item.deliveredAt));
       if (!bucket) continue;
-      const line = feesFor(item.pricePaise * item.quantity, settings);
+      const line = feesFor(item.pricePaise, settings, item.quantity);
       bucket.grossPaise += line.grossPaise;
       bucket.netPaise += line.netPaise;
       bucket.feesPaise += line.feesPaise + line.tdsPaise;
@@ -278,6 +278,10 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         commissionPercent: settings.payoutCommissionPercent,
         gatewayPercent: settings.payoutGatewayPercent,
         tdsPercent: settings.payoutTdsPercent,
+        gstPercent: settings.gstRatePercent,
+        platformFeePaise: settings.platformFeePaise,
+        deliveryFeePaise: settings.deliveryFeePaise,
+        closingFeePaise: settings.closingFeePaise,
         minPayoutPaise: settings.payoutMinPaise,
         holdDays: settings.payoutHoldDays,
       },
@@ -309,6 +313,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       fees: {
         commissionPaise: monthFees.commissionPaise,
         gatewayPaise: monthFees.gatewayPaise,
+        fixedFeesPaise: monthFees.fixedFeesPaise,
         adjustmentsPaise: balance.adjustmentsPaise,
         totalPaise: monthFees.feesPaise + balance.adjustmentsPaise,
       },
@@ -549,7 +554,7 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
     ];
     const lines = [header.join(',')];
     for (const item of items) {
-      const fee = feesFor(item.pricePaise * item.quantity, settings);
+      const fee = feesFor(item.pricePaise, settings, item.quantity);
       lines.push(
         [
           item.deliveredAt?.toISOString() ?? '',
@@ -656,7 +661,7 @@ sellerPayoutsRouter.get('/:id', async (req, res, next) => {
     if (!payout) throw ApiError.notFound('Payout not found');
 
     const lines: SellerPayoutLine[] = payout.items.map((item) => {
-      const fee = feesFor(item.pricePaise * item.quantity, settings);
+      const fee = feesFor(item.pricePaise, settings, item.quantity);
       return {
         orderItemId: item.id,
         orderNumber: item.order.orderNumber,

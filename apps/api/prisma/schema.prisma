@@ -1879,6 +1879,10 @@ enum SellerLedgerType {
   PROMOTION_CREDIT_SPEND // - promotion credits spent on a placement
   PAYOUT // - money transferred to the seller's bank
   ADJUSTMENT // +/- manual or system correction, always with a note
+  // Appended later (Postgres adds enum values at the end): the fixed fees
+  // the pricing calculator posts alongside PLATFORM_FEE.
+  DELIVERY_FEE // - fixed delivery fee charged to the seller, per shipment
+  CLOSING_FEE // - fixed closing fee, per unit
 }
 
 /// Settlement money can be paid out; promotion credits never can. Keeping them

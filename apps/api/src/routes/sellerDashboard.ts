@@ -12,7 +12,7 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { getSettings } from '../services/settingsService';
-import { availableBalance, feesFor } from '../services/payoutService';
+import { availableBalance, sumFees } from '../services/payoutService';
 import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerDashboardRouter = Router();
@@ -308,10 +308,11 @@ sellerDashboardRouter.get('/', async (req, res, next) => {
     const orders = new Set(sold.map((i) => i.orderId)).size;
     const previousOrders = new Set(previousSold.map((i) => i.orderId)).size;
 
-    // Net revenue runs the same fee maths a payout does, so the number on the
-    // dashboard and the number that reaches the bank agree.
-    const netRevenuePaise = feesFor(salesPaise, settings).netPaise;
-    const previousNet = feesFor(previousSales, settings).netPaise;
+    // Net revenue runs the same fee maths a payout does, line by line (the
+    // fixed fees are per line), so the number on the dashboard and the number
+    // that reaches the bank agree.
+    const netRevenuePaise = sumFees(sold, settings).netPaise;
+    const previousNet = sumFees(previousSold, settings).netPaise;
 
     // Counted as orders, not lines — two shirts in one parcel is one job.
     const pendingOrders = new Set(

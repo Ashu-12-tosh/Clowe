@@ -33,6 +33,7 @@ export default function AdminSettingsPage() {
   });
   const [couponsEnabled, setCouponsEnabled] = useState(false);
   const [dispatch, setDispatch] = useState({ windowHours: '', penaltyRupees: '', enabled: true });
+  const [economics, setEconomics] = useState({ gst: '', platformRupees: '', deliveryRupees: '', closingRupees: '' });
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -52,6 +53,12 @@ export default function AdminSettingsPage() {
           for (const d of AD_DURATIONS)
             prices[`${pl}:${d}`] = toRupees(s.adPricing[pl][String(d) as '7' | '15' | '30']);
         setAdPrices(prices);
+        setEconomics({
+          gst: String(s.gstRatePercent),
+          platformRupees: toRupees(s.platformFeePaise),
+          deliveryRupees: toRupees(s.deliveryFeePaise),
+          closingRupees: toRupees(s.closingFeePaise),
+        });
         setDispatch({
           windowHours: String(s.dispatchWindowHours),
           penaltyRupees: toRupees(s.lateDispatchPenaltyPaise),
@@ -99,6 +106,10 @@ export default function AdminSettingsPage() {
           dispatchWindowHours: Math.max(1, Math.round(Number(dispatch.windowHours) || 0)),
           lateDispatchPenaltyPaise: toPaise(dispatch.penaltyRupees),
           penaltyEnabled: dispatch.enabled,
+          gstRatePercent: Number(economics.gst) || 0,
+          platformFeePaise: toPaise(economics.platformRupees),
+          deliveryFeePaise: toPaise(economics.deliveryRupees),
+          closingFeePaise: toPaise(economics.closingRupees),
         },
         auth: true,
       });
@@ -361,6 +372,67 @@ export default function AdminSettingsPage() {
         <p className="mt-2 text-xs text-gray-400">
           Earnings are released this many days after delivery — keep it at or above the return
           window so refunds never chase money that has already left.
+        </p>
+      </div>
+
+      {/* Listing economics */}
+      <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
+        <h2 className="text-sm font-bold">🧮 Listing economics</h2>
+        <p className="mt-1 text-xs text-gray-400">
+          The fixed fees and GST rate behind the pricing breakdown sellers see as they type a
+          price, and behind the entries posted to their ledger on delivery &mdash; one shared
+          formula, with the commission, gateway and TDS rates below.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div>
+            <label className="text-xs text-gray-500">GST in price (%)</label>
+            <input
+              type="number"
+              min={0}
+              max={28}
+              step="0.5"
+              value={economics.gst}
+              onChange={(e) => setEconomics((v) => ({ ...v, gst: e.target.value }))}
+              className={field}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Platform fee (₹, per line)</label>
+            <input
+              type="number"
+              min={0}
+              value={economics.platformRupees}
+              onChange={(e) => setEconomics((v) => ({ ...v, platformRupees: e.target.value }))}
+              className={field}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Delivery fee (₹, per shipment)</label>
+            <input
+              type="number"
+              min={0}
+              value={economics.deliveryRupees}
+              onChange={(e) => setEconomics((v) => ({ ...v, deliveryRupees: e.target.value }))}
+              className={field}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Closing fee (₹, per unit)</label>
+            <input
+              type="number"
+              min={0}
+              value={economics.closingRupees}
+              onChange={(e) => setEconomics((v) => ({ ...v, closingRupees: e.target.value }))}
+              className={field}
+            />
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          A single GST rate for the whole catalog is a simplification: category-wise GST (books
+          0%, apparel under ₹1,000 at 5%) is a known follow-up. The tax invoice already applies
+          the category rules; this rate only drives what sellers are shown. The closing fee is a
+          placeholder until real logistics costs are known. Buyers are not charged any of these
+          &mdash; they come out of the seller&rsquo;s settlement.
         </p>
       </div>
 

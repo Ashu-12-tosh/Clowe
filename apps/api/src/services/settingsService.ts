@@ -20,6 +20,10 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   dispatchWindowHours: 12,
   lateDispatchPenaltyPaise: 8000, // ₹80
   penaltyEnabled: true,
+  gstRatePercent: 18,
+  platformFeePaise: 900, // ₹9 per line
+  deliveryFeePaise: 6000, // ₹60 per shipment
+  closingFeePaise: 2000, // ₹20 per unit — placeholder
   returnWindowDays: env.RETURN_WINDOW_DAYS,
   auditRetentionDays: 365,
   kycNameMatchMinScore: DEFAULT_KYC_NAME_MATCH_MIN_SCORE,
@@ -93,6 +97,14 @@ export async function getSettings(): Promise<PlatformSettings> {
       DEFAULT_SETTINGS.lateDispatchPenaltyPaise,
     penaltyEnabled:
       (byKey.get('penaltyEnabled') as boolean | undefined) ?? DEFAULT_SETTINGS.penaltyEnabled,
+    gstRatePercent:
+      (byKey.get('gstRatePercent') as number | undefined) ?? DEFAULT_SETTINGS.gstRatePercent,
+    platformFeePaise:
+      (byKey.get('platformFeePaise') as number | undefined) ?? DEFAULT_SETTINGS.platformFeePaise,
+    deliveryFeePaise:
+      (byKey.get('deliveryFeePaise') as number | undefined) ?? DEFAULT_SETTINGS.deliveryFeePaise,
+    closingFeePaise:
+      (byKey.get('closingFeePaise') as number | undefined) ?? DEFAULT_SETTINGS.closingFeePaise,
     returnWindowDays:
       (byKey.get('returnWindowDays') as number | undefined) ?? DEFAULT_SETTINGS.returnWindowDays,
     auditRetentionDays:

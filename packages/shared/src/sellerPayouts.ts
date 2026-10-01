@@ -87,6 +87,10 @@ export interface SellerPayoutOverview {
     commissionPercent: number;
     gatewayPercent: number;
     tdsPercent: number;
+    gstPercent: number;
+    platformFeePaise: number;
+    deliveryFeePaise: number;
+    closingFeePaise: number;
     minPayoutPaise: number;
     holdDays: number;
   };
@@ -122,6 +126,8 @@ export interface SellerPayoutOverview {
   fees: {
     commissionPaise: number;
     gatewayPaise: number;
+    /** Platform, delivery and closing fees on the month's delivered lines. */
+    fixedFeesPaise: number;
     adjustmentsPaise: number;
     totalPaise: number;
   };

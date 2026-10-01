@@ -29,12 +29,18 @@ let base: string;
 let categoryId: string;
 let seq = 0;
 
-// ₹3,000 at the default 10% / 2% / 1%.
+// ₹3,000 at the default 10% / 2% / 1%, plus the default fixed fees.
 const PRICE = 300_000;
 const COMMISSION = 30_000;
 const GATEWAY = 6_000;
 const TDS = 3_000;
-const NET = PRICE - COMMISSION - GATEWAY - TDS;
+const PLATFORM = DEFAULT_SETTINGS.platformFeePaise;
+const DELIVERY = DEFAULT_SETTINGS.deliveryFeePaise;
+const CLOSING = DEFAULT_SETTINGS.closingFeePaise;
+const FIXED = PLATFORM + DELIVERY + CLOSING;
+const NET = PRICE - COMMISSION - GATEWAY - TDS - FIXED;
+/** Entries one delivered unit posts. */
+const ENTRIES_PER_DELIVERY = 7;
 
 beforeAll(async () => {
   await seedFixture(prisma);
@@ -48,6 +54,8 @@ beforeAll(async () => {
 afterEach(async () => {
   await setSetting('payoutHoldDays', DEFAULT_SETTINGS.payoutHoldDays);
   await setSetting('payoutCommissionPercent', DEFAULT_SETTINGS.payoutCommissionPercent);
+  await setSetting('platformFeePaise', DEFAULT_SETTINGS.platformFeePaise);
+  await setSetting('deliveryFeePaise', DEFAULT_SETTINGS.deliveryFeePaise);
 });
 
 afterAll(async () => {
@@ -199,8 +207,11 @@ describe('delivery', () => {
     expect(rows.map((r) => [r.type, r.amountPaise, r.bucket])).toEqual([
       ['SALE_EARNING', PRICE, 'SETTLEMENT'],
       ['COMMISSION', -COMMISSION, 'SETTLEMENT'],
+      ['PLATFORM_FEE', -PLATFORM, 'SETTLEMENT'],
       ['GATEWAY_FEE', -GATEWAY, 'SETTLEMENT'],
       ['TDS', -TDS, 'SETTLEMENT'],
+      ['DELIVERY_FEE', -DELIVERY, 'SETTLEMENT'],
+      ['CLOSING_FEE', -CLOSING, 'SETTLEMENT'],
     ]);
     expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(NET);
   });
@@ -218,16 +229,32 @@ describe('delivery', () => {
     expect(await postDeliveryEntries(line.id)).toBe(0);
     expect(await postDeliveryEntries(line.id)).toBe(0);
 
-    expect(await entriesFor(line.id)).toHaveLength(4);
+    expect(await entriesFor(line.id)).toHaveLength(ENTRIES_PER_DELIVERY);
     expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(NET);
   });
 
-  it('uses the line total, so quantity changes the rounding base', async () => {
+  it('uses the line total, with closing per unit and the other fixed fees per line', async () => {
     const s = await makeSeller();
     const line = await makeLine(s, 'SHIPPED', { quantity: 3 });
     await call('PATCH', `/api/seller/orders/${line.id}/status`, s.token, { action: 'deliver' });
-    const sale = (await entriesFor(line.id)).find((r) => r.type === 'SALE_EARNING');
-    expect(sale?.amountPaise).toBe(PRICE * 3);
+    const rows = await entriesFor(line.id);
+    const of = (type: string) => rows.find((r) => r.type === type)?.amountPaise;
+    expect(of('SALE_EARNING')).toBe(PRICE * 3);
+    expect(of('CLOSING_FEE')).toBe(-CLOSING * 3);
+    expect(of('PLATFORM_FEE')).toBe(-PLATFORM);
+    expect(of('DELIVERY_FEE')).toBe(-DELIVERY);
+  });
+
+  it('follows the fixed-fee settings, not compiled-in numbers', async () => {
+    await setSetting('platformFeePaise', 1_500);
+    await setSetting('deliveryFeePaise', 0);
+    const s = await makeSeller();
+    const line = await makeLine(s, 'SHIPPED');
+    await call('PATCH', `/api/seller/orders/${line.id}/status`, s.token, { action: 'deliver' });
+    const rows = await entriesFor(line.id);
+    expect(rows.find((r) => r.type === 'PLATFORM_FEE')?.amountPaise).toBe(-1_500);
+    // A fee set to zero posts no row — an empty line explains nothing.
+    expect(rows.find((r) => r.type === 'DELIVERY_FEE')).toBeUndefined();
   });
 
   it('follows the commission setting, not a compiled-in rate', async () => {
@@ -250,7 +277,7 @@ describe('returns', () => {
     expect(await postReturnReversal(line.id)).toBe(true);
     expect(await postReturnReversal(line.id)).toBe(false);
     expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(0);
-    expect(await entriesFor(line.id)).toHaveLength(5);
+    expect(await entriesFor(line.id)).toHaveLength(ENTRIES_PER_DELIVERY + 1);
   });
 
   it('has nothing to reverse for a line delivered before the ledger existed', async () => {
@@ -302,7 +329,7 @@ describe('payouts', () => {
 
     const overview = await call('GET', '/api/seller/payouts/overview', s.token);
     expect((overview.json.data as { kpis: { payablePaise: number } }).kpis.payablePaise).toBe(NET);
-    expect(await entriesFor(line.id)).toHaveLength(4);
+    expect(await entriesFor(line.id)).toHaveLength(ENTRIES_PER_DELIVERY);
   });
 
   it('holds delivery entries back until the line clears, but not penalties', async () => {
@@ -335,7 +362,7 @@ describe('GET /api/seller/ledger', () => {
       total: number;
       rows: { type: string; amountPaise: number; runningBalancePaise: number; reference: { orderNumber: string | null } }[];
     };
-    expect(page.total).toBe(4);
+    expect(page.total).toBe(ENTRIES_PER_DELIVERY);
     expect(page.balancePaise).toBe(NET);
     expect(page.rows[0].runningBalancePaise).toBe(NET);
     // Oldest row (last on the page) started the running balance.

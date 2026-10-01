@@ -56,6 +56,20 @@ export interface PlatformSettings {
   lateDispatchPenaltyPaise: number;
   /** Off = late lines post nothing; entries already posted are untouched. */
   penaltyEnabled: boolean;
+  /**
+   * GST contained in every listed price, in percent, for the seller's
+   * pricing breakdown. One rate for the whole catalog is a simplification:
+   * category-wise GST (books 0%, apparel under ₹1,000 at 5%) is a known
+   * follow-up. The tax invoice already applies the category rules; this
+   * rate only drives what the product form and ledger explain to sellers.
+   */
+  gstRatePercent: number;
+  /** Fixed platform fee charged to the seller per delivered order line (paise). */
+  platformFeePaise: number;
+  /** Fixed delivery fee charged to the seller per shipment (paise). */
+  deliveryFeePaise: number;
+  /** Fixed closing fee per unit (paise). A placeholder until real logistics costs are known. */
+  closingFeePaise: number;
   /** Platform-wide return window; a seller may set a longer one of their own. */
   returnWindowDays: number;
   /** How long audit entries are kept before they can be purged. */
@@ -129,6 +143,10 @@ export const updateSettingsSchema = z.object({
   payoutMinPaise: z.number().int().min(0).optional(),
   payoutHoldDays: z.number().int().min(0).max(90).optional(),
   dispatchWindowHours: z.number().int().min(1).max(336).optional(),
+  gstRatePercent: z.number().min(0).max(28).optional(),
+  platformFeePaise: z.number().int().min(0).optional(),
+  deliveryFeePaise: z.number().int().min(0).optional(),
+  closingFeePaise: z.number().int().min(0).optional(),
   lateDispatchPenaltyPaise: z.number().int().min(0).optional(),
   penaltyEnabled: z.boolean().optional(),
   kycNameMatchMinScore: z.number().int().min(0).max(100).optional(),

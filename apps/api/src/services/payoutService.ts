@@ -4,6 +4,9 @@ import { ApiError } from '../utils/ApiError';
 import { getSettings } from './settingsService';
 import { payoutProvider } from './payouts';
 import { ensureLedgerCoversDeliveries, settlementPosition } from './sellerLedgerService';
+import { economicsRates } from './economicsRates';
+
+export { economicsRates };
 
 // ---------------------------------------------------------------------------
 // Seller earnings & settlement.
@@ -24,7 +27,9 @@ export interface FeeBreakdown {
   grossPaise: number;
   commissionPaise: number;
   gatewayPaise: number;
-  feesPaise: number; // commission + gateway
+  /** Platform + delivery + closing — the fixed fees. */
+  fixedFeesPaise: number;
+  feesPaise: number; // commission + gateway + fixed fees
   tdsPaise: number;
   netPaise: number;
 }
@@ -33,32 +38,35 @@ const EMPTY_FEES: FeeBreakdown = {
   grossPaise: 0,
   commissionPaise: 0,
   gatewayPaise: 0,
+  fixedFeesPaise: 0,
   feesPaise: 0,
   tdsPaise: 0,
   netPaise: 0,
 };
 
-/** The rates the shared calculator needs, lifted from platform settings. */
-export function economicsRates(settings: PlatformSettings) {
-  return {
-    commissionPercent: settings.payoutCommissionPercent,
-    gatewayPercent: settings.payoutGatewayPercent,
-    tdsPercent: settings.payoutTdsPercent,
-  };
-}
-
 /**
- * Fees withheld on a gross line total, using the admin's current rates. A
- * thin view over the shared calculator, so a statement, an overview chart and
- * a ledger entry can never show the same line with different deductions.
+ * Fees withheld on one line, using the admin's current rates. A thin view
+ * over the shared calculator, so a statement, an overview chart and a ledger
+ * entry can never show the same line with different deductions. Quantity
+ * matters now: the closing fee is per unit, the other fixed fees per line.
  */
-export function feesFor(grossPaise: number, settings: PlatformSettings): FeeBreakdown {
-  const e = computeListingEconomics({ sellerPricePaise: grossPaise, rates: economicsRates(settings) });
+export function feesFor(
+  unitPricePaise: number,
+  settings: PlatformSettings,
+  quantity = 1,
+): FeeBreakdown {
+  const e = computeListingEconomics({
+    sellerPricePaise: unitPricePaise,
+    quantity,
+    rates: economicsRates(settings),
+  });
+  const fixedFeesPaise = e.platformFeePaise + e.deliveryFeePaise + e.closingFeePaise;
   return {
     grossPaise: e.grossPaise,
     commissionPaise: e.commissionPaise,
     gatewayPaise: e.gatewayFeePaise,
-    feesPaise: e.commissionPaise + e.gatewayFeePaise,
+    fixedFeesPaise,
+    feesPaise: e.commissionPaise + e.gatewayFeePaise + fixedFeesPaise,
     tdsPaise: e.tdsPaise,
     netPaise: e.sellerReceivesPaise,
   };
@@ -66,11 +74,12 @@ export function feesFor(grossPaise: number, settings: PlatformSettings): FeeBrea
 
 export function sumFees(items: { pricePaise: number; quantity: number }[], settings: PlatformSettings): FeeBreakdown {
   return items.reduce<FeeBreakdown>((acc, item) => {
-    const line = feesFor(item.pricePaise * item.quantity, settings);
+    const line = feesFor(item.pricePaise, settings, item.quantity);
     return {
       grossPaise: acc.grossPaise + line.grossPaise,
       commissionPaise: acc.commissionPaise + line.commissionPaise,
       gatewayPaise: acc.gatewayPaise + line.gatewayPaise,
+      fixedFeesPaise: acc.fixedFeesPaise + line.fixedFeesPaise,
       feesPaise: acc.feesPaise + line.feesPaise,
       tdsPaise: acc.tdsPaise + line.tdsPaise,
       netPaise: acc.netPaise + line.netPaise,

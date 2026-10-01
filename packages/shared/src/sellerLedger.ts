@@ -21,6 +21,8 @@ export const SELLER_LEDGER_TYPES = [
   'PROMOTION_CREDIT_SPEND',
   'PAYOUT',
   'ADJUSTMENT',
+  'DELIVERY_FEE',
+  'CLOSING_FEE',
 ] as const;
 export type SellerLedgerTypeValue = (typeof SELLER_LEDGER_TYPES)[number];
 
@@ -40,6 +42,8 @@ export const SELLER_LEDGER_TYPE_LABELS: Record<SellerLedgerTypeValue, string> = 
   PROMOTION_CREDIT_SPEND: 'Credits spent',
   PAYOUT: 'Payout',
   ADJUSTMENT: 'Adjustment',
+  DELIVERY_FEE: 'Delivery fee',
+  CLOSING_FEE: 'Closing fee',
 };
 
 /** One row of a seller's ledger as the API serves it. */

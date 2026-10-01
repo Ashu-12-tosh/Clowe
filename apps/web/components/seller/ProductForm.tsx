@@ -23,6 +23,7 @@ import {
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadImages, uploadVideo } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
+import { PricingBreakdown } from '@/components/seller/PricingBreakdown';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -1494,6 +1495,8 @@ export default function ProductForm({ initial }: Props) {
                 )}
               </p>
             </div>
+
+            <PricingBreakdown listingPricePaise={cheapest ? cheapest.pricePaise : null} />
           </section>
         )}
 
