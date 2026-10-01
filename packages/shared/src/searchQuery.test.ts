@@ -407,3 +407,38 @@ describe('nothing typed', () => {
     expect(parsed.cleanedKeywords).toBe('');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Punctuation. Speech recognisers punctuate what they hear, so a spoken query
+// arrives as "Headphones." — and the parser used to keep the "." once it had
+// taken the word in front of it.
+// ---------------------------------------------------------------------------
+
+describe('punctuation a transcript adds', () => {
+  it('leaves no keyword behind once the word it followed is parsed away', () => {
+    expect(parse('Headphones.').cleanedKeywords).toBe('');
+    expect(parse('Laptops?').cleanedKeywords).toBe('');
+    expect(parse('Samsung!').cleanedKeywords).toBe('');
+  });
+
+  it('parses the punctuated query exactly as the plain one', () => {
+    for (const [punctuated, plain] of [
+      ['Headphones.', 'Headphones'],
+      ['laptops under 50k.', 'laptops under 50k'],
+      ['Samsung!', 'Samsung'],
+    ]) {
+      expect(parse(punctuated), punctuated).toEqual(parse(plain));
+    }
+  });
+
+  it('keeps the words of a sentence and drops only the stranded mark', () => {
+    // A real mishearing of "best mobile under 23,000" from production.
+    const parsed = parse('The best moment under 23,000.');
+    expect(parsed.cleanedKeywords).toBe('the moment');
+    expect(parsed.filters.maxPricePaise).toBe(2_300_000);
+  });
+
+  it('leaves punctuation that is part of a word alone', () => {
+    expect(parse('usb-c cable').cleanedKeywords).toBe('usb-c cable');
+  });
+});

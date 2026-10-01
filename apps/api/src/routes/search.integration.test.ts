@@ -568,6 +568,23 @@ describe('a category name that is the whole query narrows to it', () => {
     expect(body.total).toBe(0);
   });
 
+  it('is still that category when a voice transcript adds punctuation', async () => {
+    // Chrome punctuates what it hears: a spoken "smartphones" arrives as
+    // "Smartphones." Once the parser took "smartphones" as the category the
+    // "." was all that was left, it counted as a keyword, and the query fell
+    // back to the whole catalog — 245 products for "Headphones." against 12
+    // for "Headphones" on the demo catalog.
+    for (const text of ['Smartphones.', 'smartphones?', 'Smartphones!']) {
+      const body = await search(q(text));
+      expect(body.search?.strategy, text).toBe('category');
+      expect(slugs(body).sort(), text).toEqual([...PHONES].sort());
+    }
+  });
+
+  it('keeps an empty category empty when the transcript ends in a full stop', async () => {
+    expect((await search(q('Bedding.'))).total).toBe(0);
+  });
+
   it('"mobiles" returns every phone across both trees', async () => {
     // The case that ruled out filtering on the category alone: Mobiles holds
     // only some of the phones, and the rest are filed under Electronics. Read

@@ -230,7 +230,15 @@ function tidy(text: string): string {
   return text
     .replace(/[\s,]+/g, ' ')
     .replace(/\s*-\s*$/, '')
-    .trim();
+    .split(' ')
+    // A token with no letter or digit in it is punctuation stranded when the
+    // parser took the word it was attached to: the "." of "Headphones." once
+    // "headphones" became the category. Left in, it is a keyword that can
+    // match nothing yet still counts as one, so a category query stops being
+    // treated as a category and falls back to the whole catalog. Speech
+    // recognisers punctuate what they hear, so every spoken query ends this way.
+    .filter((token) => /[\p{L}\p{N}]/u.test(token))
+    .join(' ');
 }
 
 const MAX_WORDS = String.raw`(?:under|below|less than|lesser than|upto|up to|within|max|maximum|at most|cheaper than|not more than|no more than)`;
