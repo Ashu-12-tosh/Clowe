@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   VOICE_SEARCH_ERROR_MESSAGES,
   VOICE_SEARCH_FALLBACK_MESSAGE,
+  transcriptFromResults,
   voiceSearchAvailable,
   voiceSearchEndMessage,
   voiceSearchErrorMessage,
@@ -124,5 +125,38 @@ describe('voiceSearchEndMessage', () => {
     expect(voiceSearchEndMessage({ via: 'error', code: undefined }, quiet)).toBe(
       VOICE_SEARCH_FALLBACK_MESSAGE,
     );
+  });
+});
+
+describe('transcriptFromResults', () => {
+  /** Segments as the recogniser delivers them: each holds its alternatives. */
+  const results = (...segments: string[][]) =>
+    segments.map((alts) => alts.map((transcript) => ({ transcript })));
+
+  it('joins the segments Chrome splits an unfinished phrase into', () => {
+    // Recorded from Chrome 154: the settled start, then the rest with its own
+    // leading space. Reading only the first segment searched "Best mobile under".
+    expect(transcriptFromResults(results(['Best mobile under'], [' 23000']))).toBe('Best mobile under 23000');
+    expect(transcriptFromResults(results(['Samsung phone under'], [' 15000']))).toBe('Samsung phone under 15000');
+  });
+
+  it('returns a final result, a single segment, as it is', () => {
+    expect(transcriptFromResults(results(['best phone under 25k']))).toBe('best phone under 25k');
+  });
+
+  it('uses only the top alternative of each segment', () => {
+    expect(transcriptFromResults(results(['Best mobile under', 'Best moment under'], [' 23000', ' 2300']))).toBe(
+      'Best mobile under 23000',
+    );
+  });
+
+  it('collapses spacing and trims', () => {
+    expect(transcriptFromResults(results(['  boat '], ['  earbuds  ']))).toBe('boat earbuds');
+  });
+
+  it('is empty when nothing has been heard', () => {
+    expect(transcriptFromResults([])).toBe('');
+    expect(transcriptFromResults(results([''], ['   ']))).toBe('');
+    expect(transcriptFromResults([[]])).toBe('');
   });
 });

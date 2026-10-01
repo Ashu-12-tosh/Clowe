@@ -4,8 +4,13 @@ import Link from 'next/link';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { AuthUser, MyCounts } from '@clowe/shared';
-import { voiceSearchAvailable, voiceSearchEndMessage, voiceSearchErrorMessage } from '@clowe/shared';
-import type { VoiceSearchEnding } from '@clowe/shared';
+import {
+  transcriptFromResults,
+  voiceSearchAvailable,
+  voiceSearchEndMessage,
+  voiceSearchErrorMessage,
+} from '@clowe/shared';
+import type { VoiceResultList, VoiceSearchEnding } from '@clowe/shared';
 import { api, getStoredUser, logoutSession } from '@/lib/api';
 import CategoryNav from './CategoryNav';
 import SearchBar from './search/SearchBar';
@@ -14,7 +19,7 @@ import SearchBar from './search/SearchBar';
 interface SpeechRecognitionLike {
   lang: string;
   interimResults: boolean;
-  onresult: ((event: { results: { [i: number]: { [i: number]: { transcript: string } } } }) => void) | null;
+  onresult: ((event: { results: VoiceResultList }) => void) | null;
   onend: (() => void) | null;
   /** The event carries the reason; without it every failure looks the same. */
   onerror: ((event: { error?: string }) => void) | null;
@@ -93,8 +98,8 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   // What went wrong last time the recogniser was asked, in words. Empty when
   // nothing has gone wrong or the shopper stopped it themselves.
   const [voiceError, setVoiceError] = useState('');
-  // The best transcript seen so far. Interim results are on purely so a
-  // failure part-way through still has something to search for.
+  // Everything heard so far, every segment joined (transcriptFromResults).
+  // Interim results are on so a run that ends early still has this to search.
   const heardRef = useRef('');
   // Set when the shopper presses stop, so whatever the recogniser does next
   // ends in silence rather than a message about something they chose.
@@ -163,8 +168,9 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     const recognition = new SpeechRecognitionCtor();
     recognitionRef.current = recognition;
     recognition.lang = 'en-IN';
-    // On so that a failure part-way through still leaves a transcript to fall
-    // back to. Only the final result searches; see onend.
+    // On so that a run ending early — the watchdog, or an error — still has
+    // the latest hypothesis to search. A run that ends normally searches the
+    // final result, which arrives as one segment and replaces the interim ones.
     recognition.interimResults = true;
     heardRef.current = '';
     stopRequestedRef.current = false;
@@ -211,8 +217,9 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     }, VOICE_TIMEOUT_MS);
 
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      if (transcript.trim()) heardRef.current = transcript;
+      const transcript = transcriptFromResults(event.results);
+      if (!transcript) return;
+      heardRef.current = transcript;
       setQ(transcript);
     };
     recognition.onerror = (event) => {

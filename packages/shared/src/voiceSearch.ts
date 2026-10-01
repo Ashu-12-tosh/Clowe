@@ -76,6 +76,29 @@ export function voiceSearchAvailable(env: { hasRecognizer: boolean; isBrave: boo
   return env.hasRecognizer && !env.isBrave;
 }
 
+/** SpeechRecognitionEvent.results, as far as the transcript needs it. */
+export type VoiceResultList = ArrayLike<ArrayLike<{ transcript: string }>>;
+
+/**
+ * Everything the recogniser has heard so far, as one string.
+ *
+ * Chrome splits a phrase it is still working on into segments: the settled
+ * start in results[0], the rest in results[1], each later segment beginning
+ * with its own space — "Best mobile under" then " 23000". Reading only
+ * results[0][0], as this used to, searched "Best mobile under" whenever the
+ * run ended before the final result: the watchdog firing, or an error. The
+ * final result is a single segment, so a run that ends normally is unchanged.
+ *
+ * Only the top alternative of each segment is used.
+ */
+export function transcriptFromResults(results: VoiceResultList): string {
+  let text = '';
+  for (let i = 0; i < results.length; i++) {
+    text += results[i]?.[0]?.transcript ?? '';
+  }
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 /** How a voice search attempt came to an end. */
 export type VoiceSearchEnding =
   /** The recogniser reported a failure, with or without a code. */
