@@ -10,13 +10,13 @@ import {
   creditsToPaise,
   CREDIT_VALUE_PAISE,
   returnRequestSchema,
-  COD_MAX_PAISE,
   EMI_MIN_PAISE,
   type CheckoutResult,
   type OrderDetailView,
   type OrderListRow,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { getSettings } from '../services/settingsService';
 import { recordRedemptions } from '../services/promotionService';
 import { env } from '../env';
 import { returnWindowDaysFor } from '../services/categoryRules';
@@ -172,11 +172,14 @@ ordersRouter.post('/checkout', async (req, res, next) => {
         'EMI_NOT_ELIGIBLE',
       );
     }
-    if (paymentMethod === 'COD' && totalPaise > COD_MAX_PAISE) {
-      throw ApiError.badRequest(
-        `Cash on Delivery is available up to ₹${COD_MAX_PAISE / 100}`,
-        'COD_NOT_ELIGIBLE',
-      );
+    if (paymentMethod === 'COD') {
+      const { codMaxOrderPaise } = await getSettings();
+      if (totalPaise > codMaxOrderPaise) {
+        throw ApiError.badRequest(
+          `Cash on Delivery is available up to ₹${codMaxOrderPaise / 100}`,
+          'COD_NOT_ELIGIBLE',
+        );
+      }
     }
     // Sellers may switch COD off for their own goods in Store Settings.
     if (paymentMethod === 'COD') {

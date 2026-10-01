@@ -34,6 +34,7 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
     customer: 'customer-support@cloweshop.com',
     vendor: 'vendor-support@cloweshop.com',
   },
+  codMaxOrderPaise: 500000, // ₹5,000
   adPricing: {
     HOME_BANNER: { '7': 49900, '15': 89900, '30': 149900 },
     CATEGORY_SPONSORED: { '7': 29900, '15': 49900, '30': 79900 },
@@ -102,6 +103,8 @@ export async function getSettings(): Promise<PlatformSettings> {
       ...DEFAULT_SETTINGS.supportEmails,
       ...((byKey.get('supportEmails') as Partial<PlatformSettings['supportEmails']> | undefined) ?? {}),
     },
+    codMaxOrderPaise:
+      (byKey.get('codMaxOrderPaise') as number | undefined) ?? DEFAULT_SETTINGS.codMaxOrderPaise,
     adPricing:
       (byKey.get('adPricing') as PlatformSettings['adPricing'] | undefined) ??
       DEFAULT_SETTINGS.adPricing,
@@ -117,6 +120,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     tryonMinPricePaise: s.tryonMinPricePaise,
     socialLinks: s.socialLinks,
     supportEmails: s.supportEmails,
+    codMaxOrderPaise: s.codMaxOrderPaise,
     pdpOffers: s.pdpOffers,
     couponsEnabled: s.couponsEnabled,
   };

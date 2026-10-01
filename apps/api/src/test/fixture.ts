@@ -242,6 +242,11 @@ const BRANDS = ['Zephyr', 'Vertex', 'Nexo', 'Inkwell Press'];
 
 export async function seedFixture(prisma: PrismaClient): Promise<void> {
   // Order matters only for foreign keys; everything else is replaced wholesale.
+  // Orders point at variants and sellers, so a file that placed one (the
+  // checkout tests do) must not leave the next file unable to rebuild the
+  // catalog. Items and payments go with their order.
+  await prisma.payout.deleteMany();
+  await prisma.order.deleteMany();
   await prisma.productVariant.deleteMany();
   await prisma.productImage.deleteMany();
   await prisma.product.deleteMany();

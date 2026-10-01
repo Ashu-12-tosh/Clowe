@@ -64,7 +64,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     label: 'Payment & refund questions',
     keywords: ['payment', 'refund', 'paisa', 'money', 'upi', 'card', 'paid', 'charged', 'debit'],
     answer:
-      'Payments on Clowe are processed securely via Razorpay (UPI, cards, netbanking).\n\n• Payment failed but money deducted? It is auto-refunded by your bank, usually within 5–7 business days. /* TODO: confirm real refund timeline */\n• Refund for a cancelled order: initiated immediately, reflects in 5–7 business days. /* TODO: confirm */\n• Refund for a returned item: processed after the seller receives the item back.\n\nCash on Delivery (COD) is not available yet. /* TODO: update when COD launches */',
+      'Payments on Clowe are processed securely via Razorpay (UPI, cards, netbanking).\n\n• Payment failed but money deducted? It is auto-refunded by your bank, usually within 5–7 business days. /* TODO: confirm real refund timeline */\n• Refund for a cancelled order: initiated immediately, reflects in 5–7 business days. /* TODO: confirm */\n• Refund for a returned item: processed after the seller receives the item back.\n\nCash on Delivery is available on orders up to the limit shown at checkout — pick it on the payment step and keep the amount ready at handover. Some sellers do not offer it, and the payment step says so.',
     followUps: ['helped', 'complaint', 'menu'],
   },
   {

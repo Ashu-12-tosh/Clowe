@@ -65,6 +65,13 @@ export interface PlatformSettings {
    * the other contact details rather than as strings in two pages.
    */
   supportEmails: { customer: string; vendor: string };
+  /**
+   * Cash on Delivery is offered up to this order total, in paise. Enforced
+   * where orders are created — checkout and phone orders alike — and read by
+   * the payment step so the option is greyed out with the reason before
+   * anyone tries. Sellers can still switch COD off for their own goods.
+   */
+  codMaxOrderPaise: number;
   adPricing: AdPricing;
   /** Bank/EMI offers shown on every product page. */
   pdpOffers: PdpOffer[];
@@ -90,6 +97,7 @@ export interface PublicSettings {
   tryonMinPricePaise: number;
   socialLinks: PlatformSettings['socialLinks'];
   supportEmails: PlatformSettings['supportEmails'];
+  codMaxOrderPaise: number;
   pdpOffers: PdpOffer[];
   couponsEnabled: boolean;
 }
@@ -124,6 +132,7 @@ export const updateSettingsSchema = z.object({
       vendor: z.string().trim().email(),
     })
     .optional(),
+  codMaxOrderPaise: z.number().int().min(0).optional(),
   adPricing: z.object({ HOME_BANNER: adPriceRow, CATEGORY_SPONSORED: adPriceRow }).optional(),
   pdpOffers: z
     .array(

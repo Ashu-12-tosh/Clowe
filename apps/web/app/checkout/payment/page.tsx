@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ADDRESS_LABEL_TEXT,
-  COD_MAX_PAISE,
   CREDIT_VALUE_PAISE,
   creditsToPaise,
   EMI_MIN_PAISE,
@@ -22,6 +21,7 @@ import {
 } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
+import { getPublicSettings } from '@/lib/settings';
 import CheckoutStepper from '@/components/checkout/CheckoutStepper';
 import {
   BoxIcon,
@@ -95,6 +95,15 @@ function PaymentPageInner() {
   const [bank, setBank] = useState(BANKS[0]);
   const [wallet, setWallet] = useState(WALLETS[0]);
 
+  // The COD ceiling is a platform setting; until it loads, nothing is greyed
+  // out on its account — the server enforces it regardless.
+  const [codMaxPaise, setCodMaxPaise] = useState<number | null>(null);
+  useEffect(() => {
+    getPublicSettings()
+      .then((s) => setCodMaxPaise(s.codMaxOrderPaise))
+      .catch(() => {});
+  }, []);
+
   const [placing, setPlacing] = useState(false);
   const [mockOrder, setMockOrder] = useState<CheckoutResult | null>(null);
   const [error, setError] = useState('');
@@ -146,8 +155,8 @@ function PaymentPageInner() {
     if (m === 'EMI' && totalPaise < EMI_MIN_PAISE) {
       return `Available on orders above ${formatPaise(EMI_MIN_PAISE)}`;
     }
-    if (m === 'COD' && totalPaise > COD_MAX_PAISE) {
-      return `Not available above ${formatPaise(COD_MAX_PAISE)}`;
+    if (m === 'COD' && codMaxPaise !== null && totalPaise > codMaxPaise) {
+      return `Not available above ${formatPaise(codMaxPaise)}`;
     }
     return null;
   }
@@ -569,9 +578,11 @@ function PaymentPageInner() {
                     <p className="t-card-label mt-4 rounded-lg bg-cream-50 px-3 py-3 text-ink-900">
                       Keep {formatPaise(totalPaise)} ready at handover.
                     </p>
-                    <p className="t-caption mt-2 text-gray-500">
-                      Available on orders up to {formatPaise(COD_MAX_PAISE)}.
-                    </p>
+                    {codMaxPaise !== null && (
+                      <p className="t-caption mt-2 text-gray-500">
+                        Available on orders up to {formatPaise(codMaxPaise)}.
+                      </p>
+                    )}
                   </>
                 )}
               </div>

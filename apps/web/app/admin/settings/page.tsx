@@ -22,6 +22,7 @@ export default function AdminSettingsPage() {
   const [kycMinScore, setKycMinScore] = useState('');
   const [social, setSocial] = useState({ facebook: '', twitter: '', instagram: '', linkedin: '' });
   const [supportEmails, setSupportEmails] = useState({ customer: '', vendor: '' });
+  const [codMaxRupees, setCodMaxRupees] = useState('');
   const [adPrices, setAdPrices] = useState<Record<string, string>>({});
   const [payout, setPayout] = useState({
     commission: '',
@@ -44,6 +45,7 @@ export default function AdminSettingsPage() {
         setCouponsEnabled(s.couponsEnabled);
         setSocial(s.socialLinks);
         setSupportEmails(s.supportEmails);
+        setCodMaxRupees(toRupees(s.codMaxOrderPaise));
         const prices: Record<string, string> = {};
         for (const pl of AD_PLACEMENTS)
           for (const d of AD_DURATIONS)
@@ -79,6 +81,7 @@ export default function AdminSettingsPage() {
           tryonMinPricePaise: toPaise(tryonMin),
           socialLinks: social,
           supportEmails,
+          codMaxOrderPaise: toPaise(codMaxRupees),
           adPricing,
           payoutCommissionPercent: Number(payout.commission) || 0,
           payoutGatewayPercent: Number(payout.gateway) || 0,
@@ -212,6 +215,26 @@ export default function AdminSettingsPage() {
             />
           </div>
         ))}
+      </div>
+
+      {/* Cash on Delivery */}
+      <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
+        <h2 className="text-sm font-bold">💵 Cash on Delivery</h2>
+        <p className="mt-1 text-xs text-gray-400">
+          Offered up to this order total; above it the shopper must pay online. Checked when the
+          order is placed, for checkout and phone orders alike. Sellers can still switch COD off for
+          their own goods in their store settings.
+        </p>
+        <div className="mt-3">
+          <label className="text-xs text-gray-500">Maximum COD order (₹)</label>
+          <input
+            type="number"
+            min={0}
+            value={codMaxRupees}
+            onChange={(e) => setCodMaxRupees(e.target.value)}
+            className={field}
+          />
+        </div>
       </div>
 
       {/* Seller payouts */}

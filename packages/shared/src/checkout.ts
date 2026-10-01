@@ -231,8 +231,7 @@ export const PAYMENT_METHOD_META: Record<
 
 /** Minimum order value before EMI is offered. */
 export const EMI_MIN_PAISE = 300000;
-/** COD is only offered up to this order value. */
-export const COD_MAX_PAISE = 2000000;
+// The COD ceiling is PlatformSettings.codMaxOrderPaise, not a constant here.
 
 export const checkoutSchema = z.object({
   addressId: z.string().min(1, 'Pick a delivery address'),

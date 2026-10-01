@@ -1,5 +1,6 @@
-import { COD_MAX_PAISE, type ManualPaymentMethod } from '@clowe/shared';
+import type { ManualPaymentMethod } from '@clowe/shared';
 import { prisma } from '../db';
+import { getSettings } from './settingsService';
 import { ApiError } from '../utils/ApiError';
 import { deliveryPriceFor, etaWindowFor } from './deliveryService';
 import { confirmCodOrder, generateOrderNumber, settlePaymentSuccess } from './orderService';
@@ -88,9 +89,10 @@ export async function createManualOrder(input: {
   // The COD rules a shopper faces at checkout apply to a phone order too —
   // the cap and each seller's own opt-out.
   if (input.paymentMethod === 'COD') {
-    if (totalPaise > COD_MAX_PAISE) {
+    const { codMaxOrderPaise } = await getSettings();
+    if (totalPaise > codMaxOrderPaise) {
       throw ApiError.badRequest(
-        `Cash on Delivery is available up to ₹${COD_MAX_PAISE / 100}`,
+        `Cash on Delivery is available up to ₹${codMaxOrderPaise / 100}`,
         'COD_NOT_ELIGIBLE',
       );
     }
