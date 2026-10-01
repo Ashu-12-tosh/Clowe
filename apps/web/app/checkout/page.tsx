@@ -16,6 +16,7 @@ import {
   type DeliveryMethod,
   type DeliveryOption,
 } from '@clowe/shared';
+import { useCouponsEnabled } from '@/lib/coupons';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { BADGES_EVENT } from '@/components/Header';
@@ -92,6 +93,7 @@ function Step({
 }
 
 export default function CheckoutPage() {
+  const couponsEnabled = useCouponsEnabled();
   const router = useRouter();
   const [cart, setCart] = useState<CartView | null>(null);
   const [addresses, setAddresses] = useState<AddressInfo[] | null>(null);
@@ -492,8 +494,9 @@ export default function CheckoutPage() {
             </div>
           </Step>
 
-          {/* 4 ─ Coupons & credits */}
-          <Step n={4} title="Coupons & Gift Cards">
+          {/* 4 ─ Coupons & credits. The coupon box hides itself while coupons
+              are off; the heading must not keep promising them. */}
+          <Step n={4} title={couponsEnabled === true ? 'Coupons & Gift Cards' : 'Gift Cards & Credits'}>
             <div className="mt-3">
               <CouponBox
                 applied={cart.coupon}

@@ -22,6 +22,8 @@ export const FAQ_CATEGORY_META: Record<
 
 export interface FaqEntry {
   id: string;
+  /** Only shown while coupons are switched on (PlatformSettings.couponsEnabled). */
+  needsCoupons?: boolean;
   /** Which Help Center card this article sits under. */
   category: FaqCategory;
   /** Chip label shown in menus. */
@@ -133,6 +135,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
   },
   {
     id: 'coupons',
+    needsCoupons: true,
     category: 'OFFERS',
     label: 'How do I use a coupon?',
     keywords: ['coupon', 'promo', 'code', 'discount', 'offer', 'kupan'],

@@ -12,6 +12,8 @@ import {
 } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import { getPublicSettings } from '@/lib/settings';
+import { useCouponsEnabled } from '@/lib/coupons';
+import { faqEntriesFor } from '@clowe/shared';
 import type { OrderListResponse } from '@clowe/shared';
 import {
   FAQ_CATEGORIES,
@@ -111,9 +113,14 @@ export default function HelpCenterPage() {
     api<ComplaintRow[]>('/api/complaints/me', { auth: true }).then(setMyRequests).catch(() => {});
   }, []);
 
+  // Help that tells people to tap "Add Coupon" is wrong while there is no
+  // such button. The OFFERS card goes with it when nothing is left under it.
+  const couponsEnabled = useCouponsEnabled();
+  const entries = useMemo(() => faqEntriesFor(FAQ_ENTRIES, couponsEnabled), [couponsEnabled]);
+
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let list = FAQ_ENTRIES;
+    let list = entries;
     if (category) list = list.filter((e) => e.category === category);
     if (q) {
       list = list.filter(
@@ -124,17 +131,17 @@ export default function HelpCenterPage() {
       );
     }
     return list;
-  }, [query, category]);
+  }, [entries, query, category]);
 
   const visible = showAll || query || category ? results : results.slice(0, 6);
 
   const countByCategory = useMemo(() => {
     const map = new Map<FaqCategory, number>();
-    for (const entry of FAQ_ENTRIES) {
+    for (const entry of entries) {
       map.set(entry.category, (map.get(entry.category) ?? 0) + 1);
     }
     return map;
-  }, []);
+  }, [entries]);
 
   async function submitRequest() {
     setError('');
@@ -212,7 +219,7 @@ export default function HelpCenterPage() {
 
           {/* Category cards */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {FAQ_CATEGORIES.map((key) => {
+            {FAQ_CATEGORIES.filter((key) => (countByCategory.get(key) ?? 0) > 0).map((key) => {
               const meta = FAQ_CATEGORY_META[key];
               const active = category === key;
               return (
@@ -245,12 +252,12 @@ export default function HelpCenterPage() {
               <h2 className="t-sub-heading text-ink-900">
                 {category ? FAQ_CATEGORY_META[category].title : 'Frequently Asked Questions'}
               </h2>
-              {!query && !category && FAQ_ENTRIES.length > 6 && (
+              {!query && !category && entries.length > 6 && (
                 <button
                   onClick={() => setShowAll((v) => !v)}
                   className="t-caption font-semibold text-brand-600 hover:underline"
                 >
-                  {showAll ? 'Show fewer' : `View All FAQs (${FAQ_ENTRIES.length}) →`}
+                  {showAll ? 'Show fewer' : `View All FAQs (${entries.length}) →`}
                 </button>
               )}
             </div>

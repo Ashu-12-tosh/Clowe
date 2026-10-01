@@ -318,6 +318,11 @@ export default function SellerPromotionsPage() {
                           {row.code ? (
                             <>
                               Code <span className="font-mono font-semibold">{row.code}</span>
+                              {row.codeDormant && (
+                                <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                                  inactive while codes are off
+                                </span>
+                              )}
                             </>
                           ) : (
                             'Applies automatically'

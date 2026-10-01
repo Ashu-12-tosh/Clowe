@@ -12,7 +12,8 @@ import type {
 } from '@clowe/shared';
 import { COMPLAINT_CATEGORY_LABELS } from '@clowe/shared';
 import { api, getStoredUser } from '@/lib/api';
-import { FAQ_ENTRIES, FALLBACK_MESSAGE, GREETING, MAIN_MENU } from './faq-content';
+import { faqEntriesFor } from '@clowe/shared';
+import { FAQ_ENTRIES, FALLBACK_MESSAGE, GREETING, MAIN_MENU, type FaqEntry } from './faq-content';
 
 export interface Chip {
   id: string;
@@ -79,6 +80,12 @@ interface ComplaintDraft {
 
 export class RuleBasedEngine implements ChatEngine {
   private complaintDraft: ComplaintDraft | null = null;
+  /** The help this engine may offer; coupon help only while coupons are on. */
+  private readonly entries: readonly FaqEntry[];
+
+  constructor(options: { couponsEnabled: boolean | null } = { couponsEnabled: null }) {
+    this.entries = faqEntriesFor(FAQ_ENTRIES, options.couponsEnabled);
+  }
 
   async start(): Promise<BotReply> {
     return { messages: [{ text: GREETING, chips: MENU_CHIPS }] };
@@ -121,14 +128,17 @@ export class RuleBasedEngine implements ChatEngine {
         };
     }
 
-    const faq = FAQ_ENTRIES.find((f) => f.id === id);
+    const faq = this.entries.find((f) => f.id === id);
     if (faq) {
       return {
         messages: [
           {
             text: faq.answer.replace(/\s*\/\* TODO:[^*]*\*\//g, ''),
             links: faq.links,
-            chips: faq.followUps.map(chipFor),
+            // A follow-up to help this engine will not offer is not offered either.
+            chips: faq.followUps
+              .filter((f) => f in CHIP_LABELS || this.entries.some((e) => e.id === f))
+              .map(chipFor),
           },
         ],
       };
@@ -157,7 +167,7 @@ export class RuleBasedEngine implements ChatEngine {
 
     // FAQ keyword match — best score wins.
     let best: { id: string; score: number } | null = null;
-    for (const faq of FAQ_ENTRIES) {
+    for (const faq of this.entries) {
       const score = faq.keywords.filter((k) => lower.includes(k)).length;
       if (score > 0 && (!best || score > best.score)) best = { id: faq.id, score };
     }

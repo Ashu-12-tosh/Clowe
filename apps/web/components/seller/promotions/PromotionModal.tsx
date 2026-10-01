@@ -14,6 +14,7 @@ import {
   type SellerProductPage,
   type SellerProductRow,
 } from '@clowe/shared';
+import { useCouponsEnabled } from '@/lib/coupons';
 import { api, ApiRequestError } from '@/lib/api';
 
 const field =
@@ -43,6 +44,7 @@ export default function PromotionModal({
   onSaved: (row: SellerPromotionRow) => void;
 }) {
   const window0 = useMemo(defaultWindow, []);
+  const couponsEnabled = useCouponsEnabled();
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [code, setCode] = useState(initial?.code ?? '');
@@ -183,9 +185,17 @@ export default function PromotionModal({
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 maxLength={16}
-                placeholder="SUMMER25"
-                className={`mt-1 ${field} uppercase`}
+                placeholder={couponsEnabled === true ? 'SUMMER25' : 'Codes are switched off'}
+                disabled={couponsEnabled !== true}
+                className={`mt-1 ${field} uppercase disabled:bg-gray-50 disabled:text-gray-400`}
               />
+              {couponsEnabled !== true && (
+                // The same reason the API gives, before Save rather than after it.
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Promo codes are switched off on Clowe at the moment. It will come back — save it without a
+                  code and it applies automatically to everything in scope.
+                </p>
+              )}
             </div>
             <div className="sm:col-span-2">
               <label className="text-xs font-semibold text-gray-500">Description</label>

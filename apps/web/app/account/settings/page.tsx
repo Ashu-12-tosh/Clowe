@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useCouponsEnabled } from '@/lib/coupons';
 import { useRouter } from 'next/navigation';
 import {
   GENDERS,
@@ -102,6 +103,7 @@ function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; labe
 }
 
 export default function AccountSettingsPage() {
+  const couponsEnabled = useCouponsEnabled();
   const router = useRouter();
   const [tab, setTab] = useState<TabKey>('profile');
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -837,7 +839,7 @@ export default function AccountSettingsPage() {
           <div className="rounded-2xl border border-gray-100 bg-white p-4">
             <h2 className="t-sub-heading text-ink-900">Quick Actions</h2>
             <ul className="mt-3 divide-y divide-gray-100">
-              {QUICK_ACTIONS.map(({ href, Icon, title, text }) => (
+              {QUICK_ACTIONS.filter((a) => a.href !== '/account/coupons' || couponsEnabled === true).map(({ href, Icon, title, text }) => (
                 <li key={title}>
                   <Link href={href} className="flex items-center gap-2.5 py-3 transition hover:text-brand-600">
                     <Icon className="h-4 w-4 shrink-0 text-gray-500" />

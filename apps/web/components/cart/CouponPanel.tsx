@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { AppliedCoupon, CartView, CouponOffer } from '@clowe/shared';
+import { couponPanelSurface, type AppliedCoupon, type CartView, type CouponOffer } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { useCouponsEnabled } from '@/lib/coupons';
@@ -81,10 +81,15 @@ export default function CouponPanel({ applied, subtotalPaise, onCartChange }: Pr
     }
   }
 
-  if (applied) {
-    if (!couponsEnabled) return null;
+  // One decision for every branch. The gate used to sit inside the applied
+  // branch only, which hid the state that cannot occur and showed the one
+  // that always does: with coupons off the API drops any stored code, so
+  // `applied` is always null and the "Add Coupon" row rendered for everyone.
+  const surface = couponPanelSurface(couponsEnabled, applied !== null);
+  if (surface === 'hidden') return null;
 
-  return (
+  if (surface === 'applied' && applied) {
+    return (
       <div className="rounded-xl border border-dashed border-green-300 bg-green-50 px-3 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">

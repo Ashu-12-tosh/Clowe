@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { RuleBasedEngine, type BotMessage, type ChatEngine } from '@/lib/support/engine';
+import { useCouponsEnabled } from '@/lib/coupons';
 
 interface ChatItem {
   role: 'bot' | 'user';
@@ -25,6 +26,10 @@ export default function SupportChat() {
   const [busy, setBusy] = useState(false);
   const engineRef = useRef<ChatEngine | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  // Read when the chat opens, so the engine knows whether to offer coupon help.
+  const couponsEnabled = useCouponsEnabled();
+  const couponsEnabledRef = useRef(couponsEnabled);
+  couponsEnabledRef.current = couponsEnabled;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -48,7 +53,7 @@ export default function SupportChat() {
   async function openChat() {
     setOpen(true);
     if (!engineRef.current) {
-      engineRef.current = new RuleBasedEngine();
+      engineRef.current = new RuleBasedEngine({ couponsEnabled: couponsEnabledRef.current });
       const reply = await engineRef.current.start();
       setItems(reply.messages.map((message) => ({ role: 'bot' as const, message })));
     }
