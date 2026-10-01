@@ -753,6 +753,7 @@ adminSellersRouter.get('/:id', async (req, res, next) => {
       pincode: seller.pincode,
       gstNumber: seller.gstNumber,
       panNumber: seller.panNumber,
+      bankName: seller.bankName,
       bankAccountName: seller.bankAccountName,
       // Never echo a full account number back to the browser.
       bankAccountNo: seller.bankAccountNo ? `••••${seller.bankAccountNo.slice(-4)}` : null,

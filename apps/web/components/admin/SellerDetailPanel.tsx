@@ -239,7 +239,7 @@ export default function SellerDetailPanel({
                     : null,
                   GSTIN: detail.gstNumber,
                   BANK: detail.bankAccountNo
-                    ? `${detail.bankAccountNo} · ${detail.bankIfsc ?? ''} · ${detail.bankAccountName ?? 'no holder name given'}`
+                    ? `${detail.bankName ? `${detail.bankName} · ` : ''}${detail.bankAccountNo} · ${detail.bankIfsc ?? ''} · ${detail.bankAccountName ?? 'no holder name given'}`
                     : null,
                 }}
                 onChanged={async () => {
@@ -284,7 +284,7 @@ export default function SellerDetailPanel({
                   label="Bank account"
                   value={
                     detail.bankAccountNo
-                      ? `${detail.bankAccountNo} · ${detail.bankIfsc ?? ''}`
+                      ? `${detail.bankName ? `${detail.bankName} · ` : ''}${detail.bankAccountNo} · ${detail.bankIfsc ?? ''}`
                       : '— not provided'
                   }
                 />

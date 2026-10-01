@@ -1,0 +1,13 @@
+-- The bank's name beside the seller's account details.
+--
+-- HAND-WRITTEN. `prisma migrate diff` against this schema also emits
+--   DROP INDEX "products_search_vector_idx";
+--   ALTER TABLE "products" ALTER COLUMN "searchVector" DROP DEFAULT;
+-- because it cannot express the hand-managed full-text search objects (see
+-- 20260914120000_product_search_fts). Those two lines are deliberately left
+-- out: running them would silently switch off product search.
+--
+-- Additive only: one nullable column. Existing sellers have no bank name on
+-- file and registration still accepts a profile without bank details, so the
+-- column cannot be NOT NULL; the form and the schema are what require it.
+ALTER TABLE "seller_profiles" ADD COLUMN "bankName" TEXT;

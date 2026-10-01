@@ -9,6 +9,7 @@ import {
   type SellerRegisterInput,
 } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser, refreshSession, saveSession } from '@/lib/api';
+import { bankNameFromIfsc } from '@clowe/shared';
 import { useSeller } from '@/components/seller/SellerContext';
 
 const field =
@@ -26,6 +27,9 @@ export default function SellerRegisterPage() {
   const [code, setCode] = useState('');
   const [devOtp, setDevOtp] = useState('');
   const [pendingApplication, setPendingApplication] = useState<SellerRegisterInput | null>(null);
+  // Prefilled from the IFSC until the seller types a bank name themselves.
+  const [bankName, setBankName] = useState('');
+  const [bankNameTouched, setBankNameTouched] = useState(false);
 
   const loggedIn = typeof window !== 'undefined' && !!getStoredUser();
 
@@ -230,7 +234,26 @@ export default function SellerRegisterPage() {
             <input name="panNumber" className={field} placeholder="PAN number" />
             <input name="bankAccountName" className={field} placeholder="Bank account name" />
             <input name="bankAccountNo" className={field} placeholder="Bank account number" />
-            <input name="bankIfsc" className={field} placeholder="IFSC code" />
+            <input
+              name="bankIfsc"
+              className={field}
+              placeholder="IFSC code"
+              onChange={(e) => {
+                // The IFSC names the bank; fill it in unless the seller already has.
+                if (bankNameTouched) return;
+                setBankName(bankNameFromIfsc(e.target.value) ?? '');
+              }}
+            />
+            <input
+              name="bankName"
+              className={field}
+              placeholder="Bank name"
+              value={bankName}
+              onChange={(e) => {
+                setBankNameTouched(true);
+                setBankName(e.target.value);
+              }}
+            />
           </div>
         </fieldset>
 

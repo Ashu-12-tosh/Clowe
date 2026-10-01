@@ -94,6 +94,7 @@ export interface SellerStoreSettings {
   pincode: string | null;
 
   /** Payouts. */
+  bankName: string | null;
   bankAccountName: string | null;
   bankAccountLast4: string | null;
   bankIfsc: string | null;

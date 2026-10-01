@@ -100,6 +100,7 @@ export interface AdminSellerDetail extends AdminSellerListRow {
   pincode: string | null;
   gstNumber: string | null;
   panNumber: string | null;
+  bankName: string | null;
   bankAccountName: string | null;
   bankAccountNo: string | null;
   bankIfsc: string | null;

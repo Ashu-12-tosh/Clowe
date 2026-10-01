@@ -117,6 +117,7 @@ async function toSettings(seller: SellerProfile): Promise<SellerStoreSettings> {
     state: seller.state,
     pincode: seller.pincode,
 
+    bankName: seller.bankName,
     bankAccountName: seller.bankAccountName,
     // Only the tail of the account number ever leaves the server.
     bankAccountLast4: seller.bankAccountNo ? seller.bankAccountNo.slice(-4) : null,

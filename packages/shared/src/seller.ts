@@ -19,6 +19,7 @@ export const sellerRegisterSchema = z.object({
   description: z.string().trim().max(500).optional(),
   gstNumber: z.string().trim().max(20).optional(),
   panNumber: z.string().trim().max(12).optional(),
+  bankName: z.string().trim().max(80).optional(),
   bankAccountName: z.string().trim().max(80).optional(),
   bankAccountNo: z.string().trim().max(24).optional(),
   bankIfsc: z.string().trim().max(11).optional(),
@@ -30,7 +31,13 @@ export const sellerRegisterSchema = z.object({
     .trim()
     .regex(/^\d{6}$/, 'Pincode must be 6 digits')
     .optional(),
-});
+})
+  // Bank details are optional as a set, but not piecemeal: an account number
+  // without the bank it belongs to is half an instruction.
+  .refine((s) => !(s.bankAccountNo || s.bankIfsc || s.bankAccountName) || Boolean(s.bankName), {
+    message: 'Bank name is required with bank details',
+    path: ['bankName'],
+  });
 export type SellerRegisterInput = z.infer<typeof sellerRegisterSchema>;
 
 export type SellerStatusValue = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' | 'BANNED';

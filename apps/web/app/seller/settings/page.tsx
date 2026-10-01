@@ -688,6 +688,10 @@ export default function SellerStoreSettingsPage() {
             >
               <dl className="space-y-2 text-xs">
                 <div className="flex justify-between">
+                  <dt className="text-gray-500">Bank</dt>
+                  <dd className="text-ink-900">{form.bankName ?? '— not set'}</dd>
+                </div>
+                <div className="flex justify-between">
                   <dt className="text-gray-500">Account holder</dt>
                   <dd className="text-ink-900">{form.bankAccountName ?? '— not set'}</dd>
                 </div>

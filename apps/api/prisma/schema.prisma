@@ -363,6 +363,7 @@ model SellerProfile {
   panNumber       String?
   // Name exactly as printed on the PAN; what the PAN check scores against.
   panName           String?
+  bankName        String?
   bankAccountName String?
   bankAccountNo   String?
   bankIfsc        String?
