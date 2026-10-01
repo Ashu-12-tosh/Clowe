@@ -11,6 +11,7 @@ import { seedCategoryRules } from './seed/categoryRules';
 import { seedElectronics } from './seed/electronics';
 import { seedFashion } from './seed/fashion';
 import { seedTryOns } from './seed/tryon';
+import { enableTryOnWhereEligible, grantLaunchTryOns } from './seed/tryOnEligibility';
 import { demoImage } from './seed/demoImage';
 
 const prisma = new PrismaClient();
@@ -345,6 +346,19 @@ async function seedCoupons() {
   console.log(`[seed] Coupons ready: ${coupons.map((c) => c.code).join(', ')}`);
 }
 
+/**
+ * After the catalog and its category rules exist: opt eligible products in
+ * to try-on and give the demo sellers the launch credits a real signup gets.
+ * Without both, a freshly seeded site shows "Try On Me" on nothing.
+ */
+async function seedTryOnEligibility() {
+  const { enabled, checked } = await enableTryOnWhereEligible(prisma);
+  const sellers = await prisma.sellerProfile.findMany({ where: { tryOnFreeGrant: false }, select: { id: true } });
+  let granted = 0;
+  for (const s of sellers) if (await grantLaunchTryOns(prisma, s.id)) granted += 1;
+  console.log(`[seed] Try-on: ${enabled} of ${checked} products opted in, ${granted} seller(s) granted 50 free runs`);
+}
+
 async function main() {
   await seedAdmin();
   await seedCatalog();
@@ -353,6 +367,7 @@ async function main() {
   console.log(`[seed] Category rules applied to ${await seedCategoryRules(prisma)} roots`);
   await seedElectronics(prisma);
   await seedFashion(prisma);
+  await seedTryOnEligibility();
   await seedCoupons();
   await seedTryOns(prisma);
   await syncRatingCache();

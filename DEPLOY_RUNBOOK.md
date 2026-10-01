@@ -853,3 +853,15 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 
 Migrations run automatically when the API container starts. The database and
 uploads live in named volumes, so nothing is lost.
+
+### One-off data fixes
+
+Some fixes change data the seed already wrote, so they ship as scripts to run
+once on an existing catalog rather than as migrations. Each is safe to re-run.
+
+```sh
+# "Try On Me" on every eligible fashion product, and launch credits for the
+# demo sellers. A catalog seeded before 2026-10-01 has neither, so the button
+# shows on nothing until this has run.
+dc exec api npx tsx prisma/backfillTryOn.ts
+```
