@@ -12,6 +12,7 @@ import {
 } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import { getPublicSettings } from '@/lib/settings';
+import type { OrderListResponse } from '@clowe/shared';
 import {
   FAQ_CATEGORIES,
   FAQ_CATEGORY_META,
@@ -102,7 +103,11 @@ export default function HelpCenterPage() {
 
   useEffect(() => {
     if (!getStoredUser()) return;
-    api<OrderListRow[]>('/api/orders', { auth: true }).then(setOrders).catch(() => {});
+    // Paginated, like the orders page reads it; the first page is plenty for
+    // picking an order to raise a request about.
+    api<OrderListResponse>('/api/orders', { auth: true })
+      .then((r) => setOrders(r.items))
+      .catch(() => {});
     api<ComplaintRow[]>('/api/complaints/me', { auth: true }).then(setMyRequests).catch(() => {});
   }, []);
 

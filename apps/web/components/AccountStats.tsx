@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { OrderListRow, ReferralView, TryOnQuota, WishlistEntry } from '@clowe/shared';
+import type { OrderListResponse, OrderListRow, ReferralView, TryOnQuota, WishlistEntry } from '@clowe/shared';
 import { api } from '@/lib/api';
 
 /** Reference-style stat tiles — counts come from existing read-only APIs. */
@@ -17,8 +17,9 @@ export default function AccountStats() {
     api<{ reviews: number }>('/api/auth/me/stats', { auth: true })
       .then((s) => setReviews(s.reviews))
       .catch(() => {});
-    api<OrderListRow[]>('/api/orders', { auth: true })
-      .then((rows) => setOrders(rows.length))
+    // Paginated: the count is the total, not the length of the first page.
+    api<OrderListResponse>('/api/orders', { auth: true })
+      .then((r) => setOrders(r.total))
       .catch(() => {});
     api<WishlistEntry[]>('/api/wishlist', { auth: true })
       .then((rows) => setWishlist(rows.length))
