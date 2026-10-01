@@ -72,7 +72,7 @@ export function PricingBreakdown({ listingPricePaise }: { listingPricePaise: num
             <dd>{money(economics.buyerPaysPaise)}</dd>
           </div>
           <div className="flex justify-between text-gray-500">
-            <dt className="pl-3">of which GST ({rates!.gstPercent}%) you remit</dt>
+            <dt className="pl-3">includes GST ({rates!.gstPercent}%), which you remit</dt>
             <dd>{money(economics.gstPaise)}</dd>
           </div>
           {economics.lines
