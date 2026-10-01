@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import type { AuthUser, MyCounts, SearchIntent } from '@clowe/shared';
+import type { AuthUser, MyCounts } from '@clowe/shared';
 import { api, getStoredUser, logoutSession } from '@/lib/api';
 import CategoryNav from './CategoryNav';
 import SearchBar from './search/SearchBar';
@@ -80,7 +80,20 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     };
   }, []);
 
-  // AI voice search: speech → transcript → /api/ai/search-intent → filtered shop page.
+  /**
+   * Speak a search, then run it exactly as if it had been typed.
+   *
+   * The transcript goes to /products?q=..., which parses it server-side with
+   * parseSearchQuery — the same parser the typed box, the suggestions and the
+   * results page already share. It reads price bounds, brands, sort and an
+   * inferred category, so "black shoes under 2000" filters on price without
+   * anyone here knowing what a rupee is.
+   *
+   * It deliberately does not call /api/ai/search-intent any more. That endpoint
+   * ran a second, weaker parser of its own, and passed its category guess as a
+   * hard filter — which the search work forbids, because a guessed category
+   * removes products rather than ranking them.
+   */
   function startVoiceSearch() {
     const SpeechRecognitionCtor = getSpeechRecognition();
     if (!SpeechRecognitionCtor) return;
@@ -91,21 +104,9 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     setListening(true);
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
+      const spoken = transcript.trim();
       setQ(transcript);
-      void api<SearchIntent>('/api/ai/search-intent', { body: { transcript } })
-        .then((intent) => {
-          const params = new URLSearchParams();
-          if (intent.q) params.set('q', intent.q);
-          if (intent.category) params.set('category', intent.category);
-          // The listing endpoint takes maxPrice in rupees on the wire; the
-          // intent carries paise. Divide here, at the one boundary that needs it.
-          if (intent.maxPricePaise) {
-            params.set('maxPrice', String(Math.round(intent.maxPricePaise / 100)));
-          }
-          if (intent.colors.length) params.set('colors', intent.colors.join(','));
-          router.push(`/products?${params.toString()}`);
-        })
-        .catch(() => router.push(`/products?q=${encodeURIComponent(transcript)}`));
+      if (spoken) router.push(`/products?q=${encodeURIComponent(spoken)}`);
     };
     recognition.onend = () => setListening(false);
     recognition.onerror = () => setListening(false);
