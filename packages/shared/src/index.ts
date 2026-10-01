@@ -73,6 +73,7 @@ export * from './variants';
 export * from './categoryRules';
 export * from './productAttributes';
 export * from './colorFamily';
+export * from './sizeScale';
 export * from './sellerTryon';
 export * from './voiceSearch';
 export * from './couponSurfaces';

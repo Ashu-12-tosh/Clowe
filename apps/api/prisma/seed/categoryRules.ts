@@ -18,6 +18,10 @@ export interface RootRules {
 
 const COLOR: VariantAxis = { key: 'color', label: 'Colour' };
 const SIZE: VariantAxis = { key: 'size', label: 'Size', values: ['XS', 'S', 'M', 'L', 'XL', 'XXL'] };
+const STORAGE: VariantAxis = { key: 'storage', label: 'Storage' };
+const RAM: VariantAxis = { key: 'ram', label: 'RAM' };
+/** Mechanical keyboard switch type; the only non-colour axis computer accessories vary on. */
+const SWITCH: VariantAxis = { key: 'switch', label: 'Switch', values: ['Red Switch', 'Brown Switch', 'Blue Switch'] };
 
 const ORIGIN: AttributeDef = { key: 'country_of_origin', label: 'Country of origin', type: 'text', required: true };
 const MANUFACTURER: AttributeDef = { key: 'manufacturer', label: 'Manufacturer / packer', type: 'text' };
@@ -27,7 +31,10 @@ const IN_THE_BOX: AttributeDef = { key: 'in_the_box', label: 'In the box', type:
 
 export const ROOT_RULES: Record<string, RootRules> = {
   electronics: {
-    variantAxes: [COLOR, { key: 'storage', label: 'Storage' }, { key: 'ram', label: 'RAM' }],
+    // Storage and RAM are declared on the children that fill them (see
+    // CHILD_RULE_OVERRIDES); on the root they reached headphones, speakers
+    // and appliances as axes those never use.
+    variantAxes: [COLOR],
     attributeSchema: [
       MODEL_NUMBER,
       WARRANTY,
@@ -244,6 +251,13 @@ export const CHILD_RULE_OVERRIDES: Record<string, Partial<RootRules>> = {
   // catches the same garments listed under any other category.
   'fashion-innerwear': { tryOnEligible: false },
   'fashion-accessories': { tryOnEligible: false },
+  // Electronics: the option axes each department actually varies on. The
+  // root declares only colour, so a category not listed here offers colour
+  // alone and a seller adds anything else by hand.
+  'electronics-laptops': { variantAxes: [COLOR, STORAGE, RAM] },
+  'electronics-smartphones': { variantAxes: [COLOR, STORAGE] },
+  'electronics-tablets': { variantAxes: [COLOR, STORAGE] },
+  'electronics-accessories': { variantAxes: [COLOR, SWITCH] },
 };
 
 /** Apply ROOT_RULES to the seeded roots (idempotent). */
