@@ -107,6 +107,7 @@ export default function SearchBar({
   onVoiceSearch,
   voiceActive,
   voiceSupported,
+  voiceError,
   autoFocus = false,
   onNavigate,
 }: {
@@ -114,6 +115,12 @@ export default function SearchBar({
   onVoiceSearch?: () => void;
   voiceActive?: boolean;
   voiceSupported?: boolean;
+  /**
+   * Why the last voice attempt failed, already in words. Rendered under the
+   * box because the failure this replaces was silent: the microphone was
+   * granted, recognition died, and the shopper was told nothing at all.
+   */
+  voiceError?: string;
   /** Focus the input on mount — the mobile overlay opens straight into typing. */
   autoFocus?: boolean;
   /**
@@ -596,6 +603,12 @@ export default function SearchBar({
             ))
           )}
         </div>
+      )}
+
+      {voiceError && (
+        <p role="status" className="mt-1.5 px-1 text-xs text-amber-700">
+          {voiceError}
+        </p>
       )}
 
       {voiceSupported && onVoiceSearch && (

@@ -68,3 +68,4 @@ export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export * from './variants';
 export * from './categoryRules';
 export * from './sellerTryon';
+export * from './voiceSearch';

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { AuthUser, MyCounts } from '@clowe/shared';
+import { voiceSearchErrorMessage } from '@clowe/shared';
 import { api, getStoredUser, logoutSession } from '@/lib/api';
 import CategoryNav from './CategoryNav';
 import SearchBar from './search/SearchBar';
@@ -14,7 +15,8 @@ interface SpeechRecognitionLike {
   interimResults: boolean;
   onresult: ((event: { results: { [i: number]: { [i: number]: { transcript: string } } } }) => void) | null;
   onend: (() => void) | null;
-  onerror: (() => void) | null;
+  /** The event carries the reason; without it every failure looks the same. */
+  onerror: ((event: { error?: string }) => void) | null;
   start: () => void;
   stop: () => void;
 }
@@ -27,6 +29,15 @@ function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
   };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
+
+/**
+ * How long to wait on a recogniser that has said nothing at all.
+ *
+ * Long enough for someone to gather their thoughts and speak, short enough
+ * that a browser which is never going to answer does not hold the box on
+ * "Listening…" while the shopper waits for something to happen.
+ */
+const VOICE_TIMEOUT_MS = 8000;
 
 /** Other components dispatch this after cart/wishlist writes to refresh badges. */
 export const BADGES_EVENT = 'clowe:refresh-badges';
@@ -52,6 +63,12 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [counts, setCounts] = useState<MyCounts>({ cart: 0, wishlist: 0, notifications: 0 });
   const [listening, setListening] = useState(false);
+  // What went wrong last time the recogniser was asked, in words. Empty when
+  // nothing has gone wrong or the shopper stopped it themselves.
+  const [voiceError, setVoiceError] = useState('');
+  // The best transcript seen so far. Interim results are on purely so a
+  // failure part-way through still has something to search for.
+  const heardRef = useRef('');
   // Phone-width search: the box is an icon until tapped, then a full-screen
   // overlay. Below md the inline box had ~14px to live in (logo and the action
   // icons are shrink-0, so the flexible search absorbed the whole shortfall).
@@ -96,20 +113,66 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
    */
   function startVoiceSearch() {
     const SpeechRecognitionCtor = getSpeechRecognition();
-    if (!SpeechRecognitionCtor) return;
+    if (!SpeechRecognitionCtor) {
+      setVoiceError(voiceSearchErrorMessage('service-not-allowed'));
+      return;
+    }
     const recognition = new SpeechRecognitionCtor();
     recognitionRef.current = recognition;
     recognition.lang = 'en-IN';
-    recognition.interimResults = false;
+    // On so that a failure part-way through still leaves a transcript to fall
+    // back to. Only the final result searches; see onend.
+    recognition.interimResults = true;
+    heardRef.current = '';
+    setVoiceError('');
     setListening(true);
+
+    const runSearch = (transcript: string) => {
+      const spoken = transcript.trim();
+      if (!spoken) return;
+      setQ(spoken);
+      router.push(`/products?q=${encodeURIComponent(spoken)}`);
+    };
+
+    /**
+     * A recogniser is not obliged to answer.
+     *
+     * start() can be accepted, the microphone permission granted, and then no
+     * result, no error and no end ever arrive — the box sits on "Listening…"
+     * indefinitely, which is precisely what "it asks for the mic and then
+     * nothing happens" looks like. Every callback below clears this; if none
+     * of them runs, this is what ends it.
+     */
+    let settled = false;
+    const finish = (code?: string) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(watchdog);
+      setListening(false);
+      if (code) setVoiceError(voiceSearchErrorMessage(code));
+      // Whatever was heard before it stopped is still worth searching for.
+      runSearch(heardRef.current);
+    };
+    const watchdog = window.setTimeout(() => {
+      try {
+        recognition.stop();
+      } catch {
+        // Already dead; the point was to stop waiting on it, not to tidy it up.
+      }
+      finish('timeout');
+    }, VOICE_TIMEOUT_MS);
+
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
-      const spoken = transcript.trim();
+      if (transcript.trim()) heardRef.current = transcript;
       setQ(transcript);
-      if (spoken) router.push(`/products?q=${encodeURIComponent(spoken)}`);
     };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
+    recognition.onerror = (event) => {
+      // Say which failure this was. Telling someone their browser cannot do
+      // voice search because a packet dropped teaches them to stop trying.
+      finish(event?.error ?? 'unknown');
+    };
+    recognition.onend = () => finish();
     recognition.start();
   }
 
@@ -189,6 +252,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               onVoiceSearch={startVoiceSearch}
               voiceActive={listening}
               voiceSupported={speechSupported}
+              voiceError={voiceError}
             />
           </div>
 
@@ -321,6 +385,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               onVoiceSearch={startVoiceSearch}
               voiceActive={listening}
               voiceSupported={speechSupported}
+              voiceError={voiceError}
               autoFocus
               onNavigate={() => setSearchOpen(false)}
             />
