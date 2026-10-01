@@ -457,6 +457,7 @@ model SellerProfile {
   tickets           SupportTicket[]
   kycChecks         SellerKycCheck[]
   ledgerEntries     SellerLedgerEntry[]
+  promotionCreditPurchases PromotionCreditPurchase[]
 
   @@map("seller_profiles")
 }
@@ -1908,6 +1909,9 @@ model SellerLedgerEntry {
   // The ad placement a promotion credit was spent on (or refunded for).
   adId        String?
   ad          Ad?                @relation(fields: [adId], references: [id], onDelete: SetNull)
+  // The top-up a promotion credit came from; one purchase credits once.
+  purchaseId  String?
+  purchase    PromotionCreditPurchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
   note        String?
   // The admin behind a manual entry; null for entries the system posted.
   createdById String?
@@ -1917,8 +1921,30 @@ model SellerLedgerEntry {
   @@unique([orderItemId, type])
   @@unique([payoutId, type])
   @@unique([adId, type])
+  @@unique([purchaseId, type])
   @@index([sellerId, bucket, createdAt])
   @@map("seller_ledger_entries")
+}
+
+/// A seller buying promotion credits through the payment gateway. The row is
+/// the pending payment; the money only exists once the ledger entry that
+/// points back here is posted, which the (purchaseId, type) pair allows once.
+model PromotionCreditPurchase {
+  id                String        @id @default(cuid())
+  sellerId          String
+  seller            SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  amountPaise       Int
+  provider          String        @default("mock")
+  providerOrderId   String?
+  providerPaymentId String?
+  status            CreditPurchaseStatus @default(CREATED)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  ledgerEntries SellerLedgerEntry[]
+
+  @@index([sellerId, createdAt])
+  @@map("promotion_credit_purchases")
 }
 
 /// One results-page search, kept only in aggregate.

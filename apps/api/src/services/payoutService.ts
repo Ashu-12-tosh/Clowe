@@ -120,10 +120,19 @@ export async function clearingItems(sellerId: string, holdDays: number) {
   });
 }
 
-/** Approved ad spend not yet recovered from a payout. */
+/**
+ * Approved ad spend not yet recovered from a payout. Ads are prepaid from
+ * promotion credits now; this only still finds ads booked before that, which
+ * carry no spend entry and are recovered the old way.
+ */
 export async function outstandingAdSpend(sellerId: string) {
   return prisma.ad.findMany({
-    where: { sellerId, payoutId: null, status: { in: ['ACTIVE', 'EXPIRED'] } },
+    where: {
+      sellerId,
+      payoutId: null,
+      status: { in: ['ACTIVE', 'EXPIRED'] },
+      ledgerEntries: { none: { type: 'PROMOTION_CREDIT_SPEND' } },
+    },
     orderBy: { createdAt: 'asc' },
     select: { id: true, pricePaise: true, createdAt: true, placement: true },
   });

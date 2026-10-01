@@ -29,6 +29,7 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { sendToUserSafe } from '../services/messaging';
 import { getSettings, setSetting } from '../services/settingsService';
+import { refundAdCredits } from '../services/sellerLedgerService';
 import { expireDueAds } from './ads';
 import {
   SELLER_REFERRAL_TARGET_PAISE,
@@ -713,7 +714,7 @@ adminRouter.patch('/ads/:id', async (req, res, next) => {
             userId: ad.seller.userId,
             type: 'AD_APPROVED',
             title: 'Your ad is live! 📣',
-            body: `Your ${ad.durationDays}-day ad for "${ad.product.title}" is now live. Amount payable: ₹${(ad.pricePaise / 100).toFixed(2)} (adjusted from payouts).`,
+            body: `Your ${ad.durationDays}-day ad for "${ad.product.title}" is now live. ₹${(ad.pricePaise / 100).toFixed(2)} was taken from your promotion credits when you booked it.`,
           },
         }),
       ]);
@@ -728,10 +729,12 @@ adminRouter.patch('/ads/:id', async (req, res, next) => {
             userId: ad.seller.userId,
             type: 'AD_REJECTED',
             title: 'Ad request declined',
-            body: `Your ad for "${ad.product.title}" was declined: "${input.reason}".`,
+            body: `Your ad for "${ad.product.title}" was declined: "${input.reason}". The promotion credits it cost are back in your balance.`,
           },
         }),
       ]);
+      // The seller paid when they booked; a declined ad gives it back.
+      await refundAdCredits(ad.id);
     }
     res.json({
       success: true,

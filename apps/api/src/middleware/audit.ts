@@ -81,6 +81,7 @@ const RULES: RouteRule[] = [
   { method: 'POST', pattern: /^\/api\/seller\/support\/tickets$/, module: 'SUPPORT', action: 'Ticket raised' },
   { method: 'POST', pattern: /^\/api\/seller\/register/, module: 'SELLERS', action: 'Seller registered', severity: 'MEDIUM' },
   { method: 'POST', pattern: /^\/api\/seller\/ads$/, module: 'ADS', action: 'Ad booked', severity: 'MEDIUM' },
+  { method: 'POST', pattern: /^\/api\/seller\/promotion-credits\/purchase/, module: 'PAYMENTS', action: 'Promotion credits purchase', severity: 'MEDIUM' },
 
   // --- Customer & money ----------------------------------------------------
   { method: 'POST', pattern: /^\/api\/orders\/checkout/, module: 'ORDERS', action: 'Order placed', severity: 'MEDIUM', entityType: 'Order' },

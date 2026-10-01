@@ -8,6 +8,7 @@ import {
   optionValuesFromJson,
   variantOptionFields,
   type CategoryRules,
+  AD_PLACEMENT_LABELS,
   adCreateSchema,
   phoneSchema,
   sellerRegisterSchema,
@@ -28,6 +29,7 @@ import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { applyReturnDecision, findSellerReturn } from '../services/returnService';
 import { getSettings } from '../services/settingsService';
+import { spendPromotionCredits } from '../services/sellerLedgerService';
 import { removeUploadByUrl } from './uploads';
 import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
 import { isListingBelowTryOnAge } from '../services/tryon/ageGate';
@@ -789,15 +791,27 @@ sellerRouter.post('/ads', requireSeller, requireApprovedSeller, async (req, res,
     const { adPricing } = await getSettings();
     const pricePaise = adPricing[input.placement][String(input.durationDays) as '7' | '15' | '30'];
 
-    const ad = await prisma.ad.create({
-      data: {
-        sellerId: req.seller!.id,
-        productId: product.id,
-        placement: input.placement,
-        durationDays: input.durationDays,
-        pricePaise, // snapshot — owed manually / adjusted from payouts
-      },
-      include: { product: { select: { title: true, slug: true, images: { orderBy: { sortOrder: 'asc' }, take: 1 } } } },
+    // Paid up front from promotion credits, in the same transaction as the
+    // booking: either the ad exists and its credits are spent, or neither.
+    const ad = await prisma.$transaction(async (tx) => {
+      const created = await tx.ad.create({
+        data: {
+          sellerId: req.seller!.id,
+          productId: product.id,
+          placement: input.placement,
+          durationDays: input.durationDays,
+          pricePaise, // snapshot of admin pricing at booking
+        },
+        include: { product: { select: { title: true, slug: true, images: { orderBy: { sortOrder: 'asc' }, take: 1 } } } },
+      });
+      await spendPromotionCredits(
+        tx,
+        req.seller!.id,
+        pricePaise,
+        created.id,
+        `${AD_PLACEMENT_LABELS[input.placement]} · ${input.durationDays} days · "${product.title}"`,
+      );
+      return created;
     });
     res.json({ success: true, data: toSellerAdRow(ad) });
   } catch (err) {

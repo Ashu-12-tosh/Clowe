@@ -40,8 +40,11 @@ export default function SellerAdsPage() {
       </div>
 
       <p className="mt-3 rounded-lg border border-brand-100 bg-brand-50 px-4 py-2.5 text-xs text-brand-700">
-        💳 Ad billing is manual for now — the amount is adjusted from your seller payouts once the ad
-        is approved.
+        💳 Ads are paid from your promotion credits when you book them, and refunded if declined.{' '}
+        <Link href="/seller" className="font-semibold underline">
+          Top up on your dashboard
+        </Link>
+        .
       </p>
 
       {ads === null && <p className="mt-6 text-sm text-gray-500">Loading…</p>}

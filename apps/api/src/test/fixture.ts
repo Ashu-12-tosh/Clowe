@@ -247,6 +247,8 @@ export async function seedFixture(prisma: PrismaClient): Promise<void> {
   // catalog. Items and payments go with their order.
   await prisma.payout.deleteMany();
   await prisma.order.deleteMany();
+  // Ads point at products the same way (the promotion credit tests book them).
+  await prisma.ad.deleteMany();
   await prisma.productVariant.deleteMany();
   await prisma.productImage.deleteMany();
   await prisma.product.deleteMany();

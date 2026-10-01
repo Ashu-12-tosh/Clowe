@@ -45,6 +45,7 @@ import { sellerDashboardRouter } from './routes/sellerDashboard';
 import { sellerOrdersRouter } from './routes/sellerOrders';
 import { sellerPayoutsRouter } from './routes/sellerPayouts';
 import { sellerLedgerRouter } from './routes/sellerLedger';
+import { sellerPromotionCreditsRouter } from './routes/sellerPromotionCredits';
 import { sellerProductsRouter } from './routes/sellerProducts';
 import { sellerPromotionsRouter } from './routes/sellerPromotions';
 import { sellerReturnsRouter } from './routes/sellerReturns';
@@ -124,6 +125,7 @@ export function createApp() {
   app.use('/api/seller/orders', sellerOrdersRouter);
   app.use('/api/seller/payouts', sellerPayoutsRouter);
   app.use('/api/seller/ledger', sellerLedgerRouter);
+  app.use('/api/seller/promotion-credits', sellerPromotionCreditsRouter);
   // Only the dashboard endpoints live here; product CRUD falls through below.
   app.use('/api/seller/products', sellerProductsRouter);
   app.use('/api/seller/promotions', sellerPromotionsRouter);

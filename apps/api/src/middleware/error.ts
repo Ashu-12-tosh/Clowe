@@ -22,8 +22,11 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     });
   }
 
-  if (err instanceof ZodError) {
-    const first = err.issues[0];
+  // The name check is Zod's own advice for the case where two copies of the
+  // class are loaded (the CJS shared package and an ESM import of zod, as
+  // happens under vitest): a schema failure is a 400 whichever copy threw it.
+  if (err instanceof ZodError || (err instanceof Error && err.name === 'ZodError')) {
+    const first = (err as ZodError).issues[0];
     return res.status(400).json({
       success: false,
       error: {

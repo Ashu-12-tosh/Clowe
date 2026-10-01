@@ -19,6 +19,7 @@ export default function NewAdPage() {
   const router = useRouter();
   const [products, setProducts] = useState<SellerProductRow[] | null>(null);
   const [pricing, setPricing] = useState<AdPricing | null>(null);
+  const [balance, setBalance] = useState<number | null>(null);
   const [productId, setProductId] = useState('');
   const [placement, setPlacement] = useState<AdPlacementValue>('CATEGORY_SPONSORED');
   const [duration, setDuration] = useState<7 | 15 | 30>(7);
@@ -31,6 +32,9 @@ export default function NewAdPage() {
       .catch(() => setProducts([]));
     api<AdPricing>('/api/seller/ads/pricing', { auth: true })
       .then(setPricing)
+      .catch(() => {});
+    api<{ balancePaise: number }>('/api/seller/promotion-credits', { auth: true })
+      .then((d) => setBalance(d.balancePaise))
       .catch(() => {});
   }, []);
 
@@ -149,12 +153,22 @@ export default function NewAdPage() {
           </p>
         </div>
         <p className="mt-1 text-xs text-gray-400">
-          Payable manually / adjusted from your seller payouts after approval. Your ad goes live only
-          after Clowe review, and always carries a &ldquo;Sponsored&rdquo; label.
+          Taken from your promotion credits when you submit
+          {balance !== null ? ` (balance ${formatPaise(balance)})` : ''}, and returned if the ad is
+          declined. Your ad goes live only after Clowe review, and always carries a
+          &ldquo;Sponsored&rdquo; label.
         </p>
+        {price !== null && balance !== null && balance < price && (
+          <p className="mt-2 rounded-lg bg-white/10 px-3 py-2 text-xs text-amber-200">
+            You need {formatPaise(price - balance)} more.{' '}
+            <Link href="/seller" className="font-semibold underline">
+              Top up on your dashboard
+            </Link>
+          </p>
+        )}
         <button
           onClick={() => void submit()}
-          disabled={busy || !productId}
+          disabled={busy || !productId || (price !== null && balance !== null && balance < price)}
           className="mt-3 w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white hover:bg-brand-700 disabled:opacity-50"
         >
           {busy ? 'Submitting…' : 'Submit for review'}

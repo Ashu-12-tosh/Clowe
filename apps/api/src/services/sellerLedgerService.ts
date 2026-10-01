@@ -8,6 +8,7 @@ import {
   type SellerLedgerTypeValue,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { ApiError } from '../utils/ApiError';
 import { getSettings } from './settingsService';
 
 // ---------------------------------------------------------------------------
@@ -45,6 +46,7 @@ export interface PostEntryInput {
   orderItemId?: string | null;
   payoutId?: string | null;
   adId?: string | null;
+  purchaseId?: string | null;
   note?: string | null;
   createdById?: string | null;
 }
@@ -72,6 +74,7 @@ function toRow(input: PostEntryInput): Prisma.SellerLedgerEntryCreateManyInput {
     orderItemId: input.orderItemId ?? null,
     payoutId: input.payoutId ?? null,
     adId: input.adId ?? null,
+    purchaseId: input.purchaseId ?? null,
     note: input.note ?? null,
     createdById: input.createdById ?? null,
   };
@@ -272,6 +275,97 @@ export async function waivePenalty(
     amountPaise: -entry.amountPaise,
     orderItemId: entry.orderItemId,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Promotion credits
+// ---------------------------------------------------------------------------
+
+/**
+ * Settle a top-up once the gateway says it is paid (providerPaymentId) or
+ * failed (null). The status flip and the ledger credit happen together, and
+ * the (purchaseId, type) pair means a replayed callback credits nothing.
+ */
+export async function settlePromotionPurchase(
+  purchaseId: string,
+  providerPaymentId: string | null,
+): Promise<'PAID' | 'FAILED'> {
+  return prisma.$transaction(async (tx) => {
+    const purchase = await tx.promotionCreditPurchase.findUniqueOrThrow({ where: { id: purchaseId } });
+    if (purchase.status !== 'CREATED') {
+      throw ApiError.badRequest('This purchase is already settled', 'PURCHASE_SETTLED');
+    }
+    if (!providerPaymentId) {
+      await tx.promotionCreditPurchase.update({ where: { id: purchaseId }, data: { status: 'FAILED' } });
+      return 'FAILED';
+    }
+    await tx.promotionCreditPurchase.update({
+      where: { id: purchaseId },
+      data: { status: 'PAID', providerPaymentId },
+    });
+    await postEntry(
+      {
+        sellerId: purchase.sellerId,
+        type: 'PROMOTION_CREDIT_PURCHASE',
+        bucket: 'PROMOTION',
+        amountPaise: purchase.amountPaise,
+        purchaseId,
+        note: `Top-up via ${purchase.provider}`,
+      },
+      tx,
+    );
+    return 'PAID';
+  });
+}
+
+/**
+ * Spend promotion credits on one ad. Runs inside the caller's transaction
+ * with the seller row locked, so two bookings racing for the same balance
+ * are serialised and the second one sees the first one's spend. Insufficient
+ * balance is refused before anything is written.
+ */
+export async function spendPromotionCredits(
+  tx: Prisma.TransactionClient,
+  sellerId: string,
+  amountPaise: number,
+  adId: string,
+  note: string,
+): Promise<void> {
+  await tx.$executeRaw`SELECT id FROM seller_profiles WHERE id = ${sellerId} FOR UPDATE`;
+  const available = await balance(sellerId, 'PROMOTION', tx);
+  if (available < amountPaise) {
+    throw ApiError.badRequest(
+      `This placement costs ₹${(amountPaise / 100).toLocaleString('en-IN')} and your promotion balance is ₹${(available / 100).toLocaleString('en-IN')}. Top up to book it.`,
+      'INSUFFICIENT_PROMOTION_BALANCE',
+    );
+  }
+  await postEntry(
+    { sellerId, type: 'PROMOTION_CREDIT_SPEND', bucket: 'PROMOTION', amountPaise: -amountPaise, adId, note },
+    tx,
+  );
+}
+
+/**
+ * An ad that was paid for from promotion credits and then declined gives the
+ * credits back — once, by the (adId, ADJUSTMENT) pair. An ad booked before
+ * prepayment existed has no spend entry and gets nothing back.
+ */
+export async function refundAdCredits(adId: string, db: Db = prisma): Promise<boolean> {
+  const spend = await db.sellerLedgerEntry.findUnique({
+    where: { adId_type: { adId, type: 'PROMOTION_CREDIT_SPEND' } },
+  });
+  if (!spend) return false;
+  return postEntry(
+    {
+      sellerId: spend.sellerId,
+      type: 'ADJUSTMENT',
+      bucket: 'PROMOTION',
+      amountPaise: -spend.amountPaise,
+      adId,
+      note: 'Ad declined: promotion credits returned',
+    },
+    db,
+  );
 }
 
 // ---------------------------------------------------------------------------

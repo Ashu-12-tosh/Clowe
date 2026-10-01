@@ -20,6 +20,7 @@ import { formatPaise } from '@/lib/format';
 import { DonutChart, MultiLineChart } from '@/components/charts/Charts';
 import { useSeller } from '@/components/seller/SellerContext';
 import ReferralCard from '@/components/seller/ReferralCard';
+import PromotionCreditsCard from '@/components/seller/PromotionCreditsCard';
 
 // ---------------------------------------------------------------------------
 // Shared bits
@@ -642,6 +643,11 @@ export default function SellerDashboardPage() {
               </section>
             </div>
             <ReferralCard />
+          </div>
+
+          {/* Promotion credits ------------------------------------------ */}
+          <div className="mt-4">
+            <PromotionCreditsCard />
           </div>
         </>
       )}
