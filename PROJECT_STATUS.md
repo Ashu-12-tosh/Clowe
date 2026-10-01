@@ -1,6 +1,6 @@
 # Clowe — Project Status
 
-_Last updated: 2026-10-01 · commit `3448185` · live at **cloweshop.com**_
+_Last updated: 2026-10-01 · commit `c32f093` · live at **cloweshop.com**_
 
 This file is meant to stand on its own. Someone who reads only this should know
 what Clowe is, what works, what is deliberately switched off, what is blocking a
@@ -20,7 +20,7 @@ logic both sides must agree on).
 | Database | 58 models, 46 migrations |
 | API | 50 route modules |
 | Web | 80 pages |
-| Tests | **356 passing** — 196 unit, 160 integration |
+| Tests | **367 passing** — 205 unit, 162 integration |
 | Build | `npm run build` passing; api + web typecheck clean |
 | Deployed | Hostinger VPS, Docker Compose, HTTPS live |
 
@@ -73,8 +73,13 @@ hidden in Brave, which ships the speech API but not the service behind it: it
 takes the microphone and reports `network` half a second later, every time.
 Everywhere else every ending says what happened — including Chrome finishing
 with neither a result nor an error — and a watchdog ends a recogniser that
-never calls back. `scripts/voice-probe.mjs` measures all of this in real Brave,
-Chrome and Edge and exits non-zero if any of it regresses.
+never calls back. Two things the recogniser does to its output are handled:
+the punctuation it adds ("Headphones.") no longer turns a category search
+into the whole catalog, and a run that ends early searches the whole phrase
+heard so far rather than the first segment of it. `scripts/voice-probe.mjs`
+measures all of this in real Brave, Chrome and Edge — never through the real
+microphone — and `--audio` plays recorded speech through them to measure
+accuracy. What it found is under Known gaps.
 
 **Coupons are built and switched off.** `couponsEnabled` in platform settings
 defaults to `false`: every shopper-facing entry point is hidden and the API
@@ -208,6 +213,41 @@ columns on `SellerProfile`. They are never over-exposed by the API — the accou
 number is masked to its last four digits everywhere it surfaces — and the KYC
 check ledger correctly stores only HMAC fingerprints rather than the values. But
 the profile columns themselves are unencrypted at rest.
+
+**Voice recognition accuracy is the browser's, and it is not good enough for
+real shoppers.** `recognition.lang` is `en-IN` and always has been; measured
+in Chrome 154 with synthetic Indian and US voices (56 runs per setting),
+en-IN and en-US gave the same transcript nearly every run — 68% vs 66% exact —
+so the language setting is not the cause and is not the fix. Indian voices
+reached 79% exact, US voices 54–57%. The misses are words we sell: kurti →
+"curry" / "Scooty" / "pretty", boAt → "about your words", Redmi → "read my
+note", and the right word was almost never among the alternatives the
+recogniser offers, so picking a better alternative against the catalog gained
+nothing when prototyped (18 of 112 transcripts changed, none improved). The
+real production failures — "best mobile under 23,000" heard as "the best
+moment under 23,000" — did not reproduce with synthetic speech; real voices
+on phone microphones will do worse than these numbers, which are upper
+bounds. Edge ignores `maxAlternatives` entirely and its en-IN model is worse
+than its en-US one. hi-IN returns Devanagari, which the Latin-script catalog
+cannot match; en-IN already returns Hinglish ("sasta phone dikhao") in Latin
+script. Still-open parser gaps: "25000 rupees" leaves "rupees" as a keyword,
+"phone in 25k" and number words give no price bound, and "under 23" with the
+thousand dropped becomes a ₹23 cap.
+
+*After launch, in this order:* server-side speech-to-text behind a flag,
+Brave and Firefox first since the browser API cannot serve them — the browser
+records with `MediaRecorder`, our API forwards the clip. Sarvam Saaras in
+transliteration mode is the first candidate (Hinglish in Latin script, data
+in India, about ₹33 per 1,000 four-second searches); Azure in Central India
+is the English fallback at about ₹38. Choose by bake-off on 20–30 real
+recordings from real phones, scored on whether the right product is found,
+not on word error rate — `voice-probe.mjs --audio` plays any WAV through
+Chrome for the same comparison. It needs a consent notice under the DPDP
+rules and a per-user rate limit. Then vocabulary boosting for brand and
+product words through the provider, and the parser gaps above. Not worth
+doing: changing `lang`, alternative picking, Chrome's on-device recognition
+(no en-IN pack, and Brave disables it), or Whisper in the browser (41–563 MB
+download).
 
 **Uploads live only on the VPS disk.** Product images, seller documents and
 packing videos are written to a Docker volume. The nightly backup includes them,
