@@ -3,6 +3,7 @@ import {
   VOICE_SEARCH_ERROR_MESSAGES,
   VOICE_SEARCH_FALLBACK_MESSAGE,
   voiceSearchAvailable,
+  voiceSearchEndMessage,
   voiceSearchErrorMessage,
 } from './voiceSearch';
 
@@ -80,5 +81,48 @@ describe('voiceSearchAvailable', () => {
     // `network` because the service behind the API has been removed. The
     // recogniser existing is exactly what makes this case easy to get wrong.
     expect(voiceSearchAvailable({ hasRecognizer: true, isBrave: true })).toBe(false);
+  });
+});
+
+describe('voiceSearchEndMessage', () => {
+  const quiet = { heard: false, stoppedByShopper: false };
+  const heard = { heard: true, stoppedByShopper: false };
+  const stopped = { heard: false, stoppedByShopper: true };
+
+  it('says it missed them when the recogniser ends having heard nothing', () => {
+    // Chrome: speechstart, speechend, end — no result and no error. This used
+    // to show nothing at all.
+    expect(voiceSearchEndMessage({ via: 'end' }, quiet)).toBe("Didn't catch that — try again.");
+  });
+
+  it('says nothing when it ends with something heard — that is the success path', () => {
+    expect(voiceSearchEndMessage({ via: 'end' }, heard)).toBe('');
+  });
+
+  it('says nothing when the watchdog fires with a transcript in hand', () => {
+    // The transcript is searched; telling them it "stopped responding" on top
+    // of their results would be wrong.
+    expect(voiceSearchEndMessage({ via: 'timeout' }, heard)).toBe('');
+  });
+
+  it('still reports a recogniser that went quiet having heard nothing', () => {
+    expect(voiceSearchEndMessage({ via: 'timeout' }, quiet)).toMatch(/stopped responding/i);
+  });
+
+  it('stays silent whenever the shopper pressed stop', () => {
+    expect(voiceSearchEndMessage({ via: 'end' }, stopped)).toBe('');
+    expect(voiceSearchEndMessage({ via: 'timeout' }, stopped)).toBe('');
+    expect(voiceSearchEndMessage({ via: 'error', code: 'no-speech' }, stopped)).toBe('');
+  });
+
+  it('leaves error codes saying what they said before', () => {
+    // `network` is right in Chrome and Edge, where the service exists.
+    expect(voiceSearchEndMessage({ via: 'error', code: 'network' }, quiet)).toBe(
+      voiceSearchErrorMessage('network'),
+    );
+    expect(voiceSearchEndMessage({ via: 'error', code: 'aborted' }, quiet)).toBe('');
+    expect(voiceSearchEndMessage({ via: 'error', code: undefined }, quiet)).toBe(
+      VOICE_SEARCH_FALLBACK_MESSAGE,
+    );
   });
 });

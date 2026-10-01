@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { AuthUser, MyCounts } from '@clowe/shared';
-import { voiceSearchAvailable, voiceSearchErrorMessage } from '@clowe/shared';
+import { voiceSearchAvailable, voiceSearchEndMessage, voiceSearchErrorMessage } from '@clowe/shared';
+import type { VoiceSearchEnding } from '@clowe/shared';
 import { api, getStoredUser, logoutSession } from '@/lib/api';
 import CategoryNav from './CategoryNav';
 import SearchBar from './search/SearchBar';
@@ -91,6 +92,9 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   // The best transcript seen so far. Interim results are on purely so a
   // failure part-way through still has something to search for.
   const heardRef = useRef('');
+  // Set when the shopper presses stop, so whatever the recogniser does next
+  // ends in silence rather than a message about something they chose.
+  const stopRequestedRef = useRef(false);
   // Phone-width search: the box is an icon until tapped, then a full-screen
   // overlay. Below md the inline box had ~14px to live in (logo and the action
   // icons are shrink-0, so the flexible search absorbed the whole shortfall).
@@ -159,6 +163,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     // back to. Only the final result searches; see onend.
     recognition.interimResults = true;
     heardRef.current = '';
+    stopRequestedRef.current = false;
     setVoiceError('');
     setListening(true);
 
@@ -179,12 +184,16 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
      * of them runs, this is what ends it.
      */
     let settled = false;
-    const finish = (code?: string) => {
+    const finish = (ending: VoiceSearchEnding) => {
       if (settled) return;
       settled = true;
       window.clearTimeout(watchdog);
       setListening(false);
-      if (code) setVoiceError(voiceSearchErrorMessage(code));
+      const message = voiceSearchEndMessage(ending, {
+        heard: heardRef.current.trim() !== '',
+        stoppedByShopper: stopRequestedRef.current,
+      });
+      if (message) setVoiceError(message);
       // Whatever was heard before it stopped is still worth searching for.
       runSearch(heardRef.current);
     };
@@ -194,7 +203,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       } catch {
         // Already dead; the point was to stop waiting on it, not to tidy it up.
       }
-      finish('timeout');
+      finish({ via: 'timeout' });
     }, VOICE_TIMEOUT_MS);
 
     recognition.onresult = (event) => {
@@ -205,9 +214,9 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     recognition.onerror = (event) => {
       // Say which failure this was. Telling someone their browser cannot do
       // voice search because a packet dropped teaches them to stop trying.
-      finish(event?.error ?? 'unknown');
+      finish({ via: 'error', code: event?.error });
     };
-    recognition.onend = () => finish();
+    recognition.onend = () => finish({ via: 'end' });
     recognition.start();
   }
 
@@ -217,9 +226,11 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
    * stop() ends the recogniser, which fires onend, which is the same finish()
    * the watchdog and the error path call — so the transcript so far is still
    * searched and the listening state is cleared in one place. A recogniser that
-   * ignores stop() as well is left to the watchdog.
+   * ignores stop() as well is left to the watchdog. Either way it ends without
+   * a message: they stopped it, and they know.
    */
   function stopVoiceSearch() {
+    stopRequestedRef.current = true;
     try {
       recognitionRef.current?.stop();
     } catch {

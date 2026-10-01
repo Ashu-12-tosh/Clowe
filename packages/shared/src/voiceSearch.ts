@@ -74,3 +74,43 @@ export function voiceSearchErrorMessage(code: string | undefined): string {
 export function voiceSearchAvailable(env: { hasRecognizer: boolean; isBrave: boolean }): boolean {
   return env.hasRecognizer && !env.isBrave;
 }
+
+/** How a voice search attempt came to an end. */
+export type VoiceSearchEnding =
+  /** The recogniser reported a failure, with or without a code. */
+  | { via: 'error'; code: string | undefined }
+  /** The recogniser ended on its own, with no error. */
+  | { via: 'end' }
+  /** Our watchdog gave up on a recogniser that went quiet. */
+  | { via: 'timeout' };
+
+/**
+ * What to tell the shopper when a voice search attempt ends; '' to say nothing.
+ *
+ * Two endings used to get this wrong, both measured in Chrome 154:
+ *
+ * - The recogniser can hear speech, fail to transcribe it, and end with no
+ *   result and no error — speechstart, speechend, end. That is a legal
+ *   sequence, and the shopper was told nothing at all. Having heard nothing,
+ *   it now says so the same way `no-speech` does.
+ * - Our watchdog can fire after interim results arrived. The transcript is
+ *   searched either way, so "stopped responding" on top of a results page
+ *   is wrong: from the shopper's side it worked.
+ *
+ * A shopper who pressed stop gets silence, whatever the recogniser did next.
+ * They know they stopped it.
+ */
+export function voiceSearchEndMessage(
+  ending: VoiceSearchEnding,
+  ctx: { heard: boolean; stoppedByShopper: boolean },
+): string {
+  if (ctx.stoppedByShopper) return '';
+  switch (ending.via) {
+    case 'error':
+      return voiceSearchErrorMessage(ending.code);
+    case 'end':
+      return ctx.heard ? '' : voiceSearchErrorMessage('no-speech');
+    case 'timeout':
+      return ctx.heard ? '' : voiceSearchErrorMessage('timeout');
+  }
+}
