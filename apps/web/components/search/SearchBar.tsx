@@ -47,8 +47,12 @@ const GROUP_LABELS: Record<Option['kind'], string> = {
   trending: 'Popular right now',
 };
 
-/** Marks a row as a search to run, not a product to open. */
-function MagnifierIcon() {
+/**
+ * Marks a row as a search to run, not a product to open — and, at 20px, sits at
+ * the head of the search field. The size is a prop because the field pairs it
+ * with MicIcon and the dropdown rows want it at text size.
+ */
+function MagnifierIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg
       aria-hidden
@@ -56,7 +60,7 @@ function MagnifierIcon() {
       fill="none"
       stroke="currentColor"
       strokeWidth="1.8"
-      className="h-4 w-4"
+      className={className}
     >
       <circle cx="8.5" cy="8.5" r="5.5" />
       <path d="m13 13 4 4" strokeLinecap="round" />
@@ -439,8 +443,14 @@ export default function SearchBar({
       >
         <div className="mx-auto flex w-full max-w-2xl overflow-hidden rounded-xl border border-gray-200 bg-white focus-within:border-brand-600">
           <div className="relative min-w-0 flex-1">
-            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-gray-400">
-              ⌕
+            {/*
+              Was the character ⌕, which is a text glyph: it renders at
+              whatever weight the system font gives it, which is far lighter
+              than the mic at the other end of the same field. Same icon the
+              suggestion rows use, at the mic’s size.
+            */}
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <MagnifierIcon className="h-5 w-5" />
             </span>
             <input
               ref={inputRef}
