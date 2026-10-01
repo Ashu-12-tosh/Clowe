@@ -619,6 +619,7 @@ adminRouter.put('/settings', async (req, res, next) => {
       await setSetting('tryonMinPricePaise', input.tryonMinPricePaise);
     }
     if (input.socialLinks !== undefined) await setSetting('socialLinks', input.socialLinks);
+    if (input.supportEmails !== undefined) await setSetting('supportEmails', input.supportEmails);
     if (input.adPricing !== undefined) await setSetting('adPricing', input.adPricing);
     // Seller payout economics — every rate the payout page explains.
     for (const key of [

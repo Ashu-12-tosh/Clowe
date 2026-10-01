@@ -30,6 +30,10 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
     instagram: 'https://www.instagram.com/cloweshop/',
     linkedin: 'https://www.linkedin.com/company/clowe-shop/',
   },
+  supportEmails: {
+    customer: 'customer-support@cloweshop.com',
+    vendor: 'vendor-support@cloweshop.com',
+  },
   adPricing: {
     HOME_BANNER: { '7': 49900, '15': 89900, '30': 149900 },
     CATEGORY_SPONSORED: { '7': 29900, '15': 49900, '30': 79900 },
@@ -94,6 +98,10 @@ export async function getSettings(): Promise<PlatformSettings> {
       ...DEFAULT_SETTINGS.socialLinks,
       ...((byKey.get('socialLinks') as Partial<PlatformSettings['socialLinks']> | undefined) ?? {}),
     },
+    supportEmails: {
+      ...DEFAULT_SETTINGS.supportEmails,
+      ...((byKey.get('supportEmails') as Partial<PlatformSettings['supportEmails']> | undefined) ?? {}),
+    },
     adPricing:
       (byKey.get('adPricing') as PlatformSettings['adPricing'] | undefined) ??
       DEFAULT_SETTINGS.adPricing,
@@ -108,6 +116,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
   return {
     tryonMinPricePaise: s.tryonMinPricePaise,
     socialLinks: s.socialLinks,
+    supportEmails: s.supportEmails,
     pdpOffers: s.pdpOffers,
     couponsEnabled: s.couponsEnabled,
   };

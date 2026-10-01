@@ -11,6 +11,7 @@ import {
   type OrderListRow,
 } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
+import { getPublicSettings } from '@/lib/settings';
 import {
   FAQ_CATEGORIES,
   FAQ_CATEGORY_META,
@@ -28,8 +29,7 @@ import {
   TruckIcon,
 } from '@/components/cart/CartIcons';
 
-/** Where "Call us" and "Email support" actually go. */
-const SUPPORT_EMAIL = 'support@clowe.example';
+/** Where "Call us" actually goes. The email address comes from platform settings. */
 const SUPPORT_PHONE = '+911800000000';
 const SUPPORT_HOURS = 'Available everyday, 9 AM – 9 PM';
 
@@ -91,6 +91,14 @@ export default function HelpCenterPage() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [myRequests, setMyRequests] = useState<ComplaintRow[]>([]);
+  // From platform settings, where admins can change it without a deploy.
+  const [supportEmail, setSupportEmail] = useState('');
+
+  useEffect(() => {
+    getPublicSettings()
+      .then((s) => setSupportEmail(s.supportEmails.customer))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!getStoredUser()) return;
@@ -352,7 +360,7 @@ export default function HelpCenterPage() {
                   <p className="t-caption text-gray-500">We&apos;ll get back within 24 hours</p>
                 </div>
                 <a
-                  href={`mailto:${SUPPORT_EMAIL}`}
+                  href={`mailto:${supportEmail}`}
                   className="t-caption shrink-0 rounded-lg border border-brand-600 px-3 py-1.5 font-bold text-brand-700 transition hover:bg-brand-50"
                 >
                   Send Email

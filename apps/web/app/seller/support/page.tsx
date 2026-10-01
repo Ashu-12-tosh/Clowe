@@ -22,6 +22,7 @@ import {
   type TicketPriorityValue,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { getPublicSettings } from '@/lib/settings';
 import TicketDrawer, { TICKET_STATUS_STYLES } from '@/components/seller/support/TicketDrawer';
 
 const HEALTH_STYLES: Record<string, string> = {
@@ -115,6 +116,14 @@ export default function SellerSupportPage() {
     orderNumber: '',
   });
   const [creating, setCreating] = useState(false);
+  // From platform settings, where admins can change it without a deploy.
+  const [vendorEmail, setVendorEmail] = useState('');
+
+  useEffect(() => {
+    getPublicSettings()
+      .then((s) => setVendorEmail(s.supportEmails.vendor))
+      .catch(() => {});
+  }, []);
 
   const loadSummary = useCallback(async () => {
     try {
@@ -229,6 +238,14 @@ export default function SellerSupportPage() {
           <p className="mt-0.5 text-sm text-gray-500">
             Answers from the seller handbook, and a human when you need one.
           </p>
+          {vendorEmail && (
+            <p className="mt-1 text-sm text-gray-500">
+              Or email{' '}
+              <a href={`mailto:${vendorEmail}`} className="font-semibold text-brand-700 hover:underline">
+                {vendorEmail}
+              </a>
+            </p>
+          )}
         </div>
         <button
           onClick={() => setShowForm((v) => !v)}

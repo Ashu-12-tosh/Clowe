@@ -59,6 +59,12 @@ export interface PlatformSettings {
   kycNameMatchMinScore: number;
   /** Social links shown in the footer; an empty string hides that one. */
   socialLinks: { facebook: string; twitter: string; instagram: string; linkedin: string };
+  /**
+   * Where "email us" goes: one address for shoppers, one for sellers. Shown
+   * on the help centre and the seller support page, so they live here with
+   * the other contact details rather than as strings in two pages.
+   */
+  supportEmails: { customer: string; vendor: string };
   adPricing: AdPricing;
   /** Bank/EMI offers shown on every product page. */
   pdpOffers: PdpOffer[];
@@ -83,6 +89,7 @@ export interface PlatformSettings {
 export interface PublicSettings {
   tryonMinPricePaise: number;
   socialLinks: PlatformSettings['socialLinks'];
+  supportEmails: PlatformSettings['supportEmails'];
   pdpOffers: PdpOffer[];
   couponsEnabled: boolean;
 }
@@ -109,6 +116,12 @@ export const updateSettingsSchema = z.object({
       twitter: z.string().trim().url().or(z.literal('')),
       instagram: z.string().trim().url().or(z.literal('')),
       linkedin: z.string().trim().url().or(z.literal('')),
+    })
+    .optional(),
+  supportEmails: z
+    .object({
+      customer: z.string().trim().email(),
+      vendor: z.string().trim().email(),
     })
     .optional(),
   adPricing: z.object({ HOME_BANNER: adPriceRow, CATEGORY_SPONSORED: adPriceRow }).optional(),

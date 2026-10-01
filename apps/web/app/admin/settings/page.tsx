@@ -21,6 +21,7 @@ export default function AdminSettingsPage() {
   const [tryonMin, setTryonMin] = useState('');
   const [kycMinScore, setKycMinScore] = useState('');
   const [social, setSocial] = useState({ facebook: '', twitter: '', instagram: '', linkedin: '' });
+  const [supportEmails, setSupportEmails] = useState({ customer: '', vendor: '' });
   const [adPrices, setAdPrices] = useState<Record<string, string>>({});
   const [payout, setPayout] = useState({
     commission: '',
@@ -42,6 +43,7 @@ export default function AdminSettingsPage() {
         setKycMinScore(String(s.kycNameMatchMinScore));
         setCouponsEnabled(s.couponsEnabled);
         setSocial(s.socialLinks);
+        setSupportEmails(s.supportEmails);
         const prices: Record<string, string> = {};
         for (const pl of AD_PLACEMENTS)
           for (const d of AD_DURATIONS)
@@ -76,6 +78,7 @@ export default function AdminSettingsPage() {
         body: {
           tryonMinPricePaise: toPaise(tryonMin),
           socialLinks: social,
+          supportEmails,
           adPricing,
           payoutCommissionPercent: Number(payout.commission) || 0,
           payoutGatewayPercent: Number(payout.gateway) || 0,
@@ -172,7 +175,7 @@ export default function AdminSettingsPage() {
       {/* Social links */}
       <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
         <h2 className="text-sm font-bold">🔗 Social links (footer)</h2>
-        <p className="mt-1 text-xs text-gray-400">Leave empty to show a &ldquo;Coming soon&rdquo; state instead of a dead link.</p>
+        <p className="mt-1 text-xs text-gray-400">Leave one empty and that icon is simply not shown.</p>
         {(['facebook', 'twitter', 'instagram', 'linkedin'] as const).map((key) => (
           <div key={key} className="mt-3">
             <label className="block text-sm font-medium capitalize">{key}</label>
@@ -181,6 +184,30 @@ export default function AdminSettingsPage() {
               value={social[key]}
               onChange={(e) => setSocial((s) => ({ ...s, [key]: e.target.value }))}
               placeholder={`https://${key}.com/clowe`}
+              className={`mt-1 ${field}`}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Support addresses */}
+      <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
+        <h2 className="text-sm font-bold">✉ Support email addresses</h2>
+        <p className="mt-1 text-xs text-gray-400">
+          Where &ldquo;Email support&rdquo; goes on the help centre (shoppers) and the seller support page.
+        </p>
+        {(
+          [
+            ['customer', 'Customer support'],
+            ['vendor', 'Seller support'],
+          ] as const
+        ).map(([key, label]) => (
+          <div key={key} className="mt-3">
+            <label className="block text-sm font-medium">{label}</label>
+            <input
+              type="email"
+              value={supportEmails[key]}
+              onChange={(e) => setSupportEmails((s) => ({ ...s, [key]: e.target.value }))}
               className={`mt-1 ${field}`}
             />
           </div>
