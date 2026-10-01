@@ -265,6 +265,7 @@ model User {
   sellerNotes          SellerNote[]
   ticketMessages       SupportTicketMessage[]
   auditLogs            AuditLog[]
+  sellerLedgerEntries  SellerLedgerEntry[] @relation("SellerLedgerCreatedBy")
   assignedComplaints   Complaint[]        @relation("ComplaintAssignee")
   complaintMessages    ComplaintMessage[]
   stockMovements       StockMovement[]
@@ -455,6 +456,7 @@ model SellerProfile {
   notes             SellerNote[]
   tickets           SupportTicket[]
   kycChecks         SellerKycCheck[]
+  ledgerEntries     SellerLedgerEntry[]
 
   @@map("seller_profiles")
 }
@@ -612,6 +614,7 @@ model Payout {
 
   items OrderItem[]
   ads   Ad[]
+  ledgerEntries SellerLedgerEntry[]
 
   @@index([sellerId, requestedAt])
   @@map("payouts")
@@ -688,6 +691,7 @@ model Ad {
   // Ad spend is recovered from a payout; set once that has happened.
   payoutId String?
   payout   Payout? @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+  ledgerEntries SellerLedgerEntry[]
 
   @@index([status, placement])
   @@index([sellerId, payoutId])
@@ -1210,6 +1214,7 @@ model OrderItem {
   // Settlement: set once this line has been paid out to the seller.
   payoutId String?
   payout   Payout? @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+  ledgerEntries SellerLedgerEntry[]
 
   @@index([sellerId, status])
   // Seller order management sorts by recency within a shop.
@@ -1856,6 +1861,64 @@ model TryOnCreditLedger {
 
   @@index([sellerId, createdAt])
   @@map("tryon_credit_ledger")
+}
+
+/// What a ledger line is. Signed amounts carry the direction, so the type says
+/// only why the money moved.
+enum SellerLedgerType {
+  SALE_EARNING // + line total, posted on delivery
+  COMMISSION // - marketplace commission on that sale
+  PLATFORM_FEE // - fixed per-unit platform fee
+  GATEWAY_FEE // - payment gateway / collection charge
+  TDS // - section 194-O withholding
+  LATE_DISPATCH_PENALTY // - shipped after the dispatch window
+  PENALTY_WAIVER // + an admin forgave a penalty
+  RETURN_REVERSAL // - a delivered line came back; its earning and fees are undone
+  PROMOTION_CREDIT_PURCHASE // + seller bought promotion credits
+  PROMOTION_CREDIT_SPEND // - promotion credits spent on a placement
+  PAYOUT // - money transferred to the seller's bank
+  ADJUSTMENT // +/- manual or system correction, always with a note
+}
+
+/// Settlement money can be paid out; promotion credits never can. Keeping them
+/// in separate buckets means a promotion top-up cannot leak into a payout, and
+/// a penalty cannot eat ad credits, without any code having to remember that.
+enum SellerLedgerBucket {
+  SETTLEMENT
+  PROMOTION
+}
+
+/// The seller's money, one signed row per event. Balances are sums over this
+/// table, never stored, so there is nothing to drift. The unique pairs below
+/// are what make posting idempotent: a delivery, a penalty, a waiver or a
+/// payout can only ever land once against the thing it is about.
+model SellerLedgerEntry {
+  id          String             @id @default(cuid())
+  sellerId    String
+  seller      SellerProfile      @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  type        SellerLedgerType
+  bucket      SellerLedgerBucket
+  // Signed, in paise: earnings positive, deductions negative.
+  amountPaise Int
+  orderId     String?
+  orderItemId String?
+  orderItem   OrderItem?         @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  payoutId    String?
+  payout      Payout?            @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+  // The ad placement a promotion credit was spent on (or refunded for).
+  adId        String?
+  ad          Ad?                @relation(fields: [adId], references: [id], onDelete: SetNull)
+  note        String?
+  // The admin behind a manual entry; null for entries the system posted.
+  createdById String?
+  createdBy   User?              @relation("SellerLedgerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime           @default(now())
+
+  @@unique([orderItemId, type])
+  @@unique([payoutId, type])
+  @@unique([adId, type])
+  @@index([sellerId, bucket, createdAt])
+  @@map("seller_ledger_entries")
 }
 
 /// One results-page search, kept only in aggregate.

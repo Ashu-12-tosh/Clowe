@@ -16,6 +16,7 @@ import {
   PayoutDetailDrawer,
   PayoutStatusPill,
 } from '@/components/seller/payouts/PayoutModals';
+import { LedgerPanel } from '@/components/seller/payouts/LedgerPanel';
 
 function money(paise: number): string {
   return formatPaise(paise);
@@ -126,6 +127,8 @@ export default function SellerPayoutsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  // Bumped after a payout so the ledger shows the transfer without a reload.
+  const [ledgerRefresh, setLedgerRefresh] = useState(0);
 
   const loadOverview = useCallback(async () => {
     try {
@@ -175,6 +178,7 @@ export default function SellerPayoutsPage() {
         `${payout.reference}: ${money(payout.netPaise)} sent to ${payout.methodLabel ?? 'your account'}${payout.utr ? ` · UTR ${payout.utr}` : ''}`,
       );
       await Promise.all([loadOverview(), loadHistory()]);
+      setLedgerRefresh((n) => n + 1);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Payout request failed');
     } finally {
@@ -531,6 +535,14 @@ export default function SellerPayoutsPage() {
               </div>
             )}
           </section>
+
+          {/* --- Ledger ------------------------------------------------ */}
+          <LedgerPanel
+            bucket="SETTLEMENT"
+            title="Ledger"
+            subtitle="Every rupee in and out of your settlement balance, newest first. Sales clear after the return window; everything else counts at once."
+            refreshKey={ledgerRefresh}
+          />
 
           {/* --- Fees / TDS / insights ---------------------------------- */}
           {overview && (

@@ -36,6 +36,7 @@ import {
   settleCodIfDelivered,
   syncOrderStatus,
 } from '../services/orderStatusService';
+import { postDeliveryEntries } from '../services/sellerLedgerService';
 import { createManualOrder } from '../services/manualOrderService';
 import { returnStock } from '../services/stockService';
 
@@ -607,6 +608,10 @@ adminOrdersRouter.patch('/:id/status', async (req, res, next) => {
 
     await syncOrderStatus(order.id);
     await settleCodIfDelivered(order.id);
+    if (input.status === 'DELIVERED') {
+      // Same ledger event as a seller marking the line delivered.
+      for (const item of targets) await postDeliveryEntries(item.id);
+    }
 
     await prisma.notification.create({
       data: {

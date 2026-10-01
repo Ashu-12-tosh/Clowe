@@ -36,6 +36,7 @@ import {
   settleCodIfDelivered,
   syncOrderStatus,
 } from '../services/orderStatusService';
+import { postDeliveryEntries } from '../services/sellerLedgerService';
 
 export const sellerOrdersRouter = Router();
 sellerOrdersRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
@@ -522,6 +523,9 @@ async function applyAction(
   ]);
   await syncOrderStatus(item.orderId);
   await settleCodIfDelivered(item.orderId);
+  // Delivery is the moment the money is earned: it goes on the ledger here,
+  // once, however many times this line is replayed.
+  await postDeliveryEntries(item.id);
   return null;
 }
 

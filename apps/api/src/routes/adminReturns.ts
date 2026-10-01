@@ -32,6 +32,7 @@ import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { processRefund } from '../services/refundService';
+import { postReturnReversal } from '../services/sellerLedgerService';
 import { getSettings, setSetting } from '../services/settingsService';
 import { creditExpiryFrom } from './credits';
 
@@ -825,6 +826,7 @@ async function applyAdminAction(
             `${credits} Clowe Credits (₹${(amountPaise / 100).toFixed(2)}) added for ${label}. They are ready to use right away.`,
           ),
         ]);
+        await postReturnReversal(r.orderItemId);
       } else {
         const refund = await prisma.refund.create({
           data: {
@@ -840,6 +842,7 @@ async function applyAdminAction(
           where: { id: r.orderItemId },
           data: { status: 'RETURNED' },
         });
+        await postReturnReversal(r.orderItemId);
         // processRefund flips the return to REFUNDED and notifies the shopper.
         await processRefund(refund.id);
       }

@@ -1,8 +1,9 @@
-import type { PlatformSettings } from '@clowe/shared';
+import { computeListingEconomics, type PlatformSettings } from '@clowe/shared';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 import { getSettings } from './settingsService';
 import { payoutProvider } from './payouts';
+import { ensureLedgerCoversDeliveries, settlementPosition } from './sellerLedgerService';
 
 // ---------------------------------------------------------------------------
 // Seller earnings & settlement.
@@ -10,6 +11,13 @@ import { payoutProvider } from './payouts';
 // Money is earned on DELIVERY (not on order), held for the return window, then
 // paid out net of commission, gateway charges and section 194-O TDS. Every
 // settled line carries its payout id, so nothing can be paid twice.
+//
+// The amounts come from the seller ledger (sellerLedgerService): a delivery
+// posts its earning and deductions there, and what is "available" is the sum
+// of the cleared entries. The item queries below decide *which lines* a
+// payout settles; the ledger decides *how much*. The two agree unless rates
+// changed between delivery and payout, in which case the ledger — the rates
+// as they stood when the money was earned — is the one that pays.
 // ---------------------------------------------------------------------------
 
 export interface FeeBreakdown {
@@ -30,19 +38,29 @@ const EMPTY_FEES: FeeBreakdown = {
   netPaise: 0,
 };
 
-/** Fees withheld on a gross line total, using the admin's current rates. */
-export function feesFor(grossPaise: number, settings: PlatformSettings): FeeBreakdown {
-  const commissionPaise = Math.round((grossPaise * settings.payoutCommissionPercent) / 100);
-  const gatewayPaise = Math.round((grossPaise * settings.payoutGatewayPercent) / 100);
-  const tdsPaise = Math.round((grossPaise * settings.payoutTdsPercent) / 100);
-  const feesPaise = commissionPaise + gatewayPaise;
+/** The rates the shared calculator needs, lifted from platform settings. */
+export function economicsRates(settings: PlatformSettings) {
   return {
-    grossPaise,
-    commissionPaise,
-    gatewayPaise,
-    feesPaise,
-    tdsPaise,
-    netPaise: grossPaise - feesPaise - tdsPaise,
+    commissionPercent: settings.payoutCommissionPercent,
+    gatewayPercent: settings.payoutGatewayPercent,
+    tdsPercent: settings.payoutTdsPercent,
+  };
+}
+
+/**
+ * Fees withheld on a gross line total, using the admin's current rates. A
+ * thin view over the shared calculator, so a statement, an overview chart and
+ * a ledger entry can never show the same line with different deductions.
+ */
+export function feesFor(grossPaise: number, settings: PlatformSettings): FeeBreakdown {
+  const e = computeListingEconomics({ sellerPricePaise: grossPaise, rates: economicsRates(settings) });
+  return {
+    grossPaise: e.grossPaise,
+    commissionPaise: e.commissionPaise,
+    gatewayPaise: e.gatewayFeePaise,
+    feesPaise: e.commissionPaise + e.gatewayFeePaise,
+    tdsPaise: e.tdsPaise,
+    netPaise: e.sellerReceivesPaise,
   };
 }
 
@@ -112,9 +130,12 @@ export async function outstandingAdSpend(sellerId: string) {
 }
 
 export interface AvailableBalance {
+  /** Deductions on the cleared lines at today's rates — for display only. */
   fees: FeeBreakdown;
-  /** Net of fees/TDS, before ad-spend recovery. */
+  /** Cleared ledger balance: net of fees/TDS and penalties, before ad-spend recovery. */
   netPaise: number;
+  /** The whole settlement bucket, cleared or not. */
+  ledgerBalancePaise: number;
   adjustmentsPaise: number;
   /** What a payout request would actually transfer. */
   payablePaise: number;
@@ -127,17 +148,19 @@ export interface AvailableBalance {
 
 export async function availableBalance(sellerId: string): Promise<AvailableBalance> {
   const settings = await getSettings();
-  const [eligible, clearing, ads] = await Promise.all([
+  // Lines delivered before the ledger existed get their entries on first read.
+  await ensureLedgerCoversDeliveries(sellerId);
+  const [position, eligible, clearing, ads] = await Promise.all([
+    settlementPosition(sellerId, settings.payoutHoldDays),
     eligibleItems(sellerId, settings.payoutHoldDays),
     clearingItems(sellerId, settings.payoutHoldDays),
     outstandingAdSpend(sellerId),
   ]);
 
   const fees = sumFees(eligible, settings);
-  const clearingNet = sumFees(clearing, settings).netPaise;
   // Only the ad spend that fits inside this payout is recovered now; the rest
   // waits for the next one rather than pushing the transfer negative.
-  const adjustmentsPaise = affordableAdjustments(ads, fees.netPaise).total;
+  const adjustmentsPaise = affordableAdjustments(ads, position.availablePaise).total;
 
   const oldestClearing = clearing[0]?.deliveredAt ?? null;
   const releaseAt = oldestClearing
@@ -146,11 +169,12 @@ export async function availableBalance(sellerId: string): Promise<AvailableBalan
 
   return {
     fees,
-    netPaise: fees.netPaise,
+    netPaise: position.availablePaise,
+    ledgerBalancePaise: position.balancePaise,
     adjustmentsPaise,
-    payablePaise: Math.max(0, fees.netPaise - adjustmentsPaise),
+    payablePaise: Math.max(0, position.availablePaise - adjustmentsPaise),
     itemCount: eligible.length,
-    inClearingPaise: clearingNet,
+    inClearingPaise: position.clearingPaise,
     inClearingCount: clearing.length,
     nextClearingAt: releaseAt?.toISOString() ?? null,
   };
@@ -226,10 +250,15 @@ export async function requestPayout(sellerId: string, methodId?: string) {
     throw ApiError.badRequest('No cleared earnings to pay out yet', 'NOTHING_PAYABLE');
   }
 
-  const fees = sumFees(eligible, settings);
+  // The ledger says how much: every cleared entry, which is these lines'
+  // earnings and deductions plus anything that counts at once (penalties,
+  // waivers, reversals). Lines from before the ledger are posted first so
+  // nothing eligible is claimed without being paid.
+  await ensureLedgerCoversDeliveries(sellerId);
+  const position = await settlementPosition(sellerId, settings.payoutHoldDays);
   const ads = await outstandingAdSpend(sellerId);
-  const adjustments = affordableAdjustments(ads, fees.netPaise);
-  const netPaise = fees.netPaise - adjustments.total;
+  const adjustments = affordableAdjustments(ads, position.availablePaise);
+  const netPaise = position.availablePaise - adjustments.total;
 
   if (netPaise < settings.payoutMinPaise) {
     throw ApiError.badRequest(
@@ -245,17 +274,35 @@ export async function requestPayout(sellerId: string, methodId?: string) {
   const itemIds = eligible.map((i) => i.id);
 
   const payout = await prisma.$transaction(async (tx) => {
+    // The payout row explains itself from the entries it settles, not from a
+    // recomputation at today's rates.
+    const byType = await tx.sellerLedgerEntry.groupBy({
+      by: ['type'],
+      where: { orderItemId: { in: itemIds }, bucket: 'SETTLEMENT' },
+      _sum: { amountPaise: true },
+    });
+    const sumOf = (type: string) => byType.find((t) => t.type === type)?._sum.amountPaise ?? 0;
+    const grossPaise = sumOf('SALE_EARNING');
+    const commissionPaise = -sumOf('COMMISSION');
+    const gatewayPaise = -sumOf('GATEWAY_FEE');
+    const tdsPaise = -sumOf('TDS');
+
     const created = await tx.payout.create({
       data: {
         reference: await nextReference(),
         sellerId,
         periodFrom: new Date(Math.min(...stamps)),
         periodTo: new Date(Math.max(...stamps)),
-        grossPaise: fees.grossPaise,
-        commissionPaise: fees.commissionPaise,
-        gatewayPaise: fees.gatewayPaise,
+        grossPaise,
+        commissionPaise,
+        gatewayPaise,
+        // Whatever else separates gross from net: fixed fees on these lines
+        // and penalties or waivers that count at once. Defined as the
+        // remainder so the row always reconciles, whichever entries exist.
+        otherFeesPaise:
+          grossPaise - commissionPaise - gatewayPaise - tdsPaise - adjustments.total - netPaise,
         adjustmentPaise: adjustments.total,
-        tdsPaise: fees.tdsPaise,
+        tdsPaise,
         netPaise,
         status: 'PROCESSING',
         methodId: method.id,
@@ -301,14 +348,45 @@ export async function requestPayout(sellerId: string, methodId?: string) {
     throw ApiError.badRequest(transfer.failureReason ?? 'Payout failed', 'PAYOUT_FAILED');
   }
 
-  const settled = await prisma.payout.update({
-    where: { id: payout.id },
-    data: {
-      status: transfer.status,
-      utr: transfer.utr,
-      processedAt: transfer.status === 'PAID' ? new Date() : null,
-    },
-  });
+  // The money has left (or is on its way), so the ledger records it now — a
+  // FAILED transfer above never reaches here and never touches the ledger.
+  // The (payoutId, type) unique pair means a replay cannot post it twice.
+  const placements = adjustments.ids.length;
+  const [settled] = await prisma.$transaction([
+    prisma.payout.update({
+      where: { id: payout.id },
+      data: {
+        status: transfer.status,
+        utr: transfer.utr,
+        processedAt: transfer.status === 'PAID' ? new Date() : null,
+      },
+    }),
+    prisma.sellerLedgerEntry.createMany({
+      data: [
+        {
+          sellerId,
+          type: 'PAYOUT',
+          bucket: 'SETTLEMENT',
+          amountPaise: -payout.netPaise,
+          payoutId: payout.id,
+          note: `${payout.reference} to ${payout.methodLabel ?? method.label}`,
+        },
+        ...(adjustments.total > 0
+          ? [
+              {
+                sellerId,
+                type: 'ADJUSTMENT' as const,
+                bucket: 'SETTLEMENT' as const,
+                amountPaise: -adjustments.total,
+                payoutId: payout.id,
+                note: `Ad spend recovered with ${payout.reference} (${placements} placement${placements === 1 ? '' : 's'})`,
+              },
+            ]
+          : []),
+      ],
+      skipDuplicates: true,
+    }),
+  ]);
 
   await prisma.notification.create({
     data: {
