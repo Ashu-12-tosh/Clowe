@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   VOICE_SEARCH_ERROR_MESSAGES,
   VOICE_SEARCH_FALLBACK_MESSAGE,
+  voiceSearchAvailable,
   voiceSearchErrorMessage,
 } from './voiceSearch';
 
@@ -62,5 +63,22 @@ describe('voiceSearchErrorMessage', () => {
       if (message === null) continue;
       expect(message.length, `${code} should say something substantial`).toBeGreaterThan(20);
     }
+  });
+});
+
+describe('voiceSearchAvailable', () => {
+  it('offers voice search where the browser has a recogniser', () => {
+    expect(voiceSearchAvailable({ hasRecognizer: true, isBrave: false })).toBe(true);
+  });
+
+  it('hides it where there is no recogniser at all', () => {
+    expect(voiceSearchAvailable({ hasRecognizer: false, isBrave: false })).toBe(false);
+  });
+
+  it('hides it in Brave even though the recogniser is there', () => {
+    // Brave has the constructor and takes the microphone, then reports
+    // `network` because the service behind the API has been removed. The
+    // recogniser existing is exactly what makes this case easy to get wrong.
+    expect(voiceSearchAvailable({ hasRecognizer: true, isBrave: true })).toBe(false);
   });
 });

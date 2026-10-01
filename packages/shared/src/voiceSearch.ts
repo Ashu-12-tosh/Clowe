@@ -60,3 +60,17 @@ export function voiceSearchErrorMessage(code: string | undefined): string {
   }
   return VOICE_SEARCH_FALLBACK_MESSAGE;
 }
+
+/**
+ * Whether to offer voice search at all.
+ *
+ * Brave is why this is not simply `hasRecognizer`. It ships the Web Speech API
+ * surface — the constructor exists, start() is accepted, the microphone is
+ * taken — and removes the recognition service behind it, reporting `network`
+ * about half a second later (measured: Brave 1.96 on Chromium 154, raw API and
+ * live site alike). A button that can never work is hidden, exactly as it is
+ * where the API is absent.
+ */
+export function voiceSearchAvailable(env: { hasRecognizer: boolean; isBrave: boolean }): boolean {
+  return env.hasRecognizer && !env.isBrave;
+}

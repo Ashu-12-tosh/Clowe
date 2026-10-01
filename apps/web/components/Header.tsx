@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { AuthUser, MyCounts } from '@clowe/shared';
-import { voiceSearchErrorMessage } from '@clowe/shared';
+import { voiceSearchAvailable, voiceSearchErrorMessage } from '@clowe/shared';
 import { api, getStoredUser, logoutSession } from '@/lib/api';
 import CategoryNav from './CategoryNav';
 import SearchBar from './search/SearchBar';
@@ -28,6 +28,28 @@ function getSpeechRecognition(): (new () => SpeechRecognitionLike) | null {
     webkitSpeechRecognition?: new () => SpeechRecognitionLike;
   };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+/**
+ * Brave, by either signal it gives.
+ *
+ * navigator.brave.isBrave() is Brave's own API; the UA-CH brand is a second,
+ * synchronous one. Either alone hides the mic, so losing one does not bring a
+ * dead button back. The UA string is no use — Brave’s is byte-for-byte
+ * Chrome's. If the call itself fails, the object being there at all is the
+ * answer: no other browser has it.
+ */
+async function isBraveBrowser(): Promise<boolean> {
+  const nav = navigator as Navigator & {
+    brave?: { isBrave?: () => Promise<boolean> };
+    userAgentData?: { brands?: { brand: string }[] };
+  };
+  if (nav.userAgentData?.brands?.some((b) => b.brand === 'Brave')) return true;
+  try {
+    return Boolean(await nav.brave?.isBrave?.());
+  } catch {
+    return Boolean(nav.brave);
+  }
 }
 
 /**
@@ -74,10 +96,23 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   // icons are shrink-0, so the flexible search absorbed the whole shortfall).
   const [searchOpen, setSearchOpen] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  // Detect speech support only after mount — rendering the mic server-side
-  // causes a hydration mismatch.
+  // Resolved after mount, for two reasons: rendering the mic server-side
+  // causes a hydration mismatch, and the Brave check is a promise. Until it
+  // resolves the mic is hidden, which is the safe direction.
   const [speechSupported, setSpeechSupported] = useState(false);
-  useEffect(() => setSpeechSupported(getSpeechRecognition() !== null), []);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const available = voiceSearchAvailable({
+        hasRecognizer: getSpeechRecognition() !== null,
+        isBrave: await isBraveBrowser(),
+      });
+      if (!cancelled) setSpeechSupported(available);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Publish the header's rendered height as --header-h. Anything that has to
   // stick just below the sticky header (the mobile filter bar on /products)
