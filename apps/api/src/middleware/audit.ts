@@ -46,6 +46,7 @@ const RULES: RouteRule[] = [
   { method: 'PATCH', pattern: /^\/api\/admin\/sellers\/\*\/status/, module: 'SELLERS', action: 'Seller status changed', severity: 'CRITICAL', entityType: 'SellerProfile' },
   { method: 'PATCH', pattern: /^\/api\/admin\/sellers\/\*\/kyc/, module: 'SELLERS', action: 'KYC decision', severity: 'HIGH', entityType: 'SellerProfile' },
   { method: 'POST', pattern: /^\/api\/admin\/sellers\/\*\/notes/, module: 'SELLERS', action: 'Internal note added', entityType: 'SellerProfile' },
+  { method: 'POST', pattern: /^\/api\/admin\/sellers\/\*\/ledger\/\*\/waive/, module: 'PAYOUTS', action: 'Penalty waived', severity: 'HIGH', entityType: 'SellerLedgerEntry' },
   { method: 'PATCH', pattern: /^\/api\/admin\/products\//, module: 'PRODUCTS', action: 'Product moderated', severity: 'HIGH', entityType: 'Product' },
   { method: 'PATCH', pattern: /^\/api\/admin\/returns\/\*\/override/, module: 'RETURNS', action: 'Return overridden by admin', severity: 'HIGH', entityType: 'Return' },
   { method: 'PATCH', pattern: /^\/api\/admin\/complaints\//, module: 'SUPPORT', action: 'Complaint updated', severity: 'MEDIUM' },

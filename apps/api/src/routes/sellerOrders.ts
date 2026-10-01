@@ -36,7 +36,7 @@ import {
   settleCodIfDelivered,
   syncOrderStatus,
 } from '../services/orderStatusService';
-import { postDeliveryEntries } from '../services/sellerLedgerService';
+import { postDeliveryEntries, postLateDispatchPenalty } from '../services/sellerLedgerService';
 
 export const sellerOrdersRouter = Router();
 sellerOrdersRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
@@ -502,6 +502,8 @@ async function applyAction(
       body: `Your Clowe item "${item.title}" has shipped via ${shipment.courierName} (AWB ${shipment.awbNumber}). Track: /track 🚚`,
     });
     await syncOrderStatus(item.orderId);
+    // Shipped late? The penalty is judged and posted here, once per line.
+    await postLateDispatchPenalty(item.id);
     return null;
   }
 

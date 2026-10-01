@@ -12,7 +12,9 @@ import {
   adminSellerKycSchema,
   adminSellerNoteSchema,
   kycApprovalWarnings,
+  ledgerWaiveSchema,
   panGstinMismatch,
+  sellerLedgerQuerySchema,
   type AdminSellerDetail,
   type AdminSellerListRow,
   type AdminSellerPage,
@@ -25,6 +27,8 @@ import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { sendToUserSafe } from '../services/messaging';
+import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
+import { history, waivePenalty } from '../services/sellerLedgerService';
 import { kycAdminRunLimiter } from '../middleware/rateLimits';
 import {
   KycCheckRunningError,
@@ -630,6 +634,67 @@ function csvCell(value: unknown): string {
   const text = value == null ? '' : String(value);
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
+
+// ---------------------------------------------------------------------------
+// Ledger: what the seller sees, plus the power to forgive a penalty
+// ---------------------------------------------------------------------------
+
+adminSellersRouter.get('/:id/ledger', async (req, res, next) => {
+  try {
+    const query = sellerLedgerQuerySchema.parse(req.query);
+    const seller = await prisma.sellerProfile.findUnique({
+      where: { id: req.params.id },
+      select: { id: true },
+    });
+    if (!seller) throw ApiError.notFound('Seller not found');
+    res.json({
+      success: true,
+      data: await history(seller.id, query.bucket, query.page, query.pageSize),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Forgive one late-dispatch penalty. Posts the opposite entry against the
+// same line; the ledger's unique pair refuses a second waiver outright.
+adminSellersRouter.post('/:id/ledger/:entryId/waive', async (req, res, next) => {
+  try {
+    const { reason } = ledgerWaiveSchema.parse(req.body);
+    const adminId = req.auth!.userId;
+    const result = await waivePenalty(req.params.entryId, req.params.id, adminId, reason);
+    if (result.outcome === 'NOT_A_PENALTY') {
+      throw ApiError.notFound('No such penalty on this seller', 'NOT_A_PENALTY');
+    }
+    if (result.outcome === 'ALREADY_WAIVED') {
+      throw new ApiError(409, 'ALREADY_WAIVED', 'This penalty has already been waived');
+    }
+    // The middleware logs the request too; this row carries the reason and
+    // the amount, which is what a later reviewer will want.
+    auditSafe({
+      actorId: adminId,
+      actorRole: 'ADMIN',
+      module: 'PAYOUTS',
+      action: 'Penalty waived',
+      entityType: 'SellerLedgerEntry',
+      entityId: req.params.entryId,
+      summary: `Waived Rs ${(result.amountPaise / 100).toLocaleString('en-IN')} late-dispatch penalty for seller ${req.params.id}: ${reason}`,
+      metadata: {
+        sellerId: req.params.id,
+        orderItemId: result.orderItemId,
+        amountPaise: result.amountPaise,
+        reason,
+      },
+      severity: 'HIGH',
+      ipAddress: ipFrom(req),
+      userAgent: req.get('user-agent') ?? null,
+      deviceType: deviceFromUserAgent(req.get('user-agent')),
+    });
+    res.json({ success: true, data: { entryId: req.params.entryId, amountPaise: result.amountPaise } });
+  } catch (err) {
+    next(err);
+  }
+});
 
 adminSellersRouter.get('/export', async (req, res, next) => {
   try {

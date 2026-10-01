@@ -14,6 +14,7 @@ import {
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import SellerKycPanel, { KycFraudBanner } from './SellerKycPanel';
+import SellerLedgerTab from './SellerLedgerTab';
 
 export const SELLER_STATUS_STYLES: Record<AdminSellerStatus, string> = {
   APPROVED: 'bg-green-100 text-green-700',
@@ -39,7 +40,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-type Tab = 'OVERVIEW' | 'PERFORMANCE' | 'ORDERS' | 'NOTES';
+type Tab = 'OVERVIEW' | 'PERFORMANCE' | 'ORDERS' | 'LEDGER' | 'NOTES';
 
 export default function SellerDetailPanel({
   sellerId,
@@ -211,7 +212,7 @@ export default function SellerDetailPanel({
             <KycFraudBanner kyc={detail.kyc} />
 
             <div className="mt-4 flex gap-1 border-b border-gray-100">
-              {(['OVERVIEW', 'PERFORMANCE', 'ORDERS', 'NOTES'] as Tab[]).map((t) => (
+              {(['OVERVIEW', 'PERFORMANCE', 'ORDERS', 'LEDGER', 'NOTES'] as Tab[]).map((t) => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
@@ -377,6 +378,12 @@ export default function SellerDetailPanel({
                 ) : (
                   <p className="text-xs text-gray-400">No orders yet.</p>
                 )}
+              </div>
+            )}
+
+            {tab === 'LEDGER' && (
+              <div className="mt-3">
+                <SellerLedgerTab sellerId={detail.id} />
               </div>
             )}
 

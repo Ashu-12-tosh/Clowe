@@ -17,6 +17,9 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   payoutTdsPercent: 1, // section 194-O
   payoutMinPaise: 100000, // ₹1,000
   payoutHoldDays: env.RETURN_WINDOW_DAYS,
+  dispatchWindowHours: 12,
+  lateDispatchPenaltyPaise: 8000, // ₹80
+  penaltyEnabled: true,
   returnWindowDays: env.RETURN_WINDOW_DAYS,
   auditRetentionDays: 365,
   kycNameMatchMinScore: DEFAULT_KYC_NAME_MATCH_MIN_SCORE,
@@ -83,6 +86,13 @@ export async function getSettings(): Promise<PlatformSettings> {
       (byKey.get('payoutMinPaise') as number | undefined) ?? DEFAULT_SETTINGS.payoutMinPaise,
     payoutHoldDays:
       (byKey.get('payoutHoldDays') as number | undefined) ?? DEFAULT_SETTINGS.payoutHoldDays,
+    dispatchWindowHours:
+      (byKey.get('dispatchWindowHours') as number | undefined) ?? DEFAULT_SETTINGS.dispatchWindowHours,
+    lateDispatchPenaltyPaise:
+      (byKey.get('lateDispatchPenaltyPaise') as number | undefined) ??
+      DEFAULT_SETTINGS.lateDispatchPenaltyPaise,
+    penaltyEnabled:
+      (byKey.get('penaltyEnabled') as boolean | undefined) ?? DEFAULT_SETTINGS.penaltyEnabled,
     returnWindowDays:
       (byKey.get('returnWindowDays') as number | undefined) ?? DEFAULT_SETTINGS.returnWindowDays,
     auditRetentionDays:
@@ -118,6 +128,8 @@ export async function getPublicSettings(): Promise<PublicSettings> {
   const s = await getSettings();
   return {
     tryonMinPricePaise: s.tryonMinPricePaise,
+    dispatchWindowHours: s.dispatchWindowHours,
+    penaltyEnabled: s.penaltyEnabled,
     socialLinks: s.socialLinks,
     supportEmails: s.supportEmails,
     codMaxOrderPaise: s.codMaxOrderPaise,

@@ -6,6 +6,7 @@ import type { SellerOrderBulkResult, SellerOrderRow, SellerOrderSummary } from '
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { StatusPill } from '@/components/seller/orders/StatusPill';
+import { DispatchCountdown } from '@/components/seller/orders/DispatchCountdown';
 
 type Action = 'pack' | 'ship' | 'deliver';
 
@@ -247,7 +248,10 @@ export default function SellerOrderDetailPage({ params }: { params: { orderId: s
                     >
                       {line.title}
                     </Link>
-                    <StatusPill status={line.status} />
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      {line.canShip && <DispatchCountdown placedAt={order.placedAt} />}
+                      <StatusPill status={line.status} />
+                    </span>
                   </div>
                   <p className="mt-0.5 text-xs text-gray-500">
                     {line.label ? ` · ` : ''}Qty {line.quantity} ·{' '}

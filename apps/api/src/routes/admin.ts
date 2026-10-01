@@ -629,6 +629,10 @@ adminRouter.put('/settings', async (req, res, next) => {
       'payoutTdsPercent',
       'payoutMinPaise',
       'payoutHoldDays',
+      // Dispatch discipline — the window and what missing it costs.
+      'dispatchWindowHours',
+      'lateDispatchPenaltyPaise',
+      'penaltyEnabled',
       // KYC name matches are judged against this on every read, so moving it
       // re-grades sellers without re-verifying (and re-paying for) anyone.
       'kycNameMatchMinScore',

@@ -38,6 +38,7 @@ export * from './sellerOrders';
 export * from './sellerPayouts';
 export * from './sellerLedger';
 export * from './sellerEconomics';
+export * from './dispatchWindow';
 export * from './sellerPromotions';
 export * from './sellerReturns';
 export * from './admin';

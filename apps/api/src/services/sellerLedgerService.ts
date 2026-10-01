@@ -1,6 +1,8 @@
 import { Prisma, type SellerLedgerBucket, type SellerLedgerType } from '@prisma/client';
 import {
   computeListingEconomics,
+  isLateDispatch,
+  lateDispatchNote,
   type SellerLedgerEntryRow,
   type SellerLedgerPage,
   type SellerLedgerTypeValue,
@@ -190,6 +192,86 @@ export async function ensureLedgerCoversDeliveries(sellerId: string, db: Db = pr
   let posted = 0;
   for (const item of missing) posted += await postDeliveryEntries(item.id, db);
   return posted;
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch
+// ---------------------------------------------------------------------------
+
+/**
+ * Charge the late-dispatch penalty if this line shipped after its window.
+ * Judged on the order's placement time and the line's own shippedAt, so the
+ * same answer comes out whichever path marked it shipped. Returns true only
+ * when a penalty was posted now; a replay finds the (orderItemId, type) pair
+ * already taken and posts nothing. With penalties switched off nothing is
+ * posted and nothing already posted is touched.
+ */
+export async function postLateDispatchPenalty(orderItemId: string, db: Db = prisma): Promise<boolean> {
+  const settings = await getSettings();
+  if (!settings.penaltyEnabled || settings.lateDispatchPenaltyPaise <= 0) return false;
+
+  const item = await db.orderItem.findUnique({
+    where: { id: orderItemId },
+    select: {
+      sellerId: true,
+      orderId: true,
+      shippedAt: true,
+      order: { select: { createdAt: true } },
+    },
+  });
+  if (!item?.shippedAt) return false;
+  if (!isLateDispatch(item.order.createdAt, item.shippedAt, settings.dispatchWindowHours)) return false;
+
+  return postEntry(
+    {
+      sellerId: item.sellerId,
+      type: 'LATE_DISPATCH_PENALTY',
+      bucket: 'SETTLEMENT',
+      amountPaise: -settings.lateDispatchPenaltyPaise,
+      orderId: item.orderId,
+      orderItemId,
+      note: lateDispatchNote(item.order.createdAt, item.shippedAt, settings.dispatchWindowHours),
+    },
+    db,
+  );
+}
+
+export type WaiveOutcome = 'WAIVED' | 'ALREADY_WAIVED' | 'NOT_A_PENALTY';
+
+/**
+ * Forgive one penalty: post the opposite amount against the same line. The
+ * (orderItemId, PENALTY_WAIVER) pair means a line can be forgiven once,
+ * however many admins click.
+ */
+export async function waivePenalty(
+  entryId: string,
+  sellerId: string,
+  adminId: string,
+  reason: string,
+  db: Db = prisma,
+): Promise<{ outcome: WaiveOutcome; amountPaise: number; orderItemId: string | null }> {
+  const entry = await db.sellerLedgerEntry.findFirst({ where: { id: entryId, sellerId } });
+  if (!entry || entry.type !== 'LATE_DISPATCH_PENALTY' || !entry.orderItemId) {
+    return { outcome: 'NOT_A_PENALTY', amountPaise: 0, orderItemId: null };
+  }
+  const posted = await postEntry(
+    {
+      sellerId,
+      type: 'PENALTY_WAIVER',
+      bucket: 'SETTLEMENT',
+      amountPaise: -entry.amountPaise,
+      orderId: entry.orderId,
+      orderItemId: entry.orderItemId,
+      note: `Waived: ${reason}`,
+      createdById: adminId,
+    },
+    db,
+  );
+  return {
+    outcome: posted ? 'WAIVED' : 'ALREADY_WAIVED',
+    amountPaise: -entry.amountPaise,
+    orderItemId: entry.orderItemId,
+  };
 }
 
 // ---------------------------------------------------------------------------

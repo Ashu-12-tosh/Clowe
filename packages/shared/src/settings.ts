@@ -47,6 +47,15 @@ export interface PlatformSettings {
   payoutMinPaise: number;
   /** Days after delivery before earnings clear (covers the return window). */
   payoutHoldDays: number;
+  /**
+   * Hours from placement a seller has to mark a line shipped. Wall-clock:
+   * night orders count against it, which is what the admin's waiver is for.
+   */
+  dispatchWindowHours: number;
+  /** Posted to the seller's ledger, once per line, when the window is missed (paise). */
+  lateDispatchPenaltyPaise: number;
+  /** Off = late lines post nothing; entries already posted are untouched. */
+  penaltyEnabled: boolean;
   /** Platform-wide return window; a seller may set a longer one of their own. */
   returnWindowDays: number;
   /** How long audit entries are kept before they can be purged. */
@@ -95,6 +104,9 @@ export interface PlatformSettings {
 /** Subset that anonymous visitors may read. */
 export interface PublicSettings {
   tryonMinPricePaise: number;
+  /** Published so the seller's order pages can count down without a second endpoint. */
+  dispatchWindowHours: number;
+  penaltyEnabled: boolean;
   socialLinks: PlatformSettings['socialLinks'];
   supportEmails: PlatformSettings['supportEmails'];
   codMaxOrderPaise: number;
@@ -116,6 +128,9 @@ export const updateSettingsSchema = z.object({
   payoutTdsPercent: z.number().min(0).max(20).optional(),
   payoutMinPaise: z.number().int().min(0).optional(),
   payoutHoldDays: z.number().int().min(0).max(90).optional(),
+  dispatchWindowHours: z.number().int().min(1).max(336).optional(),
+  lateDispatchPenaltyPaise: z.number().int().min(0).optional(),
+  penaltyEnabled: z.boolean().optional(),
   kycNameMatchMinScore: z.number().int().min(0).max(100).optional(),
   couponsEnabled: z.boolean().optional(),
   socialLinks: z

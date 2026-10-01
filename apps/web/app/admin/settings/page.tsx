@@ -32,6 +32,7 @@ export default function AdminSettingsPage() {
     holdDays: '',
   });
   const [couponsEnabled, setCouponsEnabled] = useState(false);
+  const [dispatch, setDispatch] = useState({ windowHours: '', penaltyRupees: '', enabled: true });
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -51,6 +52,11 @@ export default function AdminSettingsPage() {
           for (const d of AD_DURATIONS)
             prices[`${pl}:${d}`] = toRupees(s.adPricing[pl][String(d) as '7' | '15' | '30']);
         setAdPrices(prices);
+        setDispatch({
+          windowHours: String(s.dispatchWindowHours),
+          penaltyRupees: toRupees(s.lateDispatchPenaltyPaise),
+          enabled: s.penaltyEnabled,
+        });
         setPayout({
           commission: String(s.payoutCommissionPercent),
           gateway: String(s.payoutGatewayPercent),
@@ -90,6 +96,9 @@ export default function AdminSettingsPage() {
           payoutHoldDays: Math.max(0, Math.round(Number(payout.holdDays) || 0)),
           kycNameMatchMinScore: Math.min(100, Math.max(0, Math.round(Number(kycMinScore) || 0))),
           couponsEnabled,
+          dispatchWindowHours: Math.max(1, Math.round(Number(dispatch.windowHours) || 0)),
+          lateDispatchPenaltyPaise: toPaise(dispatch.penaltyRupees),
+          penaltyEnabled: dispatch.enabled,
         },
         auth: true,
       });
@@ -235,6 +244,52 @@ export default function AdminSettingsPage() {
             className={field}
           />
         </div>
+      </div>
+
+      {/* Dispatch window & late penalty */}
+      <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
+        <h2 className="text-sm font-bold">⏱ Dispatch window &amp; late penalty</h2>
+        <p className="mt-1 text-xs text-gray-400">
+          Sellers see a countdown on every unshipped line. A line marked shipped after the window
+          posts one penalty to that seller&rsquo;s ledger, once, however the line was shipped. The
+          clock is wall-clock: night orders still count against the window &mdash; an order placed
+          at 11pm on a 12-hour window is due at 11am. Waiving a penalty from the seller&rsquo;s
+          ledger exists for exactly that case.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div>
+            <label className="text-xs text-gray-500">Dispatch window (hours)</label>
+            <input
+              type="number"
+              min={1}
+              max={336}
+              value={dispatch.windowHours}
+              onChange={(e) => setDispatch((d) => ({ ...d, windowHours: e.target.value }))}
+              className={field}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Late-dispatch penalty (₹)</label>
+            <input
+              type="number"
+              min={0}
+              value={dispatch.penaltyRupees}
+              onChange={(e) => setDispatch((d) => ({ ...d, penaltyRupees: e.target.value }))}
+              className={field}
+            />
+          </div>
+          <label className="flex items-center gap-2 self-end pb-2 text-sm">
+            <input
+              type="checkbox"
+              checked={dispatch.enabled}
+              onChange={(e) => setDispatch((d) => ({ ...d, enabled: e.target.checked }))}
+            />
+            <span>Charge the penalty</span>
+          </label>
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          Switching it off stops new penalties; entries already on a ledger stay as they are.
+        </p>
       </div>
 
       {/* Seller payouts */}
