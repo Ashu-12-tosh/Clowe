@@ -56,11 +56,15 @@ async function isBraveBrowser(): Promise<boolean> {
 /**
  * How long to wait on a recogniser that has said nothing at all.
  *
- * Long enough for someone to gather their thoughts and speak, short enough
- * that a browser which is never going to answer does not hold the box on
- * "Listening…" while the shopper waits for something to happen.
+ * It has to outlast the browser's own no-speech timeout, so a shopper who
+ * simply said nothing hears it from the browser ("Didn't catch that") rather
+ * than from us ("stopped responding" — which tells them to give up on
+ * something that works). With a silent microphone, Chrome and Edge 154 report
+ * no-speech 8.1–8.3s after start(); at 8s this watchdog won every run.
+ * Ten seconds clears that with margin, and is still short enough that a browser
+ * which is never going to answer does not hold the box on "Listening…" for long.
  */
-const VOICE_TIMEOUT_MS = 8000;
+const VOICE_TIMEOUT_MS = 10000;
 
 /** Other components dispatch this after cart/wishlist writes to refresh badges. */
 export const BADGES_EVENT = 'clowe:refresh-badges';

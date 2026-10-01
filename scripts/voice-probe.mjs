@@ -3,7 +3,7 @@
  * Voice search probe — what each browser's recogniser actually does, and what
  * the site shows the shopper as a result. Measures, rather than infers.
  *
- *   node scripts/voice-probe.mjs [baseUrl] [--only=brave,chrome,edge] [--runs=N] [--json]
+ *   node scripts/voice-probe.mjs [baseUrl] [--only=brave,chrome,edge] [--runs=N] [--silence] [--json]
  *
  * baseUrl defaults to http://localhost:4300; pass https://cloweshop.com to
  * probe production. Needs `playwright` (a devDependency) and whichever of
@@ -46,7 +46,13 @@
  *   transcript is searched, so from the shopper's side it worked.
  *
  *   Nothing is still listening after WAIT_MS. That is longer than the app's
- *   own 8s watchdog, so it would mean the watchdog failed.
+ *   own 10s watchdog, so it would mean the watchdog failed.
+ *
+ *   With --silence: saying nothing is reported as not having been caught,
+ *   never as voice search having stopped responding. The microphone gets a
+ *   silent recording instead of the test tone, so every run is a shopper who
+ *   said nothing, and the browser's own no-speech has to arrive before the
+ *   app's watchdog does.
  *
  * Browsers run headed: windows open and close on their own. Headless Chrome's
  * recogniser accepts start() and then never calls back at all, so it measures
@@ -70,8 +76,9 @@ const BASE = (argv.find((a) => !a.startsWith('--')) ?? 'http://localhost:4300').
 const ONLY = flag('only')?.split(',');
 const RUNS = Math.max(1, Number(flag('runs') ?? 1));
 const JSON_OUT = argv.includes('--json');
+const SILENCE = argv.includes('--silence');
 
-/** Longer than the app's 8s watchdog, so whichever fires first is visible. */
+/** Longer than the app's 10s watchdog, so whichever fires first is visible. */
 const WAIT_MS = 15000;
 /** Long enough for the mount effect's async Brave check to settle. */
 const MIC_SETTLE_MS = 5000;
@@ -107,6 +114,35 @@ const BROWSERS = [
   { name: 'chrome', isBrave: false, launch: () => ({ channel: 'chrome' }) },
   { name: 'edge', isBrave: false, launch: () => ({ channel: 'msedge' }) },
 ].filter((b) => !ONLY || ONLY.includes(b.name));
+
+/**
+ * Thirty seconds of 16-bit mono silence, for --silence. Chromium plays it as
+ * the microphone in place of its test tone.
+ */
+function writeSilentWav() {
+  const rate = 16000;
+  const bytes = 30 * rate * 2;
+  const buf = Buffer.alloc(44 + bytes);
+  buf.write('RIFF', 0);
+  buf.writeUInt32LE(36 + bytes, 4);
+  buf.write('WAVEfmt ', 8);
+  buf.writeUInt32LE(16, 16); // fmt chunk size
+  buf.writeUInt16LE(1, 20); // PCM
+  buf.writeUInt16LE(1, 22); // mono
+  buf.writeUInt32LE(rate, 24);
+  buf.writeUInt32LE(rate * 2, 28); // byte rate
+  buf.writeUInt16LE(2, 32); // block align
+  buf.writeUInt16LE(16, 34); // bits per sample
+  buf.write('data', 36);
+  buf.writeUInt32LE(bytes, 40);
+  const file = path.join(os.tmpdir(), `clowe-voice-probe-silence-${process.pid}.wav`);
+  fs.writeFileSync(file, buf);
+  return file;
+}
+
+const LAUNCH_ARGS = ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'];
+const silentWav = SILENCE ? writeSilentWav() : null;
+if (silentWav) LAUNCH_ARGS.push(`--use-file-for-fake-audio-capture=${silentWav}`);
 
 // --- raw: the Web Speech API on a page with nothing of ours on it ------------
 
@@ -262,7 +298,7 @@ for (const b of BROWSERS) {
       browser = await chromium.launch({
         ...opts,
         headless: false,
-        args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
+        args: LAUNCH_ARGS,
       });
     } catch (err) {
       rows.push({ browser: b.name, run, raw: '-', mic: '-', outcome: 'not installed', message: String(err.message).split('\n')[0].slice(0, 60), ok: 'skip' });
@@ -286,6 +322,9 @@ for (const b of BROWSERS) {
       if (site.outcome === 'results' && TIMEOUT_WORDING.test(site.message ?? '')) {
         problems.push('said it stopped responding over results');
       }
+      if (SILENCE && site.outcome === 'message' && TIMEOUT_WORDING.test(site.message ?? '')) {
+        problems.push('silence reported as stopped responding');
+      }
       failures += problems.length ? 1 : 0;
 
       rows.push({
@@ -308,9 +347,10 @@ for (const b of BROWSERS) {
 }
 
 harness.close();
+if (silentWav) fs.rmSync(silentWav, { force: true });
 
 if (JSON_OUT) console.log(JSON.stringify(details, null, 2));
-console.log(`site: ${BASE}`);
+console.log(`site: ${BASE}${SILENCE ? '  (microphone: silence)' : ''}`);
 console.table(rows);
 
 if (launched === 0) {
