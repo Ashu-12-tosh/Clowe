@@ -34,7 +34,6 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
       { label: 'About CLOWE', href: '/pages/about' },
       { label: 'Careers', href: '/pages/careers' },
       { label: 'Blog', href: '/pages/blog' },
-      { label: 'Press', href: '/pages/press' },
       { label: 'Become a Seller', href: '/sell' },
       { label: 'Affiliate Program', href: '/pages/affiliate' },
     ],
@@ -54,11 +53,67 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
 
 const PAYMENT_METHODS = ['VISA', 'MasterCard', 'RuPay', 'UPI', 'Paytm'];
 
+/**
+ * Social marks, drawn to the same recipe as the other icons in this app —
+ * 20px box, no fill, 1.8 stroke in currentColor — since there is no icon
+ * library and every icon here is written by hand.
+ */
+const ICON = {
+  'aria-hidden': true,
+  viewBox: '0 0 20 20',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.8,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+  className: 'h-5 w-5',
+} as const;
+
+function FacebookIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M12.75 3.25h-1.5a3 3 0 0 0-3 3V9H6.5v2.75h1.75v5h2.75v-5h2l.5-2.75h-2.5V6.5a.5.5 0 0 1 .5-.5h1.75Z" />
+    </svg>
+  );
+}
+
+function InstagramIcon() {
+  return (
+    <svg {...ICON}>
+      <rect x="3" y="3" width="14" height="14" rx="4" />
+      <circle cx="10" cy="10" r="3.25" />
+      <circle cx="14.25" cy="5.75" r="0.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function LinkedInIcon() {
+  return (
+    <svg {...ICON}>
+      <rect x="3" y="3" width="14" height="14" rx="2.5" />
+      <path d="M6.75 9v4.5" />
+      <circle cx="6.75" cy="6.5" r="0.5" fill="currentColor" />
+      <path d="M9.75 13.5V9m0 1.5a2 2 0 0 1 4 0v3" />
+    </svg>
+  );
+}
+
+function XIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="m4.5 4.5 11 11m0-11-11 11" />
+    </svg>
+  );
+}
+
+type SocialLinks = { facebook: string; twitter: string; instagram: string; linkedin: string };
+
 export default function Footer() {
-  const [social, setSocial] = useState<{ facebook: string; twitter: string; instagram: string }>({
+  const [social, setSocial] = useState<SocialLinks>({
     facebook: '',
     twitter: '',
     instagram: '',
+    linkedin: '',
   });
 
   useEffect(() => {
@@ -67,12 +122,14 @@ export default function Footer() {
       .catch(() => {});
   }, []);
 
+  // Only networks with a link. A greyed-out "coming soon" mark is a promise
+  // the footer has no business making.
   const socialLinks = [
-    { glyph: '◎', label: 'Instagram', href: social.instagram },
-    { glyph: 'ⓕ', label: 'Facebook', href: social.facebook },
-    { glyph: '▶', label: 'YouTube', href: '' },
-    { glyph: '𝕏', label: 'Twitter', href: social.twitter },
-  ];
+    { Icon: FacebookIcon, label: 'Clowe on Facebook', href: social.facebook },
+    { Icon: InstagramIcon, label: 'Clowe on Instagram', href: social.instagram },
+    { Icon: LinkedInIcon, label: 'Clowe on LinkedIn', href: social.linkedin },
+    { Icon: XIcon, label: 'Clowe on X', href: social.twitter },
+  ].filter((s) => s.href);
 
   return (
     <footer className="mt-16 border-t border-gray-100 bg-white">
@@ -88,26 +145,23 @@ export default function Footer() {
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
             CLOWE is your one-stop destination for everything you love. Shop smarter. Live better.
           </p>
-          <div className="mt-4 flex items-center gap-3 text-lg text-gray-400">
-            {socialLinks.map((s) =>
-              s.href ? (
+          {socialLinks.length > 0 && (
+            <div className="mt-4 flex items-center gap-1 text-gray-400">
+              {socialLinks.map(({ Icon, label, href }) => (
                 <a
-                  key={s.label}
-                  href={s.href}
+                  key={label}
+                  href={href}
                   target="_blank"
-                  rel="noreferrer"
-                  aria-label={s.label}
-                  className="transition hover:text-ink-900"
+                  rel="noopener noreferrer"
+                  aria-label={label}
+                  // 44px tap target around a 20px mark; the row stays one line tall.
+                  className="flex h-11 w-11 items-center justify-center rounded-full transition hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
                 >
-                  {s.glyph}
+                  <Icon />
                 </a>
-              ) : (
-                <span key={s.label} title={`${s.label} — coming soon`} className="cursor-default">
-                  {s.glyph}
-                </span>
-              ),
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Link columns */}

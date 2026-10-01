@@ -20,7 +20,7 @@ export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [tryonMin, setTryonMin] = useState('');
   const [kycMinScore, setKycMinScore] = useState('');
-  const [social, setSocial] = useState({ facebook: '', twitter: '', instagram: '' });
+  const [social, setSocial] = useState({ facebook: '', twitter: '', instagram: '', linkedin: '' });
   const [adPrices, setAdPrices] = useState<Record<string, string>>({});
   const [payout, setPayout] = useState({
     commission: '',
@@ -173,7 +173,7 @@ export default function AdminSettingsPage() {
       <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
         <h2 className="text-sm font-bold">🔗 Social links (footer)</h2>
         <p className="mt-1 text-xs text-gray-400">Leave empty to show a &ldquo;Coming soon&rdquo; state instead of a dead link.</p>
-        {(['facebook', 'twitter', 'instagram'] as const).map((key) => (
+        {(['facebook', 'twitter', 'instagram', 'linkedin'] as const).map((key) => (
           <div key={key} className="mt-3">
             <label className="block text-sm font-medium capitalize">{key}</label>
             <input

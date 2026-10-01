@@ -24,7 +24,12 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   // — here or from admin settings — brings the whole feature back with no
   // other change.
   couponsEnabled: false,
-  socialLinks: { facebook: '', twitter: '', instagram: '' },
+  socialLinks: {
+    facebook: 'https://www.facebook.com/profile.php?id=61594554615215',
+    twitter: '',
+    instagram: 'https://www.instagram.com/cloweshop/',
+    linkedin: 'https://www.linkedin.com/company/clowe-shop/',
+  },
   adPricing: {
     HOME_BANNER: { '7': 49900, '15': 89900, '30': 149900 },
     CATEGORY_SPONSORED: { '7': 29900, '15': 49900, '30': 79900 },
@@ -83,9 +88,12 @@ export async function getSettings(): Promise<PlatformSettings> {
       DEFAULT_SETTINGS.kycNameMatchMinScore,
     couponsEnabled:
       (byKey.get('couponsEnabled') as boolean | undefined) ?? DEFAULT_SETTINGS.couponsEnabled,
-    socialLinks:
-      (byKey.get('socialLinks') as PlatformSettings['socialLinks'] | undefined) ??
-      DEFAULT_SETTINGS.socialLinks,
+    // Merged, not replaced: a value saved before a network was added to the
+    // shape would otherwise come back without it.
+    socialLinks: {
+      ...DEFAULT_SETTINGS.socialLinks,
+      ...((byKey.get('socialLinks') as Partial<PlatformSettings['socialLinks']> | undefined) ?? {}),
+    },
     adPricing:
       (byKey.get('adPricing') as PlatformSettings['adPricing'] | undefined) ??
       DEFAULT_SETTINGS.adPricing,

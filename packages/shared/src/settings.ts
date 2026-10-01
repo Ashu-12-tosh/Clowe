@@ -57,8 +57,8 @@ export interface PlatformSettings {
    * moving it re-grades every seller without re-verifying anyone.
    */
   kycNameMatchMinScore: number;
-  /** Social links shown in the footer; empty string = "coming soon". */
-  socialLinks: { facebook: string; twitter: string; instagram: string };
+  /** Social links shown in the footer; an empty string hides that one. */
+  socialLinks: { facebook: string; twitter: string; instagram: string; linkedin: string };
   adPricing: AdPricing;
   /** Bank/EMI offers shown on every product page. */
   pdpOffers: PdpOffer[];
@@ -108,6 +108,7 @@ export const updateSettingsSchema = z.object({
       facebook: z.string().trim().url().or(z.literal('')),
       twitter: z.string().trim().url().or(z.literal('')),
       instagram: z.string().trim().url().or(z.literal('')),
+      linkedin: z.string().trim().url().or(z.literal('')),
     })
     .optional(),
   adPricing: z.object({ HOME_BANNER: adPriceRow, CATEGORY_SPONSORED: adPriceRow }).optional(),
