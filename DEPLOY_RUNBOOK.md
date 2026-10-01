@@ -757,7 +757,7 @@ starting.
 | **Refunds** | Returns a fake refund id; order marks refunded | No | Yes |
 | **Seller KYC** | **Marks every well-formed PAN/GSTIN/account as verified.** Not a real check. | No | Yes, but do **not** approve real sellers on it |
 | **AI try-on** | Composites the photo and garment into a watermarked SVG preview | No | Yes |
-| **AI features** (descriptions, review summaries, voice search, support chat) | Canned text | No | Yes |
+| **AI features** (descriptions, review summaries, support chat) | Canned text | No | Yes |
 | **WhatsApp / SMS / email** | Printed to the API log | No | Nothing is delivered |
 | **Shipping** | Fabricates an AWB number | No | Tracking pages work, no courier is booked |
 | **Payouts** | Mock only | No | No money moves |
@@ -805,7 +805,7 @@ What that means in practice:
 
 Moving `uploads/` to S3-compatible storage is post-launch work — the interface
 point is `apps/api/src/routes/uploads.ts`. See
-[PROJECT_STATUS.md](PROJECT_STATUS.md) §"After going live".
+[PROJECT_STATUS.md](PROJECT_STATUS.md) §"Known gaps".
 
 ### ⚠️ OTP login: only you can log in
 
@@ -822,8 +822,8 @@ checkout on the mock gateway, the seller dashboard and the admin area — all of
 it, for you, once you are logged in.
 
 **So treat this deploy as a staging environment on a real domain.** Do not
-advertise it until [PROJECT_STATUS.md](PROJECT_STATUS.md) §"After going live"
-item 1 is done.
+advertise it until [PROJECT_STATUS.md](PROJECT_STATUS.md) §"Launch
+blockers" item 1 is done.
 
 ---
 

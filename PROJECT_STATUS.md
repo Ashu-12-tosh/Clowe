@@ -1,6 +1,6 @@
 # Clowe — Project Status
 
-_Last updated: 2026-10-01 · commit `2426167` · live at **cloweshop.com**_
+_Last updated: 2026-10-01 · commit `9d91100` · live at **cloweshop.com**_
 
 This file is meant to stand on its own. Someone who reads only this should know
 what Clowe is, what works, what is deliberately switched off, what is blocking a
@@ -20,7 +20,7 @@ logic both sides must agree on).
 | Database | 58 models, 46 migrations |
 | API | 50 route modules |
 | Web | 80 pages |
-| Tests | **339 passing** — 179 unit, 160 integration |
+| Tests | **347 passing** — 187 unit, 160 integration |
 | Build | `npm run build` passing; api + web typecheck clean |
 | Deployed | Hostinger VPS, Docker Compose, HTTPS live |
 
@@ -64,6 +64,14 @@ say "from ₹499" when variants differ in price, and a repeatable check lives at
 `scripts/responsive-check.mjs` — it asserts the page body never scrolls
 sideways and the search box stays usable, and exits non-zero so it can gate CI.
 
+**Voice search** takes the spoken transcript to `/products?q=...` and lets
+`parseSearchQuery` read it — the same parser the typed box, the suggestions and
+the results page share, so price bounds, brands and sort come along for free. It
+used to call a second, weaker parser whose category guess was passed as a hard
+filter; that is now a ranking hint, as the rule below requires. Every failure
+says which failure it was, and a watchdog covers the case this started with: a
+recogniser that takes the microphone permission and then never calls back.
+
 **Coupons are built and switched off.** `couponsEnabled` in platform settings
 defaults to `false`: every shopper-facing entry point is hidden and the API
 refuses codes, while the table, the seeded codes, the routes, the tests and the
@@ -71,15 +79,6 @@ discount recorded against past orders all stay exactly as they are. Turning them
 back on is one checkbox in admin settings. Seller promo codes are redeemed
 through the same box, so sellers are blocked from creating a code while it is
 off, rather than creating one nothing could redeem.
-
-### Not yet landed
-
-**Voice search** is built and verified locally but **not committed**. It routes a
-spoken transcript through the same `parseSearchQuery` the typed box uses instead
-of a second parser, and replaces a silent failure with a message per error code
-plus a watchdog for recognisers that accept the microphone and then never call
-back. It also fixes voice search passing a guessed category as a hard filter —
-see the first decision below for why that matters.
 
 ---
 
