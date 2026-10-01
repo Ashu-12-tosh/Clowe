@@ -1,6 +1,6 @@
 # Clowe — Project Status
 
-_Last updated: 2026-10-01 · commit `9d91100` · live at **cloweshop.com**_
+_Last updated: 2026-10-01 · commit `3448185` · live at **cloweshop.com**_
 
 This file is meant to stand on its own. Someone who reads only this should know
 what Clowe is, what works, what is deliberately switched off, what is blocking a
@@ -20,7 +20,7 @@ logic both sides must agree on).
 | Database | 58 models, 46 migrations |
 | API | 50 route modules |
 | Web | 80 pages |
-| Tests | **347 passing** — 187 unit, 160 integration |
+| Tests | **356 passing** — 196 unit, 160 integration |
 | Build | `npm run build` passing; api + web typecheck clean |
 | Deployed | Hostinger VPS, Docker Compose, HTTPS live |
 
@@ -68,9 +68,13 @@ sideways and the search box stays usable, and exits non-zero so it can gate CI.
 `parseSearchQuery` read it — the same parser the typed box, the suggestions and
 the results page share, so price bounds, brands and sort come along for free. It
 used to call a second, weaker parser whose category guess was passed as a hard
-filter; that is now a ranking hint, as the rule below requires. Every failure
-says which failure it was, and a watchdog covers the case this started with: a
-recogniser that takes the microphone permission and then never calls back.
+filter; that is now a ranking hint, as the rule below requires. The mic is
+hidden in Brave, which ships the speech API but not the service behind it: it
+takes the microphone and reports `network` half a second later, every time.
+Everywhere else every ending says what happened — including Chrome finishing
+with neither a result nor an error — and a watchdog ends a recogniser that
+never calls back. `scripts/voice-probe.mjs` measures all of this in real Brave,
+Chrome and Edge and exits non-zero if any of it regresses.
 
 **Coupons are built and switched off.** `couponsEnabled` in platform settings
 defaults to `false`: every shopper-facing entry point is hidden and the API

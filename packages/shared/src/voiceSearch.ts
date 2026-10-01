@@ -8,8 +8,10 @@
 // nothing at all. So each code says something that is true of that code only.
 //
 // Brave is the case this was written for. It ships the API surface, because it
-// is Chromium, but removes the recognition service behind it — so the button
-// appears, the microphone permission is asked for, and then nothing arrives.
+// is Chromium, but removes the recognition service behind it: the microphone is
+// taken and `network` arrives about half a second later (measured). Back when
+// that error was thrown away, it looked like nothing arriving at all. Brave is
+// no longer offered the button — see voiceSearchAvailable below.
 // ---------------------------------------------------------------------------
 
 /**
@@ -36,8 +38,7 @@ export const VOICE_SEARCH_ERROR_MESSAGES: Record<string, string | null> = {
   /**
    * Not a code the browser reports — ours, for when it reports nothing at all.
    * A recogniser can accept start(), take the microphone permission, and then
-   * never call back: no result, no error, no end. Observed in headless Chrome,
-   * and the likeliest shape of "it asks for the mic and then nothing happens".
+   * never call back: no result, no error, no end. Observed in headless Chrome.
    */
   timeout: 'Voice search stopped responding. Type your search instead.',
   'language-not-supported': 'Voice search does not support this language yet. Type your search instead.',
