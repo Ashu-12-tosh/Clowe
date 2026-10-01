@@ -868,6 +868,8 @@ model Product {
   @@index([status, categoryId])
   @@index([sellerId])
   @@index([status, soldCount])
+  // Containment lookups by the filter facets on the spec sheet ("attributes" @> '[{"key": "fabric", "value": "Cotton"}]').
+  @@index([attributes(ops: JsonbPathOps)], type: Gin)
   @@map("products")
 }
 
@@ -946,6 +948,8 @@ model ProductVariant {
   transferItems      StockTransferItem[]
 
   @@unique([productId, optionsKey])
+  // Containment lookups by the filter facets ("optionValues" @> '{"color_family": "Blue"}').
+  @@index([optionValues(ops: JsonbPathOps)], type: Gin)
   @@map("product_variants")
 }
 

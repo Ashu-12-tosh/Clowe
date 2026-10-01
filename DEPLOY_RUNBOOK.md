@@ -874,4 +874,9 @@ dc exec api npx tsx prisma/backfillAttributeKeys.ts
 # "Blue"). New saves set it themselves; existing variants need this once. It
 # prints the colour names it could not place, for the shared lookup to learn.
 dc exec api npx tsx prisma/backfillColorFamilies.ts
+
+# Products that name a brand in text but have no brandId get linked to the
+# Brand row (matched case-insensitively, created when missing). The original
+# clothing seed wrote brand text only.
+dc exec api npx tsx prisma/backfillBrandIds.ts
 ```
