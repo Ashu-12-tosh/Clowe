@@ -159,6 +159,16 @@ The decision is Delhivery One; the integration is not written. The mock in
 `apps/api/src/services/shipping/` fabricates AWB numbers, so tracking pages work
 and no courier is booked. Orders can be shipped manually at low volume.
 
+*RTO (courier returns an undelivered parcel to the seller) is designed, not
+built; it lands with this integration. Decided on 2026-10-02: RTO is a set of
+line statuses on the existing enum (RTO_INITIATED → RTO_IN_TRANSIT →
+RTO_DELIVERED / RTO_LOST), triggered by the seller with a reason until the
+courier webhook exists; a prepaid order is refunded when RTO is **initiated**,
+not when the parcel is back; stock is restocked only on RTO_DELIVERED; the
+seller bears the RTO shipping cost as a ledger entry, with forward and RTO
+charges becoming separate typed entries once Delhivery reports them; repeat
+RTOs are counted per customer and shown to admin, with no automatic block.*
+
 **3. Cashfree — all four products requested, all pending activation.**
 Payment Gateway, Payouts, Secure ID (KYC verification) and Easy Split (split
 settlement to sellers) have been applied for and none is live yet. Until then:
