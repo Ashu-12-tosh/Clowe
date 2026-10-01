@@ -864,4 +864,9 @@ once on an existing catalog rather than as migrations. Each is safe to re-run.
 # demo sellers. A catalog seeded before 2026-10-01 has neither, so the button
 # shows on nothing until this has run.
 dc exec api npx tsx prisma/backfillTryOn.ts
+
+# Spec-sheet rows stored as { name, value } become { key, label, value }, keyed
+# from the category rule. Filters group by key, so a listing nobody re-saved
+# since the change is invisible to them until this has run.
+dc exec api npx tsx prisma/backfillAttributeKeys.ts
 ```

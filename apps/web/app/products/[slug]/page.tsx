@@ -537,8 +537,8 @@ export default function ProductDetailPage({ params }: { params: { slug: string }
               <p className="text-sm font-bold text-ink-900">Specifications</p>
               <dl className="mt-2.5 divide-y divide-gray-50">
                 {product.attributes.map((attr) => (
-                  <div key={attr.name} className="flex gap-3 py-1.5 text-sm">
-                    <dt className="w-36 shrink-0 text-gray-500">{attr.name}</dt>
+                  <div key={attr.key} className="flex gap-3 py-1.5 text-sm">
+                    <dt className="w-36 shrink-0 text-gray-500">{attr.label}</dt>
                     <dd className="min-w-0 text-ink-900">{attr.value}</dd>
                   </div>
                 ))}

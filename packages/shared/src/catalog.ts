@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ParsedSearchQuery } from './searchQuery';
 import type { CategoryRules } from './categoryRules';
 import type { VariantAxis } from './variants';
+import type { ProductAttribute } from './productAttributes';
 
 // ---------------------------------------------------------------------------
 // Product listing query (shared by API validation and web client)
@@ -335,8 +336,8 @@ export interface ProductDetail {
   highlights: string[];
   /** One-line pitch from the listing form; null when not filled in. */
   shortDescription: string | null;
-  /** Spec sheet the seller filled in: [{ name, value }]. */
-  attributes: { name: string; value: string }[];
+  /** Spec sheet the seller filled in, in canonical { key, label, value } rows. */
+  attributes: ProductAttribute[];
   /** Optional YouTube/Vimeo link the seller added. */
   videoUrl: string | null;
   createdAt: string;

@@ -71,6 +71,7 @@ export const healthResponseSchema = z.object({
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export * from './variants';
 export * from './categoryRules';
+export * from './productAttributes';
 export * from './sellerTryon';
 export * from './voiceSearch';
 export * from './couponSurfaces';

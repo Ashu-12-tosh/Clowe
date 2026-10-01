@@ -5,6 +5,7 @@ import {
   axesOf,
   axisLabel,
   compareOptionValues,
+  normaliseAttributes,
   optionValuesFromJson,
   productListQuerySchema,
   type AddonProduct,
@@ -522,11 +523,8 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
         ? product.highlights.filter((h): h is string => typeof h === 'string')
         : [],
       shortDescription: product.shortDescription,
-      attributes: Array.isArray(product.attributes)
-        ? (product.attributes as { name: string; value: string }[]).filter(
-            (a) => a && typeof a.name === 'string' && typeof a.value === 'string',
-          )
-        : [],
+      // Rows stored before keys existed still read back canonical.
+      attributes: normaliseAttributes(product.attributes, resolved.rules.attributeSchema),
       videoUrl: product.videoUrl,
       createdAt: product.createdAt.toISOString(),
     };

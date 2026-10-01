@@ -1,6 +1,7 @@
 import { imageUrlSchema } from './imageUrl';
 import { z } from 'zod';
 import { optionValuesSchema } from './variants';
+import { productAttributeInputSchema, type ProductAttribute } from './productAttributes';
 
 // ---------------------------------------------------------------------------
 // Seller registration (KYC-lite)
@@ -108,12 +109,6 @@ export const SHIPPING_TEMPLATE_LABELS: Record<ShippingTemplateValue, string> = {
 /** GST slabs a seller may pick; null means "use the category default". */
 export const TAX_RATES = [0, 5, 12, 18, 28] as const;
 
-/** One row of the spec sheet. */
-export const productAttributeSchema = z.object({
-  name: z.string().trim().min(1).max(40),
-  value: z.string().trim().min(1).max(120),
-});
-export type ProductAttribute = z.infer<typeof productAttributeSchema>;
 
 /** Draft = private work in progress; Pending = submitted for admin review. */
 export const PRODUCT_SAVE_MODES = ['DRAFT', 'SUBMIT'] as const;
@@ -131,7 +126,7 @@ export const sellerProductUpsertSchema = z
     videoUrl: z.string().trim().url().max(300).optional().or(z.literal('')),
     /** Packing-process clip - required to submit for review; auto-removed after 10 days. */
     packingVideoUrl: z.string().trim().url().max(300).optional().or(z.literal('')),
-    attributes: z.array(productAttributeSchema).max(20).optional(),
+    attributes: z.array(productAttributeInputSchema).max(20).optional(),
     highlights: z.array(z.string().trim().min(3).max(120)).max(8).optional(),
     variants: z.array(sellerVariantInputSchema).max(60),
     taxRatePercent: z.number().int().min(0).max(28).nullable().optional(),

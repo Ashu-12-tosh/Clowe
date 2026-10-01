@@ -13,7 +13,9 @@ import {
   sellerProductUpsertSchema,
   type CategoryNode,
   type CategoryRules,
-  type ProductAttribute,
+  attributeMatchesDef,
+  type AttributeDef,
+  type ProductAttributeInput,
   type ProductSaveMode,
   type SellerProductDetail,
   type SellerProductUpsertInput,
@@ -143,7 +145,9 @@ export default function ProductForm({ initial }: Props) {
 
   // --- Category & details ---
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? '');
-  const [attributes, setAttributes] = useState<ProductAttribute[]>(initial?.attributes ?? []);
+  // Rows from the category rule carry its key; the seller's own rows carry
+  // only a label and the API derives their key on save.
+  const [attributes, setAttributes] = useState<ProductAttributeInput[]>(initial?.attributes ?? []);
   const [highlights, setHighlights] = useState<string[]>(initial?.highlights ?? []);
 
   // --- Media ---
@@ -393,9 +397,7 @@ export default function ProductForm({ initial }: Props) {
         .filter(
           (def) =>
             def.required &&
-            !attributes.some(
-              (a) => a.name.trim().toLowerCase() === def.label.toLowerCase() && a.value.trim(),
-            ),
+            !attributes.some((a) => attributeMatchesDef(a, def) && a.value.trim()),
         )
         .map((def) => def.label),
     [rules.attributeSchema, attributes],
@@ -405,8 +407,7 @@ export default function ProductForm({ initial }: Props) {
   const customAttributeIndexes = attributes
     .map((a, i) => ({ a, i }))
     .filter(
-      ({ a }) =>
-        !rules.attributeSchema.some((def) => def.label.toLowerCase() === a.name.trim().toLowerCase()),
+      ({ a }) => !rules.attributeSchema.some((def) => attributeMatchesDef(a, def)),
     )
     .map(({ i }) => i);
 
@@ -443,7 +444,7 @@ export default function ProductForm({ initial }: Props) {
       imageUrls,
       videoUrl: videoUrl.trim() || undefined,
       packingVideoUrl: packingVideoUrl || undefined,
-      attributes: attributes.filter((a) => a.name.trim() && a.value.trim()),
+      attributes: attributes.filter((a) => a.label?.trim() && a.value.trim()),
       highlights: highlights.filter((h) => h.trim().length >= 3),
       variants: variantInputs,
       taxRatePercent: taxRate === '' ? null : Number(taxRate),
@@ -539,7 +540,7 @@ export default function ProductForm({ initial }: Props) {
           brand: brand.trim() || undefined,
           categoryName: path.map((c) => c.name).join(' › ') || undefined,
           keywords:
-            [shortDescription.trim(), ...attributes.map((a) => `${a.name}: ${a.value}`)]
+            [shortDescription.trim(), ...attributes.map((a) => `${a.label}: ${a.value}`)]
               .filter(Boolean)
               .join(', ')
               .slice(0, 200) || undefined,
@@ -593,13 +594,13 @@ export default function ProductForm({ initial }: Props) {
     );
   }
 
-  /** Upsert one spec-sheet value by its label; an empty value removes the row. */
-  function setAttribute(name: string, value: string) {
+  /** Upsert one rule field's value; an empty value removes the row. */
+  function setAttribute(def: AttributeDef, value: string) {
     setAttributes((prev) => {
-      const i = prev.findIndex((a) => a.name.trim().toLowerCase() === name.toLowerCase());
-      if (i === -1) return value === '' ? prev : [...prev, { name, value }];
+      const i = prev.findIndex((a) => attributeMatchesDef(a, def));
+      if (i === -1) return value === '' ? prev : [...prev, { key: def.key, label: def.label, value }];
       if (value === '') return prev.filter((_, j) => j !== i);
-      return prev.map((a, j) => (j === i ? { ...a, value } : a));
+      return prev.map((a, j) => (j === i ? { ...a, key: def.key, label: def.label, value } : a));
     });
   }
 
@@ -797,10 +798,7 @@ export default function ProductForm({ initial }: Props) {
               {rules.attributeSchema.length > 0 && (
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {rules.attributeSchema.map((def) => {
-                    const current =
-                      attributes.find(
-                        (a) => a.name.trim().toLowerCase() === def.label.toLowerCase(),
-                      )?.value ?? '';
+                    const current = attributes.find((a) => attributeMatchesDef(a, def))?.value ?? '';
                     return (
                       <div key={def.key}>
                         <label className="text-xs font-medium text-gray-700">
@@ -811,7 +809,7 @@ export default function ProductForm({ initial }: Props) {
                         {def.type === 'select' && def.options?.length ? (
                           <select
                             value={current}
-                            onChange={(e) => setAttribute(def.label, e.target.value)}
+                            onChange={(e) => setAttribute(def, e.target.value)}
                             className={`mt-1 ${field}`}
                           >
                             <option value="">Select…</option>
@@ -825,7 +823,7 @@ export default function ProductForm({ initial }: Props) {
                           <input
                             type={def.type === 'number' ? 'number' : 'text'}
                             value={current}
-                            onChange={(e) => setAttribute(def.label, e.target.value)}
+                            onChange={(e) => setAttribute(def, e.target.value)}
                             placeholder={def.placeholder ?? ''}
                             maxLength={120}
                             className={`mt-1 ${field}`}
@@ -841,7 +839,7 @@ export default function ProductForm({ initial }: Props) {
                 <span className="text-xs font-semibold text-gray-600">Other details</span>
                 <button
                   type="button"
-                  onClick={() => setAttributes((prev) => [...prev, { name: '', value: '' }])}
+                  onClick={() => setAttributes((prev) => [...prev, { label: '', value: '' }])}
                   className="rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-semibold hover:bg-gray-50"
                 >
                   ＋ Add detail
@@ -851,10 +849,10 @@ export default function ProductForm({ initial }: Props) {
                 {customAttributeIndexes.map((i) => (
                   <div key={i} className="flex gap-2">
                     <input
-                      value={attributes[i].name}
+                      value={attributes[i].label ?? ''}
                       onChange={(e) =>
                         setAttributes((prev) =>
-                          prev.map((a, j) => (i === j ? { ...a, name: e.target.value } : a)),
+                          prev.map((a, j) => (i === j ? { ...a, label: e.target.value } : a)),
                         )
                       }
                       placeholder="Detail (e.g. Material)"

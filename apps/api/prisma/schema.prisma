@@ -811,7 +811,7 @@ model Product {
   viewCount       Int           @default(0)
   // Key-feature bullets for the product page: string[].
   highlights      Json?
-  // Spec sheet the seller fills in: [{ name, value }].
+  // Spec sheet the seller fills in: [{ key, label, value }] (see shared/productAttributes).
   attributes      Json?
   // Optional YouTube/Vimeo link shown beside the gallery.
   videoUrl        String?

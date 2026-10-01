@@ -5,6 +5,9 @@ import type { NextFunction, Request, Response } from 'express';
 import type { SellerProfile, SellerStatus } from '@prisma/client';
 import {
   MAX_VARIANT_AXES,
+  canonicalAttributes,
+  missingRequiredAttributes,
+  normaliseAttributes,
   optionValuesFromJson,
   variantOptionFields,
   type CategoryRules,
@@ -15,7 +18,6 @@ import {
   sellerProductUpsertSchema,
   sellerReturnActionSchema,
   type SellerAdRow,
-  type ProductAttribute,
   type SellerProductDetail,
   type SellerProductUpsertInput,
   type SellerProfileInfo,
@@ -307,6 +309,7 @@ async function ownProduct(req: Request, id: string) {
 sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
   try {
     const p = await ownProduct(req, req.params.id);
+    const rules = await categoryRulesFor(p.categoryId);
     const body: SellerProductDetail = {
       id: p.id,
       title: p.title,
@@ -321,7 +324,7 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
       imageUrls: p.images.map((i) => i.url),
       videoUrl: p.videoUrl,
       packingVideoUrl: p.packingVideoUrl,
-      attributes: (p.attributes as ProductAttribute[] | null) ?? [],
+      attributes: normaliseAttributes(p.attributes, rules.attributeSchema),
       highlights: (p.highlights as string[] | null) ?? [],
       taxRatePercent: p.taxRatePercent,
       weightGrams: p.weightGrams,
@@ -368,7 +371,7 @@ function productDataFrom(input: SellerProductUpsertInput, rules: CategoryRules) 
     description: input.description,
     videoUrl: input.videoUrl?.trim() || null,
     packingVideoUrl: input.packingVideoUrl?.trim() || null,
-    attributes: (input.attributes ?? []) as object,
+    attributes: canonicalAttributes(input.attributes ?? [], rules.attributeSchema) as object,
     highlights: (input.highlights ?? []) as object,
     taxRatePercent: input.taxRatePercent ?? null,
     weightGrams: input.weightGrams ?? null,
@@ -489,12 +492,12 @@ function assertVariantImages(
 
 function assertRequiredAttributes(input: SellerProductUpsertInput, rules: CategoryRules) {
   if (input.mode === 'DRAFT') return;
-  const given = new Map(
-    (input.attributes ?? []).map((a) => [a.name.trim().toLowerCase(), a.value.trim()]),
+  // Matched by key once canonical, so "fabric", "Fabric" and a row that
+  // arrived with the rule's key all count as the same field.
+  const missing = missingRequiredAttributes(
+    canonicalAttributes(input.attributes ?? [], rules.attributeSchema),
+    rules.attributeSchema,
   );
-  const missing = rules.attributeSchema
-    .filter((a) => a.required && !given.get(a.label.toLowerCase()))
-    .map((a) => a.label);
   if (missing.length) {
     throw ApiError.badRequest(`Please fill in: ${missing.join(', ')}`, 'ATTRIBUTES_REQUIRED');
   }
