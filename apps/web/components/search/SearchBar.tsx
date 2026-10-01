@@ -65,6 +65,31 @@ function MagnifierIcon() {
 }
 
 /**
+ * Microphone, drawn to the same recipe as MagnifierIcon above — 20px box, no
+ * fill, 1.8 stroke in currentColor — so the two read as one icon set.
+ */
+function MicIcon() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+    >
+      {/* capsule */}
+      <path d="M10 2.75a2.25 2.25 0 0 1 2.25 2.25v4a2.25 2.25 0 0 1-4.5 0V5A2.25 2.25 0 0 1 10 2.75Z" />
+      {/* the arc that makes it a microphone rather than a pill */}
+      <path d="M5.25 8.75V9a4.75 4.75 0 0 0 9.5 0v-.25" />
+      <path d="M10 13.75v3.5" />
+    </svg>
+  );
+}
+
+/**
  * A query suggestion drawn the way Amazon draws one: what was typed in plain
  * text, the completion in bold, so the eye lands on the part that is new.
  *
@@ -105,6 +130,7 @@ function Highlighted({ text, match }: { text: string; match: string }) {
 export default function SearchBar({
   initialQuery = '',
   onVoiceSearch,
+  onVoiceStop,
   voiceActive,
   voiceSupported,
   voiceError,
@@ -113,6 +139,12 @@ export default function SearchBar({
 }: {
   initialQuery?: string;
   onVoiceSearch?: () => void;
+  /**
+   * Stop a run in progress. The button says "Stop listening" while it is
+   * recording, so it has to actually stop — a disabled button wearing that
+   * label would be a lie.
+   */
+  onVoiceStop?: () => void;
   voiceActive?: boolean;
   voiceSupported?: boolean;
   /**
@@ -381,6 +413,21 @@ export default function SearchBar({
   const typed = query.trim();
   const showDropdown = open && (options.length > 0 || (typed.length > 0 && !loading));
 
+  // Hidden outright where the browser has no recogniser, so nobody is offered a
+  // button that cannot work. Header resolves support after mount.
+  const showVoice = Boolean(voiceSupported && onVoiceSearch);
+  // Reserve exactly as much right-hand padding as the in-field cluster actually
+  // occupies: 44px for the mic, another 32 once a clear button joins it.
+  // Over-reserving eats visible query text, which matters most on a 360px phone
+  // where there is least of it.
+  const fieldPadRight = showVoice
+    ? query
+      ? 'pr-[4.75rem]'
+      : 'pr-12'
+    : query
+      ? 'pr-8'
+      : 'pr-3';
+
   return (
     <div ref={rootRef} className="relative min-w-0 flex-1">
       <form
@@ -405,7 +452,7 @@ export default function SearchBar({
               onFocus={() => setOpen(true)}
               onKeyDown={onKeyDown}
               placeholder={
-                voiceActive ? '🎙 Listening… speak now' : 'Search for products, brands and more...'
+                voiceActive ? 'Listening… speak now' : 'Search for products, brands and more...'
               }
               aria-label="Search"
               role="combobox"
@@ -415,22 +462,66 @@ export default function SearchBar({
               aria-activedescendant={activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined}
               autoComplete="off"
               enterKeyHint="search"
-              className="t-search w-full bg-transparent py-2.5 pl-9 pr-8 outline-none"
+              className={`t-search w-full bg-transparent py-2.5 pl-9 outline-none ${fieldPadRight}`}
             />
-            {query && (
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery('');
-                  setSuggestions(null);
-                  inputRef.current?.focus();
-                }}
-                aria-label="Clear search"
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-base leading-none text-gray-400 transition hover:text-ink-900"
-              >
-                ×
-              </button>
-            )}
+            {/*
+              Both in-field controls in one cluster so they cannot overlap and
+              the padding above only has to clear one box.
+            */}
+            <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center">
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery('');
+                    setSuggestions(null);
+                    inputRef.current?.focus();
+                  }}
+                  aria-label="Clear search"
+                  className="rounded-full p-1 text-base leading-none text-gray-400 transition hover:text-ink-900"
+                >
+                  ×
+                </button>
+              )}
+
+              {showVoice && (
+                <button
+                  type="button"
+                  onClick={voiceActive ? onVoiceStop : onVoiceSearch}
+                  aria-label={voiceActive ? 'Stop listening' : 'Search by voice'}
+                  title={voiceActive ? 'Stop listening' : 'Search by voice'}
+                  aria-pressed={voiceActive}
+                  /*
+                    h-11 w-11 is the 44px tap target. The field is 44px tall, so
+                    it fits without changing the height — measured, not assumed,
+                    and the parent clips overflow so a taller button would lose
+                    both its edges and the taps that land on them.
+
+                    That clipping is also why the focus ring is inset. The
+                    field leaves 1px above and below the button, so a ring
+                    drawn outside it is cut away entirely and the button ends
+                    up focusable with nothing to show for it.
+                  */
+                  className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600 ${
+                    voiceActive ? 'text-red-600' : 'text-gray-400 hover:text-ink-900'
+                  }`}
+                >
+                  {/*
+                    The halo breathes, not the icon: a stroked glyph fading in
+                    and out just looks blurry. motion-safe keeps it still for
+                    anyone who asked for less movement — the colour already
+                    says it is recording, so nothing is lost.
+                  */}
+                  {voiceActive && (
+                    <span
+                      aria-hidden
+                      className="absolute inset-1 rounded-full bg-red-500/15 motion-safe:animate-pulse"
+                    />
+                  )}
+                  <MicIcon />
+                </button>
+              )}
+            </div>
           </div>
           <button
             type="submit"
@@ -609,20 +700,6 @@ export default function SearchBar({
         <p role="status" className="mt-1.5 px-1 text-xs text-amber-700">
           {voiceError}
         </p>
-      )}
-
-      {voiceSupported && onVoiceSearch && (
-        <button
-          type="button"
-          onClick={onVoiceSearch}
-          disabled={voiceActive}
-          title="Search by voice (AI)"
-          className={`absolute right-[6.5rem] top-1/2 hidden -translate-y-1/2 items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-bold transition lg:flex ${
-            voiceActive ? 'animate-pulse text-red-500' : 'text-brand-700 hover:bg-brand-50'
-          }`}
-        >
-          🎙
-        </button>
       )}
     </div>
   );

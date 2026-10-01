@@ -176,6 +176,22 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     recognition.start();
   }
 
+  /**
+   * Stop a run the shopper started, and search whatever was heard.
+   *
+   * stop() ends the recogniser, which fires onend, which is the same finish()
+   * the watchdog and the error path call — so the transcript so far is still
+   * searched and the listening state is cleared in one place. A recogniser that
+   * ignores stop() as well is left to the watchdog.
+   */
+  function stopVoiceSearch() {
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      // Already finished. finish() has run or is about to; nothing to undo.
+    }
+  }
+
   // While the phone search overlay is up, hold the page behind it still —
   // otherwise a scroll gesture aimed at the suggestion list drags the
   // storefront underneath. Also drop the overlay if the viewport grows past
@@ -250,6 +266,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             <SearchBar
               initialQuery={q}
               onVoiceSearch={startVoiceSearch}
+              onVoiceStop={stopVoiceSearch}
               voiceActive={listening}
               voiceSupported={speechSupported}
               voiceError={voiceError}
@@ -383,6 +400,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             <SearchBar
               initialQuery={q}
               onVoiceSearch={startVoiceSearch}
+              onVoiceStop={stopVoiceSearch}
               voiceActive={listening}
               voiceSupported={speechSupported}
               voiceError={voiceError}
