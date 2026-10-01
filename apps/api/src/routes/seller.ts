@@ -8,6 +8,7 @@ import {
   canonicalAttributes,
   missingRequiredAttributes,
   normaliseAttributes,
+  optionAxisKeys,
   optionValuesFromJson,
   variantOptionFields,
   type CategoryRules,
@@ -411,14 +412,14 @@ function variantRowsFrom(input: SellerProductUpsertInput) {
     input: v,
     fields: variantOptionFields(v.optionValues, [], { size: v.size, color: v.color }),
   }));
-  const axisSets = new Set(rows.map((r) => Object.keys(r.fields.optionValues).sort().join('|')));
+  const axisSets = new Set(rows.map((r) => optionAxisKeys(r.fields.optionValues).sort().join('|')));
   if (axisSets.size > 1) {
     throw ApiError.badRequest(
       'Every variant must use the same options (e.g. all of them have Colour and Size)',
       'VARIANT_AXES_MISMATCH',
     );
   }
-  if (rows.some((r) => Object.keys(r.fields.optionValues).length > MAX_VARIANT_AXES)) {
+  if (rows.some((r) => optionAxisKeys(r.fields.optionValues).length > MAX_VARIANT_AXES)) {
     throw ApiError.badRequest(
       `A product can vary on at most ${MAX_VARIANT_AXES} options`,
       'VARIANT_AXES_LIMIT',

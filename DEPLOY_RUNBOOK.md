@@ -869,4 +869,9 @@ dc exec api npx tsx prisma/backfillTryOn.ts
 # from the category rule. Filters group by key, so a listing nobody re-saved
 # since the change is invisible to them until this has run.
 dc exec api npx tsx prisma/backfillAttributeKeys.ts
+
+# Every variant with a colour gets optionValues.color_family ("Powder Blue" ->
+# "Blue"). New saves set it themselves; existing variants need this once. It
+# prints the colour names it could not place, for the shared lookup to learn.
+dc exec api npx tsx prisma/backfillColorFamilies.ts
 ```

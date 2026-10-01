@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { colorFamilyOf } from './colorFamily';
 
 // ---------------------------------------------------------------------------
 // Product variants — generic option axes
@@ -25,6 +26,28 @@ export const MAX_VARIANT_AXES = 3;
 
 /** Legacy column values that meant "this axis does not apply". */
 const LEGACY_SENTINELS = new Set(['', 'one size', 'standard', 'default', 'n/a', '-', '—']);
+
+/**
+ * Keys the API writes into optionValues for filtering, computed from another
+ * key rather than chosen by the seller. They live in the JSON so a facet can
+ * index them, but they are not axes: a variant does not differ on its colour
+ * family, so they stay out of the options key, the label, the axis count and
+ * every read, and are recomputed on every write.
+ */
+export const DERIVED_OPTION_KEYS: ReadonlySet<string> = new Set(['color_family']);
+
+/** The seller-chosen axes of an option map, with the derived keys left out. */
+export function optionAxisKeys(values: Record<string, unknown>): string[] {
+  return Object.keys(values).filter((key) => !DERIVED_OPTION_KEYS.has(key));
+}
+
+/** The map as stored: the axes plus whatever can be derived from them. */
+export function withDerivedOptions(values: Record<string, string>): Record<string, string> {
+  const out = { ...values };
+  const family = colorFamilyOf(values.color);
+  if (family) out.color_family = family;
+  return out;
+}
 
 /** Well-known axis labels; anything else is title-cased from the key. */
 export const AXIS_LABELS: Record<string, string> = {
@@ -80,7 +103,7 @@ export function normalizeOptionValues(
 ): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, raw] of Object.entries(values ?? {})) {
-    if (typeof raw !== 'string' || !OPTION_KEY_RE.test(key)) continue;
+    if (typeof raw !== 'string' || !OPTION_KEY_RE.test(key) || DERIVED_OPTION_KEYS.has(key)) continue;
     const value = raw.trim();
     if (!value) continue;
     if ((key === 'size' || key === 'color') && LEGACY_SENTINELS.has(value.toLowerCase())) continue;
@@ -144,7 +167,11 @@ export function axesOf(
   );
 }
 
-/** Every column a ProductVariant row derives from its option map. */
+/**
+ * Every column a ProductVariant row derives from its option map. The stored
+ * `optionValues` carries the derived keys; the key, label and caches are
+ * computed from the axes alone.
+ */
 export function variantOptionFields(
   values: Record<string, unknown> | null | undefined,
   axes: VariantAxis[] = [],
@@ -160,7 +187,7 @@ export function variantOptionFields(
   return {
     size: optionValues.size ?? '',
     color: optionValues.color ?? '',
-    optionValues,
+    optionValues: withDerivedOptions(optionValues),
     optionsKey: optionsKeyOf(optionValues),
     label: variantLabelOf(optionValues, axes),
   };
