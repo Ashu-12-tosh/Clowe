@@ -10,6 +10,8 @@ import { demoImage } from './demoImage';
 import { Prisma, PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { variantOptionFields } from '@clowe/shared';
 import { generateReferralCode } from '../../src/utils/crypto';
+import { loadCategoryLookup } from './categoryRulesLookup';
+import { demoAttributesFor } from './demoAttributes';
 
 /** Deterministic PRNG (mulberry32) — same seed, same catalogue every run. */
 function makeRng(seed: number) {
@@ -513,6 +515,8 @@ export async function seedElectronics(prisma: PrismaClient) {
 
   // -- Products --------------------------------------------------------------
   const seller = await ensureDemoSeller(prisma);
+  // Rules were applied before this seed ran; the spec sheet follows them.
+  const { rulesById } = await loadCategoryLookup(prisma);
   let sku = (await prisma.productVariant.count()) + 20000;
   let created = 0;
   let photoLock = 500;
@@ -556,6 +560,10 @@ export async function seedElectronics(prisma: PrismaClient) {
             `${title}. Backed by Clowe's 7-day easy returns, secure payments and a ` +
             `1-year brand warranty. Seeded demo product — imagery is neutral stock photography.`,
           highlights: plan.highlights ?? [],
+          attributes: demoAttributesFor(
+            { slug, title, brand: plan.brand, categorySlug: plan.cat, rootSlug: 'electronics' },
+            rulesById.get(categoryId)?.attributeSchema ?? [],
+          ),
           basePricePaise: price * 100,
           mrpPaise: mrp * 100,
           ratingAvg,

@@ -879,4 +879,9 @@ dc exec api npx tsx prisma/backfillColorFamilies.ts
 # Brand row (matched case-insensitively, created when missing). The original
 # clothing seed wrote brand text only.
 dc exec api npx tsx prisma/backfillBrandIds.ts
+
+# Demo products seeded without a spec sheet get the rows a fresh seed would
+# write (same slug-seeded pools). Only products the seeds wrote, and only
+# those with no rows; a seller's own listing is never touched.
+dc exec api npx tsx prisma/backfillDemoAttributes.ts
 ```

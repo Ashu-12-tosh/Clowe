@@ -19,6 +19,7 @@
     "db:backfill-attribute-keys": "tsx prisma/backfillAttributeKeys.ts",
     "db:backfill-color-families": "tsx prisma/backfillColorFamilies.ts",
     "db:backfill-brand-ids": "tsx prisma/backfillBrandIds.ts",
+    "db:backfill-demo-attributes": "tsx prisma/backfillDemoAttributes.ts",
     "seed:tryon-demo": "tsx scripts/seedTryOnDemoProduct.ts",
     "tryon:check": "tsx scripts/tryonCheck.ts",
     "tryon:e2e": "node scripts/tryonE2E.mjs"

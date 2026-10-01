@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { normaliseAttributes } from '@clowe/shared';
 import { loadCategoryLookup } from './categoryRulesLookup';
 
@@ -22,7 +22,7 @@ export interface AttributeKeyBackfillReport {
 export async function backfillAttributeKeys(prisma: PrismaClient): Promise<AttributeKeyBackfillReport> {
   const { rulesById } = await loadCategoryLookup(prisma);
   const products = await prisma.product.findMany({
-    where: { attributes: { not: null } },
+    where: { attributes: { not: Prisma.AnyNull } },
     select: { id: true, categoryId: true, attributes: true },
   });
   const report: AttributeKeyBackfillReport = { checked: 0, productsChanged: 0, rowsWritten: 0, rowsDropped: 0 };

@@ -8,6 +8,7 @@ import { generateReferralCode } from '../src/utils/crypto';
 import { variantOptionFields } from '@clowe/shared';
 import { seedMarketplace } from './seed/marketplace';
 import { seedCategoryRules } from './seed/categoryRules';
+import { seedDemoAttributes } from './seed/demoAttributes';
 import { seedElectronics } from './seed/electronics';
 import { seedFashion } from './seed/fashion';
 import { seedTryOns } from './seed/tryon';
@@ -367,6 +368,11 @@ async function main() {
   console.log(`[seed] Category rules applied to ${await seedCategoryRules(prisma)} roots`);
   await seedElectronics(prisma);
   await seedFashion(prisma);
+  // The clothing catalog above is written before the rules exist, and a
+  // catalog seeded before spec sheets were seeded has none; both get theirs
+  // here, from the same slug-seeded pools the department seeds draw from.
+  const sheets = await seedDemoAttributes(prisma);
+  console.log(`[seed] Spec sheets: ${sheets.filled} of ${sheets.empty} demo products filled (${sheets.rows} rows)`);
   await seedTryOnEligibility();
   await seedCoupons();
   await seedTryOns(prisma);
