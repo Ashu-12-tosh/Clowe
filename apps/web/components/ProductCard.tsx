@@ -56,8 +56,8 @@ export default function ProductCard({
         <p className="t-card-brand mt-0.5 uppercase tracking-wide text-gray-400">
           {product.brand ?? product.categoryName}
         </p>
-        <div className="mt-1.5 flex items-center justify-between gap-2">
-          <div className="flex items-baseline gap-1.5">
+        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
             {/* The price shown is the cheapest variant's. When the others cost
                 more, say "from" — a bare ₹499 on a listing that only sells one
                 size at ₹499 reads as the price of the thing, not of its

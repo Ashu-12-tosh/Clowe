@@ -391,7 +391,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                   )}
                   <Badge count={counts.notifications} />
                 </span>
-                <span className="hidden text-left leading-tight sm:block">
+                <span className="hidden text-left leading-tight lg:block">
                   <span className="block max-w-28 truncate text-sm font-semibold">
                     Hi, {user.name?.split(' ')[0] ?? 'there'}
                   </span>
@@ -408,7 +408,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                 </Link>
                 <Link
                   href="/login?new=1"
-                  className="hidden items-center gap-1.5 rounded-full border border-brand-600 px-4 py-2 text-sm font-semibold text-brand-600 hover:bg-brand-50 md:flex"
+                  className="hidden items-center gap-1.5 rounded-full border border-brand-600 px-4 py-2 text-sm font-semibold text-brand-600 hover:bg-brand-50 lg:flex"
                 >
                   👥 Create Account
                 </Link>

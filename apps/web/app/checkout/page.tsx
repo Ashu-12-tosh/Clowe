@@ -229,7 +229,7 @@ export default function CheckoutPage() {
     return (
       <main className="mx-auto max-w-7xl animate-pulse px-4 py-6">
         <div className="h-8 w-40 rounded-lg bg-cream-100" />
-        <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="h-96 rounded-2xl bg-cream-100" />
           <div className="h-80 rounded-2xl bg-cream-100" />
         </div>
@@ -278,7 +278,7 @@ export default function CheckoutPage() {
         </div>
       )}
 
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mt-5 grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* ── Left column ────────────────────────────────────────────────── */}
         <div className="space-y-4">
           {/* 1 ─ Delivery address */}
@@ -758,7 +758,7 @@ export default function CheckoutPage() {
       </div>
 
       {/* Bottom trust strip */}
-      <section className="mt-6 grid gap-3 rounded-2xl border border-gray-100 bg-white p-4 sm:grid-cols-2 lg:grid-cols-5">
+      <section className="mt-6 grid gap-3 rounded-2xl border border-gray-100 bg-white p-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
         {TRUST_STRIP.map(({ Icon, title, text }) => (
           <div key={title} className="flex items-start gap-2.5">
             <Icon className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />

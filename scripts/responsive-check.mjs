@@ -2,11 +2,25 @@
 /**
  * Storefront responsive check — measures, rather than eyeballs.
  *
- *   node scripts/responsive-check.mjs [baseUrl]
+ *   node scripts/responsive-check.mjs [baseUrl] [--phone=<10 digits>]
  *
  * Needs `playwright` (a devDependency) and a browser. It uses Playwright's own
  * Chromium if present and otherwise drives a Chrome or Edge already installed,
  * so `npx playwright install` is optional rather than required.
+ *
+ * Widths run from 360 (most Indian phones sit in 360–414) through tablet
+ * (768, 820, 1024 — an iPad in each orientation) to 1280 and 1920, because
+ * the cart's table collided at exactly 1024 while passing at the phone widths
+ * this used to check, and nothing below 768 would ever have shown it.
+ *
+ * Pages: home, the listing, one product page (the first the API lists), the
+ * cart with an item in it, checkout, and tracking. The cart and checkout need
+ * a signed-in shopper with something in the cart, so against a local server
+ * the script signs one in through the dev OTP (the code comes back in the
+ * response when the API is not in production), adds the first variant of the
+ * first product, and clears the cart again at the end. Against any other
+ * host it does not try: pass --phone=... to opt in, and the OTP has to be
+ * real. Without a session those two pages are skipped and the summary says so.
  *
  * What it asserts, per page per width:
  *
@@ -14,6 +28,19 @@
  *                            content (tables, chip rows, category nav) is
  *                            expected to scroll inside its own container, so
  *                            anything with an overflow-x ancestor is ignored.
+ *
+ *   clippedTextCount === 0   Nothing readable may be cut off at the viewport
+ *                            edge by an overflow-hidden ancestor either. The
+ *                            cart at 768 laid its single grid column out at
+ *                            the width of a product scroller inside it —
+ *                            about 1950px — and a clip higher up hid the
+ *                            result: the body did not scroll, so the first
+ *                            assertion passed, while the order summary's
+ *                            amounts were simply off the right of the page.
+ *                            Elements inside a scroller (overflow auto or
+ *                            scroll) or a transformed track (the carousel
+ *                            moves its slides with translateX) are the
+ *                            intended pattern and are not counted.
  *
  *   searchBoxPx >= MIN       The header search must stay usable. It regressed
  *                            to 14px at 360 because the logo and action icons
@@ -29,9 +56,22 @@
  * Exits non-zero if any assertion fails, so it can gate CI later.
  */
 
-const BASE = process.argv[2] ?? 'http://localhost:4300';
-const WIDTHS = [360, 390, 414]; // most Indian phones sit in this band
-const PAGES = ['/', '/products', '/cart', '/track'];
+const argv = process.argv.slice(2);
+const BASE = (argv.find((a) => !a.startsWith('--')) ?? 'http://localhost:4300').replace(/\/$/, '');
+const PHONE = argv.find((a) => a.startsWith('--phone='))?.slice('--phone='.length);
+/** Width and a height typical of a device that width. */
+const VIEWPORTS = [
+  { width: 360, height: 780 },
+  { width: 390, height: 844 },
+  { width: 414, height: 896 },
+  { width: 768, height: 1024 },
+  { width: 820, height: 1180 },
+  { width: 1024, height: 768 },
+  { width: 1280, height: 800 },
+  { width: 1920, height: 1080 },
+];
+/** Pages that need a signed-in shopper with a cart. */
+const AUTH_PAGES = new Set(['/cart', '/checkout']);
 /** Below this the field cannot show a useful amount of a query. */
 const MIN_SEARCH_PX = 180;
 
@@ -55,6 +95,22 @@ function measure() {
       cls: String(el.className || '').slice(0, 70),
       width: Math.round(r.width),
     });
+  });
+
+  // Readable content pushed past the viewport edge and hidden by a clip,
+  // which the check above deliberately ignores. See the header.
+  const clippedText = [];
+  document.querySelectorAll('*').forEach((el) => {
+    const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+    if (!hasText) return;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0 || r.right <= window.innerWidth + 1) return;
+    for (let p = el.parentElement; p; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      if (cs.overflowX === 'auto' || cs.overflowX === 'scroll') return;
+      if (cs.transform !== 'none') return;
+    }
+    clippedText.push({ tag: el.tagName.toLowerCase(), text: el.textContent.trim().slice(0, 40), right: Math.round(r.right) });
   });
 
   let truncated = 0;
@@ -98,6 +154,8 @@ function measure() {
     bodyOverflowPx: de.scrollWidth - de.clientWidth,
     unclippedCount: unclipped.length,
     unclipped: unclipped.slice(0, 5),
+    clippedTextCount: clippedText.length,
+    clippedText: clippedText.slice(0, 5),
     searchBoxPx: Math.round(visibleWidth(input)),
     truncatedNodes: truncated,
     navScrollableBy: nav ? Math.round(nav.scrollWidth - nav.clientWidth) : 0,
@@ -145,19 +203,75 @@ async function launch() {
   process.exit(2);
 }
 
+const api = async (path, { method = 'GET', body, token } = {}) => {
+  const res = await fetch(BASE + path, {
+    method,
+    headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return res.json();
+};
+
+/**
+ * A signed-in shopper with one item in the cart, or null with the reason.
+ * Only automatic against localhost; see the header.
+ */
+async function openSession() {
+  const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(BASE);
+  if (!local && !PHONE) return { session: null, why: 'not localhost; pass --phone to sign in' };
+  // A fresh number each run on localhost, so cooldowns and carts never collide.
+  const phone = PHONE ?? `9${String(Date.now()).slice(-9)}`;
+  const otp = await api('/api/auth/request-otp', { method: 'POST', body: { phone } });
+  const code = otp.data?.devOtp;
+  if (!code) return { session: null, why: `no devOtp for ${phone}: ${otp.error?.code ?? 'unknown'}` };
+  const verified = await api('/api/auth/verify-otp', { method: 'POST', body: { phone, code } });
+  const token = verified.data?.accessToken;
+  if (!token) return { session: null, why: `verify-otp failed: ${verified.error?.code ?? 'unknown'}` };
+  const list = await api('/api/products?limit=1');
+  const slug = list.data?.items?.[0]?.slug;
+  if (!slug) return { session: null, why: 'no product to add to the cart' };
+  const product = await api(`/api/products/${slug}`);
+  const variantId = product.data?.variants?.[0]?.id;
+  const added = variantId && (await api('/api/cart/items', { method: 'POST', body: { variantId, quantity: 1 }, token }));
+  if (!added?.success) return { session: null, why: `could not add to cart: ${added?.error?.code ?? 'no variant'}` };
+  return { session: { token, user: verified.data.user, slug }, why: null };
+}
+
 const browser = await launch();
+const { session, why } = await openSession();
+if (!session) console.log(`cart and checkout skipped: ${why}`);
+
+const firstProduct = session?.slug ?? (await api('/api/products?limit=1')).data?.items?.[0]?.slug;
+const PAGES = ['/', '/products', ...(firstProduct ? [`/products/${firstProduct}`] : []), '/cart', '/checkout', '/track'];
+
+// One context for everything: the session, when there is one, lives in
+// localStorage exactly as the app stores it, and pages are opened from it.
+const context = await browser.newContext();
+if (session) {
+  await context.addInitScript(({ token, user }) => {
+    localStorage.setItem('clowe.accessToken', token);
+    localStorage.setItem('clowe.user', JSON.stringify(user));
+  }, { token: session.token, user: session.user });
+}
+
 const rows = [];
 let failures = 0;
+let skipped = 0;
 
 for (const path of PAGES) {
-  for (const width of WIDTHS) {
-    const page = await browser.newPage({ viewport: { width, height: 780 } });
+  if (AUTH_PAGES.has(path) && !session) {
+    skipped += VIEWPORTS.length;
+    continue;
+  }
+  for (const { width, height } of VIEWPORTS) {
+    const page = await context.newPage();
+    await page.setViewportSize({ width, height });
     try {
-      await page.goto(BASE + path, { waitUntil: 'networkidle', timeout: 20000 });
+      await page.goto(BASE + path, { waitUntil: 'networkidle', timeout: 30000 });
       const overlayed = await openSearchOverlay(page);
       const m = await page.evaluate(measure);
 
-      const overflowBad = m.bodyOverflowPx > 0 || m.unclippedCount > 0;
+      const overflowBad = m.bodyOverflowPx > 0 || m.unclippedCount > 0 || m.clippedTextCount > 0;
       const searchBad = m.searchBoxPx > 0 && m.searchBoxPx < MIN_SEARCH_PX;
       if (overflowBad || searchBad) failures += 1;
 
@@ -166,6 +280,7 @@ for (const path of PAGES) {
         w: width,
         overflow: m.bodyOverflowPx,
         unclipped: m.unclippedCount,
+        clipped: m.clippedTextCount,
         search: m.searchBoxPx + (overlayed ? ' (overlay)' : ''),
         navScroll: m.navScrollableBy,
         trunc: m.truncatedNodes,
@@ -175,9 +290,13 @@ for (const path of PAGES) {
         console.error(`\n${path} @${width} — elements overflowing the viewport:`);
         for (const o of m.unclipped) console.error(`   <${o.tag}> ${o.width}px  ${o.cls}`);
       }
+      if (m.clippedTextCount > 0) {
+        console.error(`\n${path} @${width} — readable content cut off at the right edge:`);
+        for (const o of m.clippedText) console.error(`   <${o.tag}> right=${o.right}px  "${o.text}"`);
+      }
     } catch (err) {
       failures += 1;
-      rows.push({ page: path, w: width, overflow: '-', unclipped: '-', search: '-',
+      rows.push({ page: path, w: width, overflow: '-', unclipped: '-', clipped: '-', search: '-',
                   navScroll: '-', trunc: '-', ok: `ERROR ${err.message.slice(0, 40)}` });
     } finally {
       await page.close();
@@ -185,11 +304,14 @@ for (const path of PAGES) {
   }
 }
 
+// Leave the throwaway shopper with an empty cart.
+if (session) await api('/api/cart', { method: 'DELETE', token: session.token }).catch(() => {});
 await browser.close();
 console.table(rows);
 console.log(
-  failures === 0
-    ? `\nAll ${rows.length} checks passed (body overflow 0, search >= ${MIN_SEARCH_PX}px).`
-    : `\n${failures} of ${rows.length} checks FAILED.`,
+  (failures === 0
+    ? `\nAll ${rows.length} checks passed (body overflow 0, nothing clipped, search >= ${MIN_SEARCH_PX}px).`
+    : `\n${failures} of ${rows.length} checks FAILED.`) +
+    (skipped ? ` ${skipped} skipped (no session).` : ''),
 );
 process.exit(failures === 0 ? 0 : 1);

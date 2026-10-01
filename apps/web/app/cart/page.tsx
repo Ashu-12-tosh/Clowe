@@ -240,12 +240,12 @@ export default function CartPage() {
         </div>
       )}
 
-      <div className="mt-4 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         {/* ── Left: line items ───────────────────────────────────────────── */}
         <div>
           <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
             {/* Column header (desktop) */}
-            <div className="hidden items-center gap-3 border-b border-gray-100 bg-cream-50 px-4 py-3 lg:flex">
+            <div className="hidden items-center gap-3 border-b border-gray-100 bg-cream-50 px-4 py-3 xl:flex">
               <label className="flex cursor-pointer items-center gap-2">
                 <input
                   type="checkbox"
@@ -335,9 +335,9 @@ export default function CartPage() {
                       )}
                     </Link>
 
-                    <div className="grid min-w-0 flex-1 gap-2 lg:grid-cols-[minmax(0,1fr)_110px_140px_110px_76px] lg:items-center lg:gap-4">
-                      {/* Product */}
-                      <div className="min-w-0">
+                    <div className="grid min-w-0 flex-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto] md:items-center md:gap-x-4 xl:grid-cols-[minmax(0,1fr)_110px_140px_110px_76px] xl:gap-4">
+                      {/* Product: its own row until the table has room for it as a column */}
+                      <div className="min-w-0 md:col-span-4 xl:col-span-1">
                         <Link
                           href={`/products/${line.slug}`}
                           className="line-clamp-2 text-sm font-semibold text-ink-900 hover:text-brand-600"
@@ -413,7 +413,7 @@ export default function CartPage() {
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center gap-2 lg:justify-center">
+                      <div className="flex items-center gap-2 md:justify-center">
                         <button
                           onClick={() => void moveToWishlist(line)}
                           disabled={busy}
@@ -671,7 +671,7 @@ export default function CartPage() {
       </div>
 
       {/* Bottom trust strip */}
-      <section className="mt-6 grid gap-3 rounded-2xl border border-gray-100 bg-white p-4 sm:grid-cols-2 lg:grid-cols-5">
+      <section className="mt-6 grid gap-3 rounded-2xl border border-gray-100 bg-white p-4 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
         {TRUST_STRIP.map(({ Icon, title, text }) => (
           <div key={title} className="flex items-start gap-2.5">
             <Icon className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
