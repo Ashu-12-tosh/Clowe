@@ -182,3 +182,35 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
     lines,
   };
 }
+
+/**
+ * How a breakdown row reads: where the money starts, what the platform
+ * deducts, the running totals, and the GST the seller remits — tax they owe
+ * the government, not a charge, so a screen can set it apart.
+ */
+export type BreakdownRowKind = 'start' | 'deduction' | 'subtotal' | 'tax' | 'total';
+
+export interface BreakdownRow {
+  key: string;
+  label: string;
+  /** Signed: what this row adds to or takes from the running total. Totals are the total. */
+  amountPaise: number;
+  kind: BreakdownRowKind;
+}
+
+/**
+ * The breakdown as the seller reads it, top to bottom: buyer pays, each
+ * deduction, what reaches the bank, the GST they remit, what they earn.
+ * Every running total is the sum of the rows above it.
+ */
+export function breakdownRows(e: SellerEconomics): BreakdownRow[] {
+  return [
+    { key: 'buyer', label: 'Buyer pays', amountPaise: e.buyerPaysPaise, kind: 'start' },
+    ...e.lines
+      .filter((l) => l.key !== 'sale')
+      .map((l): BreakdownRow => ({ key: l.key, label: l.label, amountPaise: l.amountPaise, kind: 'deduction' })),
+    { key: 'bank', label: 'Paid to your bank', amountPaise: e.sellerReceivesPaise, kind: 'subtotal' },
+    { key: 'gst', label: `GST you remit (${e.gstRatePercent}%)`, amountPaise: -e.gstPaise, kind: 'tax' },
+    { key: 'earning', label: 'Your earning', amountPaise: e.sellerKeepsAfterGstPaise, kind: 'total' },
+  ];
+}

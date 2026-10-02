@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { computeListingEconomics, type CategoryRules, type SellerEconomicsRates } from '@clowe/shared';
+import {
+  breakdownRows,
+  computeListingEconomics,
+  type BreakdownRowKind,
+  type CategoryRules,
+  type SellerEconomicsRates,
+} from '@clowe/shared';
 import { api } from '@/lib/api';
 
 let ratesCache: Promise<SellerEconomicsRates> | null = null;
@@ -17,6 +23,31 @@ export function loadRates(): Promise<SellerEconomicsRates> {
 function money(paise: number): string {
   return `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+/** A row's amount with its sign: what it takes away, or the total it is. */
+function signed(paise: number, kind: BreakdownRowKind): string {
+  if (kind === 'deduction' || kind === 'tax') return `− ${money(-paise)}`;
+  return money(paise);
+}
+
+/** Classes for both cells of a row, so a rule or a gap spans the whole line. */
+const ROW: Record<BreakdownRowKind, { cell: string; label: string; amount: string }> = {
+  start: { cell: 'py-1', label: 'font-semibold text-ink-900', amount: 'font-semibold text-ink-900' },
+  deduction: { cell: 'py-0.5', label: 'text-gray-600', amount: 'text-red-600' },
+  subtotal: {
+    cell: 'mt-1 border-t border-gray-300 pt-1.5 pb-1',
+    label: 'font-semibold text-ink-900',
+    amount: 'font-semibold text-ink-900',
+  },
+  // GST is the seller's own tax, not something Clowe takes: set apart by a
+  // gap and a dashed rule, in neutral grey rather than deduction red.
+  tax: { cell: 'mt-2 border-t border-dashed border-gray-300 pt-2 pb-1', label: 'text-gray-500', amount: 'text-gray-500' },
+  total: {
+    cell: 'border-t border-gray-300 pt-1.5',
+    label: 'text-sm font-bold text-ink-900',
+    amount: 'text-sm font-bold text-ink-900',
+  },
+};
 
 /**
  * What a price pays the seller, live. Runs the same shared calculator the
@@ -74,31 +105,27 @@ export function PricingBreakdown({
       {!rates && <p className="mt-2 text-gray-400">Loading rates…</p>}
 
       {economics && (
-        <dl className="mt-2 space-y-1">
-          <div className="flex justify-between font-semibold text-ink-900">
-            <dt>Buyer pays</dt>
-            <dd>{money(economics.buyerPaysPaise)}</dd>
-          </div>
-          <div className="flex justify-between text-gray-500">
-            <dt className="pl-3">includes GST ({economics.gstRatePercent}%), which you remit</dt>
-            <dd>{money(economics.gstPaise)}</dd>
-          </div>
-          {economics.lines
-            .filter((l) => l.key !== 'sale')
-            .map((l) => (
-              <div key={l.key} className="flex justify-between text-gray-600">
-                <dt>{l.label}</dt>
-                <dd className="text-red-600">− {money(-l.amountPaise)}</dd>
+        // One column of figures: every label on the left, every signed amount
+        // right-aligned beside it, in the order the money moves.
+        <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] tabular-nums" data-breakdown>
+          {breakdownRows(economics).map((row) => {
+            const style = ROW[row.kind];
+            return (
+              <div key={row.key} className="contents" data-row={row.key}>
+                <dt className={`${style.cell} ${style.label} break-words`}>
+                  {row.label}
+                  {row.kind === 'tax' && (
+                    <span className="mt-0.5 block text-[11px] leading-snug text-gray-400">
+                      Collected from the buyer inside the price. You pay it in your GST return; Clowe keeps none of it.
+                    </span>
+                  )}
+                </dt>
+                <dd className={`${style.cell} ${style.amount} whitespace-nowrap pl-4 text-right`}>
+                  {signed(row.amountPaise, row.kind)}
+                </dd>
               </div>
-            ))}
-          <div className="flex justify-between border-t border-gray-200 pt-1.5 text-sm font-bold text-ink-900">
-            <dt>You receive</dt>
-            <dd>{money(economics.sellerReceivesPaise)}</dd>
-          </div>
-          <div className="flex justify-between text-gray-500">
-            <dt>After the GST you remit</dt>
-            <dd className="font-semibold">{money(economics.sellerKeepsAfterGstPaise)}</dd>
-          </div>
+            );
+          })}
         </dl>
       )}
 

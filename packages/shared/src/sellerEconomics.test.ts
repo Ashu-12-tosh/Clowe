@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeListingEconomics, gstInclusiveShare, percentOf } from './sellerEconomics';
+import { breakdownRows, computeListingEconomics, gstInclusiveShare, percentOf } from './sellerEconomics';
 
 const RATES = {
   commissionPercent: 10,
@@ -165,5 +165,43 @@ describe('computeListingEconomics — TDS and TCS on the value ex-GST', () => {
   it('posts TCS as its own ledger line', () => {
     const e = computeListingEconomics({ sellerPricePaise: 100_000, rates: RATES });
     expect(e.lines.find((l) => l.key === 'tcs')).toMatchObject({ ledgerType: 'GST_TCS', amountPaise: -424 });
+  });
+});
+
+describe('breakdownRows', () => {
+  const rows = (price: number, taxRules?: { taxRule: 'VALUE_SLAB'; defaultTaxRatePercent: null }) =>
+    breakdownRows(computeListingEconomics({ sellerPricePaise: price, rates: RATES, taxRules }));
+
+  it('reads top to bottom in the order the seller follows the money', () => {
+    expect(rows(100_000).map((r) => [r.kind, r.label])).toEqual([
+      ['start', 'Buyer pays'],
+      ['deduction', 'Commission (10%)'],
+      ['deduction', 'Payment gateway (2%)'],
+      ['deduction', 'Platform fee'],
+      ['deduction', 'Delivery fee'],
+      ['deduction', 'Closing fee'],
+      ['deduction', 'TDS (0.1%)'],
+      ['deduction', 'TCS (0.5%)'],
+      ['subtotal', 'Paid to your bank'],
+      ['tax', 'GST you remit (18%)'],
+      ['total', 'Your earning'],
+    ]);
+  });
+
+  it('signs every row, and each total is the sum of the rows above it', () => {
+    for (const price of [100_000, 33_333, 262_500, 299_000]) {
+      const r = rows(price, { taxRule: 'VALUE_SLAB', defaultTaxRatePercent: null });
+      let running = 0;
+      for (const row of r) {
+        if (row.kind === 'subtotal' || row.kind === 'total') expect(row.amountPaise, `${price} ${row.key}`).toBe(running);
+        else running += row.amountPaise;
+        if (row.kind === 'deduction' || row.kind === 'tax') expect(row.amountPaise, row.key).toBeLessThanOrEqual(0);
+      }
+    }
+  });
+
+  it('shows the rate the category gave, in the GST row', () => {
+    const gst = rows(262_500, { taxRule: 'VALUE_SLAB', defaultTaxRatePercent: null }).find((r) => r.key === 'gst');
+    expect(gst).toEqual({ key: 'gst', label: 'GST you remit (5%)', amountPaise: -12_500, kind: 'tax' });
   });
 });
