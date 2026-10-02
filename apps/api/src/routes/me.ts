@@ -17,7 +17,6 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { getSettings } from '../services/settingsService';
-import { env } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { productListItemInclude, toProductListItem } from '../utils/productListing';
@@ -298,7 +297,7 @@ meRouter.get('/returns', async (req, res, next) => {
           .filter((r) => r.refund && r.refund.status !== 'PROCESSED')
           .reduce((sum, r) => sum + (r.refund?.amountPaise ?? 0), 0),
       },
-      returnWindowDays: env.RETURN_WINDOW_DAYS,
+      returnWindowDays: (await getSettings()).returnWindowDays,
     };
     res.json({ success: true, data: body });
   } catch (err) {

@@ -1,6 +1,7 @@
 import type { ManualPaymentMethod } from '@clowe/shared';
 import { prisma } from '../db';
 import { getSettings } from './settingsService';
+import { saleReturnWindows } from './categoryRules';
 import { ApiError } from '../utils/ApiError';
 import { deliveryPriceFor, etaWindowFor } from './deliveryService';
 import { confirmCodOrder, generateOrderNumber, settlePaymentSuccess } from './orderService';
@@ -108,6 +109,9 @@ export async function createManualOrder(input: {
     }
   }
 
+  // Each line keeps the return window it is sold with, as at checkout.
+  const windowByProduct = await saleReturnWindows(lines.map((l) => l.productId));
+
   const order = await prisma.$transaction(async (tx) => {
     for (const line of lines) {
       const updated = await tx.productVariant.updateMany({
@@ -167,6 +171,7 @@ export async function createManualOrder(input: {
             pricePaise: l.pricePaise,
             quantity: l.quantity,
             status: 'PLACED',
+            returnWindowDays: windowByProduct.get(l.productId) ?? null,
           })),
         },
       },

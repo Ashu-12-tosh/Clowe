@@ -106,7 +106,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     label: 'Return policy & window',
     keywords: ['return policy', 'wapas', 'exchange', 'return window', 'galat size', 'size'],
     answer:
-      'Returns are simple:\n\n• Request a return within 7 days of delivery /* TODO: confirm return window */\n• Go to Orders → open the order → "Request return" on the delivered item\n• Refund is processed after the seller receives the item back\n\nItems should be unused with tags intact. Size guide is available on each product page under details.',
+      'Returns are simple:\n\n• Request a return within {{returnWindow}} of delivery\n• Go to Orders → open the order → "Request return" on the delivered item\n• Refund is processed after the seller receives the item back\n\nItems should be unused with tags intact. Size guide is available on each product page under details.',
     links: [{ label: 'My orders', href: '/orders' }],
     followUps: ['return-cancel', 'helped', 'menu'],
   },

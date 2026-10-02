@@ -330,7 +330,7 @@ export async function seedFashion(prisma: PrismaClient) {
       { icon: '✨', title: 'Latest Trends', subtitle: 'New styles added daily' },
       { icon: '⭐', title: 'Top Brands', subtitle: '1000+ premium brands' },
       { icon: '💎', title: 'Premium Quality', subtitle: '100% original products' },
-      { icon: '↩', title: 'Easy Returns', subtitle: '7 days return policy' },
+      { icon: '↩', title: 'Easy Returns', subtitle: 'Hassle-free return policy' },
       { icon: '🛡', title: 'Secure Payments', subtitle: 'Safe & secure transactions' },
       { icon: '💡', title: 'Fashion Advice', subtitle: 'Style tips & inspiration' },
     ],
@@ -474,7 +474,7 @@ export async function seedFashion(prisma: PrismaClient) {
           title,
           slug,
           description:
-            `${title}. Easy 7-day returns, secure payments and free delivery over ₹999. ` +
+            `${title}. Easy returns, secure payments and free delivery over ₹999. ` +
             `Seeded demo product — imagery is neutral stock photography.`,
           highlights: plan.highlights ?? [],
           attributes: demoAttributesFor(

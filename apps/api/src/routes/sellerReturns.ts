@@ -18,7 +18,7 @@ import {
   periodWindow,
 } from '@clowe/shared';
 import { prisma } from '../db';
-import { env } from '../env';
+import { getSettings } from '../services/settingsService';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { applyReturnDecision } from '../services/returnService';
@@ -304,7 +304,8 @@ sellerReturnsRouter.get('/summary', async (req, res, next) => {
         .sort((a, b) => b.count - a.count)
         .slice(0, 5),
       policy: {
-        returnWindowDays: env.RETURN_WINDOW_DAYS,
+        // This shop's window for what it sells now: its own, else the platform's.
+        returnWindowDays: req.seller!.returnWindowDays ?? (await getSettings()).returnWindowDays,
         refundBusinessDays: '3–5 business days',
         returnShipping: 'Free pickup — return shipping is on the marketplace',
         decisionSlaHours: DECISION_SLA_HOURS,

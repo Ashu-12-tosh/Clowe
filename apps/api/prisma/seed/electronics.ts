@@ -557,7 +557,7 @@ export async function seedElectronics(prisma: PrismaClient) {
           title,
           slug,
           description:
-            `${title}. Backed by Clowe's 7-day easy returns, secure payments and a ` +
+            `${title}. Backed by Clowe's easy returns, secure payments and a ` +
             `1-year brand warranty. Seeded demo product — imagery is neutral stock photography.`,
           highlights: plan.highlights ?? [],
           attributes: demoAttributesFor(

@@ -13,7 +13,8 @@ export interface RootRules {
   taxRule: 'VALUE_SLAB' | null;
   defaultTaxRatePercent: number | null;
   hsnCode: string | null;
-  returnWindowDays: number;
+  /** Null: follow the platform return window setting. Set only where a category truly differs. */
+  returnWindowDays: number | null;
 }
 
 const COLOR: VariantAxis = { key: 'color', label: 'Colour' };
@@ -69,7 +70,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     taxRule: null,
     defaultTaxRatePercent: 18,
     hsnCode: '8517',
-    returnWindowDays: 7,
+    returnWindowDays: null,
   },
   fashion: {
     variantAxes: [COLOR, SIZE],
@@ -87,7 +88,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     taxRule: 'VALUE_SLAB',
     defaultTaxRatePercent: null,
     hsnCode: '6109',
-    returnWindowDays: 7,
+    returnWindowDays: null,
   },
   'home-kitchen': {
     variantAxes: [COLOR, { key: 'capacity', label: 'Capacity' }],
@@ -104,7 +105,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     taxRule: null,
     defaultTaxRatePercent: 18,
     hsnCode: null,
-    returnWindowDays: 7,
+    returnWindowDays: null,
   },
   beauty: {
     variantAxes: [{ key: 'shade', label: 'Shade' }, { key: 'volume', label: 'Volume / size' }],
@@ -122,7 +123,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     taxRule: null,
     defaultTaxRatePercent: 18,
     hsnCode: '3304',
-    returnWindowDays: 7,
+    returnWindowDays: null,
   },
   books: {
     variantAxes: [{ key: 'format', label: 'Format', values: ['Paperback', 'Hardcover'] }, { key: 'language', label: 'Language' }],
@@ -139,7 +140,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     taxRule: null,
     defaultTaxRatePercent: 0,
     hsnCode: '4901',
-    returnWindowDays: 7,
+    returnWindowDays: null,
   },
   supplements: {
     variantAxes: [{ key: 'flavour', label: 'Flavour' }, { key: 'weight', label: 'Weight' }],
@@ -157,7 +158,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     taxRule: null,
     defaultTaxRatePercent: 5,
     hsnCode: '2106',
-    returnWindowDays: 7,
+    returnWindowDays: null,
   },
   sports: {
     variantAxes: [COLOR, SIZE],
@@ -173,7 +174,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     taxRule: null,
     defaultTaxRatePercent: 5,
     hsnCode: '9506',
-    returnWindowDays: 7,
+    returnWindowDays: null,
   },
   gaming: {
     variantAxes: [{ key: 'platform', label: 'Platform', values: ['PC', 'PlayStation 5', 'Xbox Series X', 'Nintendo Switch'] }, { key: 'edition', label: 'Edition' }, COLOR],
@@ -189,7 +190,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     taxRule: null,
     defaultTaxRatePercent: 18,
     hsnCode: '9504',
-    returnWindowDays: 7,
+    returnWindowDays: null,
   },
   grocery: {
     variantAxes: [{ key: 'weight', label: 'Weight / pack' }],
@@ -224,7 +225,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     taxRule: null,
     defaultTaxRatePercent: 5,
     hsnCode: '9503',
-    returnWindowDays: 7,
+    returnWindowDays: null,
   },
 };
 

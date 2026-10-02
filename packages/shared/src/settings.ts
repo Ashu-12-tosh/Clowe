@@ -138,6 +138,12 @@ export interface PublicSettings {
   codMaxOrderPaise: number;
   pdpOffers: PdpOffer[];
   couponsEnabled: boolean;
+  /**
+   * The platform return window in days from delivery: what help, policy and
+   * home pages quote. A category or seller may set its own; the product page
+   * shows the window that applies to each item.
+   */
+  returnWindowDays: number;
 }
 
 const adPriceRow = z.object({

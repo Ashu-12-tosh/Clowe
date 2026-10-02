@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { newsletterSubscribeSchema, type HomePayload, safeHref } from '@clowe/shared';
+import { newsletterSubscribeSchema, returnWindowPhrase, type HomePayload, safeHref } from '@clowe/shared';
+import { useReturnWindowDays } from '@/lib/returnWindow';
 import { api, ApiRequestError } from '@/lib/api';
 import HeroCarousel from '@/components/home/HeroCarousel';
 import RecentlyViewed from '@/components/home/RecentlyViewed';
@@ -16,7 +17,7 @@ import {
 
 const TRUST_ITEMS = [
   { icon: '🚚', title: 'Free Shipping', text: 'On orders above ₹499' },
-  { icon: '↩️', title: 'Easy Returns', text: '7 days easy returns' },
+  { icon: '↩️', title: 'Easy Returns', text: 'Hassle-free returns' },
   { icon: '🔒', title: 'Secure Payments', text: '100% protected' },
   { icon: '🤖', title: 'AI Shopping Assistant', text: 'Get smart help' },
   { icon: '🎧', title: '24x7 Support', text: "We're here for you" },
@@ -95,6 +96,8 @@ function NewsletterForm() {
 export default function HomePage() {
   const [home, setHome] = useState<HomePayload | null>(null);
   const [failed, setFailed] = useState(false);
+  // The returns card quotes the platform window once settings arrive.
+  const windowDays = useReturnWindowDays();
 
   const load = useCallback(() => {
     api<HomePayload>('/api/home')
@@ -151,7 +154,11 @@ export default function HomePage() {
             <span className="text-2xl">{item.icon}</span>
             <div className="min-w-0">
               <p className="text-sm font-bold text-ink-900">{item.title}</p>
-              <p className="text-xs text-gray-500">{item.text}</p>
+              <p className="text-xs text-gray-500">
+                {item.title === 'Easy Returns' && windowDays
+                  ? `${returnWindowPhrase(windowDays)} easy returns`
+                  : item.text}
+              </p>
             </div>
           </div>
         ))}

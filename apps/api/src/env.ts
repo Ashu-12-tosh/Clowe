@@ -52,7 +52,6 @@ const envSchema = z.object({
 
   // --- Returns ---
   // Customers can request a return up to this many days after delivery.
-  RETURN_WINDOW_DAYS: z.coerce.number().int().min(1).default(7),
 
   // --- AI Try-On ---
   // 'auto': use FASHN when FASHN_API_KEY is set, otherwise the free mock.

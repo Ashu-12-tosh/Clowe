@@ -117,7 +117,7 @@ From that point the money follows the normal payout path: it clears after the re
     summary: 'The window, your decision SLA, and when the refund goes out.',
     popular: true,
     tags: ['return', 'refund', 'window', 'reject', 'damaged'],
-    body: `Customers can request a return within the return window (7 days from delivery by default). You then approve or decline it — decline needs a written reason the customer sees.
+    body: `Customers can request a return within the return window: {{returnWindow}} from delivery, unless the category or your store sets its own (Store Settings → Returns). Each order keeps the window it was sold with. You then approve or decline it — decline needs a written reason the customer sees.
 
 Decide within 48 hours. Requests older than that are flagged as overdue on your Returns page, and the admin can override a rejection on the customer's behalf.
 
@@ -132,7 +132,7 @@ Return shipping is arranged by the marketplace; you do not pay pickup charges.`,
     summary: 'Earn on delivery, clear after the return window, request a transfer.',
     popular: true,
     tags: ['payout', 'settlement', 'money', 'bank', 'clearing'],
-    body: `You earn on delivery, not on order. Delivered earnings are held for the clearing period (the return window, 7 days by default) so a refund never chases money that has already left.
+    body: `You earn on delivery, not on order. Delivered earnings are held for the clearing period shown on your Payouts page, which covers the return window, so a refund never chases money that has already left.
 
 Once cleared, the amount appears as Amount payable on the Payouts page. Request a payout and it transfers to your default payout method, subject to the minimum payout amount.
 

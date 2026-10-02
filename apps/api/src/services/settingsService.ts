@@ -20,7 +20,11 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   // s.52 CGST Act: 0.5% since 10.07.2024 (Notification 15/2024-Central Tax).
   gstTcsPercent: 0.5,
   payoutMinPaise: 100000, // ₹1,000
-  payoutHoldDays: env.RETURN_WINDOW_DAYS,
+  // How long a delivered line's earnings wait before they can be paid out.
+  // Its own setting: it must cover the return window (a line with a return
+  // requested leaves DELIVERED and is never paid anyway), and 7 also covers
+  // lines sold under the earlier 7-day window.
+  payoutHoldDays: 7,
   dispatchWindowHours: 12,
   lateDispatchPenaltyPaise: 8000, // ₹80
   penaltyEnabled: true,
@@ -31,7 +35,11 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   platformFeePaise: 900, // ₹9 per line
   deliveryFeePaise: 6000, // ₹60 per shipment
   closingFeePaise: 2000, // ₹20 per unit — placeholder
-  returnWindowDays: env.RETURN_WINDOW_DAYS,
+  // The platform return window, in days from delivery. The one source every
+  // page reads (product pages, help, policies, seller panels); a category or
+  // a seller may set its own, and each order line keeps the window it was
+  // sold with.
+  returnWindowDays: 5,
   auditRetentionDays: 365,
   kycNameMatchMinScore: DEFAULT_KYC_NAME_MATCH_MIN_SCORE,
   // Off. Coupons are built and seeded but not offered; flipping this to true
@@ -161,6 +169,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     codMaxOrderPaise: s.codMaxOrderPaise,
     pdpOffers: s.pdpOffers,
     couponsEnabled: s.couponsEnabled,
+    returnWindowDays: s.returnWindowDays,
   };
 }
 

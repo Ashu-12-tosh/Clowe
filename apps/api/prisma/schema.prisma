@@ -1210,6 +1210,10 @@ model OrderItem {
   packedAt    DateTime?
   shippedAt   DateTime?
   deliveredAt DateTime?
+  // The return window this line was sold with, fixed at checkout so a later
+  // change to the platform, category or seller window never moves it. Null
+  // only on rows written without checkout (tests): those use today's rule.
+  returnWindowDays Int?
 
   // Delivery partner details (filled when the seller ships via ShippingProvider).
   awbNumber   String?

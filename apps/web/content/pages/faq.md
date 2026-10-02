@@ -7,7 +7,7 @@
 
 ## Returns
 
-- **What is the return window?** 7 days from delivery for eligible items — see [Return Policy](/pages/return-policy).
+- **What is the return window?** {{returnWindow}} from delivery for eligible items; each product page shows the window for that item — see [Return Policy](/pages/return-policy).
 - **When do I get my refund?** Within 5–7 business days of pickup/receipt.
 
 ## Payments

@@ -17,7 +17,7 @@ export default function UtilityBar() {
         </div>
         <p className="t-announce mx-auto truncate text-center sm:absolute sm:left-1/2 sm:-translate-x-1/2">
           <span className="font-semibold text-brand-400">Free Shipping</span> on orders above ₹499
-          <span className="mx-1.5 text-gray-500">|</span>7 Days Easy Returns
+          <span className="mx-1.5 text-gray-500">|</span>Easy Returns
         </p>
         <Link href="/pages/help" className="hidden shrink-0 hover:text-white sm:block">
           🎧 Help &amp; Support

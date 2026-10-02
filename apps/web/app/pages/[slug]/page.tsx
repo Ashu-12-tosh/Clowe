@@ -1,7 +1,26 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { fillReturnWindow, type PublicSettings } from '@clowe/shared';
 import { CONTENT_PAGES, getContentPage, renderMarkdown } from '@/lib/contentPages';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
+/**
+ * The platform return window, for the policy and help pages to quote. Null
+ * when the API cannot be reached: the page then says "the window shown on
+ * the product page" rather than guess a number.
+ */
+async function returnWindowDays(): Promise<number | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/settings/public`, { next: { revalidate: 60 } });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: Partial<PublicSettings> };
+    return json.data?.returnWindowDays ?? null;
+  } catch {
+    return null;
+  }
+}
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -24,7 +43,7 @@ export default async function ContentPage({ params }: Props) {
   if (!page) notFound();
 
   // The markdown's own "# heading" renders as the page title.
-  const html = renderMarkdown(page.markdown);
+  const html = renderMarkdown(fillReturnWindow(page.markdown, await returnWindowDays()));
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">

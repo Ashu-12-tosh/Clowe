@@ -18,8 +18,7 @@ import {
 import { prisma } from '../db';
 import { getSettings } from '../services/settingsService';
 import { recordRedemptions } from '../services/promotionService';
-import { env } from '../env';
-import { returnWindowDaysFor } from '../services/categoryRules';
+import { orderLineReturnWindowDays, saleReturnWindows } from '../services/categoryRules';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { paymentProvider } from '../services/payments';
@@ -196,6 +195,9 @@ ordersRouter.post('/checkout', async (req, res, next) => {
       }
     }
 
+    // Each line keeps the return window it is sold with.
+    const windowByProduct = await saleReturnWindows(orderLines.map((l) => l.productId));
+
     // Create the order and reserve stock atomically. Conditional decrements
     // guard against a concurrent checkout taking the last unit.
     const order = await prisma.$transaction(async (tx) => {
@@ -295,6 +297,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
               status: 'PLACED',
               promotionId: line.promotion?.id ?? null,
               promoDiscountPaise: line.promoDiscountPaise,
+              returnWindowDays: windowByProduct.get(line.productId) ?? null,
             })),
           },
         },
@@ -622,16 +625,14 @@ ordersRouter.get('/:id', async (req, res, next) => {
 
     // Packed items haven't left the warehouse yet, so they stay cancellable.
     const cancellable = ['PLACED', 'CONFIRMED', 'PACKED'];
-    // Return window per item: seller policy, else the category rule, else the platform default.
+    // Return window per item: the one it was sold with.
     const windowDaysByItem = new Map<string, number>();
     for (const i of order.items) {
-      windowDaysByItem.set(
-        i.id,
-        await returnWindowDaysFor(i.product.categoryId, i.seller.returnWindowDays),
-      );
+      windowDaysByItem.set(i.id, await orderLineReturnWindowDays(i));
     }
+    const platformWindowDays = (await getSettings()).returnWindowDays;
     const windowMsFor = (itemId: string) =>
-      (windowDaysByItem.get(itemId) ?? env.RETURN_WINDOW_DAYS) * 24 * 60 * 60 * 1000;
+      (windowDaysByItem.get(itemId) ?? platformWindowDays) * 24 * 60 * 60 * 1000;
     const body: OrderDetailView = {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -732,7 +733,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
         order.status !== 'CANCELLED' && order.items.every((i) => cancellable.includes(i.status)),
       returnWindowDays: windowDaysByItem.size
         ? Math.max(...windowDaysByItem.values())
-        : env.RETURN_WINDOW_DAYS,
+        : platformWindowDays,
     };
     // Return photos are private; this is the buyer's own order.
     const returnBlocks = body.items.flatMap((i) => (i.returnInfo ? [i.returnInfo] : []));
@@ -848,9 +849,9 @@ ordersRouter.post('/items/:itemId/return', async (req, res, next) => {
     }
     if (item.return) throw ApiError.badRequest('Return already requested for this item');
 
-    // Return window enforced server-side (UI hides the button, this is the law).
-    // The seller may allow longer than the platform default, never shorter.
-    const windowDays = await returnWindowDaysFor(item.product.categoryId, item.seller.returnWindowDays);
+    // Return window enforced server-side (UI hides the button, this is the law):
+    // the window this line was sold with, whatever the setting says today.
+    const windowDays = await orderLineReturnWindowDays(item);
     const windowMs = windowDays * 24 * 60 * 60 * 1000;
     if (!item.deliveredAt || Date.now() - item.deliveredAt.getTime() > windowMs) {
       throw ApiError.badRequest(

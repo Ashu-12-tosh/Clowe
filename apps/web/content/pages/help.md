@@ -10,7 +10,7 @@ Quick answers to common questions. For anything else, the **Support chat** (gold
 
 ## Returns & refunds
 
-- **Return window** — request a return within 7 days of delivery from the order page
+- **Return window** — request a return within {{returnWindow}} of delivery from the order page
 - **Refund timeline** — 5–7 business days after the item is received back
 
 ## Account

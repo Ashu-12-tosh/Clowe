@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
+  fillReturnWindow,
   HELP_ARTICLES,
   HELP_TOPICS,
   SELLER_POLICIES,
@@ -118,10 +119,15 @@ export default function SellerSupportPage() {
   const [creating, setCreating] = useState(false);
   // From platform settings, where admins can change it without a deploy.
   const [vendorEmail, setVendorEmail] = useState('');
+  // Articles quote the return window from settings too.
+  const [windowDays, setWindowDays] = useState<number | null>(null);
 
   useEffect(() => {
     getPublicSettings()
-      .then((s) => setVendorEmail(s.supportEmails.vendor))
+      .then((s) => {
+        setVendorEmail(s.supportEmails.vendor);
+        setWindowDays(s.returnWindowDays);
+      })
       .catch(() => {});
   }, []);
 
@@ -576,7 +582,7 @@ export default function SellerSupportPage() {
                   </button>
                   {openArticle?.id === article.id && (
                     <p className="whitespace-pre-line pb-3 text-xs leading-relaxed text-gray-700">
-                      {article.body}
+                      {fillReturnWindow(article.body, windowDays)}
                     </p>
                   )}
                 </li>

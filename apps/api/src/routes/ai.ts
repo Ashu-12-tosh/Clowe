@@ -3,6 +3,7 @@ import {
   aiDescriptionSchema,
   searchIntentSchema,
   supportChatSchema,
+  fillReturnWindow,
   findHelpArticles,
   sellerAssistantSchema,
   type ReviewSummaryView,
@@ -13,6 +14,7 @@ import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { aiProvider } from '../services/ai';
+import { getSettings } from '../services/settingsService';
 import { aiLimiter } from '../middleware/rateLimits';
 
 export const aiRouter = Router();
@@ -221,6 +223,7 @@ aiRouter.post('/seller-assistant', requireAuth, async (req, res, next) => {
 
     // Ground the answer in the handbook so it can't contradict the docs.
     const articles = findHelpArticles(input.question, 3);
+    const windowDays = (await getSettings()).returnWindowDays;
 
     const answer = await aiProvider.complete({
       task: 'seller-assistant',
@@ -233,7 +236,7 @@ aiRouter.post('/seller-assistant', requireAuth, async (req, res, next) => {
       user: JSON.stringify({
         question: input.question,
         history: input.history.slice(-6),
-        articles: articles.map((a) => ({ id: a.id, title: a.title, body: a.body })),
+        articles: articles.map((a) => ({ id: a.id, title: a.title, body: fillReturnWindow(a.body, windowDays) })),
       }),
       maxTokens: 1024,
     });

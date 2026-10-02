@@ -12,7 +12,8 @@ import type {
 } from '@clowe/shared';
 import { COMPLAINT_CATEGORY_LABELS } from '@clowe/shared';
 import { api, getStoredUser } from '@/lib/api';
-import { faqEntriesFor } from '@clowe/shared';
+import { faqEntriesFor, fillReturnWindow } from '@clowe/shared';
+import { getPublicSettings } from '../settings';
 import { FAQ_ENTRIES, FALLBACK_MESSAGE, GREETING, MAIN_MENU, type FaqEntry } from './faq-content';
 
 export interface Chip {
@@ -133,7 +134,12 @@ export class RuleBasedEngine implements ChatEngine {
       return {
         messages: [
           {
-            text: faq.answer.replace(/\s*\/\* TODO:[^*]*\*\//g, ''),
+            text: fillReturnWindow(
+              faq.answer.replace(/\s*\/\* TODO:[^*]*\*\//g, ''),
+              await getPublicSettings()
+                .then((s) => s.returnWindowDays)
+                .catch(() => null),
+            ),
             links: faq.links,
             // A follow-up to help this engine will not offer is not offered either.
             chips: faq.followUps

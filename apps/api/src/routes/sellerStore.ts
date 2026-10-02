@@ -18,7 +18,6 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { getSettings } from '../services/settingsService';
-import { env } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { blockSuspendedWrites, requireSeller } from './seller';
@@ -66,6 +65,7 @@ function parseHighlights(value: unknown): StoreHighlight[] {
 }
 
 async function toSettings(seller: SellerProfile): Promise<SellerStoreSettings> {
+  const platformWindowDays = (await getSettings()).returnWindowDays;
   const [category, counts, methodCount] = await Promise.all([
     seller.primaryCategoryId
       ? prisma.category.findUnique({
@@ -130,8 +130,8 @@ async function toSettings(seller: SellerProfile): Promise<SellerStoreSettings> {
     codEnabled: seller.codEnabled,
 
     returnWindowDays: seller.returnWindowDays,
-    effectiveReturnWindowDays: seller.returnWindowDays ?? (await getSettings()).returnWindowDays,
-    platformReturnWindowDays: env.RETURN_WINDOW_DAYS,
+    effectiveReturnWindowDays: seller.returnWindowDays ?? platformWindowDays,
+    platformReturnWindowDays: platformWindowDays,
     returnAddressSameAsPickup: seller.returnAddressSameAsPickup,
     returnLine1: seller.returnLine1,
     returnCity: seller.returnCity,
@@ -415,9 +415,10 @@ sellerStoreRouter.put('/returns', async (req, res, next) => {
     const input = storeReturnsSchema.parse(req.body);
 
     // A seller may be more generous than the platform, never stricter.
-    if (input.returnWindowDays != null && input.returnWindowDays < env.RETURN_WINDOW_DAYS) {
+    const platformWindowDays = (await getSettings()).returnWindowDays;
+    if (input.returnWindowDays != null && input.returnWindowDays < platformWindowDays) {
       throw ApiError.badRequest(
-        `The marketplace guarantees ${env.RETURN_WINDOW_DAYS} days — you can extend it, not shorten it`,
+        `The marketplace guarantees ${platformWindowDays} days — you can extend it, not shorten it`,
         'WINDOW_TOO_SHORT',
       );
     }

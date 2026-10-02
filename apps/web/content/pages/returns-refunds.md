@@ -7,7 +7,7 @@ Changed your mind or received something unexpected? We keep it simple.
 3. Once the seller (or Clowe support) approves, a pickup is arranged.
 4. Your refund is issued to the original payment method after the item is received.
 
-- Return window: **7 days** from delivery for eligible items.
+- Return window: **{{returnWindow}}** from delivery for eligible items (each product page shows the window for that item).
 - Refund timeline: **5–7 business days** after pickup.
 
 Full details: [Return Policy](/pages/return-policy).

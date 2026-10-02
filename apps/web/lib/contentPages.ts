@@ -3,7 +3,8 @@ import path from 'node:path';
 
 /**
  * Static content pages, backed by markdown files in apps/web/content/pages/.
- * To edit a page: edit its .md file — no code changes needed.
+ * To edit a page: edit its .md file — no code changes needed. Write the
+ * return window as {{returnWindow}}: the page fills it from platform settings.
  */
 export interface ContentPageMeta {
   slug: string;

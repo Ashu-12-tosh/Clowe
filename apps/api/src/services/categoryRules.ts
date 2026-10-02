@@ -173,8 +173,9 @@ export async function descendantIds(categoryId: string): Promise<string[]> {
 }
 
 /**
- * Return window for an item: the seller's own policy if set, else the
- * category rule, else the platform setting.
+ * Return window for an item sold now: the seller's own policy if set, else
+ * the category rule, else the platform setting. Checkout stores the answer on
+ * each order line; after that, read it with orderLineReturnWindowDays.
  */
 export async function returnWindowDaysFor(
   categoryId: string,
@@ -185,4 +186,29 @@ export async function returnWindowDaysFor(
   if (rules.returnWindowDays != null) return rules.returnWindowDays;
   const settings = await getSettings();
   return settings.returnWindowDays;
+}
+
+/** The window each product would be sold with right now, for checkout to store. */
+export async function saleReturnWindows(productIds: string[]): Promise<Map<string, number>> {
+  const products = await prisma.product.findMany({
+    where: { id: { in: [...new Set(productIds)] } },
+    select: { id: true, categoryId: true, seller: { select: { returnWindowDays: true } } },
+  });
+  const out = new Map<string, number>();
+  for (const p of products) {
+    out.set(p.id, await returnWindowDaysFor(p.categoryId, p.seller.returnWindowDays));
+  }
+  return out;
+}
+
+/**
+ * The window an order line was sold with. Lines from checkout carry it; a
+ * line written some other way (tests) falls back to today's rule.
+ */
+export async function orderLineReturnWindowDays(line: {
+  returnWindowDays: number | null;
+  product: { categoryId: string };
+  seller: { returnWindowDays: number | null };
+}): Promise<number> {
+  return line.returnWindowDays ?? returnWindowDaysFor(line.product.categoryId, line.seller.returnWindowDays);
 }
