@@ -84,3 +84,4 @@ export * from './voiceSearch';
 export * from './couponSurfaces';
 export * from './ifscBanks';
 export * from './facets';
+export * from './railParams';

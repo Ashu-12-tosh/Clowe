@@ -6,17 +6,24 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   PRODUCT_SORT_LABELS,
   productSortValues,
+  railFilterCount,
+  withChipRemoved,
+  withRailCleared,
+  withValueToggled,
+  type AppliedFilter,
   type CategoryCallout,
   type CategoryDetail,
   type ProductListResponse,
   type ProductSort,
+  type RailFacet,
 } from '@clowe/shared';
 import { api } from '@/lib/api';
 import { fetchWishlistIds } from '@/lib/wishlist';
-import { formatPaise } from '@/lib/format';
 import CategoryHero from '@/components/category/CategoryHero';
 import CategoryProductCard from '@/components/category/CategoryProductCard';
-import PriceRangeSlider from '@/components/PriceRangeSlider';
+import FilterRail from '@/components/search/FilterRail';
+import AppliedFilters from '@/components/search/AppliedFilters';
+import FilterSheet from '@/components/search/FilterSheet';
 import { trackAdClick, useSponsoredAds } from '@/components/SponsoredAds';
 import { ChevronIcon } from '@/components/cart/CartIcons';
 
@@ -157,15 +164,10 @@ function CategoryPageInner() {
   const [error, setError] = useState('');
   const [notFound, setNotFound] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [brandQuery, setBrandQuery] = useState('');
   const [showAllCats, setShowAllCats] = useState(false);
-  const [showAllBrands, setShowAllBrands] = useState(false);
 
   // `category` here is the *selected* subcategory (falls back to the root).
   const selectedCategory = searchParams.get('category') ?? rootSlug;
-  const brands = (searchParams.get('brands') ?? '').split(',').filter(Boolean);
-  const minPrice = searchParams.get('minPrice') ?? '';
-  const maxPrice = searchParams.get('maxPrice') ?? '';
   const sort = (searchParams.get('sort') ?? 'popularity') as ProductSort;
   const page = Number(searchParams.get('page') ?? '1');
 
@@ -209,31 +211,29 @@ function CategoryPageInner() {
       .finally(() => setLoading(false));
   }, [searchParams, selectedCategory]);
 
-  useEffect(() => {
-    document.body.style.overflow = sheetOpen ? 'hidden' : '';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [sheetOpen]);
-
-  const toggleBrand = (name: string) => {
-    const next = brands.includes(name) ? brands.filter((b) => b !== name) : [...brands, name];
-    setParams({ brands: next.join(',') });
-  };
+  /** Every filter is in the URL: push the next query (shareable, and Back undoes it). */
+  const pushQuery = useCallback(
+    (next: URLSearchParams) => {
+      const query = next.toString();
+      router.push(`/category/${rootSlug}${query ? `?${query}` : ''}`);
+    },
+    [router, rootSlug],
+  );
+  const toggle = (facet: RailFacet, value: string) => pushQuery(withValueToggled(searchParams, facet, value));
+  const removeChip = (chip: AppliedFilter) => pushQuery(withChipRemoved(searchParams, chip));
+  const clearRail = () => pushQuery(withRailCleared(searchParams));
+  const closeSheet = useCallback(() => setSheetOpen(false), []);
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
-  const activeFilterCount =
-    brands.length + (selectedCategory !== rootSlug ? 1 : 0) + (minPrice || maxPrice ? 1 : 0);
+  const railCount = railFilterCount(searchParams);
+  const activeFilterCount = railCount + (selectedCategory !== rootSlug ? 1 : 0);
   const firstItem = data ? (page - 1) * data.limit + 1 : 0;
   const lastItem = data ? Math.min(page * data.limit, data.total) : 0;
 
   const features = category?.features.length ? category.features : DEFAULT_FEATURES;
   const catFacets = data?.facets.categories ?? [];
-  const brandFacets = (data?.facets.brands ?? []).filter((b) =>
-    b.name.toLowerCase().includes(brandQuery.trim().toLowerCase()),
-  );
 
-  const renderFilters = () => (
+  const categoryGroup = (
     <>
       <FilterGroup title="Categories">
         <ul className="space-y-2 text-sm">
@@ -290,69 +290,20 @@ function CategoryPageInner() {
         )}
       </FilterGroup>
 
-      <FilterGroup title="Brands">
-        <input
-          value={brandQuery}
-          onChange={(e) => setBrandQuery(e.target.value)}
-          placeholder="Search brands..."
-          aria-label="Search brands"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600"
-        />
-        <ul className="mt-2.5 space-y-2 text-sm">
-          {(showAllBrands ? brandFacets : brandFacets.slice(0, FACET_PREVIEW)).map((brand) => (
-            <li key={brand.name}>
-              <label className="flex cursor-pointer items-center gap-2.5">
-                <input
-                  type="checkbox"
-                  checked={brands.includes(brand.name)}
-                  onChange={() => toggleBrand(brand.name)}
-                  className="h-4 w-4 accent-brand-600"
-                />
-                <span
-                  className={
-                    brands.includes(brand.name)
-                      ? 'font-semibold text-ink-900'
-                      : 'text-gray-600 hover:text-brand-600'
-                  }
-                >
-                  {brand.name}
-                </span>
-                <span className="ml-auto text-xs text-gray-400">({brand.count})</span>
-              </label>
-            </li>
-          ))}
-          {brandFacets.length === 0 && (
-            <li className="text-xs text-gray-400">No brands match “{brandQuery}”.</li>
-          )}
-        </ul>
-        {brandFacets.length > FACET_PREVIEW && (
-          <button
-            onClick={() => setShowAllBrands((v) => !v)}
-            className="mt-2.5 text-xs font-semibold text-brand-600 hover:underline"
-          >
-            {showAllBrands ? '− View Less' : '+ View More'}
-          </button>
-        )}
-      </FilterGroup>
-
-      {data?.rail.price && (
-        <FilterGroup title="Price">
-          <PriceRangeSlider
-            price={data.rail.price}
-            onApply={(lo, hi) =>
-              setParams({ minPrice: lo ? String(lo) : '', maxPrice: hi ? String(hi) : '' })
-            }
-          />
-          {(minPrice || maxPrice) && (
-            <p className="mt-2 text-xs text-gray-500">
-              Showing {minPrice ? formatPaise(Number(minPrice) * 100) : '₹0'} –{' '}
-              {maxPrice ? formatPaise(Number(maxPrice) * 100) : 'any'}
-            </p>
-          )}
-        </FilterGroup>
-      )}
     </>
   );
+
+  const renderFilters = () =>
+    data ? (
+      <FilterRail
+        rail={data.rail}
+        onToggle={toggle}
+        onPrice={(lo, hi) => setParams({ minPrice: lo ? String(lo) : '', maxPrice: hi ? String(hi) : '' })}
+        before={categoryGroup}
+      />
+    ) : (
+      categoryGroup
+    );
 
   if (notFound) {
     return (
@@ -404,13 +355,10 @@ function CategoryPageInner() {
         <aside className="hidden rounded-2xl border border-gray-100 bg-white px-4 py-3 lg:block">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-ink-900">Filter</h2>
-            {activeFilterCount > 0 && (
-              <Link
-                href={`/category/${rootSlug}`}
-                className="text-xs font-semibold text-brand-600 hover:underline"
-              >
-                Clear All
-              </Link>
+            {railCount > 0 && (
+              <button onClick={clearRail} className="text-xs font-semibold text-brand-600 hover:underline">
+                Clear all
+              </button>
             )}
           </div>
           {renderFilters()}
@@ -457,30 +405,17 @@ function CategoryPageInner() {
                 </span>
               )}
             </button>
-            {activeFilterCount > 0 && (
-              <Link
-                href={`/category/${rootSlug}`}
+            {railCount > 0 && (
+              <button
+                onClick={clearRail}
                 className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm text-gray-600"
               >
                 Clear ✕
-              </Link>
+              </button>
             )}
           </div>
 
-          {/* Active brand chips */}
-          {brands.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {brands.map((brand) => (
-                <button
-                  key={brand}
-                  onClick={() => toggleBrand(brand)}
-                  className="flex items-center gap-1.5 rounded-full border border-brand-600 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700"
-                >
-                  {brand} ✕
-                </button>
-              ))}
-            </div>
-          )}
+          {data && <AppliedFilters applied={data.rail.applied} onRemove={removeChip} onClearAll={clearRail} />}
 
           {error && (
             <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -566,52 +501,10 @@ function CategoryPageInner() {
         </section>
       </div>
 
-      {/* Mobile filter sheet */}
-      {sheetOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden" onClick={() => setSheetOpen(false)}>
-          <div className="absolute inset-0 bg-black/50" />
-          <div
-            className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-3xl bg-white shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-              <h2 className="text-base font-bold">
-                Filters
-                {activeFilterCount > 0 && (
-                  <span className="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-bold text-brand-700">
-                    {activeFilterCount} applied
-                  </span>
-                )}
-              </h2>
-              <button
-                onClick={() => setSheetOpen(false)}
-                aria-label="Close filters"
-                className="rounded-full p-1.5 text-xl text-gray-400 hover:bg-gray-100"
-              >
-                ×
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-5 pb-4">{renderFilters()}</div>
-            <div className="flex gap-3 border-t border-gray-100 px-5 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
-              <button
-                onClick={() => {
-                  setSheetOpen(false);
-                  router.push(`/category/${rootSlug}`);
-                }}
-                className="flex-1 rounded-xl border border-gray-300 py-3 text-sm font-bold uppercase tracking-wide text-ink-900"
-              >
-                Clear All
-              </button>
-              <button
-                onClick={() => setSheetOpen(false)}
-                className="flex-1 rounded-xl bg-ink-900 py-3 text-sm font-bold uppercase tracking-wide text-white"
-              >
-                Apply{data ? ` (${data.total})` : ''}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Phone / tablet: the rail as a bottom sheet */}
+      <FilterSheet open={sheetOpen} onClose={closeSheet} onClearAll={clearRail} applied={railCount} total={data?.total ?? null}>
+        {renderFilters()}
+      </FilterSheet>
     </main>
   );
 }

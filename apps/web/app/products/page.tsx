@@ -5,9 +5,15 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   SEARCH_SORT_LABELS,
+  railFilterCount,
+  withChipRemoved,
+  withRailCleared,
+  withValueToggled,
+  type AppliedFilter,
   type CategoryNode,
   type ProductListResponse,
   type ProductSort,
+  type RailFacet,
   type SearchDroppable,
 } from '@clowe/shared';
 import { api } from '@/lib/api';
@@ -18,35 +24,9 @@ import SearchSummary from '@/components/search/SearchSummary';
 /** Every chip 'Clear all' removes. Kept local: it is a UI affordance, not a contract. */
 const ALL_DROPPABLE: SearchDroppable[] = ['minPrice','maxPrice','brands','onSale','category','sort'];
 import { trackAdClick, useSponsoredAds } from '@/components/SponsoredAds';
-import PriceRangeSlider from '@/components/PriceRangeSlider';
-import { colorToHex } from '@/lib/colors';
-
-/** Collapsible filter group — click the title to expand/collapse. */
-function FilterSection({
-  title,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="mt-4 border-b border-gray-100 pb-3">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between text-sm font-semibold text-gray-800 hover:text-brand-600"
-      >
-        {title}
-        <span className={`text-xs text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`}>
-          ▶
-        </span>
-      </button>
-      {open && <div className="mt-2.5">{children}</div>}
-    </div>
-  );
-}
+import FilterRail from '@/components/search/FilterRail';
+import AppliedFilters from '@/components/search/AppliedFilters';
+import FilterSheet from '@/components/search/FilterSheet';
 
 function ProductsPageInner() {
   const router = useRouter();
@@ -57,20 +37,11 @@ function ProductsPageInner() {
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  // Mobile filter bottom-sheet (visual only — same filter logic underneath).
+  // Phone and tablet: the rail opens as a bottom sheet over the results.
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const q = searchParams.get('q') ?? '';
   const category = searchParams.get('category') ?? '';
-  // Option filters live in the URL as opt[<axis>]=a,b — one entry per axis.
-  const optionFilters: Record<string, string[]> = {};
-  searchParams.forEach((value, key) => {
-    if (!key.startsWith('opt[') || !key.endsWith(']')) return;
-    optionFilters[key.slice(4, -1)] = value.split(',').filter(Boolean);
-  });
-  const activeOptionCount = Object.values(optionFilters).reduce((n, v) => n + v.length, 0);
-  const minPrice = searchParams.get('minPrice') ?? '';
-  const maxPrice = searchParams.get('maxPrice') ?? '';
   // Only what the shopper picked. With nothing picked, a search is in whatever
   // order the server applied — the words' sort ("best" -> top rated), or
   // relevance — so the dropdown reads that back instead of a default the
@@ -110,6 +81,16 @@ function ProductsPageInner() {
   const adProductIds = new Set(sponsoredAds.map((ad) => ad.product.id));
   const organicItems = (data?.items ?? []).filter((p) => !adProductIds.has(p.id));
 
+  /** Every filter is in the URL: push the next query (shareable, and Back undoes it). */
+  const pushQuery = useCallback(
+    (next: URLSearchParams) => router.push(`/products?${next.toString()}`),
+    [router],
+  );
+  const toggle = (facet: RailFacet, value: string) => pushQuery(withValueToggled(searchParams, facet, value));
+  const removeChip = (chip: AppliedFilter) => pushQuery(withChipRemoved(searchParams, chip));
+  const clearRail = () => pushQuery(withRailCleared(searchParams));
+  const closeSheet = useCallback(() => setSheetOpen(false), []);
+
   /** Update one or more query params (resets to page 1 unless page is set). */
   const setParams = useCallback(
     (updates: Record<string, string>) => {
@@ -138,31 +119,14 @@ function ProductsPageInner() {
       .finally(() => setLoading(false));
   }, [searchParams]);
 
-  // Lock page scroll while the mobile sheet is open.
-  useEffect(() => {
-    document.body.style.overflow = sheetOpen ? 'hidden' : '';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [sheetOpen]);
-
-  const toggleOption = (axis: string, value: string) => {
-    const current = optionFilters[axis] ?? [];
-    const next = current.includes(value)
-      ? current.filter((v) => v !== value)
-      : [...current, value];
-    setParams({ [`opt[${axis}]`]: next.join(',') });
-  };
-
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
-  const activeFilterCount =
-    (category ? 1 : 0) + activeOptionCount + (minPrice || maxPrice ? 1 : 0);
-  const hasAnyFilter = Boolean(q) || activeFilterCount > 0;
+  const railCount = railFilterCount(searchParams);
+  const activeFilterCount = (category ? 1 : 0) + railCount;
 
-  /** All filter options — rendered in the desktop sidebar AND the mobile sheet. */
-  const renderFilters = (inSheet: boolean) => (
+  /** The category list, then the rail — in the desktop sidebar and the mobile sheet alike. */
+  const categoryNav = (inSheet: boolean) => (
     <>
-      <div className={inSheet ? '' : 'mt-4'}>
+      <div className={inSheet ? 'pt-3' : 'mt-4'}>
         <h3 className="text-sm font-semibold">Category</h3>
         <ul className="mt-2 space-y-1 text-sm">
           <li>
@@ -173,6 +137,7 @@ function ProductsPageInner() {
               All
             </button>
           </li>
+          {/* Departments only; the one in use opens to its subcategories. */}
           {categories.map((root) => (
             <li key={root.id}>
               <button
@@ -181,6 +146,7 @@ function ProductsPageInner() {
               >
                 {root.name}
               </button>
+              {(category === root.slug || root.children.some((c) => c.slug === category)) && (
               <ul className="ml-3 mt-1 space-y-1">
                 {root.children.map((child) => (
                   <li key={child.id}>
@@ -193,96 +159,39 @@ function ProductsPageInner() {
                   </li>
                 ))}
               </ul>
+              )}
             </li>
           ))}
         </ul>
       </div>
-
-      {/* One filter group per option axis in scope - colour as swatches, the rest as chips */}
-      {data?.facets.options.map((facet) => {
-        const active = optionFilters[facet.key] ?? [];
-        return (
-          <FilterSection
-            key={facet.key}
-            title={facet.label}
-            defaultOpen={inSheet || active.length > 0}
-          >
-            {facet.key === 'color' ? (
-              <div className="flex flex-wrap gap-2">
-                {facet.values.map((color) => {
-                  const hex = colorToHex(color);
-                  const on = active.includes(color);
-                  return (
-                    <button
-                      key={color}
-                      onClick={() => toggleOption(facet.key, color)}
-                      title={color}
-                      className={`flex h-7 w-7 items-center justify-center rounded-full border-2 transition ${
-                        on ? 'border-brand-600 ring-2 ring-brand-100' : 'border-gray-200 hover:border-gray-400'
-                      }`}
-                      style={hex ? { backgroundColor: hex } : undefined}
-                    >
-                      {!hex && (
-                        <span className="text-[9px] font-bold text-gray-500">{color.slice(0, 2)}</span>
-                      )}
-                      {on && hex && (
-                        <span className={hex === '#ffffff' || hex === '#f5e6c8' ? 'text-ink-900' : 'text-white'}>
-                          ✓
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {facet.values.map((value) => (
-                  <button
-                    key={value}
-                    onClick={() => toggleOption(facet.key, value)}
-                    className={`rounded border px-2 py-1 text-xs ${
-                      active.includes(value)
-                        ? 'border-brand-600 bg-brand-100 font-semibold text-brand-600'
-                        : 'border-gray-300 text-gray-600 hover:border-brand-600'
-                    }`}
-                  >
-                    {value}
-                  </button>
-                ))}
-              </div>
-            )}
-          </FilterSection>
-        );
-      })}
-
-      {data?.rail.price && (
-        <div className="mt-5">
-          <h3 className="text-base font-bold">Price</h3>
-          <div className="mt-2">
-            <PriceRangeSlider
-              price={data.rail.price}
-              onApply={(lo, hi) =>
-                setParams({ minPrice: lo ? String(lo) : '', maxPrice: hi ? String(hi) : '' })
-              }
-            />
-          </div>
-        </div>
-      )}
-
-      {!inSheet && hasAnyFilter && (
-        <Link href="/products" className="mt-5 inline-block text-xs text-brand-600 hover:underline">
-          Clear all filters
-        </Link>
-      )}
     </>
   );
 
+  const renderFilters = (inSheet: boolean) =>
+    data ? (
+      <FilterRail
+        rail={data.rail}
+        onToggle={toggle}
+        onPrice={(lo, hi) => setParams({ minPrice: lo ? String(lo) : '', maxPrice: hi ? String(hi) : '' })}
+        before={categoryNav(inSheet)}
+      />
+    ) : (
+      categoryNav(inSheet)
+    );
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-6">
-      <div className="flex flex-col gap-6 md:flex-row">
-        {/* ---------------- Desktop filters sidebar (unchanged) ---------------- */}
-        <aside className="hidden w-full shrink-0 md:block md:w-56">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500">Filters</h2>
+      <div className="flex flex-col gap-6 lg:flex-row">
+        {/* ---------------- Filter rail: a sidebar from laptop width up ---------------- */}
+        <aside className="hidden w-60 shrink-0 lg:block">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500">Filters</h2>
+            {railCount > 0 && (
+              <button onClick={clearRail} className="text-xs font-semibold text-brand-600 hover:underline">
+                Clear all
+              </button>
+            )}
+          </div>
           {renderFilters(false)}
         </aside>
 
@@ -299,12 +208,12 @@ function ProductsPageInner() {
               </h1>
               <p className="mt-0.5 text-sm text-gray-500">{data ? `${data.total} Products` : '…'}</p>
             </div>
-            {/* Desktop sort (mobile uses the chip bar below) */}
+            {/* Desktop sort (phone and tablet use the bar below) */}
             <select
               aria-label="Sort"
               value={sortValue}
               onChange={(e) => pickSort(e.target.value)}
-              className="hidden rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm outline-none md:block"
+              className="hidden rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm outline-none lg:block"
             >
               {sortOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -315,7 +224,7 @@ function ProductsPageInner() {
           </div>
 
           {/* ---------------- Mobile filter chip bar ---------------- */}
-          <div className="sticky top-[var(--header-h,108px)] z-10 -mx-4 mt-3 flex items-center gap-2 overflow-x-auto border-b border-gray-100 bg-cream-50/95 px-4 py-2 backdrop-blur md:hidden">
+          <div className="sticky top-[var(--header-h,108px)] z-10 -mx-4 mt-3 flex items-center gap-2 overflow-x-auto border-b border-gray-100 bg-cream-50/95 px-4 py-2 backdrop-blur lg:hidden">
             <button
               onClick={() => setSheetOpen(true)}
               className={`relative flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-semibold ${
@@ -343,15 +252,17 @@ function ProductsPageInner() {
                 </option>
               ))}
             </select>
-            {hasAnyFilter && (
-              <Link
-                href="/products"
+            {railCount > 0 && (
+              <button
+                onClick={clearRail}
                 className="shrink-0 rounded-full border border-gray-300 bg-white px-3.5 py-1.5 text-sm text-gray-600"
               >
                 Clear ✕
-              </Link>
+              </button>
             )}
           </div>
+
+          {data && <AppliedFilters applied={data.rail.applied} onRemove={removeChip} onClearAll={clearRail} />}
 
           {error && (
             <div className="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -482,57 +393,16 @@ function ProductsPageInner() {
         </section>
       </div>
 
-      {/* ---------------- Mobile filter bottom sheet ---------------- */}
-      {sheetOpen && (
-        <div className="fixed inset-0 z-50 md:hidden" onClick={() => setSheetOpen(false)}>
-          <div className="absolute inset-0 bg-black/50" />
-          <div
-            className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col rounded-t-3xl bg-white shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Sheet header */}
-            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-              <h2 className="text-base font-bold">
-                Filters
-                {activeFilterCount > 0 && (
-                  <span className="ml-2 rounded-full bg-brand-100 px-2 py-0.5 text-xs font-bold text-brand-700">
-                    {activeFilterCount} applied
-                  </span>
-                )}
-              </h2>
-              <button
-                onClick={() => setSheetOpen(false)}
-                aria-label="Close filters"
-                className="rounded-full p-1.5 text-xl text-gray-400 hover:bg-gray-100"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Scrollable filter options (results update live behind the sheet) */}
-            <div className="flex-1 overflow-y-auto px-5 pb-4 pt-2">{renderFilters(true)}</div>
-
-            {/* Sticky action bar */}
-            <div className="flex gap-3 border-t border-gray-100 px-5 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
-              <button
-                onClick={() => {
-                  setSheetOpen(false);
-                  router.push('/products');
-                }}
-                className="flex-1 rounded-xl border border-gray-300 py-3 text-sm font-bold uppercase tracking-wide text-ink-900"
-              >
-                Clear All
-              </button>
-              <button
-                onClick={() => setSheetOpen(false)}
-                className="flex-1 rounded-xl bg-ink-900 py-3 text-sm font-bold uppercase tracking-wide text-white"
-              >
-                Apply{data ? ` (${data.total})` : ''}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ---------------- Phone / tablet: the rail as a bottom sheet ---------------- */}
+      <FilterSheet
+        open={sheetOpen}
+        onClose={closeSheet}
+        onClearAll={clearRail}
+        applied={railCount}
+        total={data?.total ?? null}
+      >
+        {renderFilters(true)}
+      </FilterSheet>
     </main>
   );
 }
