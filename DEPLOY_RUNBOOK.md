@@ -934,4 +934,11 @@ dc exec api npx tsx prisma/backfillDemoAttributes.ts
 # are left alone. Take a backup before --apply.
 dc exec api npx tsx prisma/backfillPrivateFiles.ts
 dc exec api npx tsx prisma/backfillPrivateFiles.ts --apply
+
+# TEMPORARY, demo catalog only: loremflickr answers every request with 401, so
+# demo images hot-linked from it are broken. This points them at picsum,
+# seeded by product id so each product keeps the same pictures. Goes away with
+# the demo catalog at launch.
+dc exec api npx tsx prisma/replaceLoremflickr.ts
+dc exec api npx tsx prisma/replaceLoremflickr.ts --apply
 ```
