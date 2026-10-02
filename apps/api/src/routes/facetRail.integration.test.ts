@@ -6,6 +6,7 @@ import type { ProductListResponse, RailFacet } from '@clowe/shared';
 import { createApp } from '../app';
 import { FIXTURE, seedFixture } from '../test/fixture';
 import { invalidateCategoryRules } from '../services/categoryRules';
+import { priceEdges } from '../services/facetEngine';
 
 /**
  * The filter rail: facets that fit what was found, counts that leave a
@@ -207,5 +208,44 @@ describe('a search', () => {
     expect(keys).toContain('size');
     expect(keys).not.toContain('screen_size');
     expect(keys).not.toContain('kit');
+  });
+});
+
+describe('the price slider', () => {
+  it('matches a product when any variant is in range, and shows the cheapest one inside it', async () => {
+    // Alpha Oxford: M at ₹900, L at ₹1,500.
+    const over = await list('category=apparel&minPrice=1000');
+    expect(over.items.find((i) => i.title === 'Alpha Oxford Shirt')?.pricePaise).toBe(150_000);
+    const under = await list('category=apparel&maxPrice=1000');
+    expect(under.items.find((i) => i.title === 'Alpha Oxford Shirt')?.pricePaise).toBe(90_000);
+    // Without a price filter the card shows the cheapest of all.
+    expect((await list('category=apparel')).items.find((i) => i.title === 'Alpha Oxford Shirt')?.pricePaise).toBe(90_000);
+  });
+
+  it('spans what the other filters leave, whatever price is chosen', async () => {
+    const beta = await list('category=apparel&brands=Beta&maxPrice=1000');
+    expect(beta.rail.price).toMatchObject({ minPaise: 80_000, maxPaise: 150_000, selectedMaxPaise: 100_000, selectedMinPaise: null });
+  });
+
+  it('draws a histogram of how many products have a variant in each bar', async () => {
+    const price = (await list('category=apparel')).rail.price!;
+    expect(price.histogram[0].fromPaise).toBe(70_000);
+    expect(price.histogram.at(-1)!.toPaise).toBe(150_000);
+    // Three products; the Oxford has variants in two bars, the Beta in two.
+    expect(price.histogram.reduce((sum, b) => sum + b.count, 0)).toBe(5);
+  });
+
+  it('spaces the bars on a log scale when prices run from hundreds to lakhs', () => {
+    const edges = priceEdges(18_000, 16_286_000);
+    expect(edges[0]).toBe(18_000);
+    expect(edges.at(-1)).toBe(16_286_000);
+    expect(edges.length).toBe(21);
+    // Log spacing: the first bar is a few hundred rupees wide, the last tens of thousands.
+    expect(edges[1] - edges[0]).toBeLessThan(10_000);
+    expect(edges.at(-1)! - edges.at(-2)!).toBeGreaterThan(2_000_000);
+    // A narrow range stays linear.
+    const narrow = priceEdges(5_000_000, 16_000_000);
+    // Equal widths, give or take the rounding to ₹500 / ₹1,000 steps.
+    expect(Math.abs(narrow[1] - narrow[0] - (narrow[11] - narrow[10]))).toBeLessThanOrEqual(100_000);
   });
 });

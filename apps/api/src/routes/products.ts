@@ -165,9 +165,12 @@ productsRouter.get('/', async (req, res, next) => {
     const pageIds = engine.ids.slice(skip, skip + query.limit);
     const found = await prisma.product.findMany({ where: { id: { in: pageIds } }, include: productListItemInclude });
     const byId = new Map(found.map((p) => [p.id, p]));
+    // A card shows the cheapest variant that matched, when variants were filtered on.
+    const variantFiltered =
+      filters.minPaise !== null || filters.maxPaise !== null || filters.inStock || filters.minDiscount !== null || filters.facets.size > 0;
     const items: ProductListItem[] = pageIds.flatMap((id) => {
       const product = byId.get(id);
-      return product ? [toProductListItem(product)] : [];
+      return product ? [toProductListItem(product, variantFiltered ? engine.matchedVariants.get(id) : undefined)] : [];
     });
 
     const categoryNames = new Map([...(await categoryRows()).values()].map((c) => [c.id, c]));

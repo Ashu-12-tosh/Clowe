@@ -64,6 +64,41 @@ export const UNKNOWN_VALUE_MIN_PRODUCTS = 2;
 
 const RATING_STEPS = [4, 3, 2];
 
+/** Bars in the price histogram. */
+const PRICE_BARS = 20;
+
+/**
+ * When the dearest variant costs more than this many times the cheapest, the
+ * bars are spaced on a log scale. ₹180 to ₹1.6 lakh in equal steps puts
+ * nearly the whole catalog in the first bar, and the slider, which moves bar
+ * by bar, could not tell ₹500 from ₹5,000.
+ */
+const LOG_SCALE_ABOVE = 20;
+
+/** Bar edges rounded to steps a shopper would type: ₹10 under ₹1,000, then ₹50, ₹500, ₹1,000. */
+function niceRupees(paise: number): number {
+  const rupees = paise / 100;
+  const step = rupees < 1_000 ? 10 : rupees < 10_000 ? 50 : rupees < 100_000 ? 500 : 1_000;
+  return Math.round(rupees / step) * step * 100;
+}
+
+/** Edges for the histogram: PRICE_BARS + 1 ascending values from min to max (fewer if they collapse). */
+export function priceEdges(minPaise: number, maxPaise: number): number[] {
+  if (maxPaise <= minPaise) return [minPaise, maxPaise];
+  const log = maxPaise / Math.max(minPaise, 1) > LOG_SCALE_ABOVE;
+  const edges = [minPaise];
+  for (let i = 1; i < PRICE_BARS; i += 1) {
+    const t = i / PRICE_BARS;
+    const raw = log
+      ? Math.exp(Math.log(Math.max(minPaise, 1)) + t * (Math.log(maxPaise) - Math.log(Math.max(minPaise, 1))))
+      : minPaise + t * (maxPaise - minPaise);
+    const edge = niceRupees(raw);
+    if (edge > edges[edges.length - 1] && edge < maxPaise) edges.push(edge);
+  }
+  edges.push(maxPaise);
+  return edges;
+}
+
 /** Option keys the API writes for itself, never a facet of their own. */
 const INTERNAL_OPTION_KEYS = new Set(['color_family']);
 
@@ -413,10 +448,24 @@ export async function runFacetEngine(input: EngineInput): Promise<EngineResult> 
     // Bounds over every variant the other filters leave, so the slider spans
     // what could still be chosen.
     const prices = priced.flatMap(({ x, mask }) => x.p.variants.filter((_, i) => mask[i]).map((v) => v.pricePaise));
+    const minPaise = Math.min(...prices);
+    const maxPaise = Math.max(...prices);
+    const edges = priceEdges(minPaise, maxPaise);
+    const bars = edges.slice(0, -1).map((from, i) => ({ fromPaise: from, toPaise: edges[i + 1], count: 0 }));
+    // A product counts once in each bar one of its variants falls in.
+    for (const { x, mask } of priced) {
+      const hit = new Set<number>();
+      x.p.variants.forEach((v, i) => {
+        if (!mask[i]) return;
+        const bar = bars.findIndex((b, j) => v.pricePaise >= b.fromPaise && (v.pricePaise < b.toPaise || j === bars.length - 1));
+        if (bar !== -1) hit.add(bar);
+      });
+      for (const bar of hit) bars[bar].count += 1;
+    }
     price = {
-      minPaise: Math.min(...prices),
-      maxPaise: Math.max(...prices),
-      histogram: [],
+      minPaise,
+      maxPaise,
+      histogram: bars,
       selectedMinPaise: filters.minPaise,
       selectedMaxPaise: filters.maxPaise,
     };

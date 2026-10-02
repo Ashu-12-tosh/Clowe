@@ -75,10 +75,14 @@ export const productListItemInclude = {
  * Price comes from the cheapest variant (not the cheapest *in-stock* one — a
  * sold-out card still shows what it costs); defaultVariantId is the in-stock one.
  */
-export function toProductListItem(p: ListingProduct): ProductListItem {
-  const cheapest = p.variants.reduce<{ pricePaise: number; mrpPaise: number | null }>(
+export function toProductListItem(p: ListingProduct, matchedVariantIds?: readonly string[]): ProductListItem {
+  // With filters on variants (a price range, a size), the card speaks for the
+  // variants that matched: their cheapest price, and one of them to add.
+  const matched = matchedVariantIds ? p.variants.filter((v) => matchedVariantIds.includes(v.id)) : [];
+  const shown = matched.length ? matched : p.variants;
+  const cheapest = shown.reduce<{ pricePaise: number; mrpPaise: number | null }>(
     (min, v) => (v.pricePaise < min.pricePaise ? v : min),
-    p.variants[0] ?? { pricePaise: p.basePricePaise, mrpPaise: null },
+    shown[0] ?? { pricePaise: p.basePricePaise, mrpPaise: null },
   );
   return {
     id: p.id,
@@ -88,7 +92,7 @@ export function toProductListItem(p: ListingProduct): ProductListItem {
     categoryName: p.category.name,
     pricePaise: cheapest.pricePaise,
     mrpPaise: p.mrpPaise ?? cheapest.mrpPaise,
-    priceVaries: pricesVary(p.variants),
+    priceVaries: pricesVary(shown),
     imageUrl: p.images[0]?.url ?? null,
     // size/color are display caches of optionValues — "" when the axis is absent.
     sizes: [...new Set(p.variants.map((v) => v.size).filter(Boolean))],
@@ -96,6 +100,7 @@ export function toProductListItem(p: ListingProduct): ProductListItem {
     // Denormalised rating cache — synced on every review write.
     ratingAvg: p.ratingCount > 0 ? p.ratingAvg : null,
     ratingCount: p.ratingCount,
-    ...listingStockFields(p.variants),
+    // Prefer a matching variant in stock; fall back to any in stock.
+    ...(matched.length && listingStockFields(matched).inStock ? listingStockFields(matched) : listingStockFields(p.variants)),
   };
 }
