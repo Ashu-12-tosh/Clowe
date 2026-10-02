@@ -2,6 +2,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { SellerProductDetail } from '@clowe/shared';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
 import { signAccessToken } from '../utils/jwt';
@@ -57,7 +58,7 @@ async function call(method: string, path: string, token: string, body?: unknown)
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  return { status: res.status, body: (await res.json()) as { success: boolean; data?: any; error?: { code: string } } };
+  return { status: res.status, body: (await res.json()) as { success: boolean; data: SellerProductDetail; error?: { code: string } } };
 }
 
 describe('colour family on variant write', () => {

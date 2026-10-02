@@ -168,7 +168,6 @@ function changePercent(current: number, previous: number): number | null {
 sellerPromotionsRouter.get('/summary', async (req, res, next) => {
   try {
     const sellerId = req.seller!.id;
-    const { couponsEnabled } = await getSettings();
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);

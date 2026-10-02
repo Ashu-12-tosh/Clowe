@@ -2,6 +2,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { SellerProductDetail } from '@clowe/shared';
 import type { AttributeDef } from '@clowe/shared';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
@@ -74,7 +75,7 @@ async function call(method: string, path: string, token: string | null, body?: u
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  return { status: res.status, body: (await res.json()) as { success: boolean; data?: any; error?: { code: string } } };
+  return { status: res.status, body: (await res.json()) as { success: boolean; data: SellerProductDetail; error?: { code: string } } };
 }
 
 /** A complete listing; attributes and mode are what each test varies. */
