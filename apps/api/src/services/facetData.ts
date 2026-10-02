@@ -3,10 +3,12 @@ import { colorFamilyOf, facetKeys, type ProductAttribute, type ResolvedFacet } f
 /**
  * Reading a product's value for a filter facet.
  *
- * A facet key names a spec-sheet field or a variant option, and a product is
- * read under the first of the facet's keys it carries anywhere. A spec-sheet
- * value belongs to the whole product; an option value belongs to each variant,
- * so "16GB" can be one of a laptop's variants and not the others.
+ * A facet key names a spec-sheet field or a variant option. When the variants
+ * carry any of the facet's keys they are read, one value per variant, so
+ * "16GB" can be one of a laptop's variants and not the others; a spec-sheet
+ * row for the same thing then says less than the variants do, and is not
+ * read. Otherwise the first of the keys the spec sheet has gives the whole
+ * product one value.
  */
 
 export type FacetFacts = Pick<ResolvedFacet, 'key' | 'alsoKeys' | 'kind' | 'values'>;
@@ -32,9 +34,8 @@ export function readFacet(
   variantOptions: readonly Record<string, string>[],
   facet: FacetFacts,
 ): FacetReading {
-  for (const key of facetKeys(facet)) {
-    const row = attributes.find((a) => a.key === key);
-    if (row) return { product: facetValue(row.value, facet), variants: null };
+  const keys = facetKeys(facet);
+  for (const key of keys) {
     if (variantOptions.some((o) => o[key])) {
       return {
         product: null,
@@ -42,6 +43,10 @@ export function readFacet(
         variants: variantOptions.map((o) => facetValue(o[key], facet, key === 'color' ? o.color_family : undefined)),
       };
     }
+  }
+  for (const key of keys) {
+    const row = attributes.find((a) => a.key === key);
+    if (row) return { product: facetValue(row.value, facet), variants: null };
   }
   return { product: null, variants: null };
 }

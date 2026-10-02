@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ParsedSearchQuery } from './searchQuery';
-import type { CategoryRules } from './categoryRules';
+import type { AttributeDef, CategoryRules } from './categoryRules';
 import type { VariantAxis } from './variants';
 import type { ProductAttribute } from './productAttributes';
 
@@ -80,6 +80,8 @@ export interface CategoryNode {
   icon: string | null;
   /** Resolved marketplace rules (own -> parent -> platform default). */
   rules: CategoryRules;
+  /** The spec sheet sellers fill in here: rules.attributeSchema plus the facets' fields and dropdowns. */
+  specFields: AttributeDef[];
   children: CategoryNode[];
 }
 

@@ -171,6 +171,7 @@ export const ENGINE_SELECT = {
   createdAt: true,
   mrpPaise: true,
   attributes: true,
+  brandRef: { select: { name: true } },
   variants: { select: { id: true, optionValues: true, pricePaise: true, mrpPaise: true, stock: true } },
 } satisfies Prisma.ProductSelect;
 
@@ -178,7 +179,8 @@ export function toEngineProduct(row: Prisma.ProductGetPayload<{ select: typeof E
   return {
     id: row.id,
     categoryId: row.categoryId,
-    brand: row.brand,
+    // A linked brand's own spelling, so "zephyr" and "Zephyr" are one value.
+    brand: row.brandRef?.name ?? row.brand,
     ratingAvg: row.ratingAvg,
     ratingCount: row.ratingCount,
     soldCount: row.soldCount,
@@ -524,14 +526,16 @@ function collectMembers(x: Prepared, def: ResolvedFacet, mask: boolean[], into: 
     into.set(fam, set);
   };
   for (const key of facetKeys(def)) {
-    const row = x.p.attributes.find((a) => a.key === key);
-    if (row) return add(row.value);
     if (x.p.variants.some((v) => v.options[key])) {
       x.p.variants.forEach((v, i) => {
         if (mask[i]) add(v.options[key], key === 'color' ? v.options.color_family : undefined);
       });
       return;
     }
+  }
+  for (const key of facetKeys(def)) {
+    const row = x.p.attributes.find((a) => a.key === key);
+    if (row) return add(row.value);
   }
 }
 

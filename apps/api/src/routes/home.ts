@@ -6,6 +6,7 @@ import {
   type HomeProductCard,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { isLiveBrand, liveBrands } from '../services/productSearch';
 
 export const homeRouter = Router();
 
@@ -124,7 +125,11 @@ async function buildHomePayload(): Promise<HomePayload> {
       where: { isActive: true, parentId: null },
       orderBy: { sortOrder: 'asc' },
     }),
-    prisma.brand.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' }, take: 16 }),
+    // Only brands with something live to buy (a backfilled "t shirt" has nothing).
+    Promise.all([
+      prisma.brand.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
+      liveBrands(),
+    ]).then(([all, live]) => all.filter((b) => isLiveBrand(b, live)).slice(0, 16)),
     trendingCards(),
   ]);
 

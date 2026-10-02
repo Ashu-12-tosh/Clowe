@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { AttributeDef } from './categoryRules';
 
 // ---------------------------------------------------------------------------
 // Filter facets — what a shopper can narrow a listing or a search by.
@@ -31,6 +32,36 @@ export const FACET_KIND_LABELS: Record<FacetKind, string> = {
 
 /** Same alphabet as a spec-sheet key or an option axis. */
 export const FACET_KEY_RE = /^[a-z][a-z0-9_]{0,31}$/;
+
+/**
+ * The spec sheet a seller fills in for a category: its own fields, then one
+ * for each facet that is not a variant axis there, and a dropdown wherever a
+ * facet knows the values — the same values the filter rail lists, so what a
+ * seller picks is what a shopper filters by.
+ */
+export function specFieldsFor(
+  rules: { attributeSchema: readonly AttributeDef[]; variantAxes: readonly { key: string }[] },
+  facets: readonly ResolvedFacet[],
+): AttributeDef[] {
+  const axes = new Set(rules.variantAxes.map((a) => a.key));
+  const byKey = new Map(facets.map((f) => [f.key, f]));
+  const fields: AttributeDef[] = rules.attributeSchema.map((def) => {
+    const values = byKey.get(def.key)?.values;
+    if (!values?.length) return def;
+    return { ...def, type: 'select', options: [...values, ...(def.options ?? []).filter((o) => !values.includes(o))] };
+  });
+  for (const facet of facets) {
+    // Colours and the category's own axes are set per variant, not on the sheet.
+    if (facet.kind === 'color' || facetKeys(facet).some((k) => axes.has(k))) continue;
+    if (fields.some((f) => f.key === facet.key)) continue;
+    fields.push(
+      facet.values?.length
+        ? { key: facet.key, label: facet.label, type: 'select', options: [...facet.values] }
+        : { key: facet.key, label: facet.label, type: 'text' },
+    );
+  }
+  return fields;
+}
 
 /** The rail entries every listing has, whatever the category. Not stored per category. */
 export const COMMON_FACETS = ['price', 'brand', 'rating', 'discount', 'inStock'] as const;

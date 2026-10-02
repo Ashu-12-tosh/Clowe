@@ -85,6 +85,39 @@ const PRICE_BUCKETS: { label: string; minPaise: number | null; maxPaise: number 
 ];
 
 // ---------------------------------------------------------------------------
+// Brands worth showing
+// ---------------------------------------------------------------------------
+
+/*
+ * A Brand row can exist with nothing behind it: the brand backfill made one
+ * for every name a seller typed, so a draft branded "t shirt" became a brand.
+ * Shoppers are shown a brand only when it has a live product (services/brands.ts
+ * has what sellers are offered).
+ */
+
+export interface LiveBrands {
+  /** Brand ids with a live product linked. */
+  ids: Set<string>;
+  /** Lower-cased names live products carry as text (older rows, and the fixture, are not all linked). */
+  names: Set<string>;
+}
+
+export async function liveBrands(): Promise<LiveBrands> {
+  const [linked, named] = await Promise.all([
+    prisma.product.groupBy({ by: ['brandId'], where: { ...LIVE_PRODUCT_WHERE, brandId: { not: null } } }),
+    prisma.product.groupBy({ by: ['brand'], where: { ...LIVE_PRODUCT_WHERE, brand: { not: null } } }),
+  ]);
+  return {
+    ids: new Set(linked.flatMap((g) => (g.brandId ? [g.brandId] : []))),
+    names: new Set(named.flatMap((g) => (g.brand ? [g.brand.trim().toLowerCase()] : []))),
+  };
+}
+
+export function isLiveBrand(brand: { id: string; name: string }, live: LiveBrands): boolean {
+  return live.ids.has(brand.id) || live.names.has(brand.name.trim().toLowerCase());
+}
+
+// ---------------------------------------------------------------------------
 // Catalog cache
 // ---------------------------------------------------------------------------
 
@@ -114,8 +147,9 @@ let catalogCache: CachedCatalog | null = null;
 export async function searchCatalog(): Promise<CachedCatalog> {
   if (catalogCache && catalogCache.expires > Date.now()) return catalogCache;
 
-  const [brands, categories, ratingAgg] = await Promise.all([
-    prisma.brand.findMany({ select: { name: true } }),
+  const [allBrands, live, categories, ratingAgg] = await Promise.all([
+    prisma.brand.findMany({ select: { id: true, name: true } }),
+    liveBrands(),
     prisma.category.findMany({
       where: { isActive: true },
       select: { slug: true, name: true, parent: { select: { name: true } } },
@@ -126,6 +160,8 @@ export async function searchCatalog(): Promise<CachedCatalog> {
     }),
   ]);
 
+  // Only brands with something to buy: the parser and the suggestions both read this.
+  const brands = allBrands.filter((b) => isLiveBrand(b, live));
   catalogCache = {
     brands: brands.map((b) => b.name),
     categories: categories.map((c) => ({ slug: c.slug, name: c.name })),

@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import type { CategoryCallout, CategoryDetail, CategoryNode } from '@clowe/shared';
 import { prisma } from '../db';
-import { chainOf, descendantIds, rulesFromChain } from '../services/categoryRules';
+import { specFieldsFor } from '@clowe/shared';
+import { chainOf, descendantIds, facetsFromChain, rulesFromChain } from '../services/categoryRules';
 import { ApiError } from '../utils/ApiError';
 
 export const categoriesRouter = Router();
@@ -36,16 +37,21 @@ categoriesRouter.get('/', async (_req, res, next) => {
       byParent.set(cat.parentId, list);
     }
 
-    const toNode = (cat: (typeof categories)[number]): CategoryNode => ({
-      id: cat.id,
-      name: cat.name,
-      slug: cat.slug,
-      imageUrl: cat.imageUrl,
-      icon: cat.icon,
-      // Rules resolve up the chain in memory - the tree is already loaded.
-      rules: rulesFromChain(chainOf(byId, cat.id)),
-      children: (byParent.get(cat.id) ?? []).map(toNode),
-    });
+    const toNode = (cat: (typeof categories)[number]): CategoryNode => {
+      // Rules and facets resolve up the chain in memory - the tree is already loaded.
+      const chain = chainOf(byId, cat.id);
+      const rules = rulesFromChain(chain);
+      return {
+        id: cat.id,
+        name: cat.name,
+        slug: cat.slug,
+        imageUrl: cat.imageUrl,
+        icon: cat.icon,
+        rules,
+        specFields: specFieldsFor(rules, facetsFromChain(chain)),
+        children: (byParent.get(cat.id) ?? []).map(toNode),
+      };
+    };
 
     const tree = (byParent.get(null) ?? []).map(toNode);
     res.json({ success: true, data: tree });

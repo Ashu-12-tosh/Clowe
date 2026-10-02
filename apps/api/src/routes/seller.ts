@@ -29,6 +29,7 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { categoryRulesFor } from '../services/categoryRules';
+import { brandSuggestions, linkBrand } from '../services/brands';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { applyReturnDecision, findSellerReturn } from '../services/returnService';
@@ -392,6 +393,18 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
   }
 });
 
+// Brands to offer as the seller types: ones with live products, and ones an
+// admin has created that have none yet. A name not offered can still be typed;
+// it is reviewed with the listing.
+sellerRouter.get('/brands', requireSeller, async (req, res, next) => {
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 40) : '';
+    res.json({ success: true, data: await brandSuggestions(q) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Create a product — goes live only after admin approval (status PENDING).
 
 /** Fields shared by create and update — everything the listing form owns. */
@@ -535,7 +548,8 @@ function assertRequiredAttributes(input: SellerProductUpsertInput, rules: Catego
 
 sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req, res, next) => {
   try {
-    const input = sellerProductUpsertSchema.parse(req.body);
+    // A typed name that matches a brand is linked to it, in the brand's own spelling.
+    const input = await linkBrand(sellerProductUpsertSchema.parse(req.body));
     const category = await prisma.category.findUnique({ where: { id: input.categoryId } });
     if (!category) throw ApiError.badRequest('Category not found', 'CATEGORY_NOT_FOUND');
     const rules = await categoryRulesFor(category.id);
@@ -718,7 +732,8 @@ async function saveLiveEdit(
 
 sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (req, res, next) => {
   try {
-    const input = sellerProductUpsertSchema.parse(req.body);
+    // A typed name that matches a brand is linked to it, in the brand's own spelling.
+    const input = await linkBrand(sellerProductUpsertSchema.parse(req.body));
     const product = await ownProduct(req, req.params.id);
     const rules = await categoryRulesFor(input.categoryId);
     assertRequiredAttributes(input, rules);
