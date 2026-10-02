@@ -60,6 +60,14 @@
  *                            opens a full-width overlay, so what is measured
  *                            there is the overlay's box.
  *
+ *   rail                     On listings, the filter rail must be reachable:
+ *                            from 1024 up as the sidebar, below it as the
+ *                            bottom sheet the Filters button opens — which
+ *                            must fit the viewport and not scroll sideways.
+ *                            Checked on all products, a filtered search and
+ *                            a filtered category, so the applied-filter chips
+ *                            are on the page too.
+ *
  * Truncated text nodes are reported but not asserted on: `truncate` is
  * sometimes the right call (a seller name in a dense row), so the count is a
  * number to watch, not a gate.
@@ -87,6 +95,14 @@ const VIEWPORTS = [
 const AUTH_PAGES = new Set(['/cart', '/checkout']);
 /** Pages that need the signed-in seller, and get the no-scroller assertion. */
 const SELLER_PAGES = new Set(['/seller/products']);
+/** Listings that carry the filter rail. */
+const RAIL_PAGES = new Set([
+  '/products',
+  '/products?q=laptop&f[ram]=16GB',
+  '/category/electronics?category=electronics-tvs&f[resolution]=4K%20Ultra%20HD',
+]);
+/** The width the rail becomes a sidebar (Tailwind's lg). */
+const RAIL_SIDEBAR_FROM = 1024;
 /** Below this the field cannot show a useful amount of a query. */
 const MIN_SEARCH_PX = 180;
 
@@ -277,7 +293,34 @@ const { session: sellerSession, why: sellerWhy } = await openSellerSession();
 if (!sellerSession) console.log(`seller pages skipped: ${sellerWhy}`);
 
 const firstProduct = session?.slug ?? (await api('/api/products?limit=1')).data?.items?.[0]?.slug;
-const PAGES = ['/', '/products', ...(firstProduct ? [`/products/${firstProduct}`] : []), '/cart', '/checkout', '/track', '/seller/products'];
+const PAGES = ['/', ...RAIL_PAGES, ...(firstProduct ? [`/products/${firstProduct}`] : []), '/cart', '/checkout', '/track', '/seller/products'];
+
+/** Sidebar from RAIL_SIDEBAR_FROM up; below, the sheet the Filters button opens. */
+async function checkRail(page, width) {
+  // The rail renders (in the sidebar, hidden or not) once the listing has loaded.
+  await page.locator('aside [data-filter-rail] [data-rail-section]').first().waitFor({ state: 'attached', timeout: 15000 });
+  if (width >= RAIL_SIDEBAR_FROM) {
+    const sections = await page.locator('aside [data-filter-rail] [data-rail-section]').count();
+    return { ok: sections > 0, text: `sidebar ${sections}` };
+  }
+  const button = page.locator('button', { hasText: 'Filters' }).filter({ visible: true }).first();
+  if ((await button.count()) === 0) return { ok: false, text: 'no Filters button' };
+  await button.click();
+  await page.locator('[data-filter-sheet] [data-rail-section]').first().waitFor({ timeout: 5000 });
+  const sheet = await page.evaluate(() => {
+    const dialog = document.querySelector('[data-filter-sheet] [role="dialog"]');
+    const r = dialog.getBoundingClientRect();
+    return {
+      sections: dialog.querySelectorAll('[data-rail-section]').length,
+      fits: r.left >= 0 && r.right <= window.innerWidth + 1 && r.bottom <= window.innerHeight + 1,
+      sideways: [...dialog.querySelectorAll('*')].some((el) => {
+        const ov = getComputedStyle(el).overflowX;
+        return (ov === 'auto' || ov === 'scroll') && el.scrollWidth > el.clientWidth + 1;
+      }),
+    };
+  });
+  return { ok: sheet.sections > 0 && sheet.fits && !sheet.sideways, text: `sheet ${sheet.sections}${sheet.fits ? '' : ' OVERFLOWS'}${sheet.sideways ? ' SCROLLS' : ''}` };
+}
 
 // One context for everything: the session, when there is one, lives in
 // localStorage exactly as the app stores it, and pages are opened from it.
@@ -323,7 +366,12 @@ for (const path of PAGES) {
         m.clippedTextCount > 0 ||
         (isSellerPage && m.scrollableCount > 0);
       const searchBad = m.searchBoxPx > 0 && m.searchBoxPx < MIN_SEARCH_PX;
-      if (overflowBad || searchBad) failures += 1;
+      // After the page measure: opening the sheet changes the page.
+      // The search overlay opened above would cover the Filters button: start clean.
+      if (RAIL_PAGES.has(path) && overlayed) await page.reload({ waitUntil: 'networkidle', timeout: 30000 });
+      const rail = RAIL_PAGES.has(path) ? await checkRail(page, width) : null;
+      const railBad = rail !== null && !rail.ok;
+      if (overflowBad || searchBad || railBad) failures += 1;
 
       rows.push({
         page: path,
@@ -335,7 +383,8 @@ for (const path of PAGES) {
         navScroll: m.navScrollableBy,
         scrollers: m.scrollableCount,
         trunc: m.truncatedNodes,
-        ok: overflowBad || searchBad ? 'FAIL' : 'ok',
+        rail: rail?.text ?? '',
+        ok: overflowBad || searchBad || railBad ? 'FAIL' : 'ok',
       });
       if (m.unclippedCount > 0) {
         console.error(`\n${path} @${width} — elements overflowing the viewport:`);
