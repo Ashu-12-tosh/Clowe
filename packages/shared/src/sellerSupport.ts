@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { httpUrlSchema } from './url';
 
 // ---------------------------------------------------------------------------
 // Seller support & help centre
@@ -130,13 +131,13 @@ export const ticketCreateSchema = z.object({
   priority: z.enum(TICKET_PRIORITIES).default('MEDIUM'),
   orderNumber: z.string().trim().max(40).optional(),
   productId: z.string().trim().max(40).optional(),
-  attachments: z.array(z.string().url()).max(5).default([]),
+  attachments: z.array(httpUrlSchema()).max(5).default([]),
 });
 export type TicketCreateInput = z.infer<typeof ticketCreateSchema>;
 
 export const ticketReplySchema = z.object({
   body: z.string().trim().min(1, 'Write a message').max(4000),
-  attachments: z.array(z.string().url()).max(5).default([]),
+  attachments: z.array(httpUrlSchema()).max(5).default([]),
 });
 export type TicketReplyInput = z.infer<typeof ticketReplySchema>;
 

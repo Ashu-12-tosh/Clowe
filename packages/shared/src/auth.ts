@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { UserRole } from './index';
+import { imageUrlSchema } from './imageUrl';
 
 /**
  * Indian 10-digit mobile number (stored without +91).
@@ -62,7 +63,7 @@ export const updateProfileSchema = z.object({
   interests: shortList(12),
   favouriteBrands: shortList(12),
   preferredCategories: shortList(12),
-  avatarUrl: z.string().url().nullable().optional(),
+  avatarUrl: imageUrlSchema.nullable().optional(),
   gender: z.enum(GENDERS).nullable().optional(),
   dateOfBirth: z
     .string()

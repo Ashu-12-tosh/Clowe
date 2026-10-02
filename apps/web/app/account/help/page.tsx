@@ -66,6 +66,7 @@ function Answer({ entry }: { entry: FaqEntry }) {
           {entry.links.map((link) => (
             <Link
               key={link.href}
+              // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
               href={link.href}
               className="t-caption rounded-lg border border-gray-300 px-3 py-1.5 font-semibold text-ink-900 transition hover:border-brand-600 hover:text-brand-600"
             >

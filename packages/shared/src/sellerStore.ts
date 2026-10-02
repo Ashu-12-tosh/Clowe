@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { imageUrlSchema } from './imageUrl';
+import { httpUrlSchema } from './url';
 
 // ---------------------------------------------------------------------------
 // Seller store settings
@@ -168,7 +170,7 @@ export interface SellerStoreOverview {
   integrations: PlatformIntegration[];
 }
 
-const socialUrl = z.string().trim().url().max(200).or(z.literal(''));
+const socialUrl = httpUrlSchema(200).or(z.literal(''));
 
 export const storeProfileSchema = z.object({
   shopName: z.string().trim().min(2, 'Store name is required').max(60),
@@ -183,8 +185,8 @@ export const storeProfileSchema = z.object({
     .or(z.literal('')),
   tagline: z.string().trim().max(80).optional(),
   description: z.string().trim().max(500).optional(),
-  logoUrl: z.string().trim().url().optional().or(z.literal('')),
-  bannerUrl: z.string().trim().url().optional().or(z.literal('')),
+  logoUrl: imageUrlSchema.optional().or(z.literal('')),
+  bannerUrl: imageUrlSchema.optional().or(z.literal('')),
   storeEmail: z.string().trim().email('Enter a valid email').optional().or(z.literal('')),
   storePhone: z.string().trim().max(20).optional(),
   primaryCategoryId: z.string().optional().or(z.literal('')),

@@ -116,6 +116,7 @@ export default function AccountLayout({ children }: { children: React.ReactNode 
               return (
                 <Link
                   key={item.href}
+                  // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
                   href={item.href}
                   className={`t-sidebar flex items-center gap-2.5 border-l-[3px] px-4 py-2.5 transition ${
                     active

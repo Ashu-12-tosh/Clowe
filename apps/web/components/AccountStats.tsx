@@ -49,6 +49,7 @@ export default function AccountStats() {
       {tiles.map((tile) => (
         <Link
           key={tile.label}
+          // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
           href={tile.href}
           className="rounded-2xl border border-gray-100 bg-white p-3 text-center transition hover:border-brand-600"
         >

@@ -1,4 +1,5 @@
 import { imageUrlSchema } from './imageUrl';
+import { httpUrlSchema } from './url';
 import { z } from 'zod';
 import { optionValuesSchema } from './variants';
 import { productAttributeInputSchema, type ProductAttribute } from './productAttributes';
@@ -121,9 +122,9 @@ export const sellerProductUpsertSchema = z
     shortDescription: z.string().trim().max(200).optional(),
     description: z.string().trim().max(5000),
     imageUrls: z.array(imageUrlSchema).max(8),
-    videoUrl: z.string().trim().url().max(300).optional().or(z.literal('')),
+    videoUrl: httpUrlSchema(300).optional().or(z.literal('')),
     /** Packing-process clip - required to submit for review; auto-removed after 10 days. */
-    packingVideoUrl: z.string().trim().url().max(300).optional().or(z.literal('')),
+    packingVideoUrl: httpUrlSchema(300).optional().or(z.literal('')),
     attributes: z.array(productAttributeInputSchema).max(20).optional(),
     highlights: z.array(z.string().trim().min(3).max(120)).max(8).optional(),
     variants: z.array(sellerVariantInputSchema).max(60),

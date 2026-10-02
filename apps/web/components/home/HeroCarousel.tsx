@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HomeBannerView } from '@clowe/shared';
+import { safeHref } from '@clowe/shared';
 
 const AI_PILLS = [
   { icon: '✦', label: 'AI Recommendations', href: '/products' },
@@ -74,14 +75,14 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
                 )}
                 <div className="mt-6 flex flex-wrap gap-3">
                   <Link
-                    href={banner.primaryHref}
+                    href={safeHref(banner.primaryHref) ?? '/products'}
                     className="rounded-lg bg-ink-900 px-6 py-3 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800"
                   >
                     {banner.primaryLabel}
                   </Link>
-                  {banner.secondaryLabel && banner.secondaryHref && (
+                  {banner.secondaryLabel && safeHref(banner.secondaryHref) && (
                     <Link
-                      href={banner.secondaryHref}
+                      href={safeHref(banner.secondaryHref) ?? '/products'}
                       className="rounded-lg border border-brand-600 px-6 py-3 text-sm font-bold uppercase tracking-wide text-brand-600 hover:bg-brand-50"
                     >
                       {banner.secondaryLabel}
@@ -92,6 +93,7 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
                   {AI_PILLS.map((pill) => (
                     <Link
                       key={pill.label}
+                      // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
                       href={pill.href}
                       className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/70 px-3 py-1.5 text-xs font-medium text-gray-700 backdrop-blur transition hover:border-brand-600 hover:text-brand-600"
                     >

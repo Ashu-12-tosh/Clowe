@@ -1,4 +1,5 @@
 import { imageUrlSchema } from './imageUrl';
+import { linkHrefSchema } from './url';
 import { z } from 'zod';
 
 // ---------------------------------------------------------------------------
@@ -134,9 +135,9 @@ export const bannerUpsertSchema = z.object({
   subtext: z.string().trim().max(200).nullable().optional(),
   imageUrl: imageUrlSchema.nullable().optional(),
   primaryLabel: z.string().trim().min(1).max(30).optional(),
-  primaryHref: z.string().trim().min(1).max(200).optional(),
+  primaryHref: linkHrefSchema(200).optional(),
   secondaryLabel: z.string().trim().max(30).nullable().optional(),
-  secondaryHref: z.string().trim().max(200).nullable().optional(),
+  secondaryHref: linkHrefSchema(200).or(z.literal('')).nullable().optional(),
   sortOrder: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
 });
@@ -159,7 +160,7 @@ export const promoTileUpsertSchema = z.object({
   title: z.string().trim().min(2).max(60),
   subtitle: z.string().trim().max(80).nullable().optional(),
   imageUrl: imageUrlSchema.nullable().optional(),
-  href: z.string().trim().min(1).max(200).optional(),
+  href: linkHrefSchema(200).optional(),
   sortOrder: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
 });

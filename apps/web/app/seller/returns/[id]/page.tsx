@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { RETURN_REASON_LABELS, type ReturnReasonValue, type SellerReturnRow } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
+import { ExternalLink } from '@/components/ExternalLink';
 
 const returnStatusStyles: Record<string, string> = {
   REQUESTED: 'bg-orange-100 text-orange-700',
@@ -121,10 +122,10 @@ export default function SellerReturnDetailPage({ params }: { params: { id: strin
         {row.photos.length > 0 && (
           <div className="mt-3 flex gap-2">
             {row.photos.map((url) => (
-              <a key={url} href={url} target="_blank" rel="noreferrer">
+              <ExternalLink key={url} href={url}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={url} alt="Return photo" className="h-24 w-24 rounded-lg object-cover transition hover:opacity-80" />
-              </a>
+              </ExternalLink>
             ))}
           </div>
         )}

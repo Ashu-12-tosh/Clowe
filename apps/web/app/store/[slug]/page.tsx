@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { WEEKDAYS, WEEKDAY_LABELS, type PublicStore, type Weekday } from '@clowe/shared';
+import { WEEKDAYS, WEEKDAY_LABELS, type PublicStore, type Weekday, safeHref } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
+import { ExternalLink } from '@/components/ExternalLink';
 
 interface StoreProductsPage {
   total: number;
@@ -69,7 +70,7 @@ export default function StorePage({ params }: { params: { slug: string } }) {
     );
   }
 
-  const socials = Object.entries(store.socialLinks).filter(([, url]) => !!url);
+  const socials = Object.entries(store.socialLinks).filter(([, url]) => !!safeHref(url));
 
   return (
     <main className="pb-16">
@@ -280,14 +281,9 @@ export default function StorePage({ params }: { params: { slug: string } }) {
                 <ul className="mt-2 space-y-1 text-xs">
                   {socials.map(([key, url]) => (
                     <li key={key}>
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="capitalize text-brand-600 hover:underline"
-                      >
+                      <ExternalLink href={url} className="capitalize text-brand-600 hover:underline">
                         {key} →
-                      </a>
+                      </ExternalLink>
                     </li>
                   ))}
                 </ul>

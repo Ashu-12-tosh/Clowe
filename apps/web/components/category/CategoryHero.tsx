@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { CategoryCallout, CategoryBannerSlide } from '@clowe/shared';
+import { safeHref } from '@clowe/shared';
 
 interface Props {
   slides: CategoryBannerSlide[];
@@ -71,7 +72,7 @@ export default function CategoryHero({ slides, highlights, intervalMs = 6000 }: 
           </p>
           {slide.subtext && <p className="t-hero-desc mt-3 text-gray-600">{slide.subtext}</p>}
           <Link
-            href={slide.primaryHref ?? '#products'}
+            href={safeHref(slide.primaryHref) ?? '#products'}
             className="mt-5 inline-block rounded-lg bg-ink-900 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-ink-800"
           >
             {slide.primaryLabel}

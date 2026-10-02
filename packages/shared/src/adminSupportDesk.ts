@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { COMPLAINT_CATEGORIES } from './complaints';
+import { httpUrlSchema } from './url';
 
 // ---------------------------------------------------------------------------
 // Customer support & ticket management (admin desk)
@@ -185,7 +186,7 @@ export interface SupportDeskSummary {
 
 export const deskReplySchema = z.object({
   body: z.string().trim().min(1, 'Write a message').max(4000),
-  attachments: z.array(z.string().url()).max(5).default([]),
+  attachments: z.array(httpUrlSchema()).max(5).default([]),
   /** Internal notes stay on the desk and never reach the shopper. */
   isInternal: z.boolean().default(false),
 });

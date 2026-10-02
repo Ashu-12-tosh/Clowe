@@ -10,6 +10,7 @@ import {
   type NotificationCategory,
   type NotificationList,
   type NotificationRow,
+  safeHref,
 } from '@clowe/shared';
 import { api, getStoredUser } from '@/lib/api';
 import { BADGES_EVENT } from '@/components/Header';
@@ -350,9 +351,9 @@ export default function NotificationsPage() {
                   <div className="min-w-0 flex-1">
                     <p className="t-card-label text-ink-900">{row.title}</p>
                     <p className="t-caption mt-0.5 text-gray-600">{row.body}</p>
-                    {row.linkHref && (
+                    {safeHref(row.linkHref) && (
                       <Link
-                        href={row.linkHref}
+                        href={safeHref(row.linkHref) ?? '/notifications'}
                         className="t-caption mt-2 inline-block rounded-lg border border-brand-600 px-3 py-1.5 font-bold text-brand-700 transition hover:bg-brand-50"
                       >
                         {NOTIFICATION_CTA_LABELS[row.category]}

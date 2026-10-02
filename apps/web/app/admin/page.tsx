@@ -230,6 +230,7 @@ export default function AdminDashboardPage() {
             .map((item) => (
               <Link
                 key={item.one}
+                // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
                 href={item.href}
                 className="rounded-lg border border-yellow-300 bg-yellow-50 px-3.5 py-2 text-xs font-medium text-yellow-800 hover:bg-yellow-100"
               >
@@ -467,6 +468,7 @@ export default function AdminDashboardPage() {
                   {data.riskAlerts.map((a) => (
                     <li key={a.key}>
                       <Link
+                        // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
                         href={a.href}
                         className="flex items-center justify-between gap-2 hover:text-brand-600"
                         title={a.detail}
@@ -497,6 +499,7 @@ export default function AdminDashboardPage() {
                   ].map(([label, href]) => (
                     <Link
                       key={href}
+                      // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
                       href={href}
                       className="rounded-lg border border-gray-200 px-3 py-2 text-center text-gray-700 hover:border-brand-600 hover:text-brand-600"
                     >

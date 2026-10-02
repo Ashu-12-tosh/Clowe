@@ -21,6 +21,7 @@ export interface ApiResponse<T> {
 /** Health-check response returned by GET /api/health. */
 export * from './auth';
 export * from './imageUrl';
+export * from './url';
 export * from './catalog';
 export * from './search';
 export * from './searchAnalytics';

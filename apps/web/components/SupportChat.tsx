@@ -145,6 +145,7 @@ export default function SupportChat() {
                         {item.message.links.map((link) => (
                           <Link
                             key={link.href + link.label}
+                            // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
                             href={link.href}
                             onClick={() => setOpen(false)}
                             className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-700"

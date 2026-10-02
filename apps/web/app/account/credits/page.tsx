@@ -494,6 +494,7 @@ export default function CreditsPage() {
             <ul className="mt-3 divide-y divide-gray-100">
               {EARN_WAYS.map(({ Icon, title, text, href }) => (
                 <li key={title}>
+                  {/* eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data */}
                   <Link href={href} className="flex items-start gap-2.5 py-3 hover:text-brand-600">
                     <Icon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
                     <span className="min-w-0">

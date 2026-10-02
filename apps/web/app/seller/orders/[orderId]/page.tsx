@@ -7,6 +7,7 @@ import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { StatusPill } from '@/components/seller/orders/StatusPill';
 import { DispatchCountdown } from '@/components/seller/orders/DispatchCountdown';
+import { ExternalLink } from '@/components/ExternalLink';
 
 type Action = 'pack' | 'ship' | 'deliver';
 
@@ -267,14 +268,12 @@ export default function SellerOrderDetailPage({ params }: { params: { orderId: s
                       {line.trackingUrl && (
                         <>
                           {' · '}
-                          <a
+                          <ExternalLink
                             href={line.trackingUrl}
-                            target="_blank"
-                            rel="noreferrer"
                             className="font-semibold text-brand-600 hover:underline"
                           >
                             Track ↗
-                          </a>
+                          </ExternalLink>
                         </>
                       )}
                     </p>

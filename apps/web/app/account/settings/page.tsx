@@ -841,6 +841,7 @@ export default function AccountSettingsPage() {
             <ul className="mt-3 divide-y divide-gray-100">
               {QUICK_ACTIONS.filter((a) => a.href !== '/account/coupons' || couponsEnabled === true).map(({ href, Icon, title, text }) => (
                 <li key={title}>
+                  {/* eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data */}
                   <Link href={href} className="flex items-center gap-2.5 py-3 transition hover:text-brand-600">
                     <Icon className="h-4 w-4 shrink-0 text-gray-500" />
                     <span className="min-w-0 flex-1">

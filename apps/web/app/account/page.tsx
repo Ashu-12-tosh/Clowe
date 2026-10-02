@@ -111,6 +111,7 @@ export default function AccountOverviewPage() {
         {stats.map((tile) => (
           <Link
             key={tile.label}
+            // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
             href={tile.href}
             className="group rounded-2xl border border-gray-100 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-md"
           >

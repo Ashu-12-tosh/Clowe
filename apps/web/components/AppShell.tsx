@@ -89,6 +89,7 @@ function MobileDrawer({ onNavigate }: { onNavigate: () => void }) {
         {ACCOUNT_LINKS.map((item) => (
           <Link
             key={item.label}
+            // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
             href={item.href}
             onClick={onNavigate}
             className="flex items-center gap-3 px-5 py-2.5 text-sm text-gray-800"

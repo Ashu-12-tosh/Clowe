@@ -259,6 +259,7 @@ export default function SellerDashboardPage() {
           {data.actions.map((a) => (
             <Link
               key={a.key}
+              // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
               href={a.href}
               className={`rounded-lg border px-3.5 py-2 text-xs font-medium ${
                 a.tone === 'WARN'

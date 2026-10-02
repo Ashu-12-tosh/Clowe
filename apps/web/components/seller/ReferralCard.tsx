@@ -59,6 +59,7 @@ export default function ReferralCard() {
           {copied ? '✓ Copied' : '⧉ Copy'}
         </button>
         <a
+          // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
           href={waLink}
           target="_blank"
           rel="noreferrer"

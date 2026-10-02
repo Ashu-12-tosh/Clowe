@@ -24,6 +24,7 @@ import {
 import { api, ApiRequestError, uploadImages } from '@/lib/api';
 import StorePreview from '@/components/seller/store/StorePreview';
 import KycVerificationCard from '@/components/seller/KycVerificationCard';
+import { ExternalLink } from '@/components/ExternalLink';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -253,14 +254,12 @@ export default function SellerStoreSettingsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {form.storeUrl ? (
-            <a
+            <ExternalLink
               href={form.storeUrl}
-              target="_blank"
-              rel="noreferrer"
               className="rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-semibold hover:bg-gray-50"
             >
               👁 View store
-            </a>
+            </ExternalLink>
           ) : (
             <span
               title="Claim a store URL first"
@@ -1053,14 +1052,12 @@ export default function SellerStoreSettingsPage() {
             </p>
             <StorePreview s={form} />
             {form.storeUrl && (
-              <a
+              <ExternalLink
                 href={form.storeUrl}
-                target="_blank"
-                rel="noreferrer"
                 className="mt-2 block text-center text-[11px] font-semibold text-brand-600 hover:underline"
               >
                 Open the live store page →
-              </a>
+              </ExternalLink>
             )}
           </div>
 
@@ -1118,6 +1115,7 @@ export default function SellerStoreSettingsPage() {
               ].map((l) => (
                 <li key={l.href}>
                   <Link
+                    // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
                     href={l.href}
                     className="block rounded-lg px-2 py-1.5 text-gray-600 hover:bg-cream-50 hover:text-ink-900"
                   >

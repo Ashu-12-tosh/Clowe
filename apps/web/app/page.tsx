@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { newsletterSubscribeSchema, type HomePayload } from '@clowe/shared';
+import { newsletterSubscribeSchema, type HomePayload, safeHref } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import HeroCarousel from '@/components/home/HeroCarousel';
 import RecentlyViewed from '@/components/home/RecentlyViewed';
@@ -163,7 +163,7 @@ export default function HomePage() {
           {home.promoCards.map((card, i) => (
             <Link
               key={card.id}
-              href={card.href}
+              href={safeHref(card.href) ?? '/products'}
               className={`group relative overflow-hidden rounded-2xl ${i % 2 === 0 ? 'bg-ink-950 text-white' : 'bg-cream-100 text-ink-900'}`}
             >
               {card.imageUrl && (
@@ -250,6 +250,7 @@ export default function HomePage() {
             <p className="t-section-desc mt-2 text-gray-400">Smart features that make shopping effortless.</p>
             <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
               {AI_FEATURES.map((feature) => (
+                // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
                 <Link key={feature.title} href={feature.href} className="group">
                   <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-brand-600/40 bg-white/5 text-lg text-brand-400 transition group-hover:bg-brand-600 group-hover:text-white">
                     {feature.icon}
@@ -299,7 +300,7 @@ export default function HomePage() {
           {home.promoStrips.map((strip) => (
             <Link
               key={strip.id}
-              href={strip.href}
+              href={safeHref(strip.href) ?? '/products'}
               className="group relative flex h-36 items-center overflow-hidden rounded-2xl bg-ink-950 text-white"
             >
               {strip.imageUrl && (

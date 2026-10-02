@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ProductListItem } from './catalog';
+import { httpUrlSchema } from './url';
 
 // ---------------------------------------------------------------------------
 // Platform settings (admin-editable; defaults live in the API)
@@ -167,10 +168,10 @@ export const updateSettingsSchema = z.object({
   couponsEnabled: z.boolean().optional(),
   socialLinks: z
     .object({
-      facebook: z.string().trim().url().or(z.literal('')),
-      twitter: z.string().trim().url().or(z.literal('')),
-      instagram: z.string().trim().url().or(z.literal('')),
-      linkedin: z.string().trim().url().or(z.literal('')),
+      facebook: httpUrlSchema().or(z.literal('')),
+      twitter: httpUrlSchema().or(z.literal('')),
+      instagram: httpUrlSchema().or(z.literal('')),
+      linkedin: httpUrlSchema().or(z.literal('')),
     })
     .optional(),
   supportEmails: z

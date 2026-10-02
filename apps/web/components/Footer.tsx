@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getPublicSettings } from '@/lib/settings';
+import { ExternalLink } from '@/components/ExternalLink';
+import { safeHref } from '@clowe/shared';
 
 const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -129,7 +131,7 @@ export default function Footer() {
     { Icon: InstagramIcon, label: 'Clowe on Instagram', href: social.instagram },
     { Icon: LinkedInIcon, label: 'Clowe on LinkedIn', href: social.linkedin },
     { Icon: XIcon, label: 'Clowe on X', href: social.twitter },
-  ].filter((s) => s.href);
+  ].filter((s) => safeHref(s.href));
 
   return (
     <footer className="mt-16 border-t border-gray-100 bg-white">
@@ -148,17 +150,15 @@ export default function Footer() {
           {socialLinks.length > 0 && (
             <div className="mt-4 flex items-center gap-1 text-gray-400">
               {socialLinks.map(({ Icon, label, href }) => (
-                <a
+                <ExternalLink
                   key={label}
                   href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   aria-label={label}
                   // 44px tap target around a 20px mark; the row stays one line tall.
                   className="flex h-11 w-11 items-center justify-center rounded-full transition hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-600"
                 >
                   <Icon />
-                </a>
+                </ExternalLink>
               ))}
             </div>
           )}
@@ -171,6 +171,7 @@ export default function Footer() {
             <ul className="mt-3 space-y-2">
               {col.links.map((link) => (
                 <li key={link.label}>
+                  {/* eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data */}
                   <Link href={link.href} className="t-footer-link text-gray-500 hover:text-brand-600 hover:underline">
                     {link.label}
                   </Link>

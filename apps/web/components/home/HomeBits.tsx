@@ -32,6 +32,7 @@ export function SectionHeader({
       <div className="flex items-center gap-3">
         {right}
         {href && (
+          // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
           <Link href={href} className="text-sm font-semibold text-brand-600 hover:underline">
             View All →
           </Link>

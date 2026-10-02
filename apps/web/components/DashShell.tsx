@@ -55,6 +55,7 @@ function SidebarContent({
         {nav.map((item) => (
           <Link
             key={item.href}
+            // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
             href={item.href}
             onClick={onNavigate}
             className={`flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm transition ${

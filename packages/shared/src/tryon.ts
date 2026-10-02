@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import { imageUrlSchema } from './imageUrl';
 
 export const tryOnRequestSchema = z.object({
   productId: z.string().min(1),
   /** Public URL of the customer's photo (from POST /api/uploads). */
-  photoUrl: z.string().url(),
+  photoUrl: imageUrlSchema,
   /** Size/colour on screen when the run was made — shown on the result. */
   variantSize: z.string().trim().max(40).optional(),
   variantColor: z.string().trim().max(40).optional(),
@@ -54,5 +55,5 @@ export interface TryOnQuota {
 }
 
 export const saveTryOnPhotoSchema = z.object({
-  photoUrl: z.string().url(),
+  photoUrl: imageUrlSchema,
 });

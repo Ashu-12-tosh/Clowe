@@ -598,6 +598,7 @@ export default function SellerProductsPage() {
               {QUICK_ACTIONS.map((a) => (
                 <li key={a.href}>
                   <Link
+                    // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
                     href={a.href}
                     className="flex items-center gap-2.5 rounded-xl px-2 py-2 text-xs font-medium text-gray-600 hover:bg-cream-50 hover:text-ink-900"
                   >

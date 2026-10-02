@@ -22,6 +22,7 @@ import RelatedProducts from '@/components/RelatedProducts';
 import SizeGuideModal from '@/components/product/SizeGuideModal';
 import { fetchWishlistIds } from '@/lib/wishlist';
 import { LockIcon, ShieldCheckIcon } from '@/components/cart/CartIcons';
+import { ExternalLink } from '@/components/ExternalLink';
 
 const PHOTO_TIPS = ['Good lighting', 'Facing forward', 'Arms visible', 'Plain background'];
 
@@ -733,15 +734,13 @@ export default function TryOnPage({ params }: { params: { slug: string } }) {
               ⟳ Try Another Photo
             </button>
             {current?.resultImageUrl && (
-              <a
+              <ExternalLink
                 href={current.resultImageUrl}
                 download="clowe-tryon"
-                target="_blank"
-                rel="noreferrer"
                 className="block rounded-lg border border-gray-300 py-3 text-center text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
               >
                 ⬇ Download result
-              </a>
+              </ExternalLink>
             )}
             <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-gray-400">
               <ShieldCheckIcon className="h-3.5 w-3.5" />
