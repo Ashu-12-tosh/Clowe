@@ -391,7 +391,7 @@ function FacetsPageInner() {
             <button
               key={r.id}
               onClick={() => router.push(`/admin/facets?category=${r.id}`)}
-              className={`block w-full truncate rounded-md px-2 py-1 text-left text-sm ${
+              className={`block w-full break-words rounded-md px-2 py-1 text-left text-sm ${
                 selected === r.id ? 'bg-brand-100 font-semibold text-brand-700' : 'text-gray-700 hover:bg-gray-50'
               }`}
               style={{ paddingLeft: `${0.5 + r.depth * 1}rem` }}

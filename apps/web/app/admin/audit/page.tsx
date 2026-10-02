@@ -85,10 +85,10 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
-          <p className="mt-0.5 truncate font-display text-lg font-bold text-ink-900">{value}</p>
+          <p className="mt-0.5 break-words font-display text-lg font-bold text-ink-900">{value}</p>
         </div>
       </div>
       <p className="mt-2 text-[11px] text-gray-500">{footer}</p>
@@ -450,7 +450,7 @@ export default function AdminAuditPage() {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-4">
-        <div className="xl:col-span-3">
+        <div className="xl:col-span-3 min-w-0">
           {/* --- Tabs ---------------------------------------------------- */}
           <div className="rounded-t-2xl border border-b-0 border-gray-100 bg-white px-3 pt-3">
             <div className="flex flex-wrap gap-1">
@@ -516,11 +516,11 @@ export default function AdminAuditPage() {
                     <td className="px-3 py-2.5 text-gray-600">{row.module}</td>
                     <td className="px-3 py-2.5 text-ink-900">{row.action}</td>
                     <td className="max-w-56 px-3 py-2.5">
-                      <p className="truncate text-gray-600" title={row.summary}>
+                      <p className="break-words text-gray-600" title={row.summary}>
                         {row.summary}
                       </p>
                       {row.entityId && (
-                        <p className="truncate font-mono text-[11px] text-gray-400">
+                        <p className="break-words font-mono text-[11px] text-gray-400">
                           {row.entityType ?? 'id'}: {row.entityId}
                         </p>
                       )}
@@ -619,7 +619,7 @@ export default function AdminAuditPage() {
           {/* --- Bottom charts ------------------------------------------- */}
           {summary && (
             <div className="mt-4 grid gap-4 lg:grid-cols-3">
-              <div className="lg:col-span-2">
+              <div className="lg:col-span-2 min-w-0">
                 <Panel title="Activity trend" subtitle="Events recorded per day">
                   <LineChart
                     points={summary.trend.map((t) => ({ date: t.date, value: t.count }))}
@@ -652,7 +652,7 @@ export default function AdminAuditPage() {
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cream-100 text-[10px] font-bold text-gray-500">
                         {i + 1}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-ink-900">{a.name}</span>
+                      <span className="min-w-0 flex-1 break-words text-ink-900">{a.name}</span>
                       <span
                         className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                           ROLE_STYLES[a.role] ?? 'bg-gray-100 text-gray-600'
@@ -695,7 +695,7 @@ export default function AdminAuditPage() {
                 <ul className="space-y-2 text-xs">
                   {summary.criticalBreakdown.map((c) => (
                     <li key={c.action} className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 flex-1 truncate text-gray-700">{c.action}</span>
+                      <span className="min-w-0 flex-1 break-words text-gray-700">{c.action}</span>
                       <span className="font-semibold text-red-600">{num(c.count)}</span>
                     </li>
                   ))}
@@ -767,7 +767,7 @@ export default function AdminAuditPage() {
                   {summary.loginLocations.map((l) => (
                     <li key={l.ipAddress} className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate font-mono text-ink-900">{l.ipAddress}</p>
+                        <p className="break-words font-mono text-ink-900">{l.ipAddress}</p>
                         <p className="text-[11px] text-gray-400">
                           {DEVICE_ICONS[l.deviceType ?? 'OTHER'] ?? '•'} {l.deviceType ?? 'Unknown'}{' '}
                           · {fmtTime(l.lastSeen)}

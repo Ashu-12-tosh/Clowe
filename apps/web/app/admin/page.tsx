@@ -85,10 +85,10 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
-          <p className="mt-0.5 truncate font-display text-lg font-bold text-ink-900">{value}</p>
+          <p className="mt-0.5 break-words font-display text-lg font-bold text-ink-900">{value}</p>
         </div>
       </div>
       <p className="mt-2 text-[11px]">
@@ -291,7 +291,7 @@ export default function AdminDashboardPage() {
         <>
           {/* Sales / status / categories ------------------------------------ */}
           <div className="mt-4 grid gap-4 xl:grid-cols-4">
-            <div className="xl:col-span-2">
+            <div className="xl:col-span-2 min-w-0">
               <Panel
                 title="Sales overview"
                 subtitle={`Delivered & paid GMV · ${OVERVIEW_RANGE_LABELS[data.range.key]}`}
@@ -334,7 +334,7 @@ export default function AdminDashboardPage() {
                 {data.topCategories.map((c, i) => (
                   <li key={c.id}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate text-gray-700">
+                      <span className="min-w-0 break-words text-gray-700">
                         {i + 1}. {c.name}
                       </span>
                       <span className="shrink-0 font-semibold text-ink-900">
@@ -359,7 +359,7 @@ export default function AdminDashboardPage() {
 
           {/* Recent orders / health / risk ---------------------------------- */}
           <div className="mt-4 grid gap-4 xl:grid-cols-4">
-            <div className="xl:col-span-3">
+            <div className="xl:col-span-3 min-w-0">
               <section className="rounded-2xl border border-gray-100 bg-white">
                 <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
                   <h2 className="text-sm font-bold text-ink-900">Recent orders</h2>
@@ -385,7 +385,7 @@ export default function AdminDashboardPage() {
                         <tr key={o.id} className="border-t border-gray-100 hover:bg-cream-50">
                           <td className="px-4 py-2.5 font-mono text-brand-600">{o.orderNumber}</td>
                           <td className="px-4 py-2.5 text-ink-900">{o.customerName}</td>
-                          <td className="max-w-44 truncate px-4 py-2.5 text-gray-600">
+                          <td className="max-w-44 break-words px-4 py-2.5 text-gray-600">
                             {o.sellerNames.join(', ') || '—'}
                           </td>
                           <td className="px-4 py-2.5 text-right font-semibold text-ink-900">
@@ -456,7 +456,7 @@ export default function AdminDashboardPage() {
                 <ul className="space-y-1.5 text-xs">
                   {data.systemHealth.checks.map((c) => (
                     <li key={c.key} className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate text-gray-700" title={c.detail}>
+                      <span className="min-w-0 break-words text-gray-700" title={c.detail}>
                         <span className={HEALTH_STYLES[c.status]}>●</span> {c.label}
                       </span>
                       <span className={`shrink-0 font-semibold ${HEALTH_STYLES[c.status]}`}>
@@ -529,8 +529,8 @@ export default function AdminDashboardPage() {
                 {data.newSellers.map((s) => (
                   <li key={s.id} className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-ink-900">{s.shopName}</p>
-                      <p className="truncate text-[11px] text-gray-400">
+                      <p className="break-words font-medium text-ink-900">{s.shopName}</p>
+                      <p className="break-words text-[11px] text-gray-400">
                         {s.email ?? new Date(s.joinedAt).toLocaleDateString('en-IN')}
                       </p>
                     </div>
@@ -559,7 +559,7 @@ export default function AdminDashboardPage() {
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-ink-900">{s.shopName}</p>
+                      <p className="break-words font-medium text-ink-900">{s.shopName}</p>
                       <p className="text-[11px] text-gray-400">
                         {s.orders} order{s.orders === 1 ? '' : 's'}
                         {s.ratingAvg != null && ` · ★ ${s.ratingAvg}`}

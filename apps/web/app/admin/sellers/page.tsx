@@ -65,10 +65,10 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
-          <p className="mt-0.5 truncate font-display text-lg font-bold text-ink-900">{value}</p>
+          <p className="mt-0.5 break-words font-display text-lg font-bold text-ink-900">{value}</p>
         </div>
       </div>
       <p className="mt-2 text-[11px] text-gray-500">{footer}</p>
@@ -320,8 +320,8 @@ function SellersView() {
                       {row.shopName.slice(0, 2).toUpperCase()}
                     </span>
                     <div className="min-w-0">
-                      <p className="max-w-44 truncate font-medium text-ink-900">{row.shopName}</p>
-                      <p className="max-w-44 truncate text-[11px] text-gray-400">
+                      <p className="max-w-44 break-words font-medium text-ink-900">{row.shopName}</p>
+                      <p className="max-w-44 break-words text-[11px] text-gray-400">
                         {row.email ?? row.ownerName ?? '—'}
                       </p>
                       <p className="text-[11px] text-gray-400">+91 {row.phone}</p>
@@ -456,7 +456,7 @@ function SellersView() {
       {/* --- Charts ------------------------------------------------------ */}
       {summary && (
         <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-          <section className="rounded-2xl border border-gray-100 bg-white p-4 xl:col-span-2">
+          <section className="rounded-2xl border border-gray-100 bg-white p-4 xl:col-span-2 min-w-0">
             <h2 className="text-sm font-bold text-ink-900">Seller growth</h2>
             <p className="text-[11px] text-gray-400">New shops per day, last 30 days</p>
             <div className="mt-3">
@@ -501,7 +501,7 @@ function SellersView() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-gray-100 bg-white p-4 xl:col-span-4">
+          <section className="rounded-2xl border border-gray-100 bg-white p-4 xl:col-span-4 min-w-0">
             <h2 className="text-sm font-bold text-ink-900">Top categories by GMV</h2>
             {summary.topCategories.length > 0 ? (
               <ul className="mt-3 space-y-2 text-xs">

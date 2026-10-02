@@ -153,7 +153,7 @@ export default function AdminDealsPage() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={p.imageUrl} alt="" className="h-8 w-7 rounded object-cover" />
                   )}
-                  <span className="truncate">{p.title}</span>
+                  <span className="break-words">{p.title}</span>
                 </label>
               ))}
             </div>
@@ -205,7 +205,7 @@ export default function AdminDealsPage() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={p.imageUrl} alt="" className="h-5 w-5 rounded-full object-cover" />
                   )}
-                  <span className="max-w-40 truncate">{p.title}</span>
+                  <span className="max-w-40 break-words">{p.title}</span>
                 </span>
               ))}
             </div>

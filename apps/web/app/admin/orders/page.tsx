@@ -113,11 +113,11 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
           <p
-            className={`mt-0.5 truncate font-display text-lg font-bold ${
+            className={`mt-0.5 break-words font-display text-lg font-bold ${
               tone === 'bad' ? 'text-red-600' : tone === 'warn' ? 'text-yellow-600' : 'text-ink-900'
             }`}
           >
@@ -125,7 +125,7 @@ function KpiCard({
           </p>
         </div>
       </div>
-      {hint && <p className="mt-2 truncate text-[11px] text-gray-400">{hint}</p>}
+      {hint && <p className="mt-2 break-words text-[11px] text-gray-400">{hint}</p>}
     </div>
   );
 }
@@ -522,7 +522,7 @@ export default function AdminOrdersPage() {
 
       {/* Table + drawer ---------------------------------------------------- */}
       <div className="mt-4 grid gap-4 xl:grid-cols-4">
-        <div className={openId ? 'xl:col-span-3' : 'xl:col-span-4'}>
+        <div className={`min-w-0 ${openId ? 'xl:col-span-3' : 'xl:col-span-4'}`}>
           <section className="rounded-2xl border border-gray-100 bg-white">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-2.5">
               <div className="flex gap-1 overflow-x-auto">
@@ -645,7 +645,7 @@ export default function AdminOrdersPage() {
       {/* Charts ------------------------------------------------------------ */}
       {summary && (
         <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-5">
-          <div className="xl:col-span-2">
+          <div className="xl:col-span-2 min-w-0">
             <Panel title="Order trend" subtitle="Last 30 days">
               <LineChart
                 points={summary.trend.map((t) => ({ date: t.date, value: t.orders }))}
@@ -781,8 +781,8 @@ function OrderRow({
             {initials(order.customer.name, order.customer.phone)}
           </span>
           <div className="min-w-0">
-            <p className="truncate font-medium text-ink-900">{order.customer.name ?? '—'}</p>
-            <p className="truncate text-[11px] text-gray-400">
+            <p className="break-words font-medium text-ink-900">{order.customer.name ?? '—'}</p>
+            <p className="break-words text-[11px] text-gray-400">
               {order.customer.email ?? `+91 ${order.customer.phone}`}
             </p>
           </div>
@@ -830,7 +830,7 @@ function OrderRow({
           {order.statusLabel}
         </span>
       </td>
-      <td className="max-w-40 truncate px-3 py-2.5 text-gray-600">
+      <td className="max-w-40 break-words px-3 py-2.5 text-gray-600">
         {order.sellerNames.join(', ') || '—'}
       </td>
       <td className="whitespace-nowrap px-3 py-2.5 text-gray-500">{when(order.createdAt)}</td>
@@ -992,10 +992,10 @@ function OrderDrawer({
             {initials(detail.customer.name, detail.customer.phone)}
           </span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-ink-900">
+            <p className="break-words text-sm font-semibold text-ink-900">
               {detail.customer.name ?? '—'}
             </p>
-            <p className="truncate text-[11px] text-gray-400">
+            <p className="break-words text-[11px] text-gray-400">
               {detail.customer.email ?? '—'} · +91 {detail.customer.phone}
             </p>
           </div>
@@ -1021,8 +1021,8 @@ function OrderDrawer({
                 <div className="h-12 w-10 shrink-0 rounded bg-gray-100" />
               )}
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-ink-900">{i.title}</p>
-                <p className="truncate text-[11px] text-gray-400">
+                <p className="break-words font-medium text-ink-900">{i.title}</p>
+                <p className="break-words text-[11px] text-gray-400">
                   {i.variantLabel ? ` · ` : ''}{i.sellerName}
                 </p>
                 <p className="mt-0.5">
@@ -1104,7 +1104,7 @@ function OrderDrawer({
           {detail.payment.providerPaymentId && (
             <div className="flex justify-between gap-2">
               <dt className="text-gray-500">Transaction ID</dt>
-              <dd className="truncate font-mono text-ink-900">
+              <dd className="break-words font-mono text-ink-900">
                 {detail.payment.providerPaymentId}
               </dd>
             </div>
@@ -1213,7 +1213,7 @@ function OrderDrawer({
                 }
                 void advance(next);
               }}
-              className="col-span-2 rounded-lg bg-brand-600 py-2 text-white disabled:opacity-50"
+              className="col-span-2 rounded-lg bg-brand-600 py-2 text-white disabled:opacity-50 min-w-0"
             >
               {next === 'SHIPPED' && !shipping
                 ? 'Mark shipped…'
@@ -1238,7 +1238,7 @@ function OrderDrawer({
             <button
               disabled={busy}
               onClick={() => void cancel()}
-              className="col-span-2 rounded-lg border border-red-200 py-2 text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className="col-span-2 rounded-lg border border-red-200 py-2 text-red-600 hover:bg-red-50 disabled:opacity-50 min-w-0"
             >
               Cancel order
             </button>
@@ -1473,7 +1473,7 @@ function CreateOrderModal({
                   }}
                   className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-cream-50"
                 >
-                  <span className="min-w-0 truncate">
+                  <span className="min-w-0 break-words">
                     <span className="font-mono text-brand-600">{h.sku}</span> {h.title}
                     <span className="text-gray-400">
                       {' '}
@@ -1506,7 +1506,7 @@ function CreateOrderModal({
             {lines.map((l, i) => (
               <tr key={l.variant.id} className="border-t border-gray-100">
                 <td className="py-1.5 font-mono text-brand-600">{l.variant.sku}</td>
-                <td className="max-w-44 truncate py-1.5">{l.variant.title}</td>
+                <td className="max-w-44 break-words py-1.5">{l.variant.title}</td>
                 <td className="py-1.5 text-right">{formatPaise(l.variant.pricePaise)}</td>
                 <td className="py-1.5 text-right">
                   <input

@@ -2,7 +2,9 @@
 /**
  * Storefront responsive check — measures, rather than eyeballs.
  *
- *   node scripts/responsive-check.mjs [baseUrl] [--phone=<10 digits>]
+ *   node scripts/responsive-check.mjs [baseUrl] [--phone=<10 digits>] [--only=/seller,/admin]
+ *
+ * --only keeps the pages whose path starts with one of the given prefixes.
  *
  * Needs `playwright` (a devDependency) and a browser. It uses Playwright's own
  * Chromium if present and otherwise drives a Chrome or Edge already installed,
@@ -68,6 +70,21 @@
  *                            a filtered category, so the applied-filter chips
  *                            are on the page too.
  *
+ * Every seller and admin page is checked too (signed in as the demo seller
+ * and the admin on localhost; elsewhere pass --seller-phone / --admin-phone),
+ * with two more assertions, because a label cut short there is a label the
+ * seller or admin cannot read:
+ *
+ *   cut === 0                Text cut with an ellipsis or a line clamp, with
+ *                            no title to read it whole. Truncating a long
+ *                            product name in a dense row is fine when the full
+ *                            name is on hover; silently is not.
+ *
+ *   spill === 0              Text running past the box it sits in — a card,
+ *                            a bordered cell, a pill — rather than wrapping.
+ *                            A scroller is expected to hold more than it
+ *                            shows, so text inside one is not counted.
+ *
  * Truncated text nodes are reported but not asserted on: `truncate` is
  * sometimes the right call (a seller name in a dense row), so the count is a
  * number to watch, not a gate.
@@ -79,6 +96,10 @@ const argv = process.argv.slice(2);
 const BASE = (argv.find((a) => !a.startsWith('--')) ?? 'http://localhost:4300').replace(/\/$/, '');
 const PHONE = argv.find((a) => a.startsWith('--phone='))?.slice('--phone='.length);
 const SELLER_PHONE = argv.find((a) => a.startsWith('--seller-phone='))?.slice('--seller-phone='.length);
+const ADMIN_PHONE = argv.find((a) => a.startsWith('--admin-phone='))?.slice('--admin-phone='.length);
+const ONLY = argv.find((a) => a.startsWith('--only='))?.slice('--only='.length).split(',').filter(Boolean);
+/** The seeded admin on a local database (ADMIN_PHONE in apps/api/.env). */
+const DEMO_ADMIN_PHONE = '9999999999';
 const DEMO_SELLER_PHONE = '9000000001';
 /** Width and a height typical of a device that width. */
 const VIEWPORTS = [
@@ -93,8 +114,22 @@ const VIEWPORTS = [
 ];
 /** Pages that need a signed-in shopper with a cart. */
 const AUTH_PAGES = new Set(['/cart', '/checkout']);
-/** Pages that need the signed-in seller, and get the no-scroller assertion. */
-const SELLER_PAGES = new Set(['/seller/products']);
+/** The seller page that also gets the no-scroller assertion (see the header). */
+const NO_SCROLLER_PAGES = new Set(['/seller/products']);
+/** Seller and admin pages without an id in them; the ones with ids are added once known. */
+const SELLER_PAGE_PATHS = [
+  '/seller', '/seller/ads', '/seller/ads/new', '/seller/customers', '/seller/inventory', '/seller/orders',
+  '/seller/payouts', '/seller/products', '/seller/products/new', '/seller/promotions', '/seller/returns',
+  '/seller/settings', '/seller/support', '/seller/tryon',
+];
+/** Seller pages anyone can open: checked signed out. */
+const SELLER_PUBLIC_PATHS = ['/seller/login', '/seller/register'];
+const ADMIN_PAGE_PATHS = [
+  '/admin', '/admin/ads', '/admin/audit', '/admin/banners', '/admin/brands', '/admin/categories',
+  '/admin/csp-reports', '/admin/deals', '/admin/facets', '/admin/inventory', '/admin/newsletter', '/admin/orders',
+  '/admin/payments', '/admin/products', '/admin/promos', '/admin/returns', '/admin/search', '/admin/seller-referrals',
+  '/admin/sellers', '/admin/settings', '/admin/support', '/admin/tryon', '/admin/users',
+];
 /** Listings that carry the filter rail. */
 const RAIL_PAGES = new Set([
   '/products',
@@ -144,6 +179,46 @@ function measure() {
     clippedText.push({ tag: el.tagName.toLowerCase(), text: el.textContent.trim().slice(0, 40), right: Math.round(r.right) });
   });
 
+  // Panel pages: text cut with no way to read the rest, and text spilling out
+  // of the box around it. See the header.
+  const cut = [];
+  const spill = [];
+  document.querySelectorAll('body *').forEach((el) => {
+    const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+    if (!hasText) return;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden') return;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return;
+    // Screen-reader-only text is clipped on purpose.
+    if (r.width <= 1 && r.height <= 1) return;
+    const text = el.textContent.trim().replace(/\s+/g, ' ').slice(0, 50);
+    const readable = el.getAttribute('title') || el.closest('[title]')?.getAttribute('title') || el.getAttribute('aria-label');
+    const ellipsis = cs.textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth + 1;
+    const clamp = cs.webkitLineClamp;
+    const clamped = clamp && clamp !== 'none' && el.scrollHeight > el.clientHeight + 1;
+    if ((ellipsis || clamped) && !readable) cut.push({ tag: el.tagName.toLowerCase(), text });
+
+    // A form control's own value is laid out inside the control, not as text.
+    if (['TEXTAREA', 'SELECT', 'OPTION', 'INPUT'].includes(el.tagName)) return;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const tr = range.getBoundingClientRect();
+    if (tr.width === 0 || tr.height === 0) return;
+    for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+      const ps = getComputedStyle(p);
+      if (ps.overflowX === 'auto' || ps.overflowX === 'scroll') break;
+      const bordered = parseFloat(ps.borderLeftWidth) > 0 && parseFloat(ps.borderRightWidth) > 0;
+      const filled = ps.backgroundColor !== 'rgba(0, 0, 0, 0)' && ps.backgroundColor !== 'transparent' && parseFloat(ps.borderTopLeftRadius) > 0;
+      if (!bordered && !filled && ps.overflowX === 'visible') continue;
+      const pr = p.getBoundingClientRect();
+      if (tr.right > pr.right + 1 || tr.left < pr.left - 1) {
+        spill.push({ tag: el.tagName.toLowerCase(), text, by: Math.round(Math.max(tr.right - pr.right, pr.left - tr.left)) });
+      }
+      break;
+    }
+  });
+
   let truncated = 0;
   document.querySelectorAll('.truncate').forEach((el) => {
     if (el.scrollWidth > Math.ceil(el.getBoundingClientRect().width)) truncated += 1;
@@ -189,6 +264,10 @@ function measure() {
     clippedText: clippedText.slice(0, 5),
     searchBoxPx: Math.round(visibleWidth(input)),
     truncatedNodes: truncated,
+    cutCount: cut.length,
+    cut: cut.slice(0, 6),
+    spillCount: spill.length,
+    spill: spill.slice(0, 6),
     navScrollableBy: nav ? Math.round(nav.scrollWidth - nav.clientWidth) : 0,
     scrollableCount: [...document.querySelectorAll('main *')].filter((el) => {
       const ov = getComputedStyle(el).overflowX;
@@ -286,14 +365,50 @@ async function openSellerSession() {
   return { session: { token, user: verified.data.user }, why: null };
 }
 
+/** The admin, signed in. Only automatic against localhost. */
+async function openAdminSession() {
+  const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(BASE);
+  if (!local && !ADMIN_PHONE) return { session: null, why: 'not localhost; pass --admin-phone to sign in' };
+  const phone = ADMIN_PHONE ?? DEMO_ADMIN_PHONE;
+  const otp = await api('/api/auth/request-otp', { method: 'POST', body: { phone } });
+  const code = otp.data?.devOtp;
+  if (!code) return { session: null, why: `no devOtp for ${phone}: ${otp.error?.code ?? 'unknown'}` };
+  const verified = await api('/api/auth/verify-otp', { method: 'POST', body: { phone, code } });
+  const token = verified.data?.accessToken;
+  if (!token) return { session: null, why: `verify-otp failed: ${verified.error?.code ?? 'unknown'}` };
+  return { session: { token, user: verified.data.user }, why: null };
+}
+
 const browser = await launch();
 const { session, why } = await openSession();
 if (!session) console.log(`cart and checkout skipped: ${why}`);
 const { session: sellerSession, why: sellerWhy } = await openSellerSession();
 if (!sellerSession) console.log(`seller pages skipped: ${sellerWhy}`);
+const { session: adminSession, why: adminWhy } = await openAdminSession();
+if (!adminSession) console.log(`admin pages skipped: ${adminWhy}`);
+
+// Pages with an id in them: the seller's first order, product and return.
+const sellerPaths = [...SELLER_PAGE_PATHS];
+if (sellerSession) {
+  const order = (await api('/api/seller/orders?pageSize=5', { token: sellerSession.token })).data?.items?.[0];
+  const product = (await api('/api/seller/products?pageSize=5', { token: sellerSession.token })).data?.items?.[0];
+  const ret = (await api('/api/seller/returns', { token: sellerSession.token })).data?.[0];
+  if (order) {
+    sellerPaths.push(`/seller/orders/${order.orderId}`, `/seller/orders/invoice?orderId=${order.orderId}`);
+    if (order.lines?.[0]) sellerPaths.push(`/seller/orders/labels?ids=${order.lines[0].id}`);
+  }
+  if (product) sellerPaths.push(`/seller/products/${product.id}/edit`);
+  if (ret) sellerPaths.push(`/seller/returns/${ret.id}`);
+}
+const SELLER_PAGES = new Set(sellerPaths);
+const ADMIN_PAGES = new Set(ADMIN_PAGE_PATHS);
+const PANEL_PAGES = new Set([...SELLER_PAGES, ...ADMIN_PAGES, ...SELLER_PUBLIC_PATHS]);
 
 const firstProduct = session?.slug ?? (await api('/api/products?limit=1')).data?.items?.[0]?.slug;
-const PAGES = ['/', ...RAIL_PAGES, ...(firstProduct ? [`/products/${firstProduct}`] : []), '/cart', '/checkout', '/track', '/seller/products'];
+const PAGES = [
+  '/', ...RAIL_PAGES, ...(firstProduct ? [`/products/${firstProduct}`] : []), '/cart', '/checkout', '/track',
+  ...SELLER_PUBLIC_PATHS, ...SELLER_PAGES, ...ADMIN_PAGES,
+].filter((p) => !ONLY || ONLY.some((prefix) => p === prefix || p.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`) || p.startsWith(`${prefix}?`)));
 
 /** Sidebar from RAIL_SIDEBAR_FROM up; below, the sheet the Filters button opens. */
 async function checkRail(page, width) {
@@ -332,15 +447,21 @@ if (session) {
   }, { token: session.token, user: session.user });
 }
 
-// The seller gets a context of their own, so neither session leaks into the
-// other's pages.
-const sellerContext = await browser.newContext();
-if (sellerSession) {
-  await sellerContext.addInitScript(({ token, user }) => {
-    localStorage.setItem('clowe.accessToken', token);
-    localStorage.setItem('clowe.user', JSON.stringify(user));
-  }, { token: sellerSession.token, user: sellerSession.user });
+// The seller and the admin get contexts of their own, so no session leaks
+// into another's pages; public seller pages are opened signed out.
+async function contextFor(s) {
+  const ctx = await browser.newContext();
+  if (s) {
+    await ctx.addInitScript(({ token, user }) => {
+      localStorage.setItem('clowe.accessToken', token);
+      localStorage.setItem('clowe.user', JSON.stringify(user));
+    }, { token: s.token, user: s.user });
+  }
+  return ctx;
 }
+const sellerContext = await contextFor(sellerSession);
+const adminContext = await contextFor(adminSession);
+const anonymousContext = await contextFor(null);
 
 const rows = [];
 let failures = 0;
@@ -348,12 +469,16 @@ let skipped = 0;
 
 for (const path of PAGES) {
   const isSellerPage = SELLER_PAGES.has(path);
-  if ((AUTH_PAGES.has(path) && !session) || (isSellerPage && !sellerSession)) {
+  const isAdminPage = ADMIN_PAGES.has(path);
+  const isPanelPage = PANEL_PAGES.has(path);
+  if ((AUTH_PAGES.has(path) && !session) || (isSellerPage && !sellerSession) || (isAdminPage && !adminSession)) {
     skipped += VIEWPORTS.length;
     continue;
   }
   for (const { width, height } of VIEWPORTS) {
-    const page = await (isSellerPage ? sellerContext : context).newPage();
+    const page = await (
+      isSellerPage ? sellerContext : isAdminPage ? adminContext : SELLER_PUBLIC_PATHS.includes(path) ? anonymousContext : context
+    ).newPage();
     await page.setViewportSize({ width, height });
     try {
       await page.goto(BASE + path, { waitUntil: 'networkidle', timeout: 30000 });
@@ -364,7 +489,8 @@ for (const path of PAGES) {
         m.bodyOverflowPx > 0 ||
         m.unclippedCount > 0 ||
         m.clippedTextCount > 0 ||
-        (isSellerPage && m.scrollableCount > 0);
+        (NO_SCROLLER_PAGES.has(path) && m.scrollableCount > 0) ||
+        (isPanelPage && (m.cutCount > 0 || m.spillCount > 0));
       const searchBad = m.searchBoxPx > 0 && m.searchBoxPx < MIN_SEARCH_PX;
       // After the page measure: opening the sheet changes the page.
       // The search overlay opened above would cover the Filters button: start clean.
@@ -383,12 +509,22 @@ for (const path of PAGES) {
         navScroll: m.navScrollableBy,
         scrollers: m.scrollableCount,
         trunc: m.truncatedNodes,
+        cut: isPanelPage ? m.cutCount : '',
+        spill: isPanelPage ? m.spillCount : '',
         rail: rail?.text ?? '',
         ok: overflowBad || searchBad || railBad ? 'FAIL' : 'ok',
       });
       if (m.unclippedCount > 0) {
         console.error(`\n${path} @${width} — elements overflowing the viewport:`);
         for (const o of m.unclipped) console.error(`   <${o.tag}> ${o.width}px  ${o.cls}`);
+      }
+      if (isPanelPage && m.cutCount > 0) {
+        console.error(`\n${path} @${width} — text cut short with no way to read it:`);
+        for (const o of m.cut) console.error(`   <${o.tag}> "${o.text}"`);
+      }
+      if (isPanelPage && m.spillCount > 0) {
+        console.error(`\n${path} @${width} — text spilling out of its box:`);
+        for (const o of m.spill) console.error(`   <${o.tag}> by ${o.by}px  "${o.text}"`);
       }
       if (m.clippedTextCount > 0) {
         console.error(`\n${path} @${width} — readable content cut off at the right edge:`);

@@ -322,7 +322,7 @@ export default function SellerStoreSettingsPage() {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
-        <div className="space-y-4 xl:col-span-2">
+        <div className="space-y-4 xl:col-span-2 min-w-0">
           {/* --- Profile ------------------------------------------------- */}
           {tab === 'PROFILE' && (
             <>
@@ -374,7 +374,7 @@ export default function SellerStoreSettingsPage() {
                       ))}
                     </select>
                   </Field>
-                  <div className="sm:col-span-2">
+                  <div className="sm:col-span-2 min-w-0">
                     <Field
                       label="Store description"
                       hint={`${(form.description ?? '').length}/500 — what you sell and why shoppers should trust you`}

@@ -62,10 +62,10 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
-          <p className="mt-0.5 truncate font-display text-lg font-bold text-ink-900">{value}</p>
+          <p className="mt-0.5 break-words font-display text-lg font-bold text-ink-900">{value}</p>
         </div>
       </div>
       <p className="mt-2 text-[11px] text-gray-500">{footer}</p>
@@ -304,7 +304,7 @@ export default function SellerInventoryPage() {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-4">
-        <div className="xl:col-span-3">
+        <div className="xl:col-span-3 min-w-0">
           {/* --- Filters ------------------------------------------------- */}
           <div className="flex flex-wrap items-center gap-2 rounded-t-2xl border border-b-0 border-gray-100 bg-white p-3">
             <input
@@ -453,7 +453,7 @@ export default function SellerInventoryPage() {
                           <div className="min-w-0">
                             <Link
                               href={`/seller/products/${row.productId}/edit`}
-                              className="block max-w-44 truncate font-medium text-ink-900 hover:text-brand-600"
+                              className="block max-w-44 break-words font-medium text-ink-900 hover:text-brand-600"
                             >
                               {row.title}
                             </Link>
@@ -607,7 +607,7 @@ export default function SellerInventoryPage() {
                 {summary.restockList.map((r) => (
                   <li key={r.variantId} className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-ink-900">{r.title}</p>
+                      <p className="break-words text-ink-900">{r.title}</p>
                       <p className="text-[11px] text-gray-400">
                         {r.label ? ` · ` : ''}{r.unitsSold} sold
                       </p>
@@ -645,7 +645,7 @@ export default function SellerInventoryPage() {
                       <div className="h-9 w-8 rounded bg-cream-100" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-ink-900">{p.title}</p>
+                      <p className="break-words text-ink-900">{p.title}</p>
                       <p className="text-[11px] text-gray-400">
                         {p.unitsSold} sold · {p.stock} left
                       </p>

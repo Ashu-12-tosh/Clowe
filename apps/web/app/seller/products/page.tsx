@@ -87,10 +87,10 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
-          <p className="mt-0.5 truncate font-display text-lg font-bold text-ink-900">{value}</p>
+          <p className="mt-0.5 break-words font-display text-lg font-bold text-ink-900">{value}</p>
         </div>
       </div>
       <p className="mt-2 text-[11px] text-gray-500">{footer}</p>
@@ -469,7 +469,7 @@ export default function SellerProductsPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="truncate px-3 py-2.5 text-gray-600" title={row.categoryName}>
+                    <td className="break-words px-3 py-2.5 text-gray-600" title={row.categoryName}>
                       {row.categoryName}
                     </td>
                     <td className="px-3 py-2.5">
@@ -549,10 +549,10 @@ export default function SellerProductsPage() {
                     <div className="h-14 w-11 shrink-0 rounded-lg bg-cream-100" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p data-product-name className="line-clamp-2 break-words font-medium text-ink-900">
+                    <p data-product-name className="line-clamp-2 break-words font-medium text-ink-900" title={row.title}>
                       {row.title}
                     </p>
-                    <p className="truncate text-[11px] text-gray-400">{row.categoryName}</p>
+                    <p className="break-words text-[11px] text-gray-400">{row.categoryName}</p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
                       <span className="font-semibold text-ink-900">{formatPaise(row.pricePaise)}</span>
                       <span className={row.totalStock === 0 ? 'text-red-600' : row.totalStock <= row.lowStockAlert ? 'text-yellow-600' : 'text-green-700'}>
@@ -567,7 +567,7 @@ export default function SellerProductsPage() {
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 truncate text-[11px] text-gray-400">{rowFacts(row)}</p>
+                    <p className="mt-1 break-words text-[11px] text-gray-400">{rowFacts(row)}</p>
                     <div className="mt-2" data-product-actions>
                       {rowActions(row)}
                     </div>
@@ -684,7 +684,7 @@ export default function SellerProductsPage() {
                       <div className="h-9 w-8 rounded bg-cream-100" />
                     )}
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium text-ink-900">{p.title}</p>
+                      <p className="break-words text-xs font-medium text-ink-900">{p.title}</p>
                       <p className="text-[11px] text-gray-400">{p.unitsSold} sold</p>
                     </div>
                     <span className="text-xs font-semibold text-ink-900">

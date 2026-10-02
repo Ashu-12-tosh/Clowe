@@ -57,10 +57,10 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
-          <p className="mt-0.5 truncate font-display text-lg font-bold text-ink-900">{value}</p>
+          <p className="mt-0.5 break-words font-display text-lg font-bold text-ink-900">{value}</p>
         </div>
       </div>
       <p className="mt-2 text-[11px] text-gray-500">{footer}</p>
@@ -265,7 +265,7 @@ export default function SellerCustomersPage() {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-4">
-        <div className="xl:col-span-3">
+        <div className="xl:col-span-3 min-w-0">
           {/* --- Filters ------------------------------------------------- */}
           <div className="flex flex-wrap items-center gap-2 rounded-t-2xl border border-b-0 border-gray-100 bg-white p-3">
             <input
@@ -359,7 +359,7 @@ export default function SellerCustomersPage() {
                           {row.name.slice(0, 2).toUpperCase()}
                         </span>
                         <div className="min-w-0">
-                          <p className="max-w-40 truncate font-medium text-ink-900">{row.name}</p>
+                          <p className="max-w-40 break-words font-medium text-ink-900">{row.name}</p>
                           <p className="text-[11px] text-gray-400">
                             {row.city ?? '—'}
                             {row.state ? `, ${row.state}` : ''}
@@ -555,7 +555,7 @@ export default function SellerCustomersPage() {
                           {i + 1}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate font-medium text-ink-900">{c.name}</span>
+                          <span className="block break-words font-medium text-ink-900">{c.name}</span>
                           <span className="text-[11px] text-gray-400">{c.orderCount} orders</span>
                         </span>
                         <span className="font-semibold text-ink-900">

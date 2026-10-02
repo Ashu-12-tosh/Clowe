@@ -102,11 +102,11 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
           <p
-            className={`mt-0.5 truncate font-display text-lg font-bold ${
+            className={`mt-0.5 break-words font-display text-lg font-bold ${
               tone === 'bad' ? 'text-red-600' : tone === 'warn' ? 'text-yellow-600' : 'text-ink-900'
             }`}
           >
@@ -114,7 +114,7 @@ function KpiCard({
           </p>
         </div>
       </div>
-      {hint && <p className="mt-2 truncate text-[11px]">{hint}</p>}
+      {hint && <p className="mt-2 break-words text-[11px]">{hint}</p>}
     </div>
   );
 }
@@ -557,7 +557,7 @@ export default function AdminReturnsPage() {
 
       {/* Table + drawer ---------------------------------------------------- */}
       <div className="mt-4 grid gap-4 xl:grid-cols-4">
-        <div className={openId ? 'xl:col-span-3' : 'xl:col-span-3'}>
+        <div className="min-w-0 xl:col-span-3">
           <section className="rounded-2xl border border-gray-100 bg-white">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-2.5">
               <div className="flex gap-1 overflow-x-auto">
@@ -839,7 +839,7 @@ export default function AdminReturnsPage() {
                       {summary.risk.rows.map((r) => (
                         <li key={r.userId} className="rounded-lg bg-cream-50 px-2.5 py-2">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="truncate font-medium text-ink-900">
+                            <span className="break-words font-medium text-ink-900">
                               {r.name ?? `+91 ${r.phone}`}
                             </span>
                             <span className="shrink-0 font-semibold text-red-600">
@@ -937,12 +937,12 @@ function ReturnRow({
         <p className="font-mono text-[11px] text-gray-400">{row.orderNumber}</p>
       </td>
       <td className="max-w-40 px-3 py-2.5">
-        <p className="truncate text-ink-900">{row.customer.name ?? '—'}</p>
-        <p className="truncate text-[11px] text-gray-400">
+        <p className="break-words text-ink-900">{row.customer.name ?? '—'}</p>
+        <p className="break-words text-[11px] text-gray-400">
           {row.customer.email ?? `+91 ${row.customer.phone}`}
         </p>
       </td>
-      <td className="max-w-32 truncate px-3 py-2.5 text-gray-600">{row.seller.name}</td>
+      <td className="max-w-32 break-words px-3 py-2.5 text-gray-600">{row.seller.name}</td>
       <td className="max-w-48 px-3 py-2.5">
         <div className="flex items-center gap-2">
           {row.item.imageUrl ? (
@@ -956,15 +956,15 @@ function ReturnRow({
             <div className="h-8 w-7 shrink-0 rounded bg-gray-100" />
           )}
           <div className="min-w-0">
-            <p className="truncate text-ink-900">{row.item.title}</p>
-            <p className="truncate text-[11px] text-gray-400">
+            <p className="break-words text-ink-900">{row.item.title}</p>
+            <p className="break-words text-[11px] text-gray-400">
               {row.item.variantLabel ? ` · ` : ''}×{row.item.quantity}
             </p>
           </div>
         </div>
       </td>
       <td className="max-w-36 px-3 py-2.5">
-        <p className="truncate text-gray-700">{row.reasonLabel}</p>
+        <p className="break-words text-gray-700">{row.reasonLabel}</p>
         {row.photos.length > 0 && (
           <p className="text-[11px] text-gray-400">{row.photos.length} photo(s)</p>
         )}
@@ -1118,8 +1118,8 @@ function ReturnDrawer({
             <div className="h-16 shrink-0 rounded bg-gray-100" style={{ width: '3.25rem' }} />
           )}
           <div className="min-w-0 text-xs">
-            <p className="truncate font-medium text-ink-900">{detail.item.title}</p>
-            <p className="truncate text-[11px] text-gray-400">
+            <p className="break-words font-medium text-ink-900">{detail.item.title}</p>
+            <p className="break-words text-[11px] text-gray-400">
               {detail.item.variantLabel ? ` · ` : ''}{detail.item.sku} · ×{detail.item.quantity}
             </p>
             <p className="mt-1 font-semibold text-ink-900">

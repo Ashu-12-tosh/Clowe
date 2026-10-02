@@ -87,7 +87,7 @@ export default function AdminPromosPage() {
                 <p className="text-sm font-semibold">
                   {row.title} {row.subtitle && <span className="text-brand-600">· {row.subtitle}</span>}
                 </p>
-                <p className="truncate text-xs text-gray-500">→ {row.href}</p>
+                <p className="break-words text-xs text-gray-500">→ {row.href}</p>
               </div>
               <div className="flex items-center gap-3 text-xs font-semibold">
                 <button

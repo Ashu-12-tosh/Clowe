@@ -655,7 +655,7 @@ export default function ProductForm({ initial }: Props) {
 
   return (
     <div className="grid gap-4 xl:grid-cols-3">
-      <div className="space-y-4 xl:col-span-2">
+      <div className="space-y-4 xl:col-span-2 min-w-0">
         {/* --- Step tabs ------------------------------------------------ */}
         <div className="flex flex-wrap gap-1 rounded-2xl border border-gray-100 bg-white p-2">
           {STEPS.map((s, i) => (
@@ -697,7 +697,7 @@ export default function ProductForm({ initial }: Props) {
           <section className="rounded-2xl border border-gray-100 bg-white p-4">
             <h2 className="text-sm font-bold text-ink-900">1. Basic information</h2>
             <div className="mt-3 grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-2 min-w-0">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium">Product name *</label>
                   <Counter value={title} max={150} />
@@ -735,7 +735,7 @@ export default function ProductForm({ initial }: Props) {
                     : 'Pick from the list where your brand is there, so shoppers find it under one name.'}
                 </p>
               </div>
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-2 min-w-0">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium">Short description</label>
                   <Counter value={shortDescription} max={200} />
@@ -748,7 +748,7 @@ export default function ProductForm({ initial }: Props) {
                   className={`mt-1 ${field}`}
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-2 min-w-0">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium">Long description * (min 20 chars)</label>
                   <Counter value={description} max={5000} />
@@ -1449,7 +1449,7 @@ export default function ProductForm({ initial }: Props) {
                   for each order{rules.hsnCode ? ` · HSN ${rules.hsnCode}` : ''}.
                 </p>
               </div>
-              <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <label className="flex items-center gap-2 text-sm sm:col-span-2 min-w-0">
                 <input
                   type="checkbox"
                   checked={allowBackorders}
@@ -1520,7 +1520,7 @@ export default function ProductForm({ initial }: Props) {
                     ))}
                   </select>
                 </div>
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-2 min-w-0">
                   <label className="text-sm font-medium">Dimensions (cm)</label>
                   <div className="mt-1 grid grid-cols-3 gap-2">
                     {(['l', 'w', 'h'] as const).map((key) => (
@@ -1793,7 +1793,7 @@ export default function ProductForm({ initial }: Props) {
                 {title.trim() || 'Your product name'}
               </p>
               {shortDescription.trim() && (
-                <p className="mt-0.5 line-clamp-2 text-[11px] text-gray-500">{shortDescription}</p>
+                <p className="mt-0.5 line-clamp-2 text-[11px] text-gray-500" title={shortDescription}>{shortDescription}</p>
               )}
               <p className="mt-1.5">
                 <span className="font-display text-lg font-bold text-ink-900">

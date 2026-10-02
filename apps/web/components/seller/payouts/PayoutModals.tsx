@@ -308,7 +308,7 @@ export function PayoutDetailDrawer({
                     {detail.lines.map((line) => (
                       <tr key={line.orderItemId} className="border-t border-gray-100">
                         <td className="py-1.5 font-mono">{line.orderNumber}</td>
-                        <td className="max-w-40 truncate py-1.5">
+                        <td className="max-w-40 break-words py-1.5">
                           {line.title}
                           {line.quantity > 1 && <span className="text-gray-400"> ×{line.quantity}</span>}
                         </td>

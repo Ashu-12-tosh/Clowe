@@ -258,7 +258,7 @@ export default function SellerTryOnPage() {
                       <div className="min-w-0 flex-1">
                         <Link
                           href={`/products/${p.slug}`}
-                          className="line-clamp-1 text-sm font-semibold text-ink-900 hover:text-brand-600"
+                          className="text-sm font-semibold text-ink-900 hover:text-brand-600"
                         >
                           {p.title}
                         </Link>
@@ -346,7 +346,7 @@ export default function SellerTryOnPage() {
                     <div className="min-w-0 flex-1">
                       <Link
                         href={`/products/${p.slug}`}
-                        className="line-clamp-1 text-sm font-semibold text-ink-900 hover:text-brand-600"
+                        className="text-sm font-semibold text-ink-900 hover:text-brand-600"
                       >
                         {p.title}
                       </Link>
@@ -377,7 +377,7 @@ export default function SellerTryOnPage() {
                 {data.recent.map((r) => (
                   <li key={r.ref} className="flex items-center gap-3 py-2.5">
                     <div className="min-w-0 flex-1">
-                      <p className="line-clamp-1 text-sm text-ink-900">
+                      <p className="text-sm text-ink-900">
                         <span className="font-mono text-xs text-brand-600">{r.ref}</span> ·{' '}
                         {r.productTitle}
                       </p>
@@ -461,7 +461,7 @@ export default function SellerTryOnPage() {
                       <p className="text-xs font-semibold text-ink-900">
                         {LEDGER_LABELS[l.reason] ?? l.reason}
                       </p>
-                      {l.note && <p className="line-clamp-1 text-[11px] text-gray-400">{l.note}</p>}
+                      {l.note && <p className="text-[11px] text-gray-400">{l.note}</p>}
                       <p className="text-[11px] text-gray-400">{fmtDateTime(l.createdAt)}</p>
                     </div>
                     <span

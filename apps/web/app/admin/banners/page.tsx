@@ -113,7 +113,7 @@ export default function AdminBannersPage() {
           <input value={form.primaryHref} onChange={set('primaryHref')} placeholder="Primary button link" className={field} />
           <input value={form.secondaryLabel} onChange={set('secondaryLabel')} placeholder="Secondary button label (optional)" className={field} />
           <input value={form.secondaryHref} onChange={set('secondaryHref')} placeholder="Secondary button link" className={field} />
-          <div className="flex gap-2 sm:col-span-2">
+          <div className="flex gap-2 sm:col-span-2 min-w-0">
             <button disabled={busy || form.headline.trim().length < 3} className="rounded-lg bg-ink-900 px-5 py-2 text-sm font-bold uppercase tracking-wide text-white disabled:opacity-50">
               Create
             </button>
@@ -137,7 +137,7 @@ export default function AdminBannersPage() {
                 {row.headline}{' '}
                 {row.highlight && <span className="text-xs text-brand-600">(gold: {row.highlight})</span>}
               </p>
-              <p className="truncate text-xs text-gray-500">
+              <p className="break-words text-xs text-gray-500">
                 {row.primaryLabel} → {row.primaryHref}
                 {row.secondaryLabel && ` · ${row.secondaryLabel} → ${row.secondaryHref}`}
               </p>

@@ -248,7 +248,7 @@ export default function SellerOrdersPage() {
                 >
                   <p className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-500">
                     <span>{TILE_ICONS[tile.key]}</span>
-                    <span className="truncate">{tile.label}</span>
+                    <span className="break-words">{tile.label}</span>
                   </p>
                   <p className="mt-1 font-display text-xl font-bold text-ink-900">{tile.count}</p>
                   <p className="text-[11px] font-semibold text-brand-600">
@@ -325,7 +325,7 @@ export default function SellerOrdersPage() {
 
       <div className="mt-4 grid gap-4 xl:grid-cols-4">
         {/* --- Table --------------------------------------------------- */}
-        <div className="xl:col-span-3">
+        <div className="xl:col-span-3 min-w-0">
           {/* Bulk action bar */}
           <div className="flex flex-wrap items-center gap-2 rounded-t-2xl border border-b-0 border-gray-100 bg-cream-50 px-3 py-2.5 text-xs">
             <span className="font-semibold text-ink-900">
@@ -697,7 +697,7 @@ export default function SellerOrdersPage() {
                           {formatPaise(r.amountPaise)}
                         </span>
                       </div>
-                      <p className="truncate text-[11px] text-gray-400">
+                      <p className="break-words text-[11px] text-gray-400">
                         {r.title} · {r.status} · {fmtDate(r.requestedAt)}
                       </p>
                     </Link>

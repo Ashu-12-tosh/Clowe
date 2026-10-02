@@ -105,7 +105,7 @@ export function DonutChart({
               className="h-2.5 w-2.5 shrink-0 rounded-sm"
               style={{ backgroundColor: colorAt(i) }}
             />
-            <span className="flex-1 truncate text-gray-600">{s.label}</span>
+            <span className="flex-1 break-words text-gray-600">{s.label}</span>
             <span className="font-semibold text-ink-900">{s.share}%</span>
             <span className="w-14 text-right text-gray-400">
               ({s.count.toLocaleString('en-IN')})
@@ -186,7 +186,8 @@ export function LineChart({
             <text
               x={x(i)}
               y={height - 6}
-              textAnchor="middle"
+              // A date at the right edge would hang half past the chart.
+              textAnchor={x(i) > width - 20 ? 'end' : 'middle'}
               style={{ fontSize: 9, fill: '#9CA3AF' }}
             >
               {p.date.slice(5).replace('-', '/')}
@@ -317,7 +318,8 @@ export function MultiLineChart({
               key={date}
               x={x(i)}
               y={height - 6}
-              textAnchor="middle"
+              // A date at the right edge would hang half past the chart.
+              textAnchor={x(i) > width - 20 ? 'end' : 'middle'}
               style={{ fontSize: 9, fill: '#9CA3AF' }}
             >
               {date.slice(5).replace('-', '/')}
@@ -358,7 +360,7 @@ export function BarList({
         <li key={item.key} className="text-xs">
           <div className="flex items-center gap-2">
             {numbered && <span className="w-4 text-gray-400">{i + 1}.</span>}
-            <span className="min-w-0 flex-1 truncate font-medium text-gray-700">{item.label}</span>
+            <span className="min-w-0 flex-1 break-words font-medium text-gray-700">{item.label}</span>
             <span className="whitespace-nowrap font-semibold text-ink-900">{item.value}</span>
           </div>
           <div className="mt-1 flex items-center gap-2">

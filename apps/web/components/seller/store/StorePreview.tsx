@@ -28,7 +28,7 @@ export default function StorePreview({ s }: { s: SellerStoreSettings }) {
             )}
           </span>
           <div className="min-w-0 pb-1">
-            <p className="flex items-center gap-1.5 truncate text-sm font-bold text-ink-900">
+            <p className="flex items-center gap-1.5 break-words text-sm font-bold text-ink-900">
               {s.shopName || 'Your store name'}
               {s.kycStatus === 'VERIFIED' && (
                 <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
@@ -36,7 +36,7 @@ export default function StorePreview({ s }: { s: SellerStoreSettings }) {
                 </span>
               )}
             </p>
-            <p className="truncate text-[11px] text-gray-500">
+            <p className="break-words text-[11px] text-gray-500">
               {s.primaryCategoryName ?? 'Set a primary category'}
               {s.city && ` · ${s.city}`}
             </p>
@@ -45,7 +45,7 @@ export default function StorePreview({ s }: { s: SellerStoreSettings }) {
 
         {s.tagline && <p className="mt-2 text-xs font-medium text-ink-900">{s.tagline}</p>}
         {s.description && (
-          <p className="mt-1 line-clamp-2 text-[11px] text-gray-500">{s.description}</p>
+          <p className="mt-1 line-clamp-2 text-[11px] text-gray-500" title={s.description}>{s.description}</p>
         )}
 
         {s.vacationMode && (
@@ -61,7 +61,7 @@ export default function StorePreview({ s }: { s: SellerStoreSettings }) {
                 <p className="text-[11px] font-semibold text-ink-900">
                   {h.icon} {h.title}
                 </p>
-                <p className="truncate text-[10px] text-gray-500">{h.subtitle}</p>
+                <p className="break-words text-[10px] text-gray-500">{h.subtitle}</p>
               </div>
             ))}
           </div>

@@ -66,7 +66,7 @@ export default function CustomerDrawer({
       >
         <header className="sticky top-0 flex items-start justify-between border-b border-gray-100 bg-white px-5 py-4">
           <div className="min-w-0">
-            <p className="truncate font-display text-lg font-bold text-ink-900">
+            <p className="break-words font-display text-lg font-bold text-ink-900">
               {detail?.name ?? 'Loading…'}
             </p>
           </div>

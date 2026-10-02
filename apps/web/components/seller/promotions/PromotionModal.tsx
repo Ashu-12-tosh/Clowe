@@ -197,7 +197,7 @@ export default function PromotionModal({
                 </p>
               )}
             </div>
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-2 min-w-0">
               <label className="text-xs font-semibold text-gray-500">Description</label>
               <input
                 value={description}
@@ -266,7 +266,7 @@ export default function PromotionModal({
                       onChange={() => setProductIds((prev) => toggle(prev, p.id))}
                       className="h-3.5 w-3.5 accent-[#B8860B]"
                     />
-                    <span className="min-w-0 flex-1 truncate">{p.title}</span>
+                    <span className="min-w-0 flex-1 break-words">{p.title}</span>
                     <span className="text-gray-400">₹{Math.round(p.pricePaise / 100)}</span>
                   </label>
                 ))}

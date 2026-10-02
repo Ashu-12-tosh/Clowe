@@ -85,7 +85,7 @@ export default function AdminAdsPage() {
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold">
+                    <p className="break-words text-sm font-semibold">
                       {ad.productTitle}
                       <span className="ml-2 rounded bg-cream-100 px-1.5 py-0.5 text-xs font-medium text-gray-600">
                         🏪 {ad.shopName}

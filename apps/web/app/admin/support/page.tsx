@@ -94,10 +94,10 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
-          <p className="mt-0.5 truncate font-display text-lg font-bold text-ink-900">{value}</p>
+          <p className="mt-0.5 break-words font-display text-lg font-bold text-ink-900">{value}</p>
         </div>
       </div>
       <p className="mt-2 text-[11px] text-gray-500">{footer}</p>
@@ -462,7 +462,7 @@ export default function AdminSupportDeskPage() {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-4">
-        <div className="xl:col-span-3">
+        <div className="xl:col-span-3 min-w-0">
           {/* --- Tabs ---------------------------------------------------- */}
           <div className="rounded-t-2xl border border-b-0 border-gray-100 bg-white px-3 pt-3">
             <div className="flex flex-wrap gap-1">
@@ -610,7 +610,7 @@ export default function AdminSupportDeskPage() {
                       </p>
                     </td>
                     <td className="max-w-52 px-3 py-2.5">
-                      <p className="truncate text-ink-900">{row.subject}</p>
+                      <p className="break-words text-ink-900">{row.subject}</p>
                       <p className="text-[11px] text-gray-400">
                         {row.categoryLabel}
                         {row.orderNumber && ` · ${row.orderNumber}`}
@@ -728,7 +728,7 @@ export default function AdminSupportDeskPage() {
           {/* --- Bottom charts ------------------------------------------- */}
           {summary && (
             <div className="mt-4 grid gap-4 lg:grid-cols-3">
-              <div className="lg:col-span-2">
+              <div className="lg:col-span-2 min-w-0">
                 <Panel title="Ticket trend" subtitle="Created vs resolved per day">
                   <LineChart
                     points={summary.trend.map((t) => ({ date: t.date, value: t.created }))}
@@ -777,7 +777,7 @@ export default function AdminSupportDeskPage() {
                 <ul className="space-y-2 text-xs">
                   {summary.agents.map((a) => (
                     <li key={a.id} className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 flex-1 truncate text-ink-900">
+                      <span className="min-w-0 flex-1 break-words text-ink-900">
                         {a.name ?? 'Admin'}
                       </span>
                       <span className="text-gray-400">
@@ -944,7 +944,7 @@ export default function AdminSupportDeskPage() {
                 <p className="font-mono text-sm font-bold text-brand-600">
                   {detail?.reference ?? 'Loading…'}
                 </p>
-                <p className="truncate text-sm font-semibold text-ink-900">{detail?.subject}</p>
+                <p className="break-words text-sm font-semibold text-ink-900">{detail?.subject}</p>
                 {detail && (
                   <p className="text-[11px] text-gray-500">
                     {detail.customer.name ?? 'Customer'} · +91 {detail.customer.phone}

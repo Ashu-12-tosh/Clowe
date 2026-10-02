@@ -112,7 +112,7 @@ export default function SellerLedgerTab({ sellerId }: { sellerId: string }) {
                   })}
                 </span>
               </p>
-              <p className="truncate text-gray-500">
+              <p className="break-words text-gray-500">
                 {row.reference.payoutReference ??
                   row.reference.orderNumber ??
                   (row.reference.adId ? `Ad ${row.reference.adId.slice(-6).toUpperCase()}` : '')}

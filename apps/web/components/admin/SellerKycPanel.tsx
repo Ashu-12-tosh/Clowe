@@ -127,7 +127,7 @@ export default function SellerKycPanel({
               <div className="min-w-0">
                 <p className="font-semibold text-ink-900">{KYC_CHECK_LABELS[view.check]}</p>
                 {subjects[view.check] && (
-                  <p className="truncate text-[11px] text-gray-500">{subjects[view.check]}</p>
+                  <p className="break-words text-[11px] text-gray-500">{subjects[view.check]}</p>
                 )}
                 {view.reason && (
                   <p className={view.state === 'ERROR' ? 'mt-0.5 text-amber-700' : 'mt-0.5 text-red-700'}>

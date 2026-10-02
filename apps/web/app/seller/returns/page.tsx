@@ -60,10 +60,10 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
-          <p className="mt-0.5 truncate font-display text-lg font-bold text-ink-900">{value}</p>
+          <p className="mt-0.5 break-words font-display text-lg font-bold text-ink-900">{value}</p>
         </div>
       </div>
       <p className="mt-2 text-[11px] text-gray-500">{footer}</p>
@@ -306,7 +306,7 @@ export default function SellerReturnsPage() {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-4">
-        <div className="xl:col-span-3">
+        <div className="xl:col-span-3 min-w-0">
           {/* --- Tabs + filters ------------------------------------------ */}
           <div className="rounded-t-2xl border border-b-0 border-gray-100 bg-white px-3 pt-3">
             <div className="flex flex-wrap gap-1">
@@ -462,7 +462,7 @@ export default function SellerReturnsPage() {
                           <div className="h-10 w-8 rounded bg-cream-100" />
                         )}
                         <div className="min-w-0">
-                          <p className="max-w-40 truncate text-ink-900">{row.title}</p>
+                          <p className="max-w-40 break-words text-ink-900">{row.title}</p>
                           <p className="text-[11px] text-gray-400">
                             {row.variantLabel ? ` · ` : ''}×{row.quantity}
                           </p>
@@ -472,7 +472,7 @@ export default function SellerReturnsPage() {
                     <td className="max-w-40 px-3 py-2.5">
                       <p className="text-gray-700">{row.reasonLabel}</p>
                       {row.details && (
-                        <p className="truncate text-[11px] text-gray-400" title={row.details}>
+                        <p className="break-words text-[11px] text-gray-400" title={row.details}>
                           {row.details}
                         </p>
                       )}
@@ -663,7 +663,7 @@ export default function SellerReturnsPage() {
               <ul className="mt-3 space-y-2 text-xs">
                 {summary.topProducts.map((p) => (
                   <li key={p.title} className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 flex-1 truncate text-gray-700">{p.title}</span>
+                    <span className="min-w-0 flex-1 break-words text-gray-700">{p.title}</span>
                     <span className="font-semibold text-ink-900">{p.count}</span>
                     <span className="w-16 text-right text-gray-400">
                       {formatPaise(p.valuePaise)}

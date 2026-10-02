@@ -117,7 +117,7 @@ export function LedgerPanel({
                   </span>
                   {row.note && <span className="block text-[11px] text-gray-400">{row.note}</span>}
                 </td>
-                <td className="max-w-[220px] truncate px-3 py-2 text-gray-600" title={referenceOf(row)}>
+                <td className="max-w-[220px] break-words px-3 py-2 text-gray-600" title={referenceOf(row)}>
                   {referenceOf(row)}
                 </td>
                 <td

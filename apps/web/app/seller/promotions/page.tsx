@@ -68,10 +68,10 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
-          <p className="mt-0.5 truncate font-display text-lg font-bold text-ink-900">{value}</p>
+          <p className="mt-0.5 break-words font-display text-lg font-bold text-ink-900">{value}</p>
         </div>
       </div>
       <p className="mt-2 text-[11px] text-gray-500">{footer}</p>
@@ -254,7 +254,7 @@ export default function SellerPromotionsPage() {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-4">
-        <div className="xl:col-span-3">
+        <div className="xl:col-span-3 min-w-0">
           {/* --- Tabs + search ------------------------------------------- */}
           <div className="rounded-t-2xl border border-b-0 border-gray-100 bg-white px-3 pt-3">
             <div className="flex flex-wrap gap-1">
@@ -515,7 +515,7 @@ export default function SellerPromotionsPage() {
                 {summary.topPromotions.map((p) => (
                   <li key={p.id} className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-ink-900">{p.name}</p>
+                      <p className="break-words font-medium text-ink-900">{p.name}</p>
                       <p className="text-[11px] text-gray-400">
                         {p.code ? `Code ${p.code} · ` : ''}
                         {p.orderCount} orders

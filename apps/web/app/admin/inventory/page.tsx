@@ -107,11 +107,11 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
           <p
-            className={`mt-0.5 truncate font-display text-lg font-bold ${
+            className={`mt-0.5 break-words font-display text-lg font-bold ${
               tone === 'bad' ? 'text-red-600' : tone === 'warn' ? 'text-yellow-600' : 'text-ink-900'
             }`}
           >
@@ -119,7 +119,7 @@ function KpiCard({
           </p>
         </div>
       </div>
-      {hint && <p className="mt-2 truncate text-[11px] text-gray-400">{hint}</p>}
+      {hint && <p className="mt-2 break-words text-[11px] text-gray-400">{hint}</p>}
     </div>
   );
 }
@@ -641,7 +641,7 @@ function OverviewTab({
 
   return (
     <div className="grid gap-4 xl:grid-cols-4">
-      <div className="space-y-4 xl:col-span-3">
+      <div className="space-y-4 xl:col-span-3 min-w-0">
         {/* Live strip -------------------------------------------------- */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           {[
@@ -855,8 +855,8 @@ function OverviewTab({
                       </td>
                       <td className="px-3 py-2.5 font-mono text-brand-600">{r.sku}</td>
                       <td className="max-w-56 px-3 py-2.5">
-                        <p className="truncate font-medium text-ink-900">{r.title}</p>
-                        <p className="truncate text-[11px] text-gray-400">
+                        <p className="break-words font-medium text-ink-900">{r.title}</p>
+                        <p className="break-words text-[11px] text-gray-400">
                           {r.label ? ` · ` : ''}{r.sellerName}
                         </p>
                       </td>
@@ -1022,7 +1022,7 @@ function OverviewTab({
           <ul className="mt-3 space-y-1 text-[11px]">
             {summary.valueByWarehouse.map((w) => (
               <li key={w.id} className="flex justify-between gap-2">
-                <span className="truncate text-gray-500">{w.code}</span>
+                <span className="break-words text-gray-500">{w.code}</span>
                 <span className="font-semibold text-ink-900">{formatPaise(w.valuePaise)}</span>
               </li>
             ))}
@@ -1049,8 +1049,8 @@ function OverviewTab({
             {summary.lowStockAlerts.map((a) => (
               <li key={a.locationId} className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="truncate font-medium text-ink-900">{a.title}</p>
-                  <p className="truncate text-[11px] text-gray-400">
+                  <p className="break-words font-medium text-ink-900">{a.title}</p>
+                  <p className="break-words text-[11px] text-gray-400">
                     {a.warehouseName} · reorder at {a.reorderLevel}
                   </p>
                 </div>
@@ -1104,8 +1104,8 @@ function OverviewTab({
                   {m.typeLabel}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-ink-900">{m.title}</p>
-                  <p className="truncate text-[11px] text-gray-400">
+                  <p className="break-words text-ink-900">{m.title}</p>
+                  <p className="break-words text-[11px] text-gray-400">
                     {m.fromWarehouse ?? m.toWarehouse} · {when(m.createdAt)}
                   </p>
                 </div>
@@ -1288,7 +1288,7 @@ function AddStockModal({
             {lines.map((l, i) => (
               <tr key={l.variant.id} className="border-t border-gray-100">
                 <td className="py-1.5 font-mono text-brand-600">{l.variant.sku}</td>
-                <td className="max-w-52 truncate py-1.5">
+                <td className="max-w-52 break-words py-1.5">
                   {l.variant.title}
                   <span className="text-gray-400">
                     {' '}
@@ -1909,8 +1909,8 @@ function WarehousesTab({
           <div key={w.id} className="rounded-2xl border border-gray-100 bg-white p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="truncate font-semibold text-ink-900">{w.name}</p>
-                <p className="truncate text-[11px] text-gray-400">
+                <p className="break-words font-semibold text-ink-900">{w.name}</p>
+                <p className="break-words text-[11px] text-gray-400">
                   {w.code} · {w.city}, {w.state}
                   {w.pincode ? ` — ${w.pincode}` : ''}
                 </p>
@@ -2179,7 +2179,7 @@ function WarehouseModal({
             className={`${inputClass} mt-1`}
           />
         </div>
-        <div className="col-span-2">
+        <div className="col-span-2 min-w-0">
           <label className={labelClass}>Address</label>
           <input
             value={form.addressLine}
@@ -2187,7 +2187,7 @@ function WarehouseModal({
             className={`${inputClass} mt-1`}
           />
         </div>
-        <div className="col-span-2">
+        <div className="col-span-2 min-w-0">
           <label className={labelClass}>Contact name</label>
           <input
             value={form.contactName}
@@ -2418,7 +2418,7 @@ function TransferModal({
             {lines.map((l, i) => (
               <tr key={l.variant.id} className="border-t border-gray-100">
                 <td className="py-1.5 font-mono text-brand-600">{l.variant.sku}</td>
-                <td className="max-w-48 truncate py-1.5">{l.variant.title}</td>
+                <td className="max-w-48 break-words py-1.5">{l.variant.title}</td>
                 <td className="py-1.5 text-right text-gray-500">{num(l.variant.atWarehouse)}</td>
                 <td className="py-1.5 text-right">
                   <input
@@ -2587,11 +2587,11 @@ function MovementsTab({ options }: { options: InventoryFilterOptions }) {
                     </span>
                   </td>
                   <td className="px-3 py-2.5 font-mono text-brand-600">{m.sku}</td>
-                  <td className="max-w-52 truncate px-3 py-2.5 text-ink-900">{m.title}</td>
+                  <td className="max-w-52 break-words px-3 py-2.5 text-ink-900">{m.title}</td>
                   <td className="px-3 py-2.5 text-right font-semibold">{num(m.quantity)}</td>
                   <td className="px-3 py-2.5 text-gray-600">{m.fromWarehouse ?? '—'}</td>
                   <td className="px-3 py-2.5 text-gray-600">{m.toWarehouse ?? '—'}</td>
-                  <td className="max-w-44 truncate px-3 py-2.5 text-gray-500">{m.reason ?? '—'}</td>
+                  <td className="max-w-44 break-words px-3 py-2.5 text-gray-500">{m.reason ?? '—'}</td>
                   <td className="px-3 py-2.5 font-mono text-gray-500">{m.reference ?? '—'}</td>
                   <td className="px-3 py-2.5 text-gray-500">{m.actorName ?? 'System'}</td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-gray-500">
@@ -2685,7 +2685,7 @@ function AdjustmentsTab() {
                 return (
                   <tr key={m.id} className="border-t border-gray-100 hover:bg-cream-50">
                     <td className="px-3 py-2.5 font-mono text-brand-600">{m.sku}</td>
-                    <td className="max-w-52 truncate px-3 py-2.5 text-ink-900">{m.title}</td>
+                    <td className="max-w-52 break-words px-3 py-2.5 text-ink-900">{m.title}</td>
                     <td className="px-3 py-2.5 text-gray-600">
                       {m.toWarehouse ?? m.fromWarehouse ?? '—'}
                     </td>
@@ -2695,7 +2695,7 @@ function AdjustmentsTab() {
                       {added ? '+' : '−'}
                       {num(m.quantity)}
                     </td>
-                    <td className="max-w-64 truncate px-3 py-2.5 text-gray-500">
+                    <td className="max-w-64 break-words px-3 py-2.5 text-gray-500">
                       {m.reason ?? '—'}
                     </td>
                     <td className="px-3 py-2.5 text-gray-500">{m.actorName ?? 'System'}</td>
@@ -2947,7 +2947,7 @@ function SupplierModal({
             />
           </div>
         ))}
-        <div className="col-span-2">
+        <div className="col-span-2 min-w-0">
           <label className={labelClass}>Notes</label>
           <input
             value={form.notes}
@@ -3284,7 +3284,7 @@ function PurchaseOrderModal({
             {lines.map((l, i) => (
               <tr key={l.variant.id} className="border-t border-gray-100">
                 <td className="py-1.5 font-mono text-brand-600">{l.variant.sku}</td>
-                <td className="max-w-44 truncate py-1.5">{l.variant.title}</td>
+                <td className="max-w-44 break-words py-1.5">{l.variant.title}</td>
                 <td className="py-1.5 text-right">
                   <input
                     type="number"
@@ -3429,7 +3429,7 @@ function ReceiveModal({
             return (
               <tr key={i.id} className="border-t border-gray-100">
                 <td className="py-1.5 font-mono text-brand-600">{i.sku}</td>
-                <td className="max-w-52 truncate py-1.5">
+                <td className="max-w-52 break-words py-1.5">
                   {i.title}
                   <span className="text-gray-400">
                     {' '}

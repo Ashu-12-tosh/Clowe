@@ -94,11 +94,11 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
           <p
-            className={`mt-0.5 truncate font-display text-lg font-bold ${
+            className={`mt-0.5 break-words font-display text-lg font-bold ${
               tone === 'bad' ? 'text-red-600' : tone === 'warn' ? 'text-yellow-600' : 'text-ink-900'
             }`}
           >
@@ -106,7 +106,7 @@ function KpiCard({
           </p>
         </div>
       </div>
-      {hint && <p className="mt-2 truncate text-[11px]">{hint}</p>}
+      {hint && <p className="mt-2 break-words text-[11px]">{hint}</p>}
     </div>
   );
 }
@@ -517,7 +517,7 @@ export default function AdminPaymentsPage() {
 
       {/* Table + sidebar --------------------------------------------------- */}
       <div className="mt-4 grid gap-4 xl:grid-cols-4">
-        <div className="xl:col-span-3">
+        <div className="xl:col-span-3 min-w-0">
           <section className="rounded-2xl border border-gray-100 bg-white">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-2.5">
               <div className="flex gap-1 overflow-x-auto">
@@ -570,7 +570,7 @@ export default function AdminPaymentsPage() {
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.key} className="border-t border-gray-100 hover:bg-cream-50">
-                      <td className="max-w-44 truncate px-3 py-2.5 font-mono text-brand-600">
+                      <td className="max-w-44 break-words px-3 py-2.5 font-mono text-brand-600">
                         {r.reference}
                       </td>
                       <td className="px-3 py-2.5">
@@ -581,12 +581,12 @@ export default function AdminPaymentsPage() {
                         )}
                       </td>
                       <td className="max-w-44 px-3 py-2.5">
-                        <p className="truncate text-ink-900">{r.counterpartyName ?? '—'}</p>
-                        <p className="truncate text-[11px] text-gray-400">
+                        <p className="break-words text-ink-900">{r.counterpartyName ?? '—'}</p>
+                        <p className="break-words text-[11px] text-gray-400">
                           {r.counterpartySubtitle ?? ''}
                         </p>
                       </td>
-                      <td className="max-w-36 truncate px-3 py-2.5 text-gray-600">
+                      <td className="max-w-36 break-words px-3 py-2.5 text-gray-600">
                         {r.sellerName ?? '—'}
                       </td>
                       <td
@@ -781,10 +781,10 @@ export default function AdminPaymentsPage() {
                   {summary.recentRefunds.map((r) => (
                     <li key={r.id} className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate font-mono text-[11px] text-brand-600">
+                        <p className="break-words font-mono text-[11px] text-brand-600">
                           {r.reference}
                         </p>
-                        <p className="truncate text-[11px] text-gray-400">
+                        <p className="break-words text-[11px] text-gray-400">
                           {r.orderNumber ?? '—'} · {when(r.createdAt)}
                         </p>
                       </div>
@@ -943,7 +943,7 @@ export default function AdminPaymentsPage() {
                   {report.findings.map((f, i) => (
                     <tr key={`${f.check}-${f.reference}-${i}`} className="border-t border-gray-100">
                       <td className="max-w-48 px-2 py-1.5 text-red-600">{f.label}</td>
-                      <td className="max-w-36 truncate px-2 py-1.5 font-mono text-gray-500">
+                      <td className="max-w-36 break-words px-2 py-1.5 font-mono text-gray-500">
                         {f.reference}
                       </td>
                       <td className="px-2 py-1.5 font-mono text-brand-600">

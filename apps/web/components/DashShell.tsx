@@ -43,10 +43,10 @@ function SidebarContent({
     <div className="flex h-full flex-col px-3 py-5">
       {/* Brand card */}
       <div className="rounded-2xl bg-ink-900 px-4 py-3.5 text-white">
-        <p className="t-logo-sm truncate uppercase text-brand-400">
+        <p className="break-words font-display text-xl font-bold uppercase leading-tight tracking-wide text-brand-400">
           {brand}
         </p>
-        <p className="mt-0.5 truncate text-[11px] uppercase tracking-widest text-gray-400">
+        <p className="mt-0.5 break-words text-[11px] uppercase tracking-widest text-gray-400">
           {subtitle}
         </p>
       </div>
@@ -173,7 +173,7 @@ export default function DashShell({
             >
               ☰
             </button>
-            <h1 className="t-page-title min-w-0 flex-1 truncate text-ink-900">
+            <h1 className="t-page-title min-w-0 flex-1 break-words text-ink-900">
               {title}
             </h1>
 
@@ -204,7 +204,7 @@ export default function DashShell({
                   <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
                   <div className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-lg">
                     <div className="border-b border-gray-100 px-4 py-3">
-                      <p className="truncate text-sm font-semibold text-ink-900">
+                      <p className="break-words text-sm font-semibold text-ink-900">
                         {user?.name ?? 'Account'}
                       </p>
                       {user?.phone && <p className="text-xs text-gray-500">+91 {user.phone}</p>}

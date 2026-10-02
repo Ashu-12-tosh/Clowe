@@ -119,7 +119,7 @@ export default function TicketDrawer({
             <p className="font-mono text-sm font-bold text-brand-600">
               {ticket?.reference ?? 'Loading…'}
             </p>
-            <p className="truncate text-sm font-semibold text-ink-900">{ticket?.subject}</p>
+            <p className="break-words text-sm font-semibold text-ink-900">{ticket?.subject}</p>
             {ticket && (
               <p className="text-[11px] text-gray-500">
                 {ticket.categoryLabel} · {TICKET_PRIORITY_LABELS[ticket.priority]} priority ·{' '}

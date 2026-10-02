@@ -67,7 +67,7 @@ export default function SellerAdsPage() {
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="truncate text-sm font-semibold">{ad.productTitle}</p>
+                  <p className="break-words text-sm font-semibold">{ad.productTitle}</p>
                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${adStatusStyles[ad.status] ?? ''}`}>
                     {ad.status}
                   </span>

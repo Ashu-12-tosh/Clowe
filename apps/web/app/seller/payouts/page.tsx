@@ -80,10 +80,10 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-[11px] font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
-          <p className="mt-0.5 truncate font-display text-lg font-bold text-ink-900">{value}</p>
+          <p className="mt-0.5 break-words font-display text-lg font-bold text-ink-900">{value}</p>
         </div>
       </div>
       <p className="mt-2 text-[11px] text-gray-500">{footer}</p>
@@ -371,11 +371,11 @@ export default function SellerPayoutsPage() {
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-4">
-        <div className="space-y-4 xl:col-span-3">
+        <div className="space-y-4 xl:col-span-3 min-w-0">
           {/* --- Trend + breakdown ------------------------------------- */}
           {overview && (
             <div className="grid gap-4 lg:grid-cols-5">
-              <div className="lg:col-span-3">
+              <div className="lg:col-span-3 min-w-0">
                 <Panel title="Earnings trend" subtitle={`Delivered value per day · ${monthLabel(month)}`}>
                   <MultiLineChart
                     format={shortMoney}
@@ -404,7 +404,7 @@ export default function SellerPayoutsPage() {
                   />
                 </Panel>
               </div>
-              <div className="lg:col-span-2">
+              <div className="lg:col-span-2 min-w-0">
                 <Panel title="Earnings breakdown" subtitle="Where this month's gross came from">
                   <DonutChart
                     slices={overview.breakdown
@@ -738,13 +738,13 @@ export default function SellerPayoutsPage() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="truncate font-semibold text-ink-900">
+                          <p className="break-words font-semibold text-ink-900">
                             {m.type === 'UPI' ? '📱' : '🏦'} {m.label}
                           </p>
-                          <p className="truncate text-gray-500">
+                          <p className="break-words text-gray-500">
                             {m.type === 'UPI' ? m.upiId : `•••• ${m.accountLast4} · ${m.ifsc}`}
                           </p>
-                          <p className="truncate text-[11px] text-gray-400">{m.accountName}</p>
+                          <p className="break-words text-[11px] text-gray-400">{m.accountName}</p>
                         </div>
                         <span
                           className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${

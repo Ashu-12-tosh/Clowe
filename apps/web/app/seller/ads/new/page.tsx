@@ -94,7 +94,7 @@ export default function NewAdPage() {
                   <div className="h-12 w-10 shrink-0 rounded-lg bg-gray-100" />
                 )}
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold">{p.title}</span>
+                  <span className="block break-words text-sm font-semibold">{p.title}</span>
                   <span className="text-xs text-gray-500">{formatPaise(p.pricePaise)}</span>
                 </span>
               </button>

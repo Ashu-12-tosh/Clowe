@@ -116,10 +116,10 @@ function KpiCard({
           {icon}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-xs font-medium uppercase tracking-wide text-gray-500">
+          <p className="break-words text-xs font-medium uppercase tracking-wide text-gray-500">
             {label}
           </p>
-          <p className="mt-0.5 truncate font-display text-xl font-bold text-ink-900">{value}</p>
+          <p className="mt-0.5 break-words font-display text-xl font-bold text-ink-900">{value}</p>
         </div>
       </div>
       <p className="mt-2 text-[11px] text-gray-500">{footer}</p>
@@ -488,7 +488,7 @@ export default function AdminTryOnMonitorPage() {
       {/* --- Main grid --------------------------------------------------- */}
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
         {/* Requests table */}
-        <div className="xl:col-span-2">
+        <div className="xl:col-span-2 min-w-0">
           <section className="rounded-2xl border border-gray-100 bg-white">
             <div className="flex flex-wrap gap-1 border-b border-gray-100 px-3 pt-3">
               {TRYON_MONITOR_TABS.map((t) => (
@@ -534,7 +534,7 @@ export default function AdminTryOnMonitorPage() {
                         <p className="text-[11px] text-gray-400">+91 {r.userPhone}</p>
                       </td>
                       <td className="max-w-52 px-3 py-2">
-                        <p className="truncate text-ink-900">{r.productTitle}</p>
+                        <p className="break-words text-ink-900">{r.productTitle}</p>
                         <p className="text-[11px] text-gray-400">{r.categoryName}</p>
                       </td>
                       <td className="px-3 py-2 text-gray-600">{r.provider}</td>

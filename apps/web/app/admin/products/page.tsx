@@ -304,7 +304,7 @@ export default function AdminProductsPage() {
                 <div className="h-20 w-16 rounded-lg bg-gray-100" />
               )}
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{p.title}</p>
+                <p className="break-words text-sm font-semibold">{p.title}</p>
                 <p className="mt-0.5 text-xs text-gray-500">
                   {p.brand ?? '—'} · {p.categoryName} · by{' '}
                   <span className="font-medium">{p.shopName}</span> · {p.variantCount} variants ·

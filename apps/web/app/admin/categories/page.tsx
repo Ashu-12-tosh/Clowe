@@ -180,7 +180,7 @@ function RulesEditor({
       )}
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <div className="md:col-span-2">
+        <div className="md:col-span-2 min-w-0">
           <label className="text-xs font-semibold text-gray-700">
             Variant options sellers get by default (comma separated, max 3)
           </label>
