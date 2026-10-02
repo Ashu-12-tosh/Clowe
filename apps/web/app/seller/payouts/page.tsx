@@ -427,6 +427,7 @@ export default function SellerPayoutsPage() {
                     <th className="px-4 py-2.5 font-semibold">Period</th>
                     <th className="px-4 py-2.5 text-right font-semibold">Gross</th>
                     <th className="px-4 py-2.5 text-right font-semibold">TDS</th>
+                    <th className="px-4 py-2.5 text-right font-semibold">TCS</th>
                     <th className="px-4 py-2.5 text-right font-semibold">Fees</th>
                     <th className="px-4 py-2.5 text-right font-semibold">Net paid</th>
                     <th className="px-4 py-2.5 font-semibold">Status</th>
@@ -456,6 +457,7 @@ export default function SellerPayoutsPage() {
                       </td>
                       <td className="px-4 py-2.5 text-right">{money(p.grossPaise)}</td>
                       <td className="px-4 py-2.5 text-right text-red-600">{money(p.tdsPaise)}</td>
+                      <td className="px-4 py-2.5 text-right text-red-600">{money(p.tcsPaise)}</td>
                       <td className="px-4 py-2.5 text-right text-red-600">
                         {money(p.feesPaise + p.adjustmentPaise)}
                       </td>
@@ -596,9 +598,14 @@ export default function SellerPayoutsPage() {
                       {money(overview.tds.tdsDepositedPaise)}
                     </dd>
                   </div>
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">GST TCS collected (s.52)</dt>
+                    <dd className="font-semibold">{money(overview.tds.tcsCollectedPaise)}</dd>
+                  </div>
                 </dl>
                 <p className="mt-2 text-[11px] text-gray-400">
-                  Withheld TDS is deposited against your PAN with the payout that carried it.
+                  Withheld TDS is deposited against your PAN with the payout that carried it. GST TCS is
+                  filed against your GSTIN in our GSTR-8, and shows as credit in your GSTR-2X.
                 </p>
               </Panel>
 
@@ -650,6 +657,12 @@ export default function SellerPayoutsPage() {
                     <dt className="text-gray-500">TDS deducted</dt>
                     <dd className="font-semibold text-red-600">
                       − {money(overview.summary.tdsPaise)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">GST TCS collected</dt>
+                    <dd className="font-semibold text-red-600">
+                      − {money(overview.summary.tcsPaise)}
                     </dd>
                   </div>
                   <div className="flex justify-between">

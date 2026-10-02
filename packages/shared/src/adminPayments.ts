@@ -164,6 +164,8 @@ export interface AdminPaymentsSummary {
     commissionPaise: number;
     gatewayFeePaise: number;
     tdsPaise: number;
+    /** GST TCS (s.52) on the payouts in the period: the marketplace files and deposits it (GSTR-8). */
+    tcsPaise: number;
     refundsPaise: number;
     /** What the marketplace keeps once refunds are taken off. */
     netRevenuePaise: number;

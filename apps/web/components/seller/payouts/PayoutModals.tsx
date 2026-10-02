@@ -253,6 +253,10 @@ export function PayoutDetailDrawer({
                 <dt className="text-gray-500">TDS (194-O)</dt>
                 <dd className="text-red-600">− {money(payout.tdsPaise)}</dd>
               </div>
+              <div className="flex justify-between">
+                <dt className="text-gray-500">GST TCS (s.52)</dt>
+                <dd className="text-red-600">− {money(payout.tcsPaise)}</dd>
+              </div>
               {payout.adjustmentPaise > 0 && (
                 <div className="flex justify-between">
                   <dt className="text-gray-500">Ad spend recovered</dt>
@@ -296,6 +300,7 @@ export function PayoutDetailDrawer({
                       <th className="pb-2 text-right font-semibold">Gross</th>
                       <th className="pb-2 text-right font-semibold">Fees</th>
                       <th className="pb-2 text-right font-semibold">TDS</th>
+                      <th className="pb-2 text-right font-semibold">TCS</th>
                       <th className="pb-2 text-right font-semibold">Net</th>
                     </tr>
                   </thead>
@@ -312,6 +317,7 @@ export function PayoutDetailDrawer({
                           {money(line.commissionPaise + line.gatewayPaise)}
                         </td>
                         <td className="py-1.5 text-right text-red-600">{money(line.tdsPaise)}</td>
+                        <td className="py-1.5 text-right text-red-600">{money(line.tcsPaise)}</td>
                         <td className="py-1.5 text-right font-semibold">{money(line.netPaise)}</td>
                       </tr>
                     ))}

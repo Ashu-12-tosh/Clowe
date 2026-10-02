@@ -602,6 +602,7 @@ model Payout {
   otherFeesPaise  Int @default(0)
   adjustmentPaise Int @default(0) // ad spend and other recoveries
   tdsPaise        Int @default(0) // section 194-O withholding
+  tcsPaise        Int @default(0) // GST TCS collected under s.52 (GSTR-8)
   netPaise        Int // what actually leaves for the bank
 
   status        PayoutStatus        @default(PENDING)
@@ -1924,6 +1925,9 @@ model SellerLedgerEntry {
   purchaseId  String?
   purchase    PromotionCreditPurchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
   note        String?
+  // GST_TCS only: the net taxable value (ex-GST) the TCS was taken on, as
+  // calculated when it was posted. GSTR-8 reports it.
+  taxablePaise Int?
   // The admin behind a manual entry; null for entries the system posted.
   createdById String?
   createdBy   User?              @relation("SellerLedgerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)

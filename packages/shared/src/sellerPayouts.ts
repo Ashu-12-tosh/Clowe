@@ -44,6 +44,8 @@ export interface SellerPayoutRow {
   feesPaise: number;
   adjustmentPaise: number;
   tdsPaise: number;
+  /** GST TCS collected under s.52 on these lines. */
+  tcsPaise: number;
   netPaise: number;
   status: PayoutStatusValue;
   methodLabel: string | null;
@@ -73,6 +75,7 @@ export interface SellerPayoutLine {
   commissionPaise: number;
   gatewayPaise: number;
   tdsPaise: number;
+  tcsPaise: number;
   netPaise: number;
 }
 
@@ -118,6 +121,7 @@ export interface SellerPayoutOverview {
     earningsPaise: number;
     feesPaise: number;
     tdsPaise: number;
+    tcsPaise: number;
     adjustmentsPaise: number;
     paidOutPaise: number;
     payablePaise: number;
@@ -136,6 +140,8 @@ export interface SellerPayoutOverview {
     grossSalesPaise: number;
     tdsWithheldPaise: number;
     tdsDepositedPaise: number;
+    /** GST TCS (s.52) collected in the financial year; the seller claims it as credit. */
+    tcsCollectedPaise: number;
   };
   recentPayouts: SellerPayoutRow[];
   methods: SellerPayoutMethodRow[];

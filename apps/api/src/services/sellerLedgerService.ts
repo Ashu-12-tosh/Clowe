@@ -54,6 +54,8 @@ export interface PostEntryInput {
   purchaseId?: string | null;
   note?: string | null;
   createdById?: string | null;
+  /** GST_TCS only: the taxable value the TCS was taken on. */
+  taxablePaise?: number | null;
 }
 
 /**
@@ -82,6 +84,7 @@ function toRow(input: PostEntryInput): Prisma.SellerLedgerEntryCreateManyInput {
     purchaseId: input.purchaseId ?? null,
     note: input.note ?? null,
     createdById: input.createdById ?? null,
+    taxablePaise: input.taxablePaise ?? null,
   };
 }
 
@@ -146,6 +149,8 @@ export async function postDeliveryEntries(orderItemId: string, db: Db = prisma):
         orderId: item.orderId,
         orderItemId: item.id,
         note: l.label,
+        // GSTR-8 reports the value TCS was taken on, as it was calculated now.
+        taxablePaise: l.ledgerType === 'GST_TCS' ? economics.exGstPaise : null,
       }),
     );
   if (rows.length === 0) return 0;

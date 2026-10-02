@@ -84,6 +84,7 @@ function toPayoutRow(p: PayoutRecord): SellerPayoutRow {
     feesPaise: p.commissionPaise + p.gatewayPaise + p.otherFeesPaise,
     adjustmentPaise: p.adjustmentPaise,
     tdsPaise: p.tdsPaise,
+    tcsPaise: p.tcsPaise,
     netPaise: p.netPaise,
     status: p.status as PayoutStatusValue,
     methodLabel: p.methodLabel,
@@ -310,6 +311,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         earningsPaise: monthFees.grossPaise,
         feesPaise: monthFees.feesPaise,
         tdsPaise: monthFees.tdsPaise,
+        tcsPaise: monthFees.tcsPaise,
         adjustmentsPaise: balance.adjustmentsPaise,
         paidOutPaise: paidInMonth,
         payablePaise: balance.payablePaise,
@@ -325,6 +327,8 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         financialYear: fy.label,
         grossSalesPaise: fyFees.grossPaise,
         tdsWithheldPaise: fyFees.tdsPaise,
+        // GST TCS (s.52) the marketplace collected, which the seller claims as credit.
+        tcsCollectedPaise: fyFees.tcsPaise,
         // Withheld TDS is deposited with the payout that carried it.
         tdsDepositedPaise: payouts
           .filter((p) => p.status === 'PAID' && p.requestedAt >= fy.from && p.requestedAt <= fy.to)
@@ -553,6 +557,7 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
       'Commission (INR)',
       'Gateway (INR)',
       'TDS (INR)',
+      'GST TCS (INR)',
       'Net (INR)',
       'Payment method',
       'Payout',
@@ -571,6 +576,7 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
           (fee.commissionPaise / 100).toFixed(2),
           (fee.gatewayPaise / 100).toFixed(2),
           (fee.tdsPaise / 100).toFixed(2),
+          (fee.tcsPaise / 100).toFixed(2),
           (fee.netPaise / 100).toFixed(2),
           item.order.paymentMethod,
           item.payout?.reference ?? 'Unsettled',
@@ -608,6 +614,7 @@ sellerPayoutsRouter.get('/tds-report', async (req, res, next) => {
       'Period to',
       'Gross (INR)',
       'TDS 194-O (INR)',
+      'GST TCS s.52 (INR)',
       'Net paid (INR)',
       'Status',
       'UTR',
@@ -622,6 +629,7 @@ sellerPayoutsRouter.get('/tds-report', async (req, res, next) => {
           p.periodTo.toISOString().slice(0, 10),
           (p.grossPaise / 100).toFixed(2),
           (p.tdsPaise / 100).toFixed(2),
+          (p.tcsPaise / 100).toFixed(2),
           (p.netPaise / 100).toFixed(2),
           p.status,
           p.utr ?? '',
@@ -680,6 +688,7 @@ sellerPayoutsRouter.get('/:id', async (req, res, next) => {
         commissionPaise: fee.commissionPaise,
         gatewayPaise: fee.gatewayPaise,
         tdsPaise: fee.tdsPaise,
+        tcsPaise: fee.tcsPaise,
         netPaise: fee.netPaise,
       };
     });

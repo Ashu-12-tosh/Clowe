@@ -324,6 +324,7 @@ export async function requestPayout(sellerId: string, methodId?: string) {
     const commissionPaise = -sumOf('COMMISSION');
     const gatewayPaise = -sumOf('GATEWAY_FEE');
     const tdsPaise = -sumOf('TDS');
+    const tcsPaise = -sumOf('GST_TCS');
 
     const created = await tx.payout.create({
       data: {
@@ -338,9 +339,10 @@ export async function requestPayout(sellerId: string, methodId?: string) {
         // and penalties or waivers that count at once. Defined as the
         // remainder so the row always reconciles, whichever entries exist.
         otherFeesPaise:
-          grossPaise - commissionPaise - gatewayPaise - tdsPaise - adjustments.total - netPaise,
+          grossPaise - commissionPaise - gatewayPaise - tdsPaise - tcsPaise - adjustments.total - netPaise,
         adjustmentPaise: adjustments.total,
         tdsPaise,
+        tcsPaise,
         netPaise,
         status: 'PROCESSING',
         methodId: method.id,

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
+  istDate,
   TRANSACTION_SORTS,
   TRANSACTION_SORT_LABELS,
   TRANSACTION_STATUSES,
@@ -172,6 +173,12 @@ export default function AdminPaymentsPage() {
   const [page, setPage] = useState<TransactionPage | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  // GSTR-8 is filed for the previous month (by the 10th): start there.
+  const [gstrMonth, setGstrMonth] = useState(() => {
+    const { year, month } = istDate(new Date());
+    const prev = new Date(Date.UTC(year, month - 1, 1));
+    return `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, '0')}`;
+  });
 
   const [q, setQ] = useState('');
   const [tab, setTab] = useState<TransactionTab>('ALL');
@@ -316,6 +323,24 @@ export default function AdminPaymentsPage() {
           >
             ▤ Settlement Report
           </button>
+          {/* GSTR-8: the GST TCS collected in a month, per supplier GSTIN. */}
+          <label className="flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-700">
+            <span className="font-semibold">GSTR-8</span>
+            <input
+              type="month"
+              value={gstrMonth}
+              onChange={(e) => setGstrMonth(e.target.value)}
+              className="rounded border-0 bg-transparent py-1 text-xs outline-none"
+              aria-label="GSTR-8 month"
+            />
+            <button
+              type="button"
+              onClick={() => downloadFile(`/api/admin/payments/gstr8?month=${gstrMonth}`, `gstr8-tcs-${gstrMonth}.csv`)}
+              className="rounded-md bg-gray-100 px-2 py-1 font-semibold hover:bg-gray-200"
+            >
+              ⭳ CSV
+            </button>
+          </label>
           <button
             onClick={() => void reconcile()}
             disabled={reconciling}
@@ -781,6 +806,7 @@ export default function AdminPaymentsPage() {
                     ['Commission', formatPaise(summary.financials.commissionPaise), ''],
                     ['Gateway fees', formatPaise(summary.financials.gatewayFeePaise), ''],
                     ['TDS withheld', formatPaise(summary.financials.tdsPaise), 'text-gray-500'],
+                    ['GST TCS collected', formatPaise(summary.financials.tcsPaise), 'text-gray-500'],
                     [
                       'Refunds',
                       `− ${formatPaise(summary.financials.refundsPaise)}`,

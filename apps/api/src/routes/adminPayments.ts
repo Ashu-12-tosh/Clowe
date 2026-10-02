@@ -25,6 +25,7 @@ import {
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { getSettings } from '../services/settingsService';
+import { gstr8Rows } from '../services/gstr8';
 
 export const adminPaymentsRouter = Router();
 adminPaymentsRouter.use(requireAuth, requireRole('ADMIN'));
@@ -444,6 +445,7 @@ adminPaymentsRouter.get('/summary', async (req, res, next) => {
           commissionPaise: true,
           gatewayPaise: true,
           tdsPaise: true,
+          tcsPaise: true,
         },
         take: SCAN_CAP,
       }),
@@ -699,6 +701,7 @@ adminPaymentsRouter.get('/summary', async (req, res, next) => {
         commissionPaise,
         gatewayFeePaise,
         tdsPaise: payouts.reduce((sum, p) => sum + p.tdsPaise, 0),
+        tcsPaise: payouts.reduce((sum, p) => sum + p.tcsPaise, 0),
         refundsPaise,
         netRevenuePaise: commissionPaise + gatewayFeePaise - refundsPaise,
       },
@@ -826,12 +829,14 @@ adminPaymentsRouter.post('/reconcile', async (_req, res, next) => {
     // 6/7. Payout-side checks.
     const stuckBefore = new Date(Date.now() - STUCK_PAYOUT_HOURS * 3600000);
     for (const p of payouts) {
+      // How payouts are made: everything withheld or recovered comes off the gross.
       const expected =
         p.grossPaise -
         p.commissionPaise -
         p.gatewayPaise -
         p.otherFeesPaise -
-        p.tdsPaise +
+        p.tdsPaise -
+        p.tcsPaise -
         p.adjustmentPaise;
       if (expected !== p.netPaise) {
         findings.push({
@@ -961,6 +966,73 @@ adminPaymentsRouter.get('/export', async (req, res, next) => {
 });
 
 /** Seller settlements: what each payout was made of, line by line. */
+// ---------------------------------------------------------------------------
+// GET /gstr8?month=YYYY-MM — GST TCS collected in an Indian calendar month,
+// per supplier, in the shape of GSTR-8 table 3 (see services/gstr8.ts).
+// ---------------------------------------------------------------------------
+
+adminPaymentsRouter.get('/gstr8', async (req, res, next) => {
+  try {
+    const month = z
+      .string()
+      .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be YYYY-MM')
+      .parse(req.query.month);
+    const rows = await gstr8Rows(month);
+    const rupees = (paise: number) => (paise / 100).toFixed(2);
+    const header = [
+      'GSTIN of supplier',
+      'Trade name',
+      'Gross value of supplies (₹)',
+      'Value of supplies returned (₹)',
+      'Net amount liable for TCS (₹)',
+      'IGST TCS (₹)',
+      'CGST TCS (₹)',
+      'SGST/UTGST TCS (₹)',
+      'Lines',
+      'Note',
+    ];
+    const total = rows.reduce(
+      (t, r) => ({
+        supplies: t.supplies + r.suppliesTaxablePaise,
+        returns: t.returns + r.returnsTaxablePaise,
+        net: t.net + r.netTaxablePaise,
+        igst: t.igst + r.igstPaise,
+        cgst: t.cgst + r.cgstPaise,
+        sgst: t.sgst + r.sgstPaise,
+        lines: t.lines + r.lines,
+      }),
+      { supplies: 0, returns: 0, net: 0, igst: 0, cgst: 0, sgst: 0, lines: 0 },
+    );
+    const lines = [
+      header.join(','),
+      ...rows.map((r) =>
+        [
+          r.gstin ?? '',
+          r.tradeName,
+          rupees(r.suppliesTaxablePaise),
+          rupees(r.returnsTaxablePaise),
+          rupees(r.netTaxablePaise),
+          rupees(r.igstPaise),
+          rupees(r.cgstPaise),
+          rupees(r.sgstPaise),
+          r.lines,
+          r.notes.join('; '),
+        ]
+          .map(csvCell)
+          .join(','),
+      ),
+      ['TOTAL', '', rupees(total.supplies), rupees(total.returns), rupees(total.net), rupees(total.igst), rupees(total.cgst), rupees(total.sgst), total.lines, '']
+        .map(csvCell)
+        .join(','),
+    ];
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="clowe-gstr8-tcs-${month}.csv"`);
+    res.send(lines.join('\n'));
+  } catch (err) {
+    next(err);
+  }
+});
+
 adminPaymentsRouter.get('/settlement/export', async (req, res, next) => {
   try {
     const { from, to } = z
@@ -993,6 +1065,7 @@ adminPaymentsRouter.get('/settlement/export', async (req, res, next) => {
       'Other fees (₹)',
       'Adjustments (₹)',
       'TDS (₹)',
+      'GST TCS (₹)',
       'Net paid (₹)',
       'Method',
       'UTR',
@@ -1015,6 +1088,7 @@ adminPaymentsRouter.get('/settlement/export', async (req, res, next) => {
           (p.otherFeesPaise / 100).toFixed(2),
           (p.adjustmentPaise / 100).toFixed(2),
           (p.tdsPaise / 100).toFixed(2),
+          (p.tcsPaise / 100).toFixed(2),
           (p.netPaise / 100).toFixed(2),
           p.methodLabel ?? '',
           p.utr ?? '',
