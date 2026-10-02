@@ -3,6 +3,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { env } from '../../env';
 import { uploadDir } from '../../routes/uploads';
+import { fetchPublic } from '../../utils/publicFetch';
 
 /**
  * FASHN processes try-on images at 864 x 1296. Sending anything larger just
@@ -42,13 +43,9 @@ async function loadImageBytes(url: string): Promise<Buffer> {
     return fs.readFile(filePath);
   }
 
-  const res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-  if (!res.ok) throw new Error(`Could not fetch image (${res.status}): ${url}`);
-  const declared = Number(res.headers.get('content-length') ?? 0);
-  if (declared > MAX_SOURCE_BYTES) throw new Error('Image is too large to process');
-  const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.byteLength > MAX_SOURCE_BYTES) throw new Error('Image is too large to process');
-  return buf;
+  // Anywhere else is fetched from the public internet only: product images
+  // are seller-supplied URLs, and must not be a way to reach inside.
+  return fetchPublic(url, { timeoutMs: FETCH_TIMEOUT_MS, maxBytes: MAX_SOURCE_BYTES });
 }
 
 /**

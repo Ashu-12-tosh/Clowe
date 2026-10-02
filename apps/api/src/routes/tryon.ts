@@ -21,6 +21,7 @@ import {
   tryOnProvider,
 } from '../services/tryon';
 import { getSettings } from '../services/settingsService';
+import { isOwnUpload } from './uploads';
 import { categoryRulesFor } from '../services/categoryRules';
 
 export const tryonRouter = Router();
@@ -73,10 +74,22 @@ tryonRouter.get('/quota', async (req, res, next) => {
   }
 });
 
+/**
+ * The shopper's photo must be one they uploaded here. The server reads it to
+ * send to the model, so any other URL would make this API fetch an address
+ * of the caller's choosing.
+ */
+function assertOwnPhoto(photoUrl: string): void {
+  if (!isOwnUpload(photoUrl)) {
+    throw ApiError.badRequest('Upload your photo to use it for try-on', 'INVALID_PHOTO');
+  }
+}
+
 // Save (or replace) the user's try-on photo — uploaded once, reused after.
 tryonRouter.post('/photo', async (req, res, next) => {
   try {
     const { photoUrl } = saveTryOnPhotoSchema.parse(req.body);
+    assertOwnPhoto(photoUrl);
     await prisma.user.update({
       where: { id: req.auth!.userId },
       data: { tryOnPhotoUrl: photoUrl },
@@ -104,6 +117,7 @@ tryonRouter.delete('/photo', async (req, res, next) => {
 tryonRouter.post('/', async (req, res, next) => {
   try {
     const input = tryOnRequestSchema.parse(req.body);
+    assertOwnPhoto(input.photoUrl);
     const userId = req.auth!.userId;
 
     // Live controls from the admin monitor (kill switch, quota, spend cap).

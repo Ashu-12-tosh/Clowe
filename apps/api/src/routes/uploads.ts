@@ -125,6 +125,22 @@ uploadsRouter.post('/video', requireAuth, uploadLimiter, videoUpload.single('vid
   res.json({ success: true, data: { url: `${env.API_PUBLIC_URL}/uploads/${file.filename}` } });
 });
 
+/**
+ * Whether a URL is a file this API stored: `${API_PUBLIC_URL}/uploads/…` or
+ * the root-relative `/uploads/…` the seeded catalog uses. Plain names and
+ * sub-folders only — no `..`, no query, no other host.
+ */
+export function isOwnUpload(url: string): boolean {
+  const prefix = `${env.API_PUBLIC_URL}/uploads/`;
+  const rest = url.startsWith(prefix)
+    ? url.slice(prefix.length)
+    : url.startsWith('/uploads/')
+      ? url.slice('/uploads/'.length)
+      : null;
+  if (rest === null) return false;
+  return /^[\w-]+(?:\/[\w-]+)*\.[a-z0-9]+$/i.test(rest);
+}
+
 /** Best-effort delete of a local upload by its public URL (used by video expiry). */
 export function removeUploadByUrl(url: string): void {
   const name = url.split('/uploads/')[1];
