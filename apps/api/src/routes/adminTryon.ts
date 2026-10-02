@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises';
 import { Router } from 'express';
 import type { Prisma } from '@prisma/client';
 import {
@@ -23,7 +22,9 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { getSettings, setSetting } from '../services/settingsService';
 import { tryOnProvider } from '../services/tryon';
-import { uploadDir } from './uploads';
+import { removeStoredFile } from './uploads';
+import { resolveFileUrls } from '../services/assets';
+import { privateStorage } from '../services/storage';
 
 export const adminTryonRouter = Router();
 adminTryonRouter.use(requireAuth, requireRole('ADMIN'));
@@ -515,23 +516,14 @@ async function systemHealth(): Promise<AdminTryOnHealth> {
     detail: stuck === 0 ? 'No stuck runs' : `${stuck} run(s) pending over 2 min`,
   });
 
-  let storage: AdminTryOnHealthCheck = {
+  // Try-on photos and results are private files.
+  const stored = await privateStorage.check();
+  checks.push({
     key: 'storage',
     label: 'Image Storage',
-    status: 'OPERATIONAL',
-    detail: 'Upload directory writable',
-  };
-  try {
-    await fs.access(uploadDir, fs.constants.W_OK);
-  } catch {
-    storage = {
-      key: 'storage',
-      label: 'Image Storage',
-      status: 'DOWN',
-      detail: 'Upload directory is not writable',
-    };
-  }
-  checks.push(storage);
+    status: stored.ok ? 'OPERATIONAL' : 'DOWN',
+    detail: `${privateStorage.name}: ${stored.detail}`,
+  });
 
   let database: AdminTryOnHealthCheck = {
     key: 'database',
@@ -585,6 +577,13 @@ const REQUEST_INCLUDE = {
 } as const;
 
 type RequestRecord = Prisma.TryOnHistoryGetPayload<{ include: typeof REQUEST_INCLUDE }>;
+
+/** Swap the stored photo and result references for URLs the admin's browser can load. */
+async function withFileUrls<T extends { inputImageUrl: string | null; resultImageUrl: string | null }>(rows: T[]): Promise<T[]> {
+  const inputs = await resolveFileUrls(rows.map((r) => r.inputImageUrl));
+  const results = await resolveFileUrls(rows.map((r) => r.resultImageUrl));
+  return rows.map((r, i) => ({ ...r, inputImageUrl: inputs[i], resultImageUrl: results[i] }));
+}
 
 function toRow(r: RequestRecord): AdminTryOnRequestRow {
   return {
@@ -654,7 +653,7 @@ adminTryonRouter.get('/requests', async (req, res, next) => {
     ]);
 
     const body: AdminTryOnRequestPage = {
-      rows: records.map(toRow),
+      rows: await withFileUrls(records.map(toRow)),
       total,
       page,
       pageSize,
@@ -691,8 +690,9 @@ adminTryonRouter.get('/requests/:id', async (req, res, next) => {
 
     const userTotalTryOns = await prisma.tryOnHistory.count({ where: { userId: record.userId } });
 
+    const [row] = await withFileUrls([toRow(record as unknown as RequestRecord)]);
     const body: AdminTryOnRequestDetail = {
-      ...toRow(record as unknown as RequestRecord),
+      ...row,
       userEmail: record.user.email,
       userJoinedAt: record.user.createdAt.toISOString(),
       userTotalTryOns,
@@ -727,7 +727,7 @@ adminTryonRouter.post('/requests/:id/flag', async (req, res, next) => {
         : { flagged: false, flagReason: null, flaggedAt: null },
       include: REQUEST_INCLUDE,
     });
-    res.json({ success: true, data: toRow(record) });
+    res.json({ success: true, data: (await withFileUrls([toRow(record)]))[0] });
   } catch (err) {
     next(err);
   }
@@ -743,10 +743,7 @@ adminTryonRouter.delete('/requests/:id/result', async (req, res, next) => {
     if (!record) throw ApiError.notFound('Try-on not found');
 
     // Remove the generated file when it is one of ours, then clear the link.
-    const filename = record.resultImageUrl?.split('/uploads/')[1];
-    if (filename && !filename.includes('/')) {
-      await fs.unlink(`${uploadDir}/${filename}`).catch(() => undefined);
-    }
+    if (record.resultImageUrl) await removeStoredFile(record.resultImageUrl);
     const updated = await prisma.tryOnHistory.update({
       where: { id: record.id },
       data: {
@@ -757,7 +754,7 @@ adminTryonRouter.delete('/requests/:id/result', async (req, res, next) => {
       },
       include: REQUEST_INCLUDE,
     });
-    res.json({ success: true, data: toRow(updated) });
+    res.json({ success: true, data: (await withFileUrls([toRow(updated)]))[0] });
   } catch (err) {
     next(err);
   }

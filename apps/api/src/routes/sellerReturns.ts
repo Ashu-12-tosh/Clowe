@@ -20,6 +20,7 @@ import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { applyReturnDecision } from '../services/returnService';
 import { blockSuspendedWrites, requireSeller } from './seller';
+import { withPhotoUrls } from '../services/assets';
 
 export const sellerReturnsRouter = Router();
 sellerReturnsRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
@@ -180,7 +181,7 @@ sellerReturnsRouter.get('/', async (req, res, next) => {
     const query = listQuery.parse(req.query);
     const rows = await loadRows(req.seller!.id, query);
     const body: SellerReturnPage = {
-      rows: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize),
+      rows: await withPhotoUrls(rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize)),
       total: rows.length,
       page: query.page,
       pageSize: query.pageSize,

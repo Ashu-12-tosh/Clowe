@@ -249,6 +249,8 @@ export async function seedFixture(prisma: PrismaClient): Promise<void> {
   await prisma.order.deleteMany();
   // Ads point at products the same way (the promotion credit tests book them).
   await prisma.ad.deleteMany();
+  // So does try-on history (the private file tests write some).
+  await prisma.tryOnHistory.deleteMany();
   await prisma.productVariant.deleteMany();
   await prisma.productImage.deleteMany();
   await prisma.product.deleteMany();

@@ -35,6 +35,7 @@ import { processRefund } from '../services/refundService';
 import { postReturnReversal } from '../services/sellerLedgerService';
 import { getSettings, setSetting } from '../services/settingsService';
 import { creditExpiryFrom } from './credits';
+import { withPhotoUrls } from '../services/assets';
 
 export const adminReturnsRouter = Router();
 adminReturnsRouter.use(requireAuth, requireRole('ADMIN'));
@@ -260,7 +261,7 @@ adminReturnsRouter.get('/', async (req, res, next) => {
     const start = (query.page - 1) * query.pageSize;
 
     const body: AdminReturnPage = {
-      rows: sorted.slice(start, start + query.pageSize),
+      rows: await withPhotoUrls(sorted.slice(start, start + query.pageSize)),
       total: sorted.length,
       page: query.page,
       pageSize: query.pageSize,
@@ -560,8 +561,9 @@ adminReturnsRouter.get('/:id', async (req, res, next) => {
       }),
     ]);
 
+    const [row] = await withPhotoUrls([toRow(r)]);
     const body: AdminReturnDetail = {
-      ...toRow(r),
+      ...row,
       rejectionReason: r.rejectionReason,
       receivedCondition: r.receivedCondition,
       qcPassed: r.qcPassed,

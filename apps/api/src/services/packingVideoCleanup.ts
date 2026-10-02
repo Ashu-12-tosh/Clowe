@@ -1,5 +1,5 @@
 import { prisma } from '../db';
-import { removeUploadByUrl } from '../routes/uploads';
+import { removeStoredFile } from '../routes/uploads';
 
 /**
  * Packing videos are proof-of-packing clips sellers upload with a listing.
@@ -18,7 +18,12 @@ export async function sweepExpiredPackingVideos(): Promise<number> {
   if (due.length === 0) return 0;
 
   for (const product of due) {
-    if (product.packingVideoUrl) removeUploadByUrl(product.packingVideoUrl);
+    // One bad file never stops the rest of the sweep.
+    if (product.packingVideoUrl) {
+      await removeStoredFile(product.packingVideoUrl).catch((err) =>
+        console.error('[clowe-api] packing video not removed:', err instanceof Error ? err.message : err),
+      );
+    }
   }
   await prisma.product.updateMany({
     where: { id: { in: due.map((p) => p.id) } },

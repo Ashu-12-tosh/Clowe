@@ -9,7 +9,7 @@ import {
   type ReturnInfo,
   type ReturnReasonValue,
 } from '@clowe/shared';
-import { api, ApiRequestError, uploadImages } from '@/lib/api';
+import { api, ApiRequestError, uploadPrivateImages } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 
 
@@ -100,7 +100,7 @@ export function ReturnModal({
     setError('');
     setBusy(true);
     try {
-      const photos = files.length > 0 ? await uploadImages(files) : [];
+      const photos = files.length > 0 ? (await uploadPrivateImages(files, 'RETURN_PHOTO')).map((p) => p.ref) : [];
       await api(`/api/orders/items/${item.id}/return`, {
         body: { reason, details: details.trim() || undefined, photos },
         auth: true,

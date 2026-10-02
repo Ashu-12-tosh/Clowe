@@ -101,23 +101,26 @@ async function main() {
   const firstJpg = (await fs.readdir(demoDir)).find((f) => f.endsWith('.jpg'));
   const bytes = await fs.readFile(path.join(demoDir, firstJpg));
   const form = new FormData();
+  form.append('purpose', 'TRYON_PHOTO');
   form.append('images', new Blob([bytes], { type: 'image/jpeg' }), 'photo.jpg');
-  const upRes = await fetch(`${API}/api/uploads`, {
+  const upRes = await fetch(`${API}/api/uploads/private`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: form,
   });
-  const photoUrl = (await upRes.json())?.data?.urls?.[0];
-  if (photoUrl) ok('photo uploaded', photoUrl.replace(API, ''));
-  else return bad('photo upload', 'no url returned');
+  const uploaded = (await upRes.json())?.data?.items?.[0];
+  const photoRef = uploaded?.ref;
+  if (photoRef) ok('photo uploaded privately', photoRef);
+  else return bad('photo upload', 'no reference returned');
 
   console.log('\n4. Saved photo round-trip');
-  const saved = await call('/api/tryon/photo', { method: 'POST', token, body: { photoUrl } });
-  if (saved.json?.data?.savedPhotoUrl === photoUrl) ok('photo saved to the account');
+  const saved = await call('/api/tryon/photo', { method: 'POST', token, body: { photoRef } });
+  if (saved.json?.data?.savedPhotoRef === photoRef) ok('photo saved to the account');
   else bad('save photo', JSON.stringify(saved.json));
   const quota2 = await call('/api/tryon/quota', { token });
-  if (quota2.json?.data?.savedPhotoUrl === photoUrl) ok('saved photo returned by quota');
-  else bad('saved photo not returned', JSON.stringify(quota2.json?.data));
+  if (quota2.json?.data?.savedPhotoRef === photoRef && quota2.json?.data?.savedPhotoUrl) {
+    ok('saved photo returned by quota', 'with a signed URL to show it');
+  } else bad('saved photo not returned', JSON.stringify(quota2.json?.data));
 
   console.log('\n5. Eligibility guards');
   // Categories the AI physically cannot try on must be refused before any
@@ -145,7 +148,7 @@ async function main() {
     const r = await call('/api/tryon', {
       method: 'POST',
       token,
-      body: { productId: found.item.id, photoUrl },
+      body: { productId: found.item.id, photoRef },
     });
     if (r.json?.error?.code === 'TRYON_NOT_ELIGIBLE') {
       ok(`${label} refused`, found.detail.title.slice(0, 34));
@@ -155,14 +158,14 @@ async function main() {
   const missing = await call('/api/tryon', {
     method: 'POST',
     token,
-    body: { productId: 'does-not-exist', photoUrl },
+    body: { productId: 'does-not-exist', photoRef },
   });
   if (missing.json?.error?.code === 'NOT_FOUND') ok('unknown product refused', 'NOT_FOUND');
   else bad('unknown product', JSON.stringify(missing.json).slice(0, 140));
 
   const badBody = await call('/api/tryon', { method: 'POST', token, body: { productId: 'x' } });
-  if (!badBody.json?.success) ok('missing photoUrl refused', badBody.json?.error?.code ?? '4xx');
-  else bad('missing photoUrl accepted', JSON.stringify(badBody.json).slice(0, 120));
+  if (!badBody.json?.success) ok('missing photoRef refused', badBody.json?.error?.code ?? '4xx');
+  else bad('missing photoRef accepted', JSON.stringify(badBody.json).slice(0, 120));
 
   console.log('\n6. A real run');
   const eligible = await findEligible([
@@ -182,7 +185,7 @@ async function main() {
       token,
       body: {
         productId: eligible.item.id,
-        photoUrl,
+        photoRef,
         variantSize: 'M',
         variantColor: 'Black',
       },

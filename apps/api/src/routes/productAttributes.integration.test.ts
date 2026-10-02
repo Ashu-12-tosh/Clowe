@@ -58,7 +58,11 @@ async function makeSeller() {
   const seller = await prisma.sellerProfile.create({
     data: { userId: user.id, shopName: `Attr Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date() },
   });
-  return { id: seller.id, token: signAccessToken({ sub: user.id, role: 'SELLER' }) };
+  // The packing clip a submitted listing needs: a private upload of this seller's.
+  const clip = await prisma.asset.create({
+    data: { provider: 'local', key: `test/packing-video/${seq}.mp4`, purpose: 'PACKING_VIDEO', contentType: 'video/mp4', bytes: 1, ownerId: user.id },
+  });
+  return { id: seller.id, token: signAccessToken({ sub: user.id, role: 'SELLER' }), packingVideoRef: `asset:${clip.id}` };
 }
 
 async function call(method: string, path: string, token: string | null, body?: unknown) {
@@ -74,13 +78,13 @@ async function call(method: string, path: string, token: string | null, body?: u
 }
 
 /** A complete listing; attributes and mode are what each test varies. */
-function listing(overrides: Record<string, unknown>) {
+function listing(s: { packingVideoRef: string }, overrides: Record<string, unknown>) {
   return {
     title: 'Attr Test Phone',
     categoryId,
     description: 'A phone that exists to test the spec sheet.',
     imageUrls: ['https://example.com/phone.jpg'],
-    packingVideoUrl: 'https://example.com/packing.mp4',
+    packingVideoRef: s.packingVideoRef,
     variants: [{ optionValues: {}, pricePaise: 1_000_000, stock: 5 }],
     ...overrides,
   };
@@ -89,7 +93,7 @@ function listing(overrides: Record<string, unknown>) {
 describe('spec-sheet rows are stored canonical', () => {
   it('turns { name, value } rows into { key, label, value }, keying rule fields from the rule', async () => {
     const s = await makeSeller();
-    const { status, body } = await call('POST', '/api/seller/products', s.token, listing({
+    const { status, body } = await call('POST', '/api/seller/products', s.token, listing(s, {
       mode: 'DRAFT',
       attributes: [
         { name: 'Warranty', value: '1 year' },
@@ -110,7 +114,7 @@ describe('spec-sheet rows are stored canonical', () => {
 
   it('accepts a required field given under its label, whatever the spelling', async () => {
     const s = await makeSeller();
-    const { status, body } = await call('POST', '/api/seller/products', s.token, listing({
+    const { status, body } = await call('POST', '/api/seller/products', s.token, listing(s, {
       mode: 'SUBMIT',
       attributes: [{ name: 'warranty', value: '2 years' }],
     }));
@@ -120,7 +124,7 @@ describe('spec-sheet rows are stored canonical', () => {
 
   it('still refuses a submission that leaves a required field empty', async () => {
     const s = await makeSeller();
-    const { status, body } = await call('POST', '/api/seller/products', s.token, listing({
+    const { status, body } = await call('POST', '/api/seller/products', s.token, listing(s, {
       mode: 'SUBMIT',
       attributes: [{ name: 'Model number', value: 'AT-1' }],
     }));

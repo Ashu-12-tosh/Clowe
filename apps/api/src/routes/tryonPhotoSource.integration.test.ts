@@ -4,25 +4,30 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
-import { env } from '../env';
 import { signAccessToken } from '../utils/jwt';
 import { BlockedUrlError, fetchPublic } from '../utils/publicFetch';
-import { isOwnUpload } from './uploads';
+import { TINY_PNG } from '../test/images';
 
 /**
  * Try-on reads two images on the server: the shopper's photo and the
  * product's first image (a seller-supplied URL). Neither may become a way to
- * make this API fetch an address of the caller's choosing.
+ * make this API fetch an address of the caller's choosing, and the photo must
+ * be the shopper's own private upload.
  */
 
 const prisma = new PrismaClient();
 let server: Server;
 let base: string;
 let token: string;
+let userId: string;
+let otherUserId: string;
 
 beforeAll(async () => {
   await seedFixture(prisma);
   const user = await prisma.user.create({ data: { phone: '9600000001', name: 'Photo Source', referralCode: 'PHOTO-SRC-1' } });
+  const other = await prisma.user.create({ data: { phone: '9600000002', name: 'Someone Else', referralCode: 'PHOTO-SRC-2' } });
+  userId = user.id;
+  otherUserId = other.id;
   token = signAccessToken({ sub: user.id, role: 'CUSTOMER' });
   server = createApp().listen(0);
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -40,31 +45,47 @@ const post = (path: string, body: unknown) =>
     body: JSON.stringify(body),
   });
 
-describe('the shopper photo must be one of our uploads', () => {
-  it('knows our uploads from everything else', () => {
-    expect(isOwnUpload(`${env.API_PUBLIC_URL}/uploads/1788258286334-9475b8956c4b.png`)).toBe(true);
-    expect(isOwnUpload('/uploads/demo/abc123.jpg')).toBe(true);
-    expect(isOwnUpload('http://169.254.169.254/latest/meta-data/')).toBe(false);
-    expect(isOwnUpload(`${env.API_PUBLIC_URL}/uploads/../../etc/passwd`)).toBe(false);
-    expect(isOwnUpload(`${env.API_PUBLIC_URL}/uploads/a.jpg?x=http://10.0.0.1`)).toBe(false);
-    expect(isOwnUpload('https://evil.example/uploads/a.jpg')).toBe(false);
+/** A stored-file row, without bytes: enough for the ownership checks. */
+async function assetRow(ownerId: string, purpose: 'TRYON_PHOTO' | 'RETURN_PHOTO') {
+  const a = await prisma.asset.create({
+    data: { provider: 'local', key: `test/${purpose.toLowerCase()}/${Math.random().toString(36).slice(2)}.png`, purpose, contentType: 'image/png', bytes: 1, ownerId },
   });
+  return `asset:${a.id}`;
+}
 
-  it('refuses to save another URL as the try-on photo', async () => {
-    const res = await post('/api/tryon/photo', { photoUrl: 'http://169.254.169.254/latest/meta-data/' });
+describe('the shopper photo must be their own private upload', () => {
+  it('refuses a URL where the photo reference belongs', async () => {
+    const res = await post('/api/tryon/photo', { photoRef: 'http://169.254.169.254/latest/meta-data/' });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('INVALID_PHOTO');
   });
 
-  it('refuses to run a try-on with another URL', async () => {
-    const res = await post('/api/tryon', { productId: 'any', photoUrl: 'http://10.0.0.1/admin.png' });
+  it("refuses someone else's photo", async () => {
+    const res = await post('/api/tryon/photo', { photoRef: await assetRow(otherUserId, 'TRYON_PHOTO') });
     expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('INVALID_PHOTO');
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('INVALID_FILE');
   });
 
-  it('accepts an upload of ours', async () => {
-    const res = await post('/api/tryon/photo', { photoUrl: `${env.API_PUBLIC_URL}/uploads/1788258286334-9475b8956c4b.png` });
+  it('refuses their own file uploaded for something else', async () => {
+    const res = await post('/api/tryon/photo', { photoRef: await assetRow(userId, 'RETURN_PHOTO') });
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('INVALID_FILE');
+  });
+
+  it("refuses to run a try-on with someone else's photo", async () => {
+    const res = await post('/api/tryon', { productId: 'any', photoRef: await assetRow(otherUserId, 'TRYON_PHOTO') });
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('INVALID_FILE');
+  });
+
+  it('accepts their own upload, and shows it back through a signed URL', async () => {
+    const form = new FormData();
+    form.append('purpose', 'TRYON_PHOTO');
+    form.append('images', new Blob([TINY_PNG], { type: 'image/png' }), 'me.png');
+    const up = await fetch(`${base}/api/uploads/private`, { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: form });
+    const { data } = (await up.json()) as { data: { items: { ref: string; url: string }[] } };
+    const res = await post('/api/tryon/photo', { photoRef: data.items[0].ref });
     expect(res.status).toBe(200);
+    const saved = (await res.json()) as { data: { savedPhotoRef: string; savedPhotoUrl: string } };
+    expect(saved.data.savedPhotoRef).toBe(data.items[0].ref);
+    expect(saved.data.savedPhotoUrl).toContain('/api/files/local?');
   });
 });
 

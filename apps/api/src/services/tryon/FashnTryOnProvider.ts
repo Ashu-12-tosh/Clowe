@@ -1,9 +1,5 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { randomBytes } from 'node:crypto';
 import { env } from '../../env';
-import { uploadDir } from '../../routes/uploads';
-import { TryOnError, type TryOnInput, type TryOnProvider } from './TryOnProvider';
+import { TryOnError, type TryOnImage, type TryOnInput, type TryOnProvider } from './TryOnProvider';
 import { imageUrlToDataUri } from './imageUtils';
 
 const FASHN_BASE = 'https://api.fashn.ai/v1';
@@ -163,7 +159,7 @@ export class FashnTryOnProvider implements TryOnProvider {
     throw lastError ?? new TryOnError('AI Try-On failed.', 'FASHN call exhausted its retries');
   }
 
-  async generate(input: TryOnInput): Promise<string> {
+  async generate(input: TryOnInput): Promise<TryOnImage> {
     const deadline = Date.now() + this.totalTimeoutMs;
 
     const [modelImage, garmentImage] = await Promise.all([
@@ -240,7 +236,7 @@ export class FashnTryOnProvider implements TryOnProvider {
       );
     }
 
-    // 3. Re-host the result - FASHN's CDN links expire, ours do not.
+    // 3. Keep the result - FASHN's CDN links expire; the caller stores it privately.
     const imgRes = await fetch(outputUrl, { signal: AbortSignal.timeout(HTTP_TIMEOUT_MS) });
     if (!imgRes.ok) {
       throw new TryOnError(
@@ -249,10 +245,8 @@ export class FashnTryOnProvider implements TryOnProvider {
       );
     }
     const contentType = imgRes.headers.get('content-type') ?? '';
-    const ext = contentType.includes('png') || outputUrl.includes('.png') ? '.png' : '.jpg';
-    const filename = `tryon-${Date.now()}-${randomBytes(4).toString('hex')}${ext}`;
-    await fs.writeFile(path.join(uploadDir, filename), Buffer.from(await imgRes.arrayBuffer()));
-    return `${env.API_PUBLIC_URL}/uploads/${filename}`;
+    const png = contentType.includes('png') || outputUrl.includes('.png');
+    return { body: Buffer.from(await imgRes.arrayBuffer()), contentType: png ? 'image/png' : 'image/jpeg' };
   }
 
   /**

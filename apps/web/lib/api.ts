@@ -1,6 +1,6 @@
 'use client';
 
-import type { AuthTokensResponse, AuthUser } from '@clowe/shared';
+import type { AuthTokensResponse, AuthUser, UploadableImagePurpose, UploadedAsset } from '@clowe/shared';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -91,8 +91,31 @@ export async function uploadImages(files: File[]): Promise<string[]> {
   return json.data.urls as string[];
 }
 
-/** Upload one packing video (multipart) and get back its public URL. */
-export async function uploadVideo(file: File): Promise<string> {
+/**
+ * Upload personal photos (a return's damage photos, a try-on photo). They are
+ * stored privately: each comes back as a reference to submit and a URL that
+ * previews it for a few minutes.
+ */
+export async function uploadPrivateImages(files: File[], purpose: UploadableImagePurpose): Promise<UploadedAsset[]> {
+  const form = new FormData();
+  form.append('purpose', purpose);
+  for (const file of files) form.append('images', file);
+  const token = localStorage.getItem(ACCESS_KEY);
+  const res = await fetch(`${API_URL}/api/uploads/private`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  const json = await res.json();
+  if (!json.success) {
+    throw new ApiRequestError(json.error?.code ?? 'UNKNOWN', json.error?.message ?? 'Upload failed');
+  }
+  return json.data.items as UploadedAsset[];
+}
+
+/** Upload one packing video (multipart): a reference to submit, and a URL to preview it. */
+export async function uploadVideo(file: File): Promise<UploadedAsset> {
   const form = new FormData();
   form.append('video', file);
   const token = localStorage.getItem(ACCESS_KEY);
@@ -106,7 +129,7 @@ export async function uploadVideo(file: File): Promise<string> {
   if (!json.success) {
     throw new ApiRequestError(json.error?.code ?? 'UNKNOWN', json.error?.message ?? 'Upload failed');
   }
-  return json.data.url as string;
+  return json.data as UploadedAsset;
 }
 
 // --- Fetch helper with the standard { success, data, error } envelope ---

@@ -10,11 +10,8 @@
  * "try-on didn't work".
  */
 import 'dotenv/config';
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { env } from '../src/env';
 import { prisma } from '../src/db';
-import { uploadDir } from '../src/routes/uploads';
 import { garmentCategoryFor, tryOnProvider } from '../src/services/tryon';
 import { imageUrlToDataUri } from '../src/services/tryon/imageUtils';
 import { getSettings } from '../src/services/settingsService';
@@ -179,22 +176,16 @@ async function main(): Promise<void> {
   } else {
     const started = Date.now();
     try {
-      const resultUrl = await tryOnProvider.generate({
+      const result = await tryOnProvider.generate({
         personImageUrl: personUrl,
         garmentImageUrl: garmentUrl,
         productTitle: product.title,
         garmentCategory,
       });
       const elapsed = Date.now() - started;
-      pass('generated', `${elapsed} ms → ${resultUrl}`);
-
-      const filename = resultUrl.split('/uploads/')[1];
-      if (!filename) {
-        fail('result is not re-hosted', `expected an /uploads URL, got ${resultUrl}`);
-      } else {
-        const stat = await fs.stat(path.join(uploadDir, filename));
-        pass('result saved locally', `${(stat.size / 1024).toFixed(0)} KB at uploads/${filename}`);
-      }
+      // The route stores results privately; this check only confirms one came back.
+      if (result.body.length === 0) fail('generated', 'empty image');
+      else pass('generated', `${elapsed} ms → ${result.contentType}, ${(result.body.length / 1024).toFixed(0)} KB`);
     } catch (err) {
       fail('generation', err instanceof Error ? err.message : String(err));
     }

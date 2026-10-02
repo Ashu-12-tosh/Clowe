@@ -539,12 +539,18 @@ export default function AdminTryOnMonitorPage() {
                       </td>
                       <td className="px-3 py-2 text-gray-600">{r.provider}</td>
                       <td className="px-3 py-2">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={r.inputImageUrl}
-                          alt=""
-                          className="h-11 w-9 rounded border border-gray-200 object-cover"
-                        />
+                        {r.inputImageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={r.inputImageUrl}
+                            alt=""
+                            className="h-11 w-9 rounded border border-gray-200 object-cover"
+                          />
+                        ) : (
+                          <span className="text-[11px] text-gray-400" title="Deleted after the retention period">
+                            expired
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                         {r.resultImageUrl ? (

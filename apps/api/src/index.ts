@@ -1,6 +1,8 @@
 import { env } from './env';
 import { createApp } from './app';
 import { startPackingVideoCleanup } from './services/packingVideoCleanup';
+import { startTryOnPhotoRetention } from './services/tryonPhotoRetention';
+import { logStorageStatus } from './services/storage';
 import { logTryOnProviderStatus } from './services/tryon';
 import { logKycProviderStatus } from './services/kyc';
 import { startSearchLogCleanup } from './services/searchAnalytics';
@@ -14,10 +16,14 @@ app.listen(env.PORT, () => {
   // Reports the live try-on provider, and warns at boot if the key is bad.
   void logTryOnProviderStatus();
   logKycProviderStatus();
+  logStorageStatus();
 });
 
 // Packing videos expire after 10 days - swept at boot and hourly after that.
 startPackingVideoCleanup();
+
+// Shoppers' try-on photos expire after 30 days unless saved - same schedule.
+startTryOnPhotoRetention();
 
 // Logged searches expire too - swept at boot and daily after that.
 startSearchLogCleanup();

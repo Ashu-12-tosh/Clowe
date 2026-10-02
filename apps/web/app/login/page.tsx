@@ -11,7 +11,7 @@ import {
   getStoredUser,
   saveSession,
   setStoredUser,
-  uploadImages,
+  uploadPrivateImages,
 } from '@/lib/api';
 
 type Step = 'phone' | 'pin' | 'otp' | 'profile' | 'photo' | 'setpin';
@@ -284,8 +284,8 @@ export default function LoginPage() {
     setBusy(true);
     try {
       if (photoFile) {
-        const [url] = await uploadImages([photoFile]);
-        await api('/api/tryon/photo', { body: { photoUrl: url }, auth: true });
+        const [photo] = await uploadPrivateImages([photoFile], 'TRYON_PHOTO');
+        await api('/api/tryon/photo', { body: { photoRef: photo.ref }, auth: true });
       }
       setBusy(false);
       setStep('setpin');

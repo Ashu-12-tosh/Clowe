@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import { imageUrlSchema } from './imageUrl';
+import { assetRefSchema } from './assets';
 
 export const tryOnRequestSchema = z.object({
   productId: z.string().min(1),
-  /** Public URL of the customer's photo (from POST /api/uploads). */
-  photoUrl: imageUrlSchema,
+  /** The customer's photo: the reference from POST /api/uploads/private (purpose TRYON_PHOTO). */
+  photoRef: assetRefSchema,
   /** Size/colour on screen when the run was made — shown on the result. */
   variantSize: z.string().trim().max(40).optional(),
   variantColor: z.string().trim().max(40).optional(),
@@ -35,7 +35,8 @@ export interface TryOnHistoryRow {
   productId: string;
   productTitle: string;
   productSlug: string;
-  inputImageUrl: string;
+  /** Null once the photo has passed its retention period. */
+  inputImageUrl: string | null;
   resultImageUrl: string | null;
   status: string;
   provider: string;
@@ -50,10 +51,12 @@ export interface TryOnQuota {
   dailyLimit: number;
   usedToday: number;
   provider: string;
-  /** The user's saved try-on photo (uploaded once, reused automatically). */
+  /** The user's saved try-on photo (uploaded once, reused automatically): a URL to show it… */
   savedPhotoUrl: string | null;
+  /** …and the reference to send with a try-on. */
+  savedPhotoRef: string | null;
 }
 
 export const saveTryOnPhotoSchema = z.object({
-  photoUrl: imageUrlSchema,
+  photoRef: assetRefSchema,
 });

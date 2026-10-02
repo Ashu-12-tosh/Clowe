@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { TryOnQuota } from '@clowe/shared';
-import { api, ApiRequestError, uploadImages } from '@/lib/api';
+import { api, ApiRequestError, uploadPrivateImages } from '@/lib/api';
 
 /**
  * Account-page card: upload your try-on photo once — every "✨ Try On Me"
@@ -25,9 +25,9 @@ export default function TryOnPhotoCard() {
     setError('');
     setBusy(true);
     try {
-      const [url] = await uploadImages([file]);
-      await api('/api/tryon/photo', { body: { photoUrl: url }, auth: true });
-      setPhotoUrl(url);
+      const [photo] = await uploadPrivateImages([file], 'TRYON_PHOTO');
+      await api('/api/tryon/photo', { body: { photoRef: photo.ref }, auth: true });
+      setPhotoUrl(photo.url);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Upload failed');
     } finally {

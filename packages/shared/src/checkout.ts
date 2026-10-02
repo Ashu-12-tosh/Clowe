@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { phoneSchema } from './auth';
-import { imageUrlSchema } from './imageUrl';
+import { assetRefSchema } from './assets';
 
 // ---------------------------------------------------------------------------
 // Cart
@@ -571,7 +571,8 @@ export const returnRequestSchema = z
   .object({
     reason: z.enum(RETURN_REASONS),
     details: z.string().trim().max(300).optional(),
-    photos: z.array(imageUrlSchema).max(3, 'Up to 3 photos').optional(),
+    /** References from POST /api/uploads/private (purpose RETURN_PHOTO). */
+    photos: z.array(assetRefSchema).max(3, 'Up to 3 photos').optional(),
   })
   .superRefine((val, ctx) => {
     if (val.reason === 'OTHER' && (!val.details || val.details.length < 5)) {

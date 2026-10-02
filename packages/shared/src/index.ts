@@ -23,6 +23,7 @@ export * from './auth';
 export * from './imageUrl';
 export * from './url';
 export * from './csp';
+export * from './assets';
 export * from './catalog';
 export * from './search';
 export * from './searchAnalytics';

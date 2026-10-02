@@ -1,10 +1,16 @@
+/** A generated try-on image, not yet stored anywhere. */
+export interface TryOnImage {
+  body: Buffer;
+  contentType: 'image/jpeg' | 'image/png' | 'image/svg+xml';
+}
+
 /** Garment category hint the try-on model accepts. */
 export type TryOnGarmentCategory = 'auto' | 'tops' | 'bottoms' | 'one-pieces';
 
 export interface TryOnInput {
-  /** Public URL of the customer's photo (may be a localhost /uploads URL in dev). */
+  /** The customer's photo: an asset reference (their private upload). */
   personImageUrl: string;
-  /** Public URL of the garment/product image. */
+  /** The garment/product image: an asset reference, one of our uploads, or a public URL. */
   garmentImageUrl: string;
   /** Product title, for watermarks/logging. */
   productTitle: string;
@@ -41,8 +47,8 @@ export interface TryOnProvider {
   readonly name: string;
   /** Cost logged per successful try-on (paise) — for accounting. */
   readonly costPaise: number;
-  /** Generate the try-on image; returns a public URL of the result. */
-  generate(input: TryOnInput): Promise<string>;
+  /** Generate the try-on image and return it; the caller stores it, privately. */
+  generate(input: TryOnInput): Promise<TryOnImage>;
   /** Optional credentials/reachability probe used at startup and by tryon:check. */
   verifyCredentials?(): Promise<{ ok: boolean; detail: string }>;
 }

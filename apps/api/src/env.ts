@@ -106,6 +106,16 @@ const envSchema = z.object({
 
   // --- File storage (local disk in dev; S3-compatible later) ---
   UPLOAD_DIR: z.string().default('uploads'),
+  // Private files (return photos, try-on photos and results, packing videos)
+  // when they are stored locally. Never served statically: only through a
+  // signed /api/files URL. Must be on a persistent volume in production.
+  PRIVATE_UPLOAD_DIR: z.string().default('uploads-private'),
+  // Where private files live: 'local' (PRIVATE_UPLOAD_DIR), or 'auto' to use
+  // the best configured provider.
+  STORAGE_PROVIDER: z.enum(['auto', 'local']).default('auto'),
+  // Signs the short-lived URLs for locally stored private files. Falls back to
+  // JWT_ACCESS_SECRET, so nothing breaks when it is unset.
+  FILE_URL_SECRET: optionalSecret,
   // Public base URL of this API, used to build absolute image URLs.
   API_PUBLIC_URL: z.string().default('http://localhost:4000'),
   // Public base URL of the web app, printed into the QR codes on seller labels and

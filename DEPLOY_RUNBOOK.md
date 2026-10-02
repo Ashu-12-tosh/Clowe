@@ -884,4 +884,12 @@ dc exec api npx tsx prisma/backfillBrandIds.ts
 # write (same slug-seeded pools). Only products the seeds wrote, and only
 # those with no rows; a seller's own listing is never touched.
 dc exec api npx tsx prisma/backfillDemoAttributes.ts
+
+# Return photos, try-on photos and results, and packing videos uploaded before
+# private storage sit in the public uploads folder. This moves each into
+# private storage and rewrites its row to the private reference. Dry run first:
+# it lists every file it would move. Demo rows (stock-photo URLs, /uploads/demo/)
+# are left alone. Take a backup before --apply.
+dc exec api npx tsx prisma/backfillPrivateFiles.ts
+dc exec api npx tsx prisma/backfillPrivateFiles.ts --apply
 ```

@@ -153,6 +153,8 @@ export default function ProductForm({ initial }: Props) {
   // --- Media ---
   const [imageUrls, setImageUrls] = useState<string[]>(initial?.imageUrls ?? []);
   const [videoUrl, setVideoUrl] = useState(initial?.videoUrl ?? '');
+  // The clip is private: the reference is what the listing stores, the URL only previews it.
+  const [packingVideoRef, setPackingVideoRef] = useState(initial?.packingVideoRef ?? '');
   const [packingVideoUrl, setPackingVideoUrl] = useState(initial?.packingVideoUrl ?? '');
   const [videoUploading, setVideoUploading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -430,7 +432,7 @@ export default function ProductForm({ initial }: Props) {
         (rules.attributeSchema.length === 0 || attributes.some((a) => a.value.trim())),
     },
     { key: 'images', label: 'Images', done: imageUrls.length > 0 },
-    { key: 'packing_video', label: 'Packing video', done: !!packingVideoUrl },
+    { key: 'packing_video', label: 'Packing video', done: !!packingVideoRef },
     { key: 'variants', label: hasVariants ? 'Variants' : 'Price & stock', done: variantInputs.length > 0 },
     { key: 'inventory', label: 'Inventory', done: totalStock > 0 },
     { key: 'pricing', label: 'Pricing', done: !!cheapest },
@@ -448,7 +450,7 @@ export default function ProductForm({ initial }: Props) {
       description: description.trim(),
       imageUrls,
       videoUrl: videoUrl.trim() || undefined,
-      packingVideoUrl: packingVideoUrl || undefined,
+      packingVideoRef: packingVideoRef || undefined,
       attributes: attributes.filter((a) => a.label?.trim() && a.value.trim()),
       highlights: highlights.filter((h) => h.trim().length >= 3),
       variants: variantInputs,
@@ -504,7 +506,7 @@ export default function ProductForm({ initial }: Props) {
       setStep('CATEGORY');
       return;
     }
-    if (mode === 'SUBMIT' && !packingVideoUrl) {
+    if (mode === 'SUBMIT' && !packingVideoRef) {
       setError('Upload a short video of the product being packed - it is required for review');
       setStep('MEDIA');
       return;
@@ -565,7 +567,9 @@ export default function ProductForm({ initial }: Props) {
     setError('');
     setVideoUploading(true);
     try {
-      setPackingVideoUrl(await uploadVideo(file));
+      const uploaded = await uploadVideo(file);
+      setPackingVideoRef(uploaded.ref);
+      setPackingVideoUrl(uploaded.url);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Video upload failed');
     } finally {
@@ -1023,7 +1027,7 @@ export default function ProductForm({ initial }: Props) {
                   </p>
                 </div>
                 <label className="inline-block cursor-pointer rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800">
-                  {videoUploading ? 'Uploading…' : packingVideoUrl ? 'Replace video' : 'Upload video'}
+                  {videoUploading ? 'Uploading…' : packingVideoRef ? 'Replace video' : 'Upload video'}
                   <input
                     type="file"
                     accept="video/mp4,video/webm,video/quicktime"
@@ -1042,7 +1046,10 @@ export default function ProductForm({ initial }: Props) {
                   <video src={packingVideoUrl} controls className="h-36 rounded-lg border border-gray-200 bg-black" />
                   <button
                     type="button"
-                    onClick={() => setPackingVideoUrl('')}
+                    onClick={() => {
+                      setPackingVideoRef('');
+                      setPackingVideoUrl('');
+                    }}
                     className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
                   >
                     ✕ Remove
@@ -1689,7 +1696,7 @@ export default function ProductForm({ initial }: Props) {
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">Packing video</dt>
-                <dd className="font-semibold">{packingVideoUrl ? 'Uploaded' : 'Missing'}</dd>
+                <dd className="font-semibold">{packingVideoRef ? 'Uploaded' : 'Missing'}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">Details</dt>

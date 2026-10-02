@@ -29,6 +29,7 @@ import { confirmCodOrder, generateOrderNumber } from '../services/orderService';
 import { nextRmaNumber } from '../services/returnService';
 import { allocateForDispatch, returnStock } from '../services/stockService';
 import { creditExpiryFrom } from './credits';
+import { assertOwnAssets, withPhotoUrls } from '../services/assets';
 
 export const ordersRouter = Router();
 ordersRouter.use(requireAuth);
@@ -733,6 +734,12 @@ ordersRouter.get('/:id', async (req, res, next) => {
         ? Math.max(...windowDaysByItem.values())
         : env.RETURN_WINDOW_DAYS,
     };
+    // Return photos are private; this is the buyer's own order.
+    const returnBlocks = body.items.flatMap((i) => (i.returnInfo ? [i.returnInfo] : []));
+    const resolved = await withPhotoUrls(returnBlocks);
+    returnBlocks.forEach((block, k) => {
+      block.photos = resolved[k].photos;
+    });
     res.json({ success: true, data: body });
   } catch (err) {
     next(err);
@@ -823,6 +830,9 @@ ordersRouter.post('/:id/cancel', async (req, res, next) => {
 ordersRouter.post('/items/:itemId/return', async (req, res, next) => {
   try {
     const input = returnRequestSchema.parse(req.body);
+    if (input.photos?.length) {
+      await assertOwnAssets(input.photos, { ownerId: req.auth!.userId, purpose: 'RETURN_PHOTO' });
+    }
     const item = await prisma.orderItem.findUnique({
       where: { id: req.params.itemId },
       include: {

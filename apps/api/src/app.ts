@@ -35,6 +35,7 @@ import { adminTryonRouter } from './routes/adminTryon';
 import { adminSellersRouter } from './routes/adminSellers';
 import { adminAuditRouter } from './routes/adminAudit';
 import { cspReportsRouter } from './routes/cspReports';
+import { filesRouter } from './routes/files';
 import { adminSearchRouter } from './routes/adminSearch';
 import { adminSupportDeskRouter } from './routes/adminSupportDesk';
 import { adminOverviewRouter } from './routes/adminOverview';
@@ -114,6 +115,7 @@ export function createApp() {
   });
 
   app.use('/api/csp-reports', cspReportsRouter);
+  app.use('/api/files', filesRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/home', homeRouter);
   app.use('/api/me', meRouter);

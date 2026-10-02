@@ -12,7 +12,7 @@ import {
   type TryOnQuota,
   type TryOnResult,
 } from '@clowe/shared';
-import { api, ApiRequestError, getStoredUser, uploadImages } from '@/lib/api';
+import { api, ApiRequestError, getStoredUser, uploadPrivateImages } from '@/lib/api';
 import { getPublicSettings } from '@/lib/settings';
 import { discountPercent, formatPaise } from '@/lib/format';
 import { colorToHex } from '@/lib/colors';
@@ -203,16 +203,16 @@ export default function TryOnPage({ params }: { params: { slug: string } }) {
     setError('');
     setGenerating(true);
     try {
-      let photoUrl = savedPhotoUrl!;
+      let photoRef = quota?.savedPhotoRef ?? '';
       if (photoFile) {
-        [photoUrl] = await uploadImages([photoFile]);
+        [{ ref: photoRef }] = await uploadPrivateImages([photoFile], 'TRYON_PHOTO');
         // Remember the photo so the next try-on is one click.
-        void api('/api/tryon/photo', { body: { photoUrl }, auth: true }).catch(() => {});
+        void api('/api/tryon/photo', { body: { photoRef }, auth: true }).catch(() => {});
       }
       const data = await api<TryOnResult>('/api/tryon', {
         body: {
           productId: product.id,
-          photoUrl,
+          photoRef,
           ...(selected ? { variantSize: selected.size, variantColor: selected.color } : {}),
         },
         auth: true,
@@ -245,7 +245,7 @@ export default function TryOnPage({ params }: { params: { slug: string } }) {
   async function forgetPhoto() {
     try {
       await api('/api/tryon/photo', { method: 'DELETE', auth: true });
-      setQuota((q) => (q ? { ...q, savedPhotoUrl: null } : q));
+      setQuota((q) => (q ? { ...q, savedPhotoUrl: null, savedPhotoRef: null } : q));
       setPhotoFile(null);
     } catch {
       setError('Could not remove your saved photo');

@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import { env } from '../../env';
 import { uploadDir } from '../../routes/uploads';
 import { fetchPublic } from '../../utils/publicFetch';
+import { readFileRef } from '../assets';
 
 /**
  * FASHN processes try-on images at 864 x 1296. Sending anything larger just
@@ -28,6 +29,10 @@ const FETCH_TIMEOUT_MS = 20_000;
  * uploads directory is not.
  */
 async function loadImageBytes(url: string): Promise<Buffer> {
+  // A private upload (the shopper's photo), read straight from storage.
+  const privateFile = await readFileRef(url);
+  if (privateFile) return privateFile;
+
   const uploadsPrefix = `${env.API_PUBLIC_URL}/uploads/`;
   const relative = url.startsWith(uploadsPrefix)
     ? url.slice(uploadsPrefix.length)

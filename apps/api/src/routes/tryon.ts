@@ -21,7 +21,7 @@ import {
   tryOnProvider,
 } from '../services/tryon';
 import { getSettings } from '../services/settingsService';
-import { isOwnUpload } from './uploads';
+import { assertOwnAssets, resolveFileUrl, resolveFileUrls, storePrivateFile } from '../services/assets';
 import { categoryRulesFor } from '../services/categoryRules';
 
 export const tryonRouter = Router();
@@ -66,7 +66,8 @@ tryonRouter.get('/quota', async (req, res, next) => {
       dailyLimit: tryonDailyLimit,
       usedToday: await usedToday(req.auth!.userId),
       provider: tryOnProvider.name,
-      savedPhotoUrl: user?.tryOnPhotoUrl ?? null,
+      savedPhotoUrl: await resolveFileUrl(user?.tryOnPhotoUrl),
+      savedPhotoRef: user?.tryOnPhotoUrl ?? null,
     };
     res.json({ success: true, data: body });
   } catch (err) {
@@ -75,26 +76,24 @@ tryonRouter.get('/quota', async (req, res, next) => {
 });
 
 /**
- * The shopper's photo must be one they uploaded here. The server reads it to
- * send to the model, so any other URL would make this API fetch an address
- * of the caller's choosing.
+ * The shopper's photo must be a private upload of their own. The server reads
+ * it to send to the model, so it can be neither someone else's photo nor an
+ * address of the caller's choosing.
  */
-function assertOwnPhoto(photoUrl: string): void {
-  if (!isOwnUpload(photoUrl)) {
-    throw ApiError.badRequest('Upload your photo to use it for try-on', 'INVALID_PHOTO');
-  }
+async function assertOwnPhoto(photoRef: string, userId: string): Promise<void> {
+  await assertOwnAssets([photoRef], { ownerId: userId, purpose: 'TRYON_PHOTO' });
 }
 
 // Save (or replace) the user's try-on photo — uploaded once, reused after.
 tryonRouter.post('/photo', async (req, res, next) => {
   try {
-    const { photoUrl } = saveTryOnPhotoSchema.parse(req.body);
-    assertOwnPhoto(photoUrl);
+    const { photoRef } = saveTryOnPhotoSchema.parse(req.body);
+    await assertOwnPhoto(photoRef, req.auth!.userId);
     await prisma.user.update({
       where: { id: req.auth!.userId },
-      data: { tryOnPhotoUrl: photoUrl },
+      data: { tryOnPhotoUrl: photoRef },
     });
-    res.json({ success: true, data: { savedPhotoUrl: photoUrl } });
+    res.json({ success: true, data: { savedPhotoUrl: await resolveFileUrl(photoRef), savedPhotoRef: photoRef } });
   } catch (err) {
     next(err);
   }
@@ -107,7 +106,7 @@ tryonRouter.delete('/photo', async (req, res, next) => {
       where: { id: req.auth!.userId },
       data: { tryOnPhotoUrl: null },
     });
-    res.json({ success: true, data: { savedPhotoUrl: null } });
+    res.json({ success: true, data: { savedPhotoUrl: null, savedPhotoRef: null } });
   } catch (err) {
     next(err);
   }
@@ -117,8 +116,8 @@ tryonRouter.delete('/photo', async (req, res, next) => {
 tryonRouter.post('/', async (req, res, next) => {
   try {
     const input = tryOnRequestSchema.parse(req.body);
-    assertOwnPhoto(input.photoUrl);
     const userId = req.auth!.userId;
+    await assertOwnPhoto(input.photoRef, userId);
 
     // Live controls from the admin monitor (kill switch, quota, spend cap).
     const settings = await getSettings();
@@ -243,7 +242,7 @@ tryonRouter.post('/', async (req, res, next) => {
       data: {
         userId,
         productId: product.id,
-        inputImageUrl: input.photoUrl,
+        inputImageUrl: input.photoRef,
         provider: tryOnProvider.name,
         status: 'PENDING',
         variantSize: input.variantSize ?? null,
@@ -254,13 +253,20 @@ tryonRouter.post('/', async (req, res, next) => {
 
     const startedAt = Date.now();
     try {
-      const resultImageUrl = await tryOnProvider.generate({
-        personImageUrl: input.photoUrl,
+      const image = await tryOnProvider.generate({
+        personImageUrl: input.photoRef,
         garmentImageUrl,
         productTitle: product.title,
         // Category first, title as the fallback - "Jeans" as a category beats
         // guessing from "Zephyr Slim Fit Stretch" as a title.
         garmentCategory: garmentCategoryFor(product.category.name, product.title),
+      });
+      // The result is the shopper's likeness: stored privately, as theirs.
+      const result = await storePrivateFile({
+        purpose: 'TRYON_RESULT',
+        ownerId: userId,
+        body: image.body,
+        contentType: image.contentType,
       });
       // Cost + latency are logged per run — the admin accounting/monitor trail.
       // A successful run also consumes one of the seller's try-on credits and
@@ -270,7 +276,7 @@ tryonRouter.post('/', async (req, res, next) => {
           where: { id: record.id },
           data: {
             status: 'SUCCESS',
-            resultImageUrl,
+            resultImageUrl: result.ref,
             costPaise: tryOnProvider.costPaise,
             durationMs: Date.now() - startedAt,
           },
@@ -295,7 +301,7 @@ tryonRouter.post('/', async (req, res, next) => {
       const body: TryOnResult = {
         id: updated.id,
         status: 'SUCCESS',
-        resultImageUrl,
+        resultImageUrl: await resolveFileUrl(result.ref),
         errorMessage: null,
         provider: tryOnProvider.name,
         costPaise: updated.costPaise,
@@ -350,13 +356,15 @@ tryonRouter.get('/history', async (req, res, next) => {
       take: 50,
       include: { product: { select: { title: true, slug: true } } },
     });
-    const body: TryOnHistoryRow[] = rows.map((r) => ({
+    const inputs = await resolveFileUrls(rows.map((r) => r.inputImageUrl));
+    const results = await resolveFileUrls(rows.map((r) => r.resultImageUrl));
+    const body: TryOnHistoryRow[] = rows.map((r, i) => ({
       id: r.id,
       productId: r.productId,
       productTitle: r.product.title,
       productSlug: r.product.slug,
-      inputImageUrl: r.inputImageUrl,
-      resultImageUrl: r.resultImageUrl,
+      inputImageUrl: inputs[i],
+      resultImageUrl: results[i],
       status: r.status,
       provider: r.provider,
       feedback: (r.feedback as TryOnFeedback | null) ?? null,

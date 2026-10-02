@@ -21,6 +21,7 @@ coverage/
 
 # local uploads (dev file storage)
 apps/api/uploads/
+apps/api/uploads-private/
 .env.production
 backups/
 

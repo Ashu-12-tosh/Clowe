@@ -49,6 +49,8 @@ apps/api/src/test
 # apps/api/uploads is a named volume in production; anything here is local.
 uploads
 apps/api/uploads
+# Private files (return photos, try-on photos): personal data, never in an image.
+apps/api/uploads-private
 **/tmp
 backups
 

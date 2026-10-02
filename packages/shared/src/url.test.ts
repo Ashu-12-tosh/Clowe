@@ -48,9 +48,10 @@ describe('isHttpUrl / isAppPath / safeHref', () => {
 describe('every schema that stores a link refuses the unsafe schemes', () => {
   const bad = 'javascript:alert(1)';
 
-  it('return photos (buyer)', () => {
+  it('return photos (buyer): private upload references only, never a URL', () => {
     expect(returnRequestSchema.safeParse({ reason: 'DAMAGED', photos: [bad] }).success).toBe(false);
-    expect(returnRequestSchema.safeParse({ reason: 'DAMAGED', photos: ['https://cloweshop.com/uploads/a.jpg'] }).success).toBe(true);
+    expect(returnRequestSchema.safeParse({ reason: 'DAMAGED', photos: ['https://cloweshop.com/uploads/a.jpg'] }).success).toBe(false);
+    expect(returnRequestSchema.safeParse({ reason: 'DAMAGED', photos: ['asset:cmtikqsgn000x20iiuvjc4pkn'] }).success).toBe(true);
   });
 
   it('store social links, logo and banner (seller)', () => {
@@ -81,8 +82,9 @@ describe('every schema that stores a link refuses the unsafe schemes', () => {
     expect(imageUrlSchema.safeParse('data:image/svg+xml,x').success).toBe(false);
     expect(imageUrlSchema.safeParse('/uploads/../etc/passwd').success).toBe(false);
     expect(updateProfileSchema.safeParse({ avatarUrl: bad }).success).toBe(false);
-    expect(tryOnRequestSchema.safeParse({ productId: 'p', photoUrl: bad }).success).toBe(false);
-    expect(saveTryOnPhotoSchema.safeParse({ photoUrl: bad }).success).toBe(false);
+    expect(tryOnRequestSchema.safeParse({ productId: 'p', photoRef: bad }).success).toBe(false);
+    expect(saveTryOnPhotoSchema.safeParse({ photoRef: bad }).success).toBe(false);
+    expect(saveTryOnPhotoSchema.safeParse({ photoRef: 'https://cloweshop.com/uploads/me.jpg' }).success).toBe(false);
   });
 });
 

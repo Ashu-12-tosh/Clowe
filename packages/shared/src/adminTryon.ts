@@ -149,7 +149,8 @@ export interface AdminTryOnRequestRow {
   productTitle: string;
   productSlug: string;
   categoryName: string;
-  inputImageUrl: string;
+  /** Null once the photo has passed its retention period. */
+  inputImageUrl: string | null;
   resultImageUrl: string | null;
   status: TryOnStatusValue;
   provider: string;

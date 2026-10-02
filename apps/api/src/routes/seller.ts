@@ -33,7 +33,8 @@ import { ApiError } from '../utils/ApiError';
 import { applyReturnDecision, findSellerReturn } from '../services/returnService';
 import { getSettings } from '../services/settingsService';
 import { spendPromotionCredits } from '../services/sellerLedgerService';
-import { removeUploadByUrl } from './uploads';
+import { removeStoredFile } from './uploads';
+import { assertOwnAssets, resolveFileUrl } from '../services/assets';
 import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
 import { isListingBelowTryOnAge } from '../services/tryon/ageGate';
 import { expireDueAds } from './ads';
@@ -43,6 +44,7 @@ import {
   deliveredSalesPaise,
   ensureSellerReferralCode,
 } from '../services/sellerReferralService';
+import { withPhotoUrls } from '../services/assets';
 
 export const sellerRouter = Router();
 
@@ -324,7 +326,8 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
       rejectionReason: p.rejectionReason,
       imageUrls: p.images.map((i) => i.url),
       videoUrl: p.videoUrl,
-      packingVideoUrl: p.packingVideoUrl,
+      packingVideoUrl: await resolveFileUrl(p.packingVideoUrl),
+      packingVideoRef: p.packingVideoUrl,
       attributes: normaliseAttributes(p.attributes, rules.attributeSchema),
       highlights: (p.highlights as string[] | null) ?? [],
       weightGrams: p.weightGrams,
@@ -370,7 +373,7 @@ function productDataFrom(input: SellerProductUpsertInput, rules: CategoryRules) 
     shortDescription: input.shortDescription?.trim() || null,
     description: input.description,
     videoUrl: input.videoUrl?.trim() || null,
-    packingVideoUrl: input.packingVideoUrl?.trim() || null,
+    packingVideoUrl: input.packingVideoRef?.trim() || null,
     attributes: canonicalAttributes(input.attributes ?? [], rules.attributeSchema) as object,
     highlights: (input.highlights ?? []) as object,
     weightGrams: input.weightGrams ?? null,
@@ -439,7 +442,7 @@ function variantRowsFrom(input: SellerProductUpsertInput) {
 /** The packing clip is part of every reviewed listing - drafts may still skip it. */
 function assertPackingVideo(input: SellerProductUpsertInput) {
   if (input.mode === 'DRAFT') return;
-  if (!input.packingVideoUrl?.trim()) {
+  if (!input.packingVideoRef?.trim()) {
     throw ApiError.badRequest(
       'Upload a short video of the product being packed before submitting for review',
       'PACKING_VIDEO_REQUIRED',
@@ -514,13 +517,17 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
     const variantRows = variantRowsFrom(input);
 
     const slug = `${slugify(`${input.brand ?? ''} ${input.title}`)}-${randomBytes(3).toString('hex')}`;
+    // The packing clip must be this seller's own upload.
+    if (input.packingVideoRef?.trim()) {
+      await assertOwnAssets([input.packingVideoRef.trim()], { ownerId: req.auth!.userId, purpose: 'PACKING_VIDEO' });
+    }
 
     const product = await prisma.product.create({
       data: {
         sellerId: req.seller!.id,
         ...productDataFrom(input, rules),
         slug,
-        packingVideoUploadedAt: input.packingVideoUrl?.trim() ? new Date() : null,
+        packingVideoUploadedAt: input.packingVideoRef?.trim() ? new Date() : null,
         basePricePaise: basePriceOf(input),
         // Drafts stay private until the seller submits them for review.
         status: input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING',
@@ -589,9 +596,11 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
 
     // A replaced or removed packing video frees its file straight away; a fresh
     // upload restarts the 10-day retention clock.
-    const newPackingVideo = input.packingVideoUrl?.trim() || null;
+    const newPackingVideo = input.packingVideoRef?.trim() || null;
     const videoChanged = newPackingVideo !== product.packingVideoUrl;
-    if (videoChanged && product.packingVideoUrl) removeUploadByUrl(product.packingVideoUrl);
+    if (videoChanged && newPackingVideo) {
+      await assertOwnAssets([newPackingVideo], { ownerId: req.auth!.userId, purpose: 'PACKING_VIDEO' });
+    }
 
     await prisma.$transaction([
       prisma.product.update({
@@ -694,6 +703,8 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
           }),
         ),
     ]);
+    // Only once the listing points at the new clip is the old one freed.
+    if (videoChanged && product.packingVideoUrl) await removeStoredFile(product.packingVideoUrl);
     res.json({
       success: true,
       data: { id: product.id, status: input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING' },
@@ -891,7 +902,7 @@ sellerRouter.get('/returns', requireSeller, async (req, res, next) => {
         },
       },
     });
-    res.json({ success: true, data: returns.map(toReturnRow) });
+    res.json({ success: true, data: await withPhotoUrls(returns.map(toReturnRow)) });
   } catch (err) {
     next(err);
   }
@@ -901,7 +912,7 @@ sellerRouter.get('/returns/:id', requireSeller, async (req, res, next) => {
   try {
     const r = await findSellerReturn(req.seller!.id, req.params.id);
     if (!r) throw ApiError.notFound('Return not found');
-    res.json({ success: true, data: toReturnRow(r) });
+    res.json({ success: true, data: (await withPhotoUrls([toReturnRow(r)]))[0] });
   } catch (err) {
     next(err);
   }
@@ -915,7 +926,7 @@ sellerRouter.patch('/returns/:id', requireSeller, blockSuspendedWrites, async (r
   try {
     const input = sellerReturnActionSchema.parse(req.body);
     const updated = await applyReturnDecision(req.seller!.id, req.params.id, input);
-    res.json({ success: true, data: toReturnRow(updated) });
+    res.json({ success: true, data: (await withPhotoUrls([toReturnRow(updated)]))[0] });
   } catch (err) {
     next(err);
   }

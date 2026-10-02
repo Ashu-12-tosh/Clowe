@@ -34,6 +34,10 @@ services:
       ADMIN_PHONE: ${ADMIN_PHONE:-}
       API_PUBLIC_URL: ${SITE_URL}
       UPLOAD_DIR: uploads
+      # Return photos, try-on photos and packing videos: never served statically,
+      # only by signed /api/files URLs. Its own volume, below.
+      PRIVATE_UPLOAD_DIR: uploads-private
+      FILE_URL_SECRET: ${FILE_URL_SECRET:-}
       # Providers — mock until real keys are configured
       OTP_PROVIDER: ${OTP_PROVIDER:-mock}
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
@@ -54,6 +58,7 @@ services:
       KYC_FINGERPRINT_SECRET: ${KYC_FINGERPRINT_SECRET:?set KYC_FINGERPRINT_SECRET in .env.production}
     volumes:
       - uploads_data:/repo/apps/api/uploads
+      - private_uploads_data:/repo/apps/api/uploads-private
 
   web:
     build:
@@ -83,5 +88,6 @@ services:
 volumes:
   db_data:
   uploads_data:
+  private_uploads_data:
   certbot_certs:
   certbot_www:

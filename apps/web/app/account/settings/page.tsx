@@ -616,7 +616,7 @@ export default function AccountSettingsPage() {
                       <button
                         onClick={() => {
                           void api('/api/tryon/photo', { method: 'DELETE', auth: true }).then(() => {
-                            setQuota((q) => (q ? { ...q, savedPhotoUrl: null } : q));
+                            setQuota((q) => (q ? { ...q, savedPhotoUrl: null, savedPhotoRef: null } : q));
                             flash('Saved photo deleted');
                           });
                         }}

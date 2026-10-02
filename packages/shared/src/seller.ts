@@ -1,5 +1,6 @@
 import { imageUrlSchema } from './imageUrl';
 import { httpUrlSchema } from './url';
+import { assetRefSchema } from './assets';
 import { z } from 'zod';
 import { optionValuesSchema } from './variants';
 import { productAttributeInputSchema, type ProductAttribute } from './productAttributes';
@@ -123,8 +124,11 @@ export const sellerProductUpsertSchema = z
     description: z.string().trim().max(5000),
     imageUrls: z.array(imageUrlSchema).max(8),
     videoUrl: httpUrlSchema(300).optional().or(z.literal('')),
-    /** Packing-process clip - required to submit for review; auto-removed after 10 days. */
-    packingVideoUrl: httpUrlSchema(300).optional().or(z.literal('')),
+    /**
+     * Packing-process clip - required to submit for review; auto-removed after
+     * 10 days. The reference from POST /api/uploads/video.
+     */
+    packingVideoRef: assetRefSchema.optional().or(z.literal('')),
     attributes: z.array(productAttributeInputSchema).max(20).optional(),
     highlights: z.array(z.string().trim().min(3).max(120)).max(8).optional(),
     variants: z.array(sellerVariantInputSchema).max(60),
@@ -183,8 +187,10 @@ export interface SellerProductDetail {
   rejectionReason: string | null;
   imageUrls: string[];
   videoUrl: string | null;
-  /** Packing video (null once the 10-day retention lapses). */
+  /** Packing video to play now (null once the 10-day retention lapses)… */
   packingVideoUrl: string | null;
+  /** …and the reference to send back when saving. */
+  packingVideoRef: string | null;
   attributes: ProductAttribute[];
   highlights: string[];
   weightGrams: number | null;

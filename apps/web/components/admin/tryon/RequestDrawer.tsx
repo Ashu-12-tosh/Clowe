@@ -97,12 +97,18 @@ export default function RequestDrawer({
                 <figcaption className="mb-1 text-[11px] uppercase tracking-wide text-gray-400">
                   Input photo
                 </figcaption>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={detail.inputImageUrl}
-                  alt="Shopper input"
-                  className="aspect-[3/4] w-full rounded-xl border border-gray-200 object-cover"
-                />
+                {detail.inputImageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={detail.inputImageUrl}
+                    alt="Shopper input"
+                    className="aspect-[3/4] w-full rounded-xl border border-gray-200 object-cover"
+                  />
+                ) : (
+                  <p className="flex aspect-[3/4] w-full items-center justify-center rounded-xl border border-dashed border-gray-200 text-xs text-gray-400">
+                    Deleted after the retention period
+                  </p>
+                )}
               </figure>
               <figure>
                 <figcaption className="mb-1 text-[11px] uppercase tracking-wide text-gray-400">

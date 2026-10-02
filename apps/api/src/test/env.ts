@@ -1,3 +1,6 @@
+import os from 'node:os';
+import path from 'node:path';
+
 /**
  * Environment for integration tests, applied before anything imports the app.
  *
@@ -20,3 +23,6 @@ process.env.TRYON_PROVIDER = 'mock';
 process.env.AI_PROVIDER = 'mock';
 process.env.OTP_PROVIDER = 'mock';
 process.env.KYC_PROVIDER = 'mock';
+// Files the tests write go to scratch folders, never into the repo.
+process.env.UPLOAD_DIR = path.join(os.tmpdir(), 'clowe-test-uploads');
+process.env.PRIVATE_UPLOAD_DIR = path.join(os.tmpdir(), 'clowe-test-private-uploads');

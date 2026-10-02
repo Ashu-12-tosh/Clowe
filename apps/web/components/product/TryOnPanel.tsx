@@ -23,7 +23,7 @@ import {
   type TryOnQuota,
   type TryOnResult,
 } from '@clowe/shared';
-import { api, ApiRequestError, getStoredUser, uploadImages } from '@/lib/api';
+import { api, ApiRequestError, getStoredUser, uploadPrivateImages } from '@/lib/api';
 
 const PHOTO_TIPS = ['Good lighting', 'Face the camera', 'Arms visible', 'Plain background'];
 
@@ -115,20 +115,20 @@ export default function TryOnPanel({
     setError('');
     setGenerating(true);
     try {
-      let photoUrl = savedPhotoUrl ?? '';
+      let photoRef = quota?.savedPhotoRef ?? '';
       if (pendingPhoto) {
-        [photoUrl] = await uploadImages([pendingPhoto]);
+        [{ ref: photoRef }] = await uploadPrivateImages([pendingPhoto], 'TRYON_PHOTO');
         // Remember it, so the next try-on anywhere on the site is one press.
-        await api('/api/tryon/photo', { body: { photoUrl }, auth: true }).catch(() => {});
+        await api('/api/tryon/photo', { body: { photoRef }, auth: true }).catch(() => {});
       }
-      if (!photoUrl) {
+      if (!photoRef) {
         setError('Add a photo of yourself to try this on.');
         return;
       }
       const result = await api<TryOnResult>('/api/tryon', {
         body: {
           productId: product.id,
-          photoUrl,
+          photoRef,
           ...(variant ? { variantSize: variant.size, variantColor: variant.color } : {}),
         },
         auth: true,

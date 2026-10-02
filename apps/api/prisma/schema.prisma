@@ -275,6 +275,7 @@ model User {
   refundsIssued         Refund[]          @relation("RefundIssuedByAdmin")
 
   @@map("users")
+  assets      Asset[]
 }
 
 // Audit trail for shopping credits (positive = earned, negative = spent).
@@ -2018,4 +2019,39 @@ model CspReport {
 
   @@index([lastSeenAt])
   @@map("csp_reports")
+}
+
+/// What an uploaded file is for. Decides who may attach it and see it.
+enum AssetPurpose {
+  RETURN_PHOTO // private: the buyer, that item's seller, admins
+  TRYON_PHOTO // private: the shopper, admins
+  TRYON_RESULT // private: the shopper, admins
+  PACKING_VIDEO // private: the seller, admins
+}
+
+/// A stored file. Rows that use it hold "asset:<id>", never a URL: the API
+/// turns the reference into a short-lived signed URL for a viewer it has
+/// already authorised. Provider and key say where the bytes are, so a file
+/// stays readable after the configured provider changes.
+model Asset {
+  id          String       @id @default(cuid())
+  /// Storage provider holding the bytes: 'local' or 'r2'.
+  provider    String
+  /// The object's key in that provider's private store.
+  key         String
+  purpose     AssetPurpose
+  contentType String
+  bytes       Int
+  /// Who uploaded it; attaching it to anything requires being this user.
+  ownerId     String?
+  owner       User?        @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  /// Set when the bytes are deleted (retention, replacement). The row stays so
+  /// a reference resolves to "gone" rather than to an error.
+  deletedAt   DateTime?
+
+  @@unique([provider, key])
+  @@index([ownerId])
+  @@index([purpose, createdAt])
+  @@map("assets")
 }
