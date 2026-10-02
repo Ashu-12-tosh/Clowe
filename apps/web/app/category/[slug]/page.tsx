@@ -335,13 +335,10 @@ function CategoryPageInner() {
         )}
       </FilterGroup>
 
-      {data?.facets.priceRange && (
+      {data?.rail.price && (
         <FilterGroup title="Price">
           <PriceRangeSlider
-            min={Math.floor(data.facets.priceRange.minPaise / 100)}
-            max={Math.ceil(data.facets.priceRange.maxPaise / 100)}
-            valueMin={minPrice ? Number(minPrice) : null}
-            valueMax={maxPrice ? Number(maxPrice) : null}
+            price={data.rail.price}
             onApply={(lo, hi) =>
               setParams({ minPrice: lo ? String(lo) : '', maxPrice: hi ? String(hi) : '' })
             }

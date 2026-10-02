@@ -255,15 +255,12 @@ function ProductsPageInner() {
         );
       })}
 
-      {data?.facets.priceRange && (
+      {data?.rail.price && (
         <div className="mt-5">
           <h3 className="text-base font-bold">Price</h3>
           <div className="mt-2">
             <PriceRangeSlider
-              min={Math.floor(data.facets.priceRange.minPaise / 100)}
-              max={Math.ceil(data.facets.priceRange.maxPaise / 100)}
-              valueMin={minPrice ? Number(minPrice) : null}
-              valueMax={maxPrice ? Number(maxPrice) : null}
+              price={data.rail.price}
               onApply={(lo, hi) =>
                 setParams({ minPrice: lo ? String(lo) : '', maxPrice: hi ? String(hi) : '' })
               }
