@@ -18,7 +18,7 @@ import {
   type RailValue,
   type ResolvedFacet,
 } from '@clowe/shared';
-import { categoryRows, facetsMap } from './categoryRules';
+import { categoryRows, facetsMap, hiddenFacetKeysMap } from './categoryRules';
 import { readFacet, type FacetReading } from './facetData';
 
 /**
@@ -108,8 +108,8 @@ const INTERNAL_OPTION_KEYS = new Set(['color_family']);
  * facets set at all. It is offered like any facet, subject to the same
  * coverage rule, so a rail never loses what the variants can be told apart by.
  */
-function autoFacets(p: EngineProduct, defined: ResolvedFacet[]): ResolvedFacet[] {
-  const read = new Set(defined.flatMap((d) => facetKeys(d)));
+function autoFacets(p: EngineProduct, defined: ResolvedFacet[], hidden: Set<string>): ResolvedFacet[] {
+  const read = new Set([...defined.flatMap((d) => facetKeys(d)), ...hidden]);
   const keys = new Set(p.variants.flatMap((v) => Object.keys(v.options)));
   return [...keys]
     .filter((key) => !read.has(key) && !INTERNAL_OPTION_KEYS.has(key))
@@ -284,11 +284,12 @@ export async function runFacetEngine(input: EngineInput): Promise<EngineResult> 
   const brands = new Set(filters.brands.map((b) => b.toLowerCase()));
   const wantedBy: Wanted = new Map([...filters.facets].map(([k, vs]) => [k, new Set(vs.map((v) => v.toLowerCase()))]));
   const index = await facetsMap(input.products.map((p) => p.categoryId));
+  const hiddenBy = await hiddenFacetKeysMap(input.products.map((p) => p.categoryId));
   const preferredDefs = input.preferredCategoryId ? (await facetsMap([input.preferredCategoryId])).get(input.preferredCategoryId)! : [];
 
   const prepared: Prepared[] = input.products.map((p) => {
     const defined = index.get(p.categoryId) ?? [];
-    const defs = new Map([...defined, ...autoFacets(p, defined)].map((d) => [d.key, d]));
+    const defs = new Map([...defined, ...autoFacets(p, defined, hiddenBy.get(p.categoryId) ?? new Set())].map((d) => [d.key, d]));
     const readings = new Map<string, FacetReading>();
     const options = p.variants.map((v) => v.options);
     for (const [key, def] of defs) readings.set(key, readFacet(p.attributes, options, def));

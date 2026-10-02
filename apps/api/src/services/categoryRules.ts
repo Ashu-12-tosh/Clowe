@@ -114,6 +114,21 @@ export async function facetsFor(categoryId: string): Promise<ResolvedFacet[]> {
   return facetsFromChain(chainOf(await categoryRows(), categoryId));
 }
 
+/**
+ * Keys an admin hid anywhere up a category's chain. They stay off the rail
+ * even when the variants carry them, rather than coming back as an option axis
+ * offered automatically.
+ */
+export async function hiddenFacetKeysMap(categoryIds: Iterable<string>): Promise<Map<string, Set<string>>> {
+  const rows = await categoryRows();
+  const out = new Map<string, Set<string>>();
+  for (const id of categoryIds) {
+    if (out.has(id)) continue;
+    out.set(id, new Set(chainOf(rows, id).flatMap((c) => facetConfigFromJson(c.facets)?.hide ?? [])));
+  }
+  return out;
+}
+
 /** Facets for many categories at once (one tree read). */
 export async function facetsMap(categoryIds: Iterable<string>): Promise<Map<string, ResolvedFacet[]>> {
   const rows = await categoryRows();

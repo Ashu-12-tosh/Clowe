@@ -140,6 +140,23 @@ describe('a category listing', () => {
     expect(values(facet(body, 'screen_size'))).toEqual(['43 inch:1', '55 inch:1', '65 inch:1']);
   });
 
+  it("keeps a facet an admin hid off the rail, though the variants carry it", async () => {
+    const shirts = await prisma.category.findUniqueOrThrow({ where: { slug: 'apparel-shirts' } });
+    await prisma.category.update({
+      where: { id: shirts.id },
+      data: { facets: { add: [{ key: 'fabric', label: 'Fabric', kind: 'list' }], hide: ['color'] } },
+    });
+    invalidateCategoryRules();
+    try {
+      const body = await list('category=apparel-shirts');
+      expect(facet(body, 'color')).toBeUndefined();
+      expect(facet(body, 'size')).toBeDefined();
+    } finally {
+      await prisma.category.update({ where: { id: shirts.id }, data: { facets: shirts.facets ?? undefined } });
+      invalidateCategoryRules();
+    }
+  });
+
   it('offers the option axes of a category with no facets of its own', async () => {
     const body = await list('category=gadgets');
     expect(facet(body, 'kit')).toMatchObject({ label: 'Kit' });
