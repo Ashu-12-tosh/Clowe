@@ -12,7 +12,7 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { getSettings } from '../services/settingsService';
-import { availableBalance, sumFees } from '../services/payoutService';
+import { availableBalance, sumFees, taxRulesFor } from '../services/payoutService';
 import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerDashboardRouter = Router();
@@ -232,6 +232,7 @@ sellerDashboardRouter.get('/', async (req, res, next) => {
               id: true,
               title: true,
               slug: true,
+              categoryId: true,
               category: { select: { id: true, name: true } },
               images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } },
             },
@@ -241,7 +242,13 @@ sellerDashboardRouter.get('/', async (req, res, next) => {
       }),
       prisma.orderItem.findMany({
         where: { sellerId, order: { createdAt: { gte: previousFrom, lt: from } } },
-        select: { orderId: true, status: true, quantity: true, pricePaise: true },
+        select: {
+          orderId: true,
+          status: true,
+          quantity: true,
+          pricePaise: true,
+          product: { select: { categoryId: true } },
+        },
         take: ITEM_CAP,
       }),
       // Store health reads the shop's whole history, not just this window —
@@ -311,8 +318,9 @@ sellerDashboardRouter.get('/', async (req, res, next) => {
     // Net revenue runs the same fee maths a payout does, line by line (the
     // fixed fees are per line), so the number on the dashboard and the number
     // that reaches the bank agree.
-    const netRevenuePaise = sumFees(sold, settings).netPaise;
-    const previousNet = sumFees(previousSold, settings).netPaise;
+    const rules = await taxRulesFor([...sold, ...previousSold]);
+    const netRevenuePaise = sumFees(sold, settings, rules).netPaise;
+    const previousNet = sumFees(previousSold, settings, rules).netPaise;
 
     // Counted as orders, not lines — two shirts in one parcel is one job.
     const pendingOrders = new Set(

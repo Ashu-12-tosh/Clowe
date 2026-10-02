@@ -25,6 +25,7 @@ import {
   feesFor,
   requestPayout,
   sumFees,
+  taxRulesFor,
 } from '../services/payoutService';
 import { blockSuspendedWrites, requireSeller } from './seller';
 
@@ -140,6 +141,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
           quantity: true,
           deliveredAt: true,
           status: true,
+          product: { select: { categoryId: true } },
           order: { select: { paymentMethod: true, shippingPaise: true } },
         },
       });
@@ -165,11 +167,13 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
     // Returned lines were earned then reversed — they don't count as income.
     const earning = monthItems.filter((i) => i.status === 'DELIVERED');
     const prevEarning = prevItems.filter((i) => i.status === 'DELIVERED');
-    const monthFees = sumFees(earning, settings);
-    const prevFees = sumFees(prevEarning, settings);
+    const rules = await taxRulesFor([...monthItems, ...prevItems, ...fyItems, ...openingItems]);
+    const monthFees = sumFees(earning, settings, rules);
+    const prevFees = sumFees(prevEarning, settings, rules);
     const fyFees = sumFees(
       fyItems.filter((i) => i.status === 'DELIVERED'),
       settings,
+      rules,
     );
 
     // Opening balance = everything cleared before this month, less what has
@@ -177,6 +181,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
     const openingEarned = sumFees(
       openingItems.filter((i) => i.status === 'DELIVERED'),
       settings,
+      rules,
     ).netPaise;
     const paidBefore = payouts
       .filter((p) => p.status !== 'FAILED' && p.requestedAt < range.from)
@@ -198,10 +203,10 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       if (!item.deliveredAt) continue;
       const bucket = days.get(dayKey(item.deliveredAt));
       if (!bucket) continue;
-      const line = feesFor(item.pricePaise, settings, item.quantity);
+      const line = feesFor(item, settings, rules);
       bucket.grossPaise += line.grossPaise;
       bucket.netPaise += line.netPaise;
-      bucket.feesPaise += line.feesPaise + line.tdsPaise;
+      bucket.feesPaise += line.feesPaise + line.tdsPaise + line.tcsPaise;
     }
 
     // Where the month's gross came from. Shipping is what buyers paid for
@@ -532,10 +537,12 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
         quantity: true,
         pricePaise: true,
         deliveredAt: true,
+        product: { select: { categoryId: true } },
         payout: { select: { reference: true, status: true } },
         order: { select: { orderNumber: true, paymentMethod: true } },
       },
     });
+    const rules = await taxRulesFor(items);
 
     const header = [
       'Delivered on',
@@ -553,7 +560,7 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
     ];
     const lines = [header.join(',')];
     for (const item of items) {
-      const fee = feesFor(item.pricePaise, settings, item.quantity);
+      const fee = feesFor(item, settings, rules);
       lines.push(
         [
           item.deliveredAt?.toISOString() ?? '',
@@ -651,6 +658,7 @@ sellerPayoutsRouter.get('/:id', async (req, res, next) => {
             quantity: true,
             pricePaise: true,
             deliveredAt: true,
+            product: { select: { categoryId: true } },
             order: { select: { orderNumber: true } },
           },
         },
@@ -659,8 +667,9 @@ sellerPayoutsRouter.get('/:id', async (req, res, next) => {
     });
     if (!payout) throw ApiError.notFound('Payout not found');
 
+    const rules = await taxRulesFor(payout.items);
     const lines: SellerPayoutLine[] = payout.items.map((item) => {
-      const fee = feesFor(item.pricePaise, settings, item.quantity);
+      const fee = feesFor(item, settings, rules);
       return {
         orderItemId: item.id,
         orderNumber: item.order.orderNumber,

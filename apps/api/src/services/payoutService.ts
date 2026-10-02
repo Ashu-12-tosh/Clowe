@@ -1,10 +1,11 @@
-import { computeListingEconomics, type PlatformSettings } from '@clowe/shared';
+import { computeListingEconomics, type CategoryRules, type PlatformSettings } from '@clowe/shared';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 import { getSettings } from './settingsService';
 import { payoutProvider } from './payouts';
 import { ensureLedgerCoversDeliveries, settlementPosition } from './sellerLedgerService';
 import { economicsRates } from './economicsRates';
+import { categoryRulesMap } from './categoryRules';
 
 export { economicsRates };
 
@@ -31,7 +32,23 @@ export interface FeeBreakdown {
   fixedFeesPaise: number;
   feesPaise: number; // commission + gateway + fixed fees
   tdsPaise: number;
+  /** GST TCS (s.52). In netPaise, not in feesPaise: like TDS, it is tax. */
+  tcsPaise: number;
   netPaise: number;
+}
+
+/** A sold line, with the category its GST rate (and so its TDS/TCS base) comes from. */
+export interface FeeLine {
+  pricePaise: number;
+  quantity: number;
+  product: { categoryId: string };
+}
+
+export type TaxRulesByCategory = Map<string, CategoryRules>;
+
+/** The category GST rules for these lines, in one read. */
+export function taxRulesFor(lines: FeeLine[]): Promise<TaxRulesByCategory> {
+  return categoryRulesMap(lines.map((l) => l.product.categoryId));
 }
 
 const EMPTY_FEES: FeeBreakdown = {
@@ -41,6 +58,7 @@ const EMPTY_FEES: FeeBreakdown = {
   fixedFeesPaise: 0,
   feesPaise: 0,
   tdsPaise: 0,
+  tcsPaise: 0,
   netPaise: 0,
 };
 
@@ -49,16 +67,15 @@ const EMPTY_FEES: FeeBreakdown = {
  * over the shared calculator, so a statement, an overview chart and a ledger
  * entry can never show the same line with different deductions. Quantity
  * matters now: the closing fee is per unit, the other fixed fees per line.
+ * The category's GST rule is required for the same reason: it sets the
+ * ex-GST value TDS and TCS are taken on, exactly as the ledger does.
  */
-export function feesFor(
-  unitPricePaise: number,
-  settings: PlatformSettings,
-  quantity = 1,
-): FeeBreakdown {
+export function feesFor(line: FeeLine, settings: PlatformSettings, rules: TaxRulesByCategory): FeeBreakdown {
   const e = computeListingEconomics({
-    sellerPricePaise: unitPricePaise,
-    quantity,
+    sellerPricePaise: line.pricePaise,
+    quantity: line.quantity,
     rates: economicsRates(settings),
+    taxRules: rules.get(line.product.categoryId),
   });
   const fixedFeesPaise = e.platformFeePaise + e.deliveryFeePaise + e.closingFeePaise;
   return {
@@ -68,13 +85,14 @@ export function feesFor(
     fixedFeesPaise,
     feesPaise: e.commissionPaise + e.gatewayFeePaise + fixedFeesPaise,
     tdsPaise: e.tdsPaise,
+    tcsPaise: e.tcsPaise,
     netPaise: e.sellerReceivesPaise,
   };
 }
 
-export function sumFees(items: { pricePaise: number; quantity: number }[], settings: PlatformSettings): FeeBreakdown {
+export function sumFees(items: FeeLine[], settings: PlatformSettings, rules: TaxRulesByCategory): FeeBreakdown {
   return items.reduce<FeeBreakdown>((acc, item) => {
-    const line = feesFor(item.pricePaise, settings, item.quantity);
+    const line = feesFor(item, settings, rules);
     return {
       grossPaise: acc.grossPaise + line.grossPaise,
       commissionPaise: acc.commissionPaise + line.commissionPaise,
@@ -82,6 +100,7 @@ export function sumFees(items: { pricePaise: number; quantity: number }[], setti
       fixedFeesPaise: acc.fixedFeesPaise + line.fixedFeesPaise,
       feesPaise: acc.feesPaise + line.feesPaise,
       tdsPaise: acc.tdsPaise + line.tdsPaise,
+      tcsPaise: acc.tcsPaise + line.tcsPaise,
       netPaise: acc.netPaise + line.netPaise,
     };
   }, EMPTY_FEES);
@@ -110,6 +129,7 @@ export async function eligibleItems(sellerId: string, holdDays: number) {
       quantity: true,
       deliveredAt: true,
       title: true,
+      product: { select: { categoryId: true } },
       order: { select: { orderNumber: true, paymentMethod: true } },
     },
   });
@@ -175,7 +195,7 @@ export async function availableBalance(sellerId: string): Promise<AvailableBalan
     outstandingAdSpend(sellerId),
   ]);
 
-  const fees = sumFees(eligible, settings);
+  const fees = sumFees(eligible, settings, await taxRulesFor(eligible));
   // Only the ad spend that fits inside this payout is recovered now; the rest
   // waits for the next one rather than pushing the transfer negative.
   const adjustmentsPaise = affordableAdjustments(ads, position.availablePaise).total;

@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
 import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
+import { invalidateCategoryRules } from '../services/categoryRules';
 import {
   balance,
   postDeliveryEntries,
@@ -323,6 +324,38 @@ describe('payouts', () => {
     const entries = await prisma.sellerLedgerEntry.findMany({ where: { payoutId: row.id } });
     expect(entries.map((e) => [e.type, e.amountPaise])).toEqual([['PAYOUT', -NET]]);
     expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(0);
+  });
+
+  it('itemises a payout with the category GST rule the ledger used', async () => {
+    // A ₹2,625 shirt is ₹2,500 ex-GST at 5%; read at the standard 18% it would
+    // be ₹2,224.58, and TDS/TCS on that would not match what was posted.
+    await setSetting('payoutHoldDays', 0);
+    const slab = await prisma.category.create({
+      data: { name: 'Ledger Apparel', slug: `ledger-apparel-${seq}`, taxRule: 'VALUE_SLAB' },
+    });
+    invalidateCategoryRules();
+    const s = await makeSeller();
+    await prisma.product.update({ where: { id: s.product.id }, data: { categoryId: slab.id } });
+    const line = await makeLine(s, 'SHIPPED');
+    await prisma.orderItem.update({ where: { id: line.id }, data: { pricePaise: 262_500 } });
+    await call('PATCH', `/api/seller/orders/${line.id}/status`, s.token, { action: 'deliver' });
+    await prisma.orderItem.update({ where: { id: line.id }, data: { deliveredAt: new Date(Date.now() - 60_000) } });
+    const tds = await prisma.sellerLedgerEntry.findFirstOrThrow({ where: { orderItemId: line.id, type: 'TDS' } });
+    expect(tds.amountPaise).toBe(-250);
+
+    await call('POST', '/api/seller/payouts/methods', s.token, {
+      type: 'UPI',
+      label: 'Main UPI',
+      accountName: 'Ledger Seller',
+      upiId: 'slab@upi',
+    });
+    const payout = await call('POST', '/api/seller/payouts/request', s.token, {});
+    const row = payout.json.data as { id: string; netPaise: number };
+    const detail = await call('GET', `/api/seller/payouts/${row.id}`, s.token);
+    const lines = (detail.json.data as { lines: { tdsPaise: number; netPaise: number }[] }).lines;
+    expect(lines).toHaveLength(1);
+    expect(lines[0].tdsPaise).toBe(250);
+    expect(lines[0].netPaise).toBe(row.netPaise);
   });
 
   it('picks up lines delivered before the ledger existed, at today\'s rates', async () => {
