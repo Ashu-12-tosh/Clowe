@@ -225,6 +225,10 @@ export interface ProductSearchInput {
 export interface ProductSearchResult {
   /** Ids in rank order — the caller hydrates them with its own select shape. */
   ids: string[];
+  /** Every match in rank order, not just the requested page — what the filter rail works over. */
+  allIds: string[];
+  /** Matches from outside the category the query was about (see outsideInferredCategory). */
+  outsideIds: Set<string>;
   total: number;
   meta: SearchMeta;
 }
@@ -338,6 +342,8 @@ export async function searchProducts(input: ProductSearchInput): Promise<Product
 
   const dropped: SearchRelaxable[] = [];
   let rows: { id: string; outside: boolean }[] = [];
+  let allIds: string[] = [];
+  let outsideIds = new Set<string>();
   let total = 0;
   let strategy: SearchMeta['strategy'] = topic ? 'category' : tsQuery ? 'fts' : 'filters-only';
 
@@ -371,15 +377,15 @@ export async function searchProducts(input: ProductSearchInput): Promise<Product
       if (ranked.matched.length > 0) {
         strategy = ranked.strategy;
         total = ranked.matched.length;
+        allIds = ranked.matched;
         // "Outside" is measured against what the query was about: the guessed
         // category when there were words, every category of the typed name
         // when the name was the topic — so both Smartphones trees count as in.
         const home = topic ? topic.categoryIds : inferredIds;
         const homeSet = new Set(home);
-        rows = ranked.matched.slice(input.skip, input.skip + input.take).map((id) => ({
-          id,
-          outside: home.length > 0 && !homeSet.has(ranked.categoryOf.get(id) ?? ''),
-        }));
+        const isOutside = (id: string) => home.length > 0 && !homeSet.has(ranked.categoryOf.get(id) ?? '');
+        outsideIds = new Set(ranked.matched.filter(isOutside));
+        rows = ranked.matched.slice(input.skip, input.skip + input.take).map((id) => ({ id, outside: isOutside(id) }));
         break;
       }
     }
@@ -401,6 +407,8 @@ export async function searchProducts(input: ProductSearchInput): Promise<Product
 
   return {
     ids: rows.map((r) => r.id),
+    allIds,
+    outsideIds,
     total,
     meta: {
       raw: input.raw,

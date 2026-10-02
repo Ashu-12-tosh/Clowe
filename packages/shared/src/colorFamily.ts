@@ -79,3 +79,21 @@ export function colorFamilyOf(value: string | null | undefined): ColorFamily | n
   }
   return null;
 }
+
+/** A swatch for each family on the filter rail; Multicolour has none (the rail draws a gradient). */
+export const COLOR_FAMILY_SWATCH: Record<ColorFamily, string | null> = {
+  Black: '#141414',
+  White: '#ffffff',
+  Grey: '#9ca3af',
+  Blue: '#3b82f6',
+  Green: '#16a34a',
+  Red: '#dc2626',
+  Pink: '#ec4899',
+  Purple: '#9333ea',
+  Yellow: '#eab308',
+  Orange: '#f97316',
+  Brown: '#8b5e3c',
+  Beige: '#d9c7a7',
+  Metallic: '#c0c0c0',
+  Multicolour: null,
+};

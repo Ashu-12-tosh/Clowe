@@ -206,9 +206,10 @@ describe('browsing without a search term is untouched', () => {
     expect(body.search).toBeUndefined();
   });
 
-  it('still builds the option facets the browse UI needs', async () => {
+  it('still builds a filter rail when browsing', async () => {
     const body = await search('category=books');
-    expect(body.facets.options.length).toBeGreaterThan(0);
+    expect(body.rail.facets.map((f) => f.key)).toContain('brand');
+    expect(body.rail.price).not.toBeNull();
   });
 
   it('respects an explicit price filter, given in rupees', async () => {

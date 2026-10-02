@@ -34,8 +34,20 @@ export const productListQuerySchema = z.object({
   sizes: z.string().trim().optional(), // e.g. "S,M,L"
   colors: z.string().trim().optional(), // e.g. "Black,Navy"
   brands: z.string().trim().optional(), // e.g. "NovaTech,Aeris"
-  /** Generic option filters, e.g. opt[ram]=16GB&opt[color]=Black. */
+  /** Generic option filters, e.g. opt[ram]=16GB&opt[color]=Black. Older links; `f` replaces it. */
   opt: z.record(z.string().trim().max(60)).optional(),
+  /**
+   * Facet filters, one parameter per selected value: f[ram]=16GB&f[ram]=32GB.
+   * Repeated rather than comma-joined because free-text spec values can hold
+   * commas ("Nylon shell, polyester fill").
+   */
+  f: z.record(z.union([z.string().trim().max(120), z.array(z.string().trim().max(120)).max(30)])).optional(),
+  /** Customer rating at or above, 1-4. */
+  rating: z.coerce.number().int().min(1).max(4).optional(),
+  /** Discount off MRP at or above, in percent. */
+  discount: z.coerce.number().int().min(1).max(90).optional(),
+  /** Only what can be bought now. */
+  inStock: z.enum(['1', 'true']).optional(),
   minPrice: z.coerce.number().int().min(0).optional(), // rupees
   maxPrice: z.coerce.number().int().min(0).optional(), // rupees
   sort: z.enum(productSortValues).default('newest'),
@@ -169,8 +181,73 @@ export interface ProductListResponse {
     /** Price buckets for the "under ₹X" shortcuts. Only built for search requests. */
     priceBuckets?: PriceBucketFacet[];
   };
+  /** The filter rail for this listing: facets that fit what was found, with counts. */
+  rail: FacetRail;
   /** Present only when `q` was given — how the query was understood and matched. */
   search?: SearchMeta;
+}
+
+// ---------------------------------------------------------------------------
+// The filter rail
+// ---------------------------------------------------------------------------
+
+export interface RailValue {
+  /** What goes in the URL. */
+  value: string;
+  /** What the shopper reads. */
+  label: string;
+  /** Products that match every other filter and this value. */
+  count: number;
+  selected: boolean;
+  /** Colour families: a hex for the swatch. */
+  swatch?: string | null;
+  /** Colour families: the colour names inside it, as sellers wrote them. */
+  members?: string[];
+}
+
+export const RAIL_KINDS = ['list', 'color', 'size', 'rating', 'discount', 'toggle'] as const;
+export type RailKind = (typeof RAIL_KINDS)[number];
+
+export interface RailFacet {
+  /** A category facet's key, or one of the common facets: brand, rating, discount, inStock. */
+  key: string;
+  label: string;
+  kind: RailKind;
+  /** The URL parameter a value travels in: `f[ram]`, `brands`, `rating`, `discount`, `inStock`. */
+  param: string;
+  /** Several values at once (any of them), or one. */
+  multi: boolean;
+  values: RailValue[];
+}
+
+export interface PriceFacet {
+  /** Bounds of what matches every other filter, paise. */
+  minPaise: number;
+  maxPaise: number;
+  /** Equal-width bars across the bounds: how many products have a variant priced in each. */
+  histogram: { fromPaise: number; toPaise: number; count: number }[];
+  selectedMinPaise: number | null;
+  selectedMaxPaise: number | null;
+}
+
+/** One applied filter, as a removable chip. */
+export interface AppliedFilter {
+  /** URL parameter to remove the value from. */
+  param: string;
+  value: string;
+  label: string;
+}
+
+export interface FacetRail {
+  facets: RailFacet[];
+  price: PriceFacet | null;
+  applied: AppliedFilter[];
+  /**
+   * Whose facets these are: the category picked, the category the words
+   * suggested (it chooses facets but never filters), or the mix of what was
+   * found.
+   */
+  basis: { kind: 'category' | 'inferred' | 'mixed'; categoryName: string | null };
 }
 
 /** "4★ & up" and how many products clear it. */

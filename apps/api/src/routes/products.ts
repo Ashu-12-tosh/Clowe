@@ -1,28 +1,25 @@
 import { Router } from 'express';
 import type { Prisma } from '@prisma/client';
 import {
-  OPTION_KEY_RE,
+  COMMON_FACETS,
+  FACET_KEY_RE,
   axesOf,
-  axisLabel,
+  colorFamilyOf,
   compareOptionValues,
   normaliseAttributes,
   optionValuesFromJson,
   productListQuerySchema,
   type AddonProduct,
-  type CategoryRules,
+  type FacetRail,
   type ProductDetail,
   type ProductListItem,
+  type ProductListQuery,
   type ProductListResponse,
   type ProductVariantInfo,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
-import {
-  listingStockFields,
-  productListItemInclude,
-  toProductListItem,
-  pricesVary,
-} from '../utils/productListing';
+import { productListItemInclude, toProductListItem } from '../utils/productListing';
 import { optionalAuth } from '../middleware/auth';
 import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
 import { isListingBelowTryOnAge } from '../services/tryon/ageGate';
@@ -30,11 +27,21 @@ import { searchFacets, searchProducts } from '../services/productSearch';
 import { logSearch } from '../services/searchAnalytics';
 import { searchDroppableValues, type SearchDroppable } from '@clowe/shared';
 import {
-  categoryRulesFor,
+  categoryRows,
   descendantIds,
   resolveCategory,
   returnWindowDaysFor,
 } from '../services/categoryRules';
+import {
+  ENGINE_SELECT,
+  runFacetEngine,
+  toEngineProduct,
+  type EngineProduct,
+  type RailFilters,
+} from '../services/facetEngine';
+
+/** Rail entries that are not a category facet. */
+const COMMON_RAIL_KEYS = new Set<string>(COMMON_FACETS);
 
 export const productsRouter = Router();
 
@@ -46,85 +53,73 @@ const LIVE: Prisma.ProductWhereInput = {
 };
 
 /**
- * Option filters from the query string: the generic `opt[key]=a,b` form plus
- * the legacy `sizes` / `colors` params. Values within one axis are OR-ed,
- * axes are AND-ed.
+ * The rail's filters from the query string. `f[key]` is the form the rail
+ * writes; `opt[key]=a,b`, `sizes` and `colors` are older links, still honoured.
+ * Colours filter by family, so an old `colors=Navy` link finds every blue.
  */
-function optionFilters(query: {
-  opt?: Record<string, string>;
-  sizes?: string;
-  colors?: string;
-}): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  const add = (key: string, csv: string | undefined) => {
-    const values = (csv ?? '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (values.length) out[key] = [...new Set([...(out[key] ?? []), ...values])];
+function railFiltersFrom(query: ProductListQuery): RailFilters {
+  const facets = new Map<string, string[]>();
+  const add = (key: string, values: string[]) => {
+    if (!FACET_KEY_RE.test(key)) return;
+    const list = facets.get(key) ?? [];
+    for (const raw of values) {
+      const value = raw.trim();
+      if (!value) continue;
+      const v = key === 'color' ? (colorFamilyOf(value) ?? value) : value;
+      if (!list.some((x) => x.toLowerCase() === v.toLowerCase())) list.push(v);
+    }
+    if (list.length) facets.set(key, list);
   };
-  add('size', query.sizes);
-  add('color', query.colors);
-  for (const [key, csv] of Object.entries(query.opt ?? {})) {
-    if (OPTION_KEY_RE.test(key)) add(key, csv);
-  }
-  return out;
-}
-
-/** Facet order: the category's axes first, then colour, size, then alphabetical. */
-function facetRank(key: string, rules: CategoryRules | null): number {
-  const preferred = [...(rules?.variantAxes.map((a) => a.key) ?? []), 'color', 'size'];
-  const i = preferred.indexOf(key);
-  return i === -1 ? preferred.length : i;
+  for (const [key, raw] of Object.entries(query.f ?? {})) add(key, Array.isArray(raw) ? raw : [raw]);
+  for (const [key, csv] of Object.entries(query.opt ?? {})) add(key, csv.split(','));
+  if (query.sizes) add('size', query.sizes.split(','));
+  if (query.colors) add('color', query.colors.split(','));
+  return {
+    facets,
+    brands: (query.brands ?? '').split(',').map((b) => b.trim()).filter(Boolean),
+    minRating: query.rating ?? null,
+    minDiscount: query.discount ?? null,
+    inStock: query.inStock !== undefined,
+    minPaise: query.minPrice != null ? query.minPrice * 100 : null,
+    maxPaise: query.maxPrice != null ? query.maxPrice * 100 : null,
+  };
 }
 
 // Storefront product listing: filters + search + facets + pagination.
-// Only APPROVED products are ever visible here.
+// Only live products are ever visible here.
+//
+// The scope is the category picked (or everything), narrowed by the words of
+// a search when there are any; the filter rail then works over that scope in
+// memory (services/facetEngine.ts), which gives both the matching products and
+// every count.
 productsRouter.get('/', async (req, res, next) => {
   try {
     const query = productListQuerySchema.parse(req.query);
 
     // Resolve category slug → self + every descendant (any depth).
     let categoryIds: string[] | undefined;
-    let scopeRules: CategoryRules | null = null;
+    let explicitCategoryId: string | null = null;
     if (query.category) {
       const category = await prisma.category.findUnique({ where: { slug: query.category } });
       if (!category) throw ApiError.notFound('Category not found');
+      explicitCategoryId = category.id;
       categoryIds = await descendantIds(category.id);
-      scopeRules = await categoryRulesFor(category.id);
     }
-
-    const brands = query.brands?.split(',').filter(Boolean);
-    const options = optionFilters(query);
-
-    const optionAnd: Prisma.ProductVariantWhereInput[] = Object.entries(options).map(
-      ([key, values]) => ({
-        OR: values.map((value) => ({ optionValues: { path: [key], equals: value } })),
-      }),
-    );
-    const variantFilter: Prisma.ProductVariantWhereInput = {
-      ...(optionAnd.length ? { AND: optionAnd } : {}),
-      ...(query.minPrice != null ? { pricePaise: { gte: query.minPrice * 100 } } : {}),
-    };
-    if (query.maxPrice != null) {
-      variantFilter.pricePaise = {
-        ...(variantFilter.pricePaise as object | undefined),
-        lte: query.maxPrice * 100,
-      };
-    }
-
-    const where: Prisma.ProductWhereInput = {
+    const scopeWhere: Prisma.ProductWhereInput = {
       ...LIVE,
       ...(categoryIds ? { categoryId: { in: categoryIds } } : {}),
-      ...(brands?.length ? { brand: { in: brands } } : {}),
-      ...(Object.keys(variantFilter).length ? { variants: { some: variantFilter } } : {}),
     };
+    const filters = railFiltersFrom(query);
 
-    // A search request takes a different path: the words are parsed into
-    // filters and the rows are ranked by relevance. Browsing without `q` is
-    // untouched and still runs the query built above.
+    let scope: EngineProduct[];
+    let search: Awaited<ReturnType<typeof searchProducts>> | null = null;
+    let preferredCategoryId = explicitCategoryId;
+    let basisKind: FacetRail['basis']['kind'] = explicitCategoryId ? 'category' : 'mixed';
+
     if (query.q) {
-      const search = await searchProducts({
+      // The words are parsed into filters and the matches ranked by relevance;
+      // the rail's filters apply to what that finds, keeping its order.
+      search = await searchProducts({
         raw: query.q,
         drop: (query.drop ?? '')
           .split(',')
@@ -132,197 +127,89 @@ productsRouter.get('/', async (req, res, next) => {
           .filter((key): key is SearchDroppable =>
             (searchDroppableValues as readonly string[]).includes(key),
           ),
-        baseWhere: where,
+        baseWhere: scopeWhere,
         sort: query.sort,
         // The schema fills in a default, so the only way to tell a picked sort
         // from that default is whether the request carried one at all.
         sortChosen: req.query.sort !== undefined,
-        skip: (query.page - 1) * query.limit,
-        take: query.limit,
+        skip: 0,
+        take: 0,
       });
-
-      const found = await prisma.product.findMany({
-        where: { id: { in: search.ids } },
-        include: {
-          category: { select: { name: true } },
-          images: { orderBy: { sortOrder: 'asc' }, take: 1 },
-          variants: {
-            select: { id: true, size: true, color: true, pricePaise: true, mrpPaise: true, stock: true },
-          },
-        },
-      });
-      // findMany loses the ranking, so put the rows back in the ranked order.
-      const byId = new Map(found.map((p) => [p.id, p]));
-      const rankedItems = search.ids.flatMap((id) => {
-        const product = byId.get(id);
-        return product ? [toProductListItem(product)] : [];
-      });
-
-      const extraFacets = await searchFacets(where);
-      const searchBody: ProductListResponse = {
-        items: rankedItems,
-        total: search.total,
-        page: query.page,
-        limit: query.limit,
-        facets: {
-          sizes: [],
-          colors: [],
-          options: [],
-          priceRange: null,
-          ...extraFacets,
-        },
-        search: search.meta,
-      };
-      res.json({ success: true, data: searchBody });
-      // After the response. Not awaited, cannot throw — a lost data point must
-      // never cost a shopper a search.
-      logSearch(query.q, search.meta, search.total);
-      return;
+      const rows = await prisma.product.findMany({ where: { id: { in: search.allIds } }, select: ENGINE_SELECT });
+      const byId = new Map(rows.map((r) => [r.id, toEngineProduct(r)]));
+      scope = search.allIds.flatMap((id) => byId.get(id) ?? []);
+      // A guessed category chooses the facets. It never filters: the scope
+      // above is everything the words found, in every category.
+      const inferredSlug = search.meta.parsed.filters.inferredCategorySlug;
+      if (!preferredCategoryId && inferredSlug) {
+        const inferred = await prisma.category.findUnique({ where: { slug: inferredSlug }, select: { id: true } });
+        if (inferred) {
+          preferredCategoryId = inferred.id;
+          basisKind = 'inferred';
+        }
+      }
+    } else {
+      scope = (await prisma.product.findMany({ where: scopeWhere, select: ENGINE_SELECT })).map(toEngineProduct);
     }
 
-    const ORDER_BY: Record<typeof query.sort, Prisma.ProductOrderByWithRelationInput> = {
-      popularity: { soldCount: 'desc' },
-      newest: { createdAt: 'desc' },
-      price_asc: { basePricePaise: 'asc' },
-      price_desc: { basePricePaise: 'desc' },
-      rating: { ratingAvg: 'desc' },
-    };
-    const orderBy = ORDER_BY[query.sort];
-
-    // Facet scope = the category (and other filters), but never a facet's own
-    // filter — otherwise picking one brand would hide every other brand.
-    const facetScope: Prisma.ProductWhereInput = {
-      ...LIVE,
-      ...(categoryIds ? { categoryId: { in: categoryIds } } : {}),
-    };
-
-    const [total, products, facetVariants, priceAgg, brandGroups, categoryGroups, scopeCategories] =
-      await Promise.all([
-        prisma.product.count({ where }),
-        prisma.product.findMany({
-          where,
-          orderBy,
-          skip: (query.page - 1) * query.limit,
-          take: query.limit,
-          include: {
-            category: { select: { name: true } },
-            images: { orderBy: { sortOrder: 'asc' }, take: 1 },
-            variants: {
-              select: {
-                id: true,
-                size: true,
-                color: true,
-                pricePaise: true,
-                mrpPaise: true,
-                stock: true,
-              },
-            },
-          },
-        }),
-        // Facets: every option axis + value that exists in the category scope.
-        prisma.productVariant.findMany({
-          where: { product: facetScope },
-          select: { optionValues: true },
-          take: 5000,
-        }),
-        // Price bounds in scope — for the range slider.
-        prisma.productVariant.aggregate({
-          where: { product: facetScope },
-          _min: { pricePaise: true },
-          _max: { pricePaise: true },
-        }),
-        // Brand facet with counts.
-        prisma.product.groupBy({ by: ['brand'], where: facetScope, _count: { _all: true } }),
-        // Subcategory facet with counts.
-        prisma.product.groupBy({ by: ['categoryId'], where: facetScope, _count: { _all: true } }),
-        categoryIds
-          ? prisma.category.findMany({
-              where: { id: { in: categoryIds } },
-              select: { id: true, name: true, slug: true },
-            })
-          : prisma.category.findMany({ select: { id: true, name: true, slug: true } }),
-      ]);
-
-    const categoryById = new Map(scopeCategories.map((c) => [c.id, c]));
-
-    const items: ProductListItem[] = products.map((p) => {
-      const minVariant = p.variants.reduce(
-        (min, v) => (v.pricePaise < min.pricePaise ? v : min),
-        p.variants[0] ?? {
-          id: '',
-          pricePaise: p.basePricePaise,
-          mrpPaise: null,
-          size: '',
-          color: '',
-          stock: 0,
-        },
-      );
-      return {
-        id: p.id,
-        slug: p.slug,
-        title: p.title,
-        brand: p.brand,
-        categoryName: p.category.name,
-        pricePaise: minVariant.pricePaise,
-        mrpPaise: p.mrpPaise ?? minVariant.mrpPaise,
-        priceVaries: pricesVary(p.variants),
-        imageUrl: p.images[0]?.url ?? null,
-        // size/color are display caches of optionValues — "" when the axis is absent.
-        sizes: [...new Set(p.variants.map((v) => v.size).filter(Boolean))],
-        colors: [...new Set(p.variants.map((v) => v.color).filter(Boolean))],
-        // Denormalised rating cache — synced on every review write.
-        ratingAvg: p.ratingCount > 0 ? p.ratingAvg : null,
-        ratingCount: p.ratingCount,
-        ...listingStockFields(p.variants),
-      };
+    const engine = await runFacetEngine({
+      products: scope,
+      filters,
+      preferredCategoryId,
+      basisKind,
+      // A search keeps its ranking; browsing sorts.
+      sort: search ? null : query.sort,
     });
 
-    // Option facets: axis → distinct values across the scope.
-    const valuesByKey = new Map<string, Set<string>>();
-    for (const v of facetVariants) {
-      for (const [key, value] of Object.entries(optionValuesFromJson(v.optionValues))) {
-        const set = valuesByKey.get(key) ?? new Set<string>();
-        set.add(value);
-        valuesByKey.set(key, set);
-      }
-    }
-    const optionFacets = [...valuesByKey.entries()]
-      .sort(
-        (a, b) =>
-          facetRank(a[0], scopeRules) - facetRank(b[0], scopeRules) || a[0].localeCompare(b[0]),
-      )
-      .map(([key, set]) => ({
-        key,
-        label: scopeRules?.variantAxes.find((a) => a.key === key)?.label ?? axisLabel(key),
-        values: [...set].sort(compareOptionValues),
-      }));
+    const skip = (query.page - 1) * query.limit;
+    const pageIds = engine.ids.slice(skip, skip + query.limit);
+    const found = await prisma.product.findMany({ where: { id: { in: pageIds } }, include: productListItemInclude });
+    const byId = new Map(found.map((p) => [p.id, p]));
+    const items: ProductListItem[] = pageIds.flatMap((id) => {
+      const product = byId.get(id);
+      return product ? [toProductListItem(product)] : [];
+    });
 
+    const categoryNames = new Map([...(await categoryRows()).values()].map((c) => [c.id, c]));
+    const option = (key: string) => engine.rail.facets.find((f) => f.key === key);
     const body: ProductListResponse = {
       items,
-      total,
+      total: engine.ids.length,
       page: query.page,
       limit: query.limit,
+      // The older shape, for clients that have not moved to `rail`.
       facets: {
-        sizes: optionFacets.find((f) => f.key === 'size')?.values ?? [],
-        colors: optionFacets.find((f) => f.key === 'color')?.values ?? [],
-        options: optionFacets,
-        brands: brandGroups
-          .filter((g): g is typeof g & { brand: string } => Boolean(g.brand))
-          .map((g) => ({ name: g.brand, count: g._count._all }))
-          .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
-        categories: categoryGroups
-          .flatMap((g) => {
-            const cat = categoryById.get(g.categoryId);
-            return cat ? [{ name: cat.name, slug: cat.slug, count: g._count._all }] : [];
+        sizes: option('size')?.values.map((v) => v.value) ?? [],
+        colors: option('color')?.values.map((v) => v.value) ?? [],
+        options: engine.rail.facets
+          .filter((f) => !COMMON_RAIL_KEYS.has(f.key))
+          .map((f) => ({ key: f.key, label: f.label, values: f.values.map((v) => v.value) })),
+        brands: (option('brand')?.values ?? []).map((v) => ({ name: v.value, count: v.count })),
+        categories: [...engine.categoryCounts.entries()]
+          .flatMap(([id, count]) => {
+            const cat = categoryNames.get(id);
+            return cat ? [{ name: cat.name, slug: cat.slug, count }] : [];
           })
           .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
-        priceRange:
-          priceAgg._min.pricePaise != null && priceAgg._max.pricePaise != null
-            ? { minPaise: priceAgg._min.pricePaise, maxPaise: priceAgg._max.pricePaise }
-            : null,
+        priceRange: engine.rail.price
+          ? { minPaise: engine.rail.price.minPaise, maxPaise: engine.rail.price.maxPaise }
+          : null,
+        ...(search ? await searchFacets(scopeWhere).then(({ ratings, priceBuckets }) => ({ ratings, priceBuckets })) : {}),
       },
+      rail: engine.rail,
+      ...(search
+        ? {
+            search: {
+              ...search.meta,
+              outsideInferredCategory: pageIds.filter((id) => search!.outsideIds.has(id)).length,
+            },
+          }
+        : {}),
     };
     res.json({ success: true, data: body });
+    // After the response. Not awaited, cannot throw — a lost data point must
+    // never cost a shopper a search.
+    if (search) logSearch(query.q!, search.meta, engine.ids.length);
   } catch (err) {
     next(err);
   }
