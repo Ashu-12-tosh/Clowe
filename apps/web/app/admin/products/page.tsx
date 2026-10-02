@@ -2,11 +2,92 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { AdminProductDetail, AdminProductRow } from '@clowe/shared';
+import type { AdminProductDetail, AdminProductRevision, AdminProductRow } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 
-const TABS = ['PENDING', 'APPROVED', 'REJECTED'] as const;
+// REVISION: live listings with an edit waiting for review.
+const TABS = ['PENDING', 'REVISION', 'APPROVED', 'REJECTED'] as const;
+const TAB_LABELS: Record<(typeof TABS)[number], string> = {
+  PENDING: 'PENDING',
+  REVISION: 'EDITS',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  title: 'Title',
+  category: 'Category',
+  brand: 'Brand',
+  shortDescription: 'Short description',
+  description: 'Description',
+  video: 'Product video',
+  attributes: 'Specifications',
+  highlights: 'Highlights',
+  images: 'Pictures',
+  variants: 'Variant options or pictures',
+  newVariants: 'New variants',
+};
+
+/** An edit to a live listing: what changes, beside what buyers see now. */
+function RevisionBlock({ revision, live }: { revision: AdminProductRevision; live: AdminProductDetail }) {
+  const p = revision.proposed;
+  const changed = new Set(revision.changedFields);
+  const row = (label: string, now: string | null, next: string | null) => (
+    <div className="grid gap-1 border-t border-amber-100 py-2 text-sm sm:grid-cols-[140px,1fr,1fr] sm:gap-3">
+      <span className="text-xs font-semibold text-gray-500">{label}</span>
+      <span className="text-gray-500 line-through decoration-gray-300">{now || '—'}</span>
+      <span className="font-medium text-ink-900">{next || '—'}</span>
+    </div>
+  );
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+      <h3 className="text-xs font-bold uppercase tracking-wide text-amber-800">
+        Proposed changes{revision.submittedAt ? ` · submitted ${new Date(revision.submittedAt).toLocaleString('en-IN')}` : ''}
+      </h3>
+      <p className="mt-1 text-xs text-amber-900">
+        The listing is live as shown below. Approving puts these changes on it; rejecting leaves it as it is.
+      </p>
+      <p className="mt-2 text-xs text-gray-600">
+        Changed: {revision.changedFields.map((f) => FIELD_LABELS[f] ?? f).join(', ')}
+      </p>
+      <div className="mt-2">
+        {changed.has('title') && row('Title', live.title, p.title)}
+        {changed.has('category') && row('Category', live.categoryName, p.categoryName)}
+        {changed.has('brand') && row('Brand', live.brand, p.brand)}
+        {changed.has('shortDescription') && row('Short description', null, p.shortDescription)}
+        {changed.has('description') && row('Description', live.description, p.description)}
+        {changed.has('video') && row('Product video', null, p.videoUrl)}
+        {changed.has('highlights') && row('Highlights', null, p.highlights.join(' · '))}
+        {changed.has('attributes') &&
+          row('Specifications', null, p.attributes.map((a) => `${a.label}: ${a.value}`).join(' · '))}
+        {changed.has('newVariants') &&
+          row(
+            'New variants',
+            null,
+            p.newVariants.map((v) => `${v.label || 'Single SKU'} (${formatPaise(v.pricePaise)}, ${v.stock} in stock)`).join(' · '),
+          )}
+        {changed.has('variants') &&
+          row(
+            'Variant changes',
+            null,
+            p.variantEdits.map((v) => `${v.label}${v.imageCount !== null ? ` — ${v.imageCount} picture(s)` : ''}`).join(' · '),
+          )}
+      </div>
+      {changed.has('images') && (
+        <div className="mt-2">
+          <p className="text-xs font-semibold text-gray-500">Proposed pictures ({p.imageUrls.length})</p>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {p.imageUrls.map((url) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={url} src={url} alt="" className="h-16 w-12 rounded-lg border border-amber-200 object-cover" />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Full product review panel, shown when the admin expands a row. */
 function ProductReviewPanel({ productId }: { productId: string }) {
@@ -55,6 +136,8 @@ function ProductReviewPanel({ productId }: { productId: string }) {
       </div>
 
       <div className="min-w-0 space-y-4">
+        {detail.revision && <RevisionBlock revision={detail.revision} live={detail} />}
+
         {/* What the seller filled in */}
         <div>
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">
@@ -174,15 +257,26 @@ export default function AdminProductsPage() {
   }, [tab]);
   useEffect(load, [load]);
 
+  /** On the Edits tab the decision is about the edit; the live listing is not touched either way. */
   async function decide(id: string, action: 'approve' | 'reject') {
     setError('');
+    const edit = tab === 'REVISION';
     let reason: string | undefined;
     if (action === 'reject') {
-      reason = window.prompt('Reason for rejection (shown to the seller):') ?? undefined;
+      reason =
+        window.prompt(
+          edit
+            ? 'Reason for rejecting these changes (shown to the seller; the listing stays live):'
+            : 'Reason for rejection (shown to the seller):',
+        ) ?? undefined;
       if (reason === undefined) return;
     }
     try {
-      await api(`/api/admin/products/${id}`, { method: 'PATCH', body: { action, reason }, auth: true });
+      await api(`/api/admin/products/${id}${edit ? '/revision' : ''}`, {
+        method: 'PATCH',
+        body: { action, reason },
+        auth: true,
+      });
       load();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
@@ -202,7 +296,7 @@ export default function AdminProductsPage() {
               tab === t ? 'bg-ink-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            {t}
+            {TAB_LABELS[t]}
           </button>
         ))}
       </div>
@@ -234,6 +328,11 @@ export default function AdminProductsPage() {
                 {p.rejectionReason && (
                   <p className="mt-0.5 text-xs text-red-600">Reason: {p.rejectionReason}</p>
                 )}
+                {tab === 'REVISION' && (
+                  <p className="mt-0.5 text-xs text-amber-700">
+                    Live · edit submitted{p.revisionSubmittedAt ? ` ${new Date(p.revisionSubmittedAt).toLocaleString('en-IN')}` : ''}
+                  </p>
+                )}
                 <div className="mt-1 flex gap-3">
                   <button
                     onClick={() => setOpenId(openId === p.id ? null : p.id)}
@@ -252,7 +351,23 @@ export default function AdminProductsPage() {
                 </div>
               </div>
               <div className="flex shrink-0 flex-col gap-2">
-                {p.status !== 'APPROVED' && (
+                {tab === 'REVISION' && (
+                  <>
+                    <button
+                      onClick={() => void decide(p.id, 'approve')}
+                      className="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                    >
+                      Approve changes
+                    </button>
+                    <button
+                      onClick={() => void decide(p.id, 'reject')}
+                      className="rounded-lg border border-red-300 px-4 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                    >
+                      Reject changes
+                    </button>
+                  </>
+                )}
+                {tab !== 'REVISION' && p.status !== 'APPROVED' && (
                   <button
                     onClick={() => void decide(p.id, 'approve')}
                     className="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
@@ -260,7 +375,7 @@ export default function AdminProductsPage() {
                     Approve
                   </button>
                 )}
-                {p.status !== 'REJECTED' && (
+                {tab !== 'REVISION' && p.status !== 'REJECTED' && (
                   <button
                     onClick={() => void decide(p.id, 'reject')}
                     className="rounded-lg border border-red-300 px-4 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"

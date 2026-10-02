@@ -17,6 +17,13 @@ import { api, ApiRequestError, downloadFile } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { DonutChart } from '@/components/charts/Charts';
 
+/** A live listing with an edit that is not live yet: buyers still see the approved version. */
+const REVISION_NOTES: Record<'DRAFT' | 'PENDING' | 'REJECTED', { label: string; tone: string }> = {
+  PENDING: { label: 'Edit in review', tone: 'text-amber-700' },
+  DRAFT: { label: 'Draft edit, not live', tone: 'text-gray-500' },
+  REJECTED: { label: 'Edit not approved', tone: 'text-red-600' },
+};
+
 const STATE_STYLES: Record<ListingState, string> = {
   ACTIVE: 'bg-green-100 text-green-700',
   INACTIVE: 'bg-gray-100 text-gray-600',
@@ -486,6 +493,11 @@ export default function SellerProductsPage() {
                       >
                         {LISTING_STATE_LABELS[row.listingState]}
                       </span>
+                      {row.revisionStatus && (
+                        <span className={`mt-1 block text-[10px] font-semibold ${REVISION_NOTES[row.revisionStatus].tone}`}>
+                          {REVISION_NOTES[row.revisionStatus].label}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5" data-product-actions>
                       {rowActions(row)}
@@ -535,6 +547,11 @@ export default function SellerProductsPage() {
                       <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATE_STYLES[row.listingState]}`}>
                         {LISTING_STATE_LABELS[row.listingState]}
                       </span>
+                      {row.revisionStatus && (
+                        <span className={`text-[10px] font-semibold ${REVISION_NOTES[row.revisionStatus].tone}`}>
+                          {REVISION_NOTES[row.revisionStatus].label}
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1 truncate text-[11px] text-gray-400">{rowFacts(row)}</p>
                     <div className="mt-2" data-product-actions>

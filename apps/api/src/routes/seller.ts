@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import type { NextFunction, Request, Response } from 'express';
-import type { SellerProfile, SellerStatus } from '@prisma/client';
+import type { Prisma, ProductRevisionStatus, SellerProfile, SellerStatus } from '@prisma/client';
 import {
   MAX_VARIANT_AXES,
   canonicalAttributes,
@@ -38,6 +38,7 @@ import { assertOwnAssets, resolveFileUrl } from '../services/assets';
 import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
 import { isListingBelowTryOnAge } from '../services/tryon/ageGate';
 import { expireDueAds } from './ads';
+import { contentDiffers, newSku, sameList, type ListingContent } from '../services/productRevisions';
 import {
   SELLER_REFERRAL_REWARD_PAISE,
   SELLER_REFERRAL_TARGET_PAISE,
@@ -147,7 +148,6 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, '');
 }
 
-const newSku = () => `CLW-${randomBytes(4).toString('hex').toUpperCase()}`;
 
 // Public: is this phone registered as a seller? The seller-only login page
 // uses this to refuse OTPs for non-seller numbers.
@@ -301,6 +301,7 @@ async function ownProduct(req: Request, id: string) {
       // The edit form needs each variant's own pictures to show them grouped,
       // and the ownership guard on PUT reads variants from here too.
       variants: { include: { images: { orderBy: { sortOrder: 'asc' } } } },
+      revision: true,
     },
   });
   if (!product || product.sellerId !== req.seller!.id) {
@@ -312,24 +313,28 @@ async function ownProduct(req: Request, id: string) {
 sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
   try {
     const p = await ownProduct(req, req.params.id);
-    const rules = await categoryRulesFor(p.categoryId);
+    // An edit to the live listing that is not live yet: the form shows the
+    // edit's content, so the seller carries on from where they left it.
+    const edit = p.revision ? (p.revision.content as unknown as ListingContent) : null;
+    const variantEdits = new Map((edit?.variantEdits ?? []).map((e) => [e.id, e]));
+    const rules = await categoryRulesFor(edit?.categoryId ?? p.categoryId);
     const body: SellerProductDetail = {
       id: p.id,
-      title: p.title,
+      title: edit ? edit.title : p.title,
       slug: p.slug,
-      categoryId: p.categoryId,
-      brand: p.brand,
-      brandId: p.brandId,
-      shortDescription: p.shortDescription,
-      description: p.description,
+      categoryId: edit ? edit.categoryId : p.categoryId,
+      brand: edit ? edit.brand : p.brand,
+      brandId: edit ? edit.brandId : p.brandId,
+      shortDescription: edit ? edit.shortDescription : p.shortDescription,
+      description: edit ? edit.description : p.description,
       status: p.status,
       rejectionReason: p.rejectionReason,
-      imageUrls: p.images.map((i) => i.url),
-      videoUrl: p.videoUrl,
+      imageUrls: edit ? edit.imageUrls : p.images.map((i) => i.url),
+      videoUrl: edit ? edit.videoUrl : p.videoUrl,
       packingVideoUrl: await resolveFileUrl(p.packingVideoUrl),
       packingVideoRef: p.packingVideoUrl,
-      attributes: normaliseAttributes(p.attributes, rules.attributeSchema),
-      highlights: (p.highlights as string[] | null) ?? [],
+      attributes: normaliseAttributes(edit ? edit.attributes : p.attributes, rules.attributeSchema),
+      highlights: edit ? edit.highlights : ((p.highlights as string[] | null) ?? []),
       weightGrams: p.weightGrams,
       lengthMm: p.lengthMm,
       widthMm: p.widthMm,
@@ -342,18 +347,43 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
       tryOnEnabled: p.tryOnEnabled,
       lowStockAlert: p.lowStockAlert,
       allowBackorders: p.allowBackorders,
-      variants: p.variants.map((v) => ({
-        id: v.id,
-        size: v.size,
-        color: v.color,
-        optionValues: optionValuesFromJson(v.optionValues),
-        label: v.label,
-        sku: v.sku,
-        pricePaise: v.pricePaise,
-        mrpPaise: v.mrpPaise,
-        stock: v.stock,
-        imageUrls: v.images.map((i) => i.url),
-      })),
+      variants: [
+        ...p.variants.map((v) => {
+          const changed = variantEdits.get(v.id);
+          return {
+            id: v.id,
+            size: changed ? changed.size : v.size,
+            color: changed ? changed.color : v.color,
+            optionValues: changed ? changed.optionValues : optionValuesFromJson(v.optionValues),
+            label: changed ? changed.label : v.label,
+            sku: v.sku,
+            pricePaise: v.pricePaise,
+            mrpPaise: v.mrpPaise,
+            stock: v.stock,
+            imageUrls: changed?.imageUrls ?? v.images.map((i) => i.url),
+          };
+        }),
+        // Variants the edit adds: no id yet, so saving sends them as new again.
+        ...(edit?.newVariants ?? []).map((n) => ({
+          id: '',
+          size: n.size,
+          color: n.color,
+          optionValues: n.optionValues,
+          label: n.label,
+          sku: n.sku ?? '',
+          pricePaise: n.pricePaise,
+          mrpPaise: n.mrpPaise,
+          stock: n.stock,
+          imageUrls: n.imageUrls,
+        })),
+      ],
+      revision: p.revision
+        ? {
+            status: p.revision.status,
+            rejectionReason: p.revision.rejectionReason,
+            submittedAt: p.revision.submittedAt?.toISOString() ?? null,
+          }
+        : null,
     };
     res.json({ success: true, data: body });
   } catch (err) {
@@ -551,6 +581,129 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
 });
 
 // Edit a product — resets status to PENDING for re-approval.
+/**
+ * Save an edit to a live listing. What a buyer sees — content — goes into the
+ * listing's revision for review (DRAFT when saved as a draft, PENDING when
+ * submitted) and the listing keeps showing the approved version; an edit that
+ * matches the live content again clears the revision. Price, stock, SKU,
+ * removed variants, dimensions, SEO, visibility and the rest save at once.
+ * Returns where the revision now stands, or null when there is none.
+ */
+async function saveLiveEdit(
+  input: SellerProductUpsertInput,
+  product: Awaited<ReturnType<typeof ownProduct>>,
+  rules: CategoryRules,
+  variantRows: ReturnType<typeof variantRowsFrom>,
+  keptIds: string[],
+  packing: { changed: boolean; ref: string | null },
+): Promise<ProductRevisionStatus | null> {
+  // Removing every live variant would take the listing down while the new
+  // ones wait for review.
+  if (keptIds.length === 0) {
+    throw ApiError.badRequest(
+      'Keep at least one of the current variants: new ones go live only after review',
+      'LIVE_VARIANT_REQUIRED',
+    );
+  }
+  const proposed = productDataFrom(input, rules);
+  const current = new Map(product.variants.map((v) => [v.id, v]));
+  const kept = variantRows.filter((r) => r.input.id);
+
+  const content: ListingContent = {
+    title: proposed.title,
+    categoryId: proposed.categoryId,
+    brand: proposed.brand,
+    brandId: proposed.brandId,
+    shortDescription: proposed.shortDescription,
+    description: proposed.description,
+    videoUrl: proposed.videoUrl,
+    attributes: proposed.attributes,
+    highlights: input.highlights ?? [],
+    imageUrls: input.imageUrls,
+    variantEdits: kept.flatMap(({ input: v, fields }) => {
+      const now = current.get(v.id!)!;
+      // Against the live options read the same way, not the stored key: rows
+      // written before the key format settled would otherwise always differ.
+      const live = variantOptionFields(now.optionValues as Record<string, unknown>, [], { size: now.size, color: now.color });
+      const optionsChanged = fields.optionsKey !== live.optionsKey || fields.label !== live.label;
+      const imagesChanged = v.imageUrls !== undefined && !sameList(v.imageUrls, now.images.map((i) => i.url));
+      if (!optionsChanged && !imagesChanged) return [];
+      return [{ id: v.id!, ...fields, ...(imagesChanged ? { imageUrls: v.imageUrls } : {}) }];
+    }),
+    newVariants: variantRows
+      .filter((r) => !r.input.id)
+      .map(({ input: v, fields }) => ({
+        ...fields,
+        sku: v.sku?.trim() || null,
+        pricePaise: v.pricePaise,
+        mrpPaise: v.mrpPaise ?? null,
+        stock: v.stock,
+        imageUrls: v.imageUrls ?? [],
+      })),
+  };
+  const changed = contentDiffers(content, product);
+  const status: ProductRevisionStatus = input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING';
+  const liveRules = await categoryRulesFor(product.categoryId);
+
+  await prisma.$transaction([
+    prisma.product.update({
+      where: { id: product.id },
+      data: {
+        packingVideoUrl: packing.ref,
+        ...(packing.changed ? { packingVideoUploadedAt: packing.ref ? new Date() : null } : {}),
+        weightGrams: proposed.weightGrams,
+        lengthMm: proposed.lengthMm,
+        widthMm: proposed.widthMm,
+        heightMm: proposed.heightMm,
+        shippingTemplate: proposed.shippingTemplate,
+        metaTitle: proposed.metaTitle,
+        metaDescription: proposed.metaDescription,
+        tags: proposed.tags,
+        isVisible: proposed.isVisible,
+        lowStockAlert: proposed.lowStockAlert,
+        allowBackorders: proposed.allowBackorders,
+        // Judged against the live title and category, which are what buyers see.
+        tryOnEnabled:
+          (input.tryOnEnabled ?? false) &&
+          liveRules.tryOnEligible &&
+          !isSensitiveForTryOn(product.title) &&
+          !isListingBelowTryOnAge(kept.map((r) => r.input.optionValues?.size ?? '')),
+        basePricePaise: Math.min(...kept.map((r) => r.input.pricePaise)),
+      },
+    }),
+    prisma.productVariant.deleteMany({ where: { productId: product.id, id: { notIn: keptIds } } }),
+    ...kept.map(({ input: v }) =>
+      prisma.productVariant.updateMany({
+        where: { id: v.id!, productId: product.id },
+        data: {
+          ...(v.sku?.trim() ? { sku: v.sku.trim() } : {}),
+          pricePaise: v.pricePaise,
+          mrpPaise: v.mrpPaise ?? null,
+          stock: v.stock,
+        },
+      }),
+    ),
+    changed
+      ? prisma.productRevision.upsert({
+          where: { productId: product.id },
+          create: {
+            productId: product.id,
+            status,
+            content: content as unknown as Prisma.InputJsonValue,
+            submittedAt: status === 'PENDING' ? new Date() : null,
+          },
+          update: {
+            status,
+            content: content as unknown as Prisma.InputJsonValue,
+            rejectionReason: null,
+            submittedAt: status === 'PENDING' ? new Date() : null,
+          },
+        })
+      : prisma.productRevision.deleteMany({ where: { productId: product.id } }),
+  ]);
+  return changed ? status : null;
+}
+
 sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (req, res, next) => {
   try {
     const input = sellerProductUpsertSchema.parse(req.body);
@@ -589,6 +742,20 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
       await assertOwnAssets([newPackingVideo], { ownerId: req.auth!.userId, purpose: 'PACKING_VIDEO' });
     }
 
+    // A live listing stays live: its content waits for review, the rest saves now.
+    if (product.status === 'APPROVED') {
+      const revisionStatus = await saveLiveEdit(input, product, rules, variantRows, keptIds, {
+        changed: videoChanged,
+        ref: newPackingVideo,
+      });
+      if (videoChanged && product.packingVideoUrl) await removeStoredFile(product.packingVideoUrl);
+      res.json({ success: true, data: { id: product.id, status: 'APPROVED', revisionStatus } });
+      return;
+    }
+
+    // Pictures are rewritten only when the seller changed them.
+    const imagesChanged = !sameList(input.imageUrls, product.images.map((i) => i.url));
+
     await prisma.$transaction([
       prisma.product.update({
         where: { id: product.id },
@@ -603,15 +770,19 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
           rejectionReason: null,
         },
       }),
-      prisma.productImage.deleteMany({ where: { productId: product.id } }),
-      prisma.productImage.createMany({
-        data: input.imageUrls.map((url, i) => ({
-          productId: product.id,
-          url,
-          altText: input.title,
-          sortOrder: i,
-        })),
-      }),
+      ...(imagesChanged
+        ? [
+            prisma.productImage.deleteMany({ where: { productId: product.id } }),
+            prisma.productImage.createMany({
+              data: input.imageUrls.map((url, i) => ({
+                productId: product.id,
+                url,
+                altText: input.title,
+                sortOrder: i,
+              })),
+            }),
+          ]
+        : []),
       // Variants: update kept ones, remove missing, add new.
       prisma.productVariant.deleteMany({
         where: { productId: product.id, id: { notIn: keptIds } },

@@ -175,6 +175,15 @@ export const sellerProductUpsertSchema = z
   });
 export type SellerProductUpsertInput = z.infer<typeof sellerProductUpsertSchema>;
 
+/** An edit to a live listing: saved but not sent (DRAFT), waiting for review, or turned down. */
+export type ProductRevisionStatusValue = 'DRAFT' | 'PENDING' | 'REJECTED';
+
+export interface ListingRevisionInfo {
+  status: ProductRevisionStatusValue;
+  rejectionReason: string | null;
+  submittedAt: string | null;
+}
+
 export interface SellerProductDetail {
   id: string;
   title: string;
@@ -220,6 +229,14 @@ export interface SellerProductDetail {
     /** This variant's own pictures; empty means it shows the product's. */
     imageUrls: string[];
   }[];
+  /**
+   * An edit to this live listing that is not live yet. When present, the
+   * content fields above (title, descriptions, category, brand, spec sheet,
+   * highlights, video, pictures, variant options and new variants) are the
+   * edit's, so the form shows what the seller is working on; price, stock and
+   * the other fields are the listing's own.
+   */
+  revision: ListingRevisionInfo | null;
 }
 
 // ---------------------------------------------------------------------------

@@ -5,9 +5,12 @@ import {
   adminReturnOverrideSchema,
   adDecisionSchema,
   categoryUpsertSchema,
+  normaliseAttributes,
   productDecisionSchema,
+  revisionDecisionSchema,
   type AdminCategoryRow,
   type AdminProductDetail,
+  type AdminProductRevision,
   type AdminProductRow,
   type AdminReturnRow,
   type AdminSellerReferralRow,
@@ -20,11 +23,13 @@ import {
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import {
+  categoryRulesFor,
   chainOf,
   invalidateCategoryRules,
   ownRuleFields,
   rulesFromChain,
 } from '../services/categoryRules';
+import { applyRevision, changedFields, type ListingContent } from '../services/productRevisions';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { sendToUserSafe } from '../services/messaging';
@@ -167,15 +172,18 @@ adminRouter.get('/stats', async (_req, res, next) => {
 adminRouter.get('/products', async (req, res, next) => {
   try {
     const status = typeof req.query.status === 'string' ? req.query.status : 'PENDING';
+    // REVISION: live listings with an edit waiting for review, oldest first.
+    const edits = status === 'REVISION';
     const products = await prisma.product.findMany({
-      where: { status: status as never },
-      orderBy: { createdAt: 'desc' },
+      where: edits ? { revision: { status: 'PENDING' } } : { status: status as never },
+      orderBy: edits ? { revision: { submittedAt: 'asc' } } : { createdAt: 'desc' },
       take: 100,
       include: {
         category: { select: { name: true } },
         seller: { select: { shopName: true } },
         images: { orderBy: { sortOrder: 'asc' }, take: 1 },
         variants: { select: { pricePaise: true } },
+        revision: { select: { status: true, submittedAt: true } },
       },
     });
     const rows: AdminProductRow[] = products.map((p) => ({
@@ -191,6 +199,8 @@ adminRouter.get('/products', async (req, res, next) => {
       minPricePaise: Math.min(...p.variants.map((v) => v.pricePaise), p.basePricePaise),
       variantCount: p.variants.length,
       createdAt: p.createdAt.toISOString(),
+      revisionSubmittedAt:
+        p.revision?.status === 'PENDING' ? (p.revision.submittedAt?.toISOString() ?? null) : null,
     }));
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -208,9 +218,11 @@ adminRouter.get('/products/:id', async (req, res, next) => {
         images: { orderBy: { sortOrder: 'asc' } },
         variants: { orderBy: [{ color: 'asc' }, { size: 'asc' }] },
         seller: { include: { user: { select: { phone: true } } } },
+        revision: true,
       },
     });
     if (!p) throw ApiError.notFound('Product not found');
+    const revision = p.revision?.status === 'PENDING' ? await revisionView(p) : null;
 
     const body: AdminProductDetail = {
       id: p.id,
@@ -244,8 +256,89 @@ adminRouter.get('/products/:id', async (req, res, next) => {
       },
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),
+      revision,
     };
     res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** An edit waiting for review, as the review screen shows it beside the live listing. */
+async function revisionView(p: {
+  title: string;
+  categoryId: string;
+  brand: string | null;
+  brandId: string | null;
+  shortDescription: string | null;
+  description: string;
+  videoUrl: string | null;
+  attributes: Prisma.JsonValue;
+  highlights: Prisma.JsonValue;
+  images: { url: string }[];
+  revision: { content: Prisma.JsonValue; submittedAt: Date | null } | null;
+}): Promise<AdminProductRevision> {
+  const content = p.revision!.content as unknown as ListingContent;
+  const [category, rules] = await Promise.all([
+    prisma.category.findUnique({ where: { id: content.categoryId }, select: { name: true } }),
+    categoryRulesFor(content.categoryId),
+  ]);
+  return {
+    submittedAt: p.revision!.submittedAt?.toISOString() ?? null,
+    changedFields: changedFields(content, p),
+    proposed: {
+      title: content.title,
+      categoryName: category?.name ?? '(category removed)',
+      brand: content.brand,
+      shortDescription: content.shortDescription,
+      description: content.description,
+      videoUrl: content.videoUrl,
+      imageUrls: content.imageUrls,
+      highlights: content.highlights,
+      attributes: normaliseAttributes(content.attributes, rules.attributeSchema).map((a) => ({
+        label: a.label,
+        value: a.value,
+      })),
+      variantEdits: content.variantEdits.map((e) => ({ label: e.label, imageCount: e.imageUrls?.length ?? null })),
+      newVariants: content.newVariants.map((v) => ({ label: v.label, pricePaise: v.pricePaise, stock: v.stock })),
+    },
+  };
+}
+
+// Approve or reject an edit to a live listing. The listing was live the whole
+// time; approval puts the edit on it, rejection leaves it as it is.
+adminRouter.patch('/products/:id/revision', async (req, res, next) => {
+  try {
+    const { action, reason } = revisionDecisionSchema.parse(req.body);
+    const product = await prisma.product.findUnique({
+      where: { id: req.params.id },
+      include: { seller: { select: { userId: true } }, revision: { select: { status: true } } },
+    });
+    if (!product) throw ApiError.notFound('Product not found');
+    if (product.revision?.status !== 'PENDING') {
+      throw ApiError.badRequest('There is no edit waiting for review on this listing', 'NO_PENDING_REVISION');
+    }
+    if (action === 'approve') {
+      await applyRevision(product.id);
+    } else {
+      await prisma.productRevision.update({
+        where: { productId: product.id },
+        data: { status: 'REJECTED', rejectionReason: reason ?? null },
+      });
+    }
+    await prisma.notification.create({
+      data: {
+        userId: product.seller.userId,
+        type: action === 'approve' ? 'PRODUCT_EDIT_APPROVED' : 'PRODUCT_EDIT_REJECTED',
+        title: action === 'approve' ? 'Your changes are live ✅' : 'Your changes were not approved',
+        body:
+          action === 'approve'
+            ? `Your edits to "${product.title}" are now live on Clowe.`
+            : `Your edits to "${product.title}" were not approved, and the listing stays as it was.${reason ? ` Reason: ${reason}` : ''}`,
+        linkHref: `/seller/products/${product.id}/edit`,
+      },
+    });
+    res.json({ success: true, data: { id: product.id, revision: action === 'approve' ? null : 'REJECTED' } });
   } catch (err) {
     next(err);
   }

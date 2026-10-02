@@ -62,6 +62,8 @@ export interface SellerProductRow {
   mrpPaise: number | null;
   status: string;
   rejectionReason: string | null;
+  /** An edit to the live listing that is not live yet, and where it stands. */
+  revisionStatus: 'DRAFT' | 'PENDING' | 'REJECTED' | null;
   listingState: ListingState;
   isVisible: boolean;
   /** Lifetime detail-page views. */

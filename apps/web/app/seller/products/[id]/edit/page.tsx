@@ -39,6 +39,24 @@ export default function EditProductPage({ params: paramsPromise }: { params: Pro
           <span className="text-red-600"> — {product.rejectionReason}</span>
         )}
       </p>
+      {product.status === 'APPROVED' && (
+        // A live listing stays live while an edit is reviewed; say what that means here.
+        <p className="mt-2 max-w-3xl rounded-lg bg-cream-100 px-3 py-2 text-xs leading-relaxed text-gray-700">
+          {!product.revision &&
+            'This listing is live. Price, stock and the other details save straight away. Changes to the title, descriptions, pictures, category, brand, specifications, video or new variants go to review, and buyers keep seeing the live listing until they are approved.'}
+          {product.revision?.status === 'PENDING' &&
+            `Your edits are waiting for review${product.revision.submittedAt ? ` since ${new Date(product.revision.submittedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}. Buyers still see the approved listing; the form shows your edits.`}
+          {product.revision?.status === 'DRAFT' &&
+            'Your edits are saved as a draft and are not live. Submit them for review when they are ready.'}
+          {product.revision?.status === 'REJECTED' && (
+            <>
+              <span className="font-semibold text-red-600">Your last edits were not approved</span>
+              {product.revision.rejectionReason ? `: ${product.revision.rejectionReason}.` : '.'} Buyers still see
+              the approved listing. Change the edits and submit again, or put them back as they were.
+            </>
+          )}
+        </p>
+      )}
       <div className="mt-5">
         <ProductForm initial={product} />
       </div>

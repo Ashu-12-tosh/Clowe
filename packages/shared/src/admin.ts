@@ -90,7 +90,35 @@ export interface AdminProductRow {
   minPricePaise: number;
   variantCount: number;
   createdAt: string;
+  /** When the row is an edit to a live listing waiting for review. */
+  revisionSubmittedAt: string | null;
 }
+
+/** An edit to a live listing, as the review screen shows it beside the live version. */
+export interface AdminProductRevision {
+  submittedAt: string | null;
+  /** title, category, brand, shortDescription, description, video, attributes, highlights, images, variants, newVariants */
+  changedFields: string[];
+  proposed: {
+    title: string;
+    categoryName: string;
+    brand: string | null;
+    shortDescription: string | null;
+    description: string;
+    videoUrl: string | null;
+    imageUrls: string[];
+    highlights: string[];
+    attributes: { label: string; value: string }[];
+    /** Live variants whose options or pictures change, by their new label. */
+    variantEdits: { label: string; imageCount: number | null }[];
+    newVariants: { label: string; pricePaise: number; stock: number }[];
+  };
+}
+
+export const revisionDecisionSchema = z.object({
+  action: z.enum(['approve', 'reject']),
+  reason: z.string().trim().max(300).optional(),
+});
 
 /** Full product view for the admin review screen. */
 export interface AdminProductDetail {
@@ -126,6 +154,8 @@ export interface AdminProductDetail {
   };
   createdAt: string;
   updatedAt: string;
+  /** A content edit waiting for review; the fields above are the live listing. */
+  revision: AdminProductRevision | null;
 }
 
 export interface AdminCategoryRow {

@@ -39,6 +39,7 @@ const PRODUCT_INCLUDE = {
     orderBy: { createdAt: 'asc' },
     select: { sku: true, stock: true, pricePaise: true, mrpPaise: true },
   },
+  revision: { select: { status: true } },
 } satisfies Prisma.ProductInclude;
 
 type ProductRecord = Prisma.ProductGetPayload<{ include: typeof PRODUCT_INCLUDE }>;
@@ -97,6 +98,7 @@ function toRow(product: ProductRecord, sales: SalesRow | undefined): SellerProdu
     mrpPaise: cheapest?.mrpPaise ?? null,
     status: product.status,
     rejectionReason: product.rejectionReason,
+    revisionStatus: product.revision?.status ?? null,
     listingState: listingStateOf(product, totalStock),
     isVisible: product.isVisible,
     views: product.viewCount,

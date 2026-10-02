@@ -872,6 +872,7 @@ model Product {
   // Containment lookups by the filter facets on the spec sheet ("attributes" @> '[{"key": "fabric", "value": "Cotton"}]').
   @@index([attributes(ops: JsonbPathOps)], type: Gin)
   @@map("products")
+  revision    ProductRevision?
 }
 
 // One row per storefront product-detail view — powers "Trending Now"
@@ -2054,4 +2055,31 @@ model Asset {
   @@index([ownerId])
   @@index([purpose, createdAt])
   @@map("assets")
+}
+
+enum ProductRevisionStatus {
+  DRAFT // saved by the seller, not sent for review
+  PENDING // waiting for an admin
+  REJECTED // an admin said no; the live listing never changed
+}
+
+/// A content edit to a live listing. The listing stays on the storefront, and
+/// in carts, exactly as approved until an admin approves this; then the edit
+/// replaces it. Price, stock and the other operational fields never come here:
+/// they save straight onto the listing. One per product: a newer edit replaces
+/// the open one, and approval deletes it.
+model ProductRevision {
+  id              String                @id @default(cuid())
+  productId       String                @unique
+  product         Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  status          ProductRevisionStatus
+  /// The proposed content (services/productRevisions.ts, ListingContent).
+  content         Json
+  rejectionReason String?
+  submittedAt     DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@index([status, submittedAt])
+  @@map("product_revisions")
 }
