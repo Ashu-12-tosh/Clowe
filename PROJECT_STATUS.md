@@ -189,6 +189,34 @@ the main reason pages feel slow. The demo images were meant to be downloaded
 locally first; `npm run db:localize-images -w @clowe/api` does exactly that and
 has not been run against production.
 
+**Apparel and footwear priced ₹2,625.01–₹2,950 have no consistent GST rate —
+needs a CA's confirmation before launch.** The 5% / 18% line is ₹2,500 per piece
+*before* GST, but prices are entered GST-inclusive, and in this band the answer
+is circular: at 18% the ex-GST value is under ₹2,500 (so 5%), at 5% it is over
+(so 18%). The code charges 18%, never under-collects, and warns the seller that
+₹2,625 or less would be 5%. Options to put to the CA: refuse prices in that band
+for slab categories, or have sellers enter the ex-GST price for those categories
+so the rate follows from it.
+
+**TDS is withheld from the first rupee; the ₹5 lakh exemption is not applied.**
+Under s.194-O(4), an individual or HUF seller who has furnished a PAN or
+Aadhaar is exempt while their gross sales through us in the financial year stay
+within ₹5 lakh.
+We withhold 0.1% on every sale regardless. That over-deducts for small sellers
+(refundable to them through their return, not lost) rather than under-deducting.
+Applying it needs the seller's entity type and a running FY total per seller.
+Settle the exact citation and conditions with the CA, as the new Income-tax Act
+renumbers these sections.
+
+**A seller without a PAN can be paid, at the 0.1% TDS rate.** PAN is optional at
+registration, KYC never blocks approval (the admin can approve by acknowledging
+the warnings), and a payout checks only that the seller is approved and the
+payout method verified. Without a PAN, s.206AA makes the s.194-O rate 5%; we
+withhold the single `payoutTdsPercent` for everyone, so the shortfall would be
+the marketplace's. Approval does warn "PAN has not been provided", but the admin
+can acknowledge it and approve. Either payouts should require a verified PAN,
+or TDS should switch to 5% when none is on file.
+
 **The shipping template does nothing yet.** Standard / Express / Heavy is saved
 with a listing and shown back on the form, and nothing else reads it. It is left
 as it is on purpose: it gets real meaning with the Delhivery integration (service
