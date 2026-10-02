@@ -14,7 +14,7 @@ import {
   type SellerProductSort,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
-import { formatPaise } from '@/lib/format';
+import { formatPaise, istDay, istRange } from '@/lib/format';
 import { DonutChart } from '@/components/charts/Charts';
 
 /** A live listing with an edit that is not live yet: buyers still see the approved version. */
@@ -57,18 +57,6 @@ function count(n: number): string {
 function rowFacts(row: SellerProductRow): string {
   const sold = row.unitsSold > 0 ? `${count(row.unitsSold)} sold · ${formatPaise(row.salesPaise)}` : 'no sales yet';
   return `${row.sku} · ${count(row.views)} views all time · ${sold}`;
-}
-
-/** "4 Oct", by the Indian calendar the periods are counted in. */
-function istDay(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
-}
-
-/** "1–4 Oct": a period that ends at `to` (inclusive of that day). */
-function istRange(from: string, to: string): string {
-  // The end instant is exclusive for a whole previous month; step back a moment to name its last day.
-  const end = new Date(new Date(to).getTime() - 1).toISOString();
-  return istDay(from) === istDay(end) ? istDay(from) : `${istDay(from).split(' ')[0]}–${istDay(end)}`;
 }
 
 /** A change, with what it is measured against spelled out. */

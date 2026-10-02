@@ -17,7 +17,7 @@ import {
   type SellerCustomerSummary,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
-import { formatPaise } from '@/lib/format';
+import { formatPaise, istRange } from '@/lib/format';
 import { DonutChart } from '@/components/charts/Charts';
 import CustomerDrawer, {
   CUSTOMER_STATUS_STYLES,
@@ -28,12 +28,13 @@ function num(n: number): string {
   return n.toLocaleString('en-IN');
 }
 
-function Delta({ change, invert = false }: { change: number | null; invert?: boolean }) {
-  if (change === null) return <span className="text-gray-400">no prior month</span>;
+/** A change, with the days it is measured against spelled out. */
+function Delta({ change, invert = false, against }: { change: number | null; invert?: boolean; against: string }) {
+  if (change === null) return <span className="text-gray-400">nothing to compare in {against}</span>;
   const good = invert ? change <= 0 : change >= 0;
   return (
     <span className={good ? 'text-green-600' : 'text-red-600'}>
-      {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% vs last month
+      {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% vs {against}
     </span>
   );
 }
@@ -175,6 +176,8 @@ export default function SellerCustomersPage() {
   useEffect(() => setPage(1), [query, pageSize]);
 
   const k = summary?.kpis;
+  // The same days of last month (or, for a finished month, all of the one before).
+  const against = summary ? istRange(summary.period.previousFrom, summary.period.previousTo) : 'last month';
 
   return (
     <div className="pb-10">
@@ -227,7 +230,7 @@ export default function SellerCustomersPage() {
               icon="✨"
               label="New this month"
               value={num(k.newThisMonth)}
-              footer={<Delta change={k.newChangePercent} />}
+              footer={<Delta against={against} change={k.newChangePercent} />}
             />
             <KpiCard
               icon="🔁"

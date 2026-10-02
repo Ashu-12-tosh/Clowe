@@ -10,7 +10,7 @@ import {
   type OverviewRange,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
-import { formatPaise } from '@/lib/format';
+import { formatPaise, istRange } from '@/lib/format';
 import { DonutChart, LineChart } from '@/components/charts/Charts';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -51,15 +51,15 @@ function shortMoney(paise: number): string {
   return `₹${Math.round(rupees)}`;
 }
 
-function Delta({ metric }: { metric: OverviewMetric }) {
+function Delta({ metric, against }: { metric: OverviewMetric; against: string }) {
   if (metric.changePercent === null) {
-    return <span className="text-gray-400">no prior period</span>;
+    return <span className="text-gray-400">nothing to compare in {against}</span>;
   }
   const up = metric.changePercent >= 0;
   return (
     <span className={up ? 'text-green-600' : 'text-red-600'}>
       {up ? '↑' : '↓'} {Math.abs(metric.changePercent)}%{' '}
-      <span className="text-gray-400">vs previous</span>
+      <span className="text-gray-400">vs {against}</span>
     </span>
   );
 }
@@ -69,11 +69,14 @@ function KpiCard({
   label,
   value,
   metric,
+  against,
 }: {
   icon: string;
   label: string;
   value: string;
   metric: OverviewMetric;
+  /** The span the change is measured against, e.g. "1–4 Sep". */
+  against: string;
 }) {
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-4">
@@ -89,7 +92,7 @@ function KpiCard({
         </div>
       </div>
       <p className="mt-2 text-[11px]">
-        <Delta metric={metric} />
+        <Delta metric={metric} against={against} />
       </p>
     </div>
   );
@@ -147,6 +150,7 @@ export default function AdminDashboardPage() {
   }, [load]);
 
   const kpis = data?.kpis;
+  const against = data ? istRange(data.range.previousFrom, data.range.previousTo) : '';
 
   return (
     <div className="pb-10">
@@ -244,32 +248,32 @@ export default function AdminDashboardPage() {
       <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {kpis ? (
           <>
-            <KpiCard
+            <KpiCard against={against}
               icon="💰"
               label="Total GMV"
               value={formatPaise(kpis.gmvPaise.value)}
               metric={kpis.gmvPaise}
             />
-            <KpiCard icon="📦" label="Orders" value={num(kpis.orders.value)} metric={kpis.orders} />
-            <KpiCard
+            <KpiCard against={against} icon="📦" label="Orders" value={num(kpis.orders.value)} metric={kpis.orders} />
+            <KpiCard against={against}
               icon="👥"
               label="New users"
               value={num(kpis.users.value)}
               metric={kpis.users}
             />
-            <KpiCard
+            <KpiCard against={against}
               icon="🏪"
               label="Active sellers"
               value={num(kpis.activeSellers.value)}
               metric={kpis.activeSellers}
             />
-            <KpiCard
+            <KpiCard against={against}
               icon="👕"
               label="New products"
               value={num(kpis.products.value)}
               metric={kpis.products}
             />
-            <KpiCard
+            <KpiCard against={against}
               icon="📈"
               label="Platform revenue"
               value={formatPaise(kpis.revenuePaise.value)}

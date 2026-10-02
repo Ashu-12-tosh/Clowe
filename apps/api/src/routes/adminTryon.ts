@@ -16,6 +16,9 @@ import {
   type TryOnDeviceType,
   type TryOnFeedback,
   type TryOnStatusValue,
+  istDayKey,
+  istMonthStart,
+  istStartOfDay,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -48,18 +51,17 @@ interface Range {
   previousTo: Date;
 }
 
+// Days by the Indian calendar, whatever timezone the server runs in.
 function startOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return istStartOfDay(d);
 }
 
 function endOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  return new Date(istStartOfDay(d).getTime() + 86400000 - 1);
 }
 
 function dayKey(d: Date): string {
-  const m = `${d.getMonth() + 1}`.padStart(2, '0');
-  const day = `${d.getDate()}`.padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
+  return istDayKey(d);
 }
 
 /** Range from ?from/?to (ISO dates), defaulting to the last 30 days. */
@@ -67,13 +69,11 @@ function parseRange(query: Record<string, unknown>): Range {
   const rawFrom = typeof query.from === 'string' ? new Date(query.from) : null;
   const rawTo = typeof query.to === 'string' ? new Date(query.to) : null;
   const to = endOfDay(rawTo && !Number.isNaN(rawTo.getTime()) ? rawTo : new Date());
-  const defaultFrom = new Date(to);
-  defaultFrom.setDate(defaultFrom.getDate() - 29);
+  const defaultFrom = new Date(to.getTime() - 29 * 86400000);
   const from = startOfDay(rawFrom && !Number.isNaN(rawFrom.getTime()) ? rawFrom : defaultFrom);
   const days = Math.max(1, Math.round((endOfDay(to).getTime() - from.getTime()) / 86400000));
   const previousTo = new Date(from.getTime() - 1);
-  const previousFrom = new Date(from);
-  previousFrom.setDate(previousFrom.getDate() - days);
+  const previousFrom = new Date(from.getTime() - days * 86400000);
   return { from, to, days, previousFrom: startOfDay(previousFrom), previousTo };
 }
 
@@ -164,10 +164,7 @@ function shares(
 }
 
 function requestRef(id: string, createdAt: Date): string {
-  const y = createdAt.getFullYear();
-  const m = `${createdAt.getMonth() + 1}`.padStart(2, '0');
-  const d = `${createdAt.getDate()}`.padStart(2, '0');
-  return `TR-${y}${m}${d}-${id.slice(-4).toUpperCase()}`;
+  return `TR-${istDayKey(createdAt).replace(/-/g, '')}-${id.slice(-4).toUpperCase()}`;
 }
 
 const GENDER_LABELS: Record<string, string> = {
@@ -254,8 +251,7 @@ adminTryonRouter.get('/overview', async (req, res, next) => {
     const trendMap = new Map<string, { total: number; success: number; failed: number }>();
     const latencyMap = new Map<string, number[]>();
     for (let i = 0; i < range.days; i += 1) {
-      const d = new Date(range.from);
-      d.setDate(d.getDate() + i);
+      const d = new Date(range.from.getTime() + i * 86400000);
       trendMap.set(dayKey(d), { total: 0, success: 0, failed: 0 });
       latencyMap.set(dayKey(d), []);
     }
@@ -846,8 +842,7 @@ adminTryonRouter.get('/export', async (req, res, next) => {
 // ---------------------------------------------------------------------------
 
 async function currentSettings(): Promise<AdminTryOnSettings> {
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthStart = istMonthStart(new Date());
   const [settings, month] = await Promise.all([
     getSettings(),
     prisma.tryOnHistory.aggregate({

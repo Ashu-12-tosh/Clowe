@@ -7,6 +7,9 @@ import {
   type AdminOverview,
   type OverviewMetric,
   type OverviewRange,
+  istDayKey,
+  istStartOfDay,
+  periodToDateIST,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -32,28 +35,29 @@ const ORDER_STATUS_LABELS: Record<string, string> = {
   RETURNED: 'Returned',
 };
 
-function rangeBounds(key: OverviewRange): { from: Date; to: Date; previousFrom: Date } {
+function rangeBounds(key: OverviewRange): { from: Date; to: Date; previousFrom: Date; previousTo: Date } {
   const now = new Date();
   const to = now;
   let from: Date;
+  // Calendar ranges by the Indian clock, against the same span of the one
+  // before (today so far vs yesterday to this time, 1–4 Oct vs 1–4 Sep).
+  // Rolling ranges against the same number of days just before.
   switch (key) {
     case 'TODAY':
-      from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      break;
+      return periodToDateIST('day', now);
+    case 'YEAR':
+      return periodToDateIST('year', now);
     case 'WEEK':
       from = new Date(now.getTime() - 6 * 86400000);
       break;
     case 'QUARTER':
       from = new Date(now.getTime() - 89 * 86400000);
       break;
-    case 'YEAR':
-      from = new Date(now.getFullYear(), 0, 1);
-      break;
     default:
-      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      return periodToDateIST('month', now);
   }
   const span = to.getTime() - from.getTime();
-  return { from, to, previousFrom: new Date(from.getTime() - span) };
+  return { from, to, previousFrom: new Date(from.getTime() - span), previousTo: from };
 }
 
 function metric(value: number, previous: number): OverviewMetric {
@@ -64,12 +68,13 @@ function metric(value: number, previous: number): OverviewMetric {
   };
 }
 
+/** The Indian calendar date, whatever timezone the server runs in. */
 function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return istDayKey(d);
 }
 
 function startOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return istStartOfDay(d);
 }
 
 /**
@@ -104,7 +109,7 @@ adminOverviewRouter.get('/', async (req, res, next) => {
     const { range } = z
       .object({ range: z.enum(OVERVIEW_RANGES).default('MONTH') })
       .parse(req.query);
-    const { from, to, previousFrom } = rangeBounds(range);
+    const { from, to, previousFrom, previousTo } = rangeBounds(range);
     const settings = await getSettings();
 
     const [
@@ -138,11 +143,11 @@ adminOverviewRouter.get('/', async (req, res, next) => {
         },
       }),
       prisma.orderItem.findMany({
-        where: { order: { status: { not: 'PLACED' }, createdAt: { gte: previousFrom, lt: from } } },
+        where: { order: { status: { not: 'PLACED' }, createdAt: { gte: previousFrom, lt: previousTo } } },
         select: { orderId: true, status: true, pricePaise: true, quantity: true },
       }),
       prisma.user.count({ where: { createdAt: { gte: from, lte: to } } }),
-      prisma.user.count({ where: { createdAt: { gte: previousFrom, lt: from } } }),
+      prisma.user.count({ where: { createdAt: { gte: previousFrom, lt: previousTo } } }),
       prisma.sellerProfile.findMany({
         select: {
           id: true,
@@ -156,7 +161,7 @@ adminOverviewRouter.get('/', async (req, res, next) => {
         where: { status: { not: 'ARCHIVED' }, createdAt: { gte: from, lte: to } },
       }),
       prisma.product.count({
-        where: { status: { not: 'ARCHIVED' }, createdAt: { gte: previousFrom, lt: from } },
+        where: { status: { not: 'ARCHIVED' }, createdAt: { gte: previousFrom, lt: previousTo } },
       }),
       prisma.order.groupBy({ by: ['status'], _count: { _all: true } }),
       prisma.order.findMany({
@@ -183,7 +188,7 @@ adminOverviewRouter.get('/', async (req, res, next) => {
         where: { createdAt: { gte: from, lte: to } },
         select: { status: true, createdAt: true, userId: true, productId: true },
       }),
-      prisma.tryOnHistory.count({ where: { createdAt: { gte: previousFrom, lt: from } } }),
+      prisma.tryOnHistory.count({ where: { createdAt: { gte: previousFrom, lt: previousTo } } }),
       Promise.all([
         prisma.user.count(),
         prisma.sellerProfile.count(),
@@ -358,6 +363,8 @@ adminOverviewRouter.get('/', async (req, res, next) => {
         label: OVERVIEW_RANGE_LABELS[range],
         from: from.toISOString(),
         to: to.toISOString(),
+        previousFrom: previousFrom.toISOString(),
+        previousTo: previousTo.toISOString(),
       },
       kpis: {
         gmvPaise: metric(gmvPaise, previousGmv),

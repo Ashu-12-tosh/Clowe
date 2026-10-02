@@ -13,6 +13,9 @@ import {
   type SellerReturnSort,
   type SellerReturnSummary,
   type SellerReturnActionInput,
+  istDayKey,
+  monthToDateIST,
+  periodWindow,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { env } from '../env';
@@ -54,10 +57,7 @@ type ReturnRecord = Prisma.ReturnGetPayload<{ include: typeof RETURN_INCLUDE }>;
 
 /** RTN-YYYYMMDD-XXXX — stable, readable, derived from the row itself. */
 function reference(id: string, createdAt: Date): string {
-  const y = createdAt.getFullYear();
-  const m = String(createdAt.getMonth() + 1).padStart(2, '0');
-  const d = String(createdAt.getDate()).padStart(2, '0');
-  return `RTN-${y}${m}${d}-${id.slice(-4).toUpperCase()}`;
+  return `RTN-${istDayKey(createdAt).replace(/-/g, '')}-${id.slice(-4).toUpperCase()}`;
 }
 
 function toRow(record: ReturnRecord): SellerReturnListRow {
@@ -205,9 +205,8 @@ function changePercent(current: number, previous: number): number | null {
 sellerReturnsRouter.get('/summary', async (req, res, next) => {
   try {
     const sellerId = req.seller!.id;
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    // This month so far against the same days of last month, by Indian time.
+    const period = monthToDateIST(new Date());
 
     const [rows, deliveredUnits, prevDeliveredUnits] = await Promise.all([
       loadRows(sellerId, listQuery.parse({})),
@@ -216,7 +215,7 @@ sellerReturnsRouter.get('/summary', async (req, res, next) => {
         where: {
           sellerId,
           status: { in: ['DELIVERED', 'RETURN_REQUESTED', 'RETURNED'] },
-          deliveredAt: { gte: monthStart },
+          deliveredAt: { gte: period.from },
         },
       }),
       prisma.orderItem.aggregate({
@@ -224,7 +223,7 @@ sellerReturnsRouter.get('/summary', async (req, res, next) => {
         where: {
           sellerId,
           status: { in: ['DELIVERED', 'RETURN_REQUESTED', 'RETURNED'] },
-          deliveredAt: { gte: prevMonthStart, lt: monthStart },
+          deliveredAt: { gte: period.previousFrom, lt: period.previousTo },
         },
       }),
     ]);
@@ -233,8 +232,8 @@ sellerReturnsRouter.get('/summary', async (req, res, next) => {
       const at = new Date(row.requestedAt);
       return at >= from && (!to || at < to);
     };
-    const thisMonth = rows.filter((r) => inMonth(r, monthStart));
-    const lastMonth = rows.filter((r) => inMonth(r, prevMonthStart, monthStart));
+    const thisMonth = rows.filter((r) => inMonth(r, period.from));
+    const lastMonth = rows.filter((r) => inMonth(r, period.previousFrom, period.previousTo));
 
     const unitsThisMonth = deliveredUnits._sum.quantity ?? 0;
     const unitsLastMonth = prevDeliveredUnits._sum.quantity ?? 0;
@@ -267,10 +266,11 @@ sellerReturnsRouter.get('/summary', async (req, res, next) => {
       productCounts.set(row.title, entry);
     }
 
-    const slaCutoff = new Date(now.getTime() - DECISION_SLA_HOURS * 3600000);
+    const slaCutoff = new Date(Date.now() - DECISION_SLA_HOURS * 3600000);
     const refunded = rows.filter((r) => r.status === 'REFUNDED');
 
     const body: SellerReturnSummary = {
+      period: periodWindow(period),
       kpis: {
         requests: rows.length,
         requestsChangePercent: changePercent(thisMonth.length, lastMonth.length),

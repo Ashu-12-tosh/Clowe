@@ -13,7 +13,7 @@ import {
   type SellerPromotionSummary,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
-import { formatPaise } from '@/lib/format';
+import { formatPaise, istRange } from '@/lib/format';
 import { DonutChart } from '@/components/charts/Charts';
 import PromotionModal from '@/components/seller/promotions/PromotionModal';
 
@@ -40,11 +40,12 @@ function fmtDate(iso: string): string {
   });
 }
 
-function Delta({ change }: { change: number | null }) {
-  if (change === null) return <span className="text-gray-400">no prior month</span>;
+/** A change, with the days it is measured against spelled out. */
+function Delta({ change, against }: { change: number | null; against: string }) {
+  if (change === null) return <span className="text-gray-400">nothing to compare in {against}</span>;
   return (
     <span className={change >= 0 ? 'text-green-600' : 'text-red-600'}>
-      {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% vs last month
+      {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% vs {against}
     </span>
   );
 }
@@ -168,6 +169,8 @@ export default function SellerPromotionsPage() {
   }
 
   const k = summary?.kpis;
+  // The same days of last month (or, for a finished month, all of the one before).
+  const against = summary ? istRange(summary.period.previousFrom, summary.period.previousTo) : 'last month';
 
   return (
     <div className="pb-10">
@@ -222,19 +225,19 @@ export default function SellerPromotionsPage() {
               icon="🎟"
               label="Total redemptions"
               value={k.redemptions.toLocaleString('en-IN')}
-              footer={<Delta change={k.redemptionsChangePercent} />}
+              footer={<Delta against={against} change={k.redemptionsChangePercent} />}
             />
             <KpiCard
               icon="💸"
               label="Discount given"
               value={formatPaise(k.discountGivenPaise)}
-              footer={<Delta change={k.discountChangePercent} />}
+              footer={<Delta against={against} change={k.discountChangePercent} />}
             />
             <KpiCard
               icon="🛒"
               label="Sales from promotions"
               value={formatPaise(k.salesFromPromotionsPaise)}
-              footer={<Delta change={k.salesChangePercent} />}
+              footer={<Delta against={against} change={k.salesChangePercent} />}
             />
             <KpiCard
               icon="📈"

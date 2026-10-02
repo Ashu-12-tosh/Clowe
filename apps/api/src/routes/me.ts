@@ -457,7 +457,7 @@ meRouter.get('/coupons', async (req, res, next) => {
         lockedReason = 'Fully redeemed — no codes left';
       } else if (coupon.startsAt && coupon.startsAt > now) {
         status = 'LOCKED';
-        lockedReason = `Starts on ${coupon.startsAt.toLocaleDateString('en-IN')}`;
+        lockedReason = `Starts on ${coupon.startsAt.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}`;
       } else if (kind === 'PREMIUM' && !user?.isPremium) {
         status = 'LOCKED';
         lockedReason = 'Clowe Premium members only';

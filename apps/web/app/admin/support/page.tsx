@@ -25,6 +25,7 @@ import {
   type SupportTicketDeskDetail,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
+import { istRange } from '@/lib/format';
 import { DonutChart, LineChart } from '@/components/charts/Charts';
 
 const STATUS_STYLES: Record<DeskStatus, string> = {
@@ -65,11 +66,12 @@ function fmtMinutes(minutes: number | null): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-function Delta({ change }: { change: number | null }) {
-  if (change === null) return <span className="text-gray-400">no prior month</span>;
+/** A change, with the days it is measured against spelled out. */
+function Delta({ change, against }: { change: number | null; against: string }) {
+  if (change === null) return <span className="text-gray-400">nothing to compare in {against}</span>;
   return (
     <span className={change >= 0 ? 'text-green-600' : 'text-red-600'}>
-      {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% vs last month
+      {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% vs {against}
     </span>
   );
 }
@@ -269,6 +271,8 @@ export default function AdminSupportDeskPage() {
   }
 
   const k = summary?.kpis;
+  // The same days of last month (or, for a finished month, all of the one before).
+  const against = summary ? istRange(summary.period.previousFrom, summary.period.previousTo) : 'last month';
   const rows = data?.rows ?? null;
 
   return (
@@ -315,7 +319,7 @@ export default function AdminSupportDeskPage() {
               icon="🎫"
               label="Total tickets"
               value={num(k.total)}
-              footer={<Delta change={k.totalChangePercent} />}
+              footer={<Delta against={against} change={k.totalChangePercent} />}
             />
             <KpiCard icon="📬" label="Open" value={num(k.open)} footer="Nobody has replied yet" />
             <KpiCard

@@ -36,6 +36,9 @@ import {
   type TransferRow,
   type TransferStatus,
   type WarehouseRow,
+  istDayKey,
+  istMonthStart,
+  istStartOfDay,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -278,8 +281,8 @@ adminInventoryRouter.get('/stock', async (req, res, next) => {
 adminInventoryRouter.get('/summary', async (req, res, next) => {
   try {
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfToday = istStartOfDay(now);
+    const startOfMonth = istMonthStart(now);
     const trendFrom = new Date(startOfToday.getTime() - (TREND_DAYS - 1) * 86400000);
 
     const [locations, warehouses, monthMovements, recentMovements, transfers, poLines] =
@@ -538,8 +541,9 @@ adminInventoryRouter.get('/summary', async (req, res, next) => {
   }
 });
 
+/** The Indian calendar date, whatever timezone the server runs in. */
 function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return istDayKey(d);
 }
 
 /** Plain-language read of the numbers above — no model call, just thresholds. */

@@ -13,6 +13,10 @@ import {
   type SellerPayoutRow,
   type PayoutStatusValue,
   type PayoutMethodTypeValue,
+  istDayKey,
+  istFinancialYear,
+  monthPeriodIST,
+  periodWindow,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -37,38 +41,24 @@ sellerPayoutsRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 // Helpers
 // ---------------------------------------------------------------------------
 
-function monthRange(month?: string): { from: Date; to: Date; previousFrom: Date; previousTo: Date } {
-  const now = new Date();
-  const parsed = month && /^\d{4}-\d{2}$/.test(month) ? month.split('-').map(Number) : null;
-  const year = parsed ? parsed[0] : now.getFullYear();
-  const monthIndex = parsed ? parsed[1] - 1 : now.getMonth();
-  const from = new Date(year, monthIndex, 1);
-  const to = new Date(year, monthIndex + 1, 0, 23, 59, 59, 999);
-  return {
-    from,
-    to,
-    previousFrom: new Date(year, monthIndex - 1, 1),
-    previousTo: new Date(year, monthIndex, 0, 23, 59, 59, 999),
-  };
+// Months and financial years by the Indian calendar, whatever timezone the
+// server runs in. Every `to` is exclusive. The month still running is compared
+// with the same days of the month before; a finished one with all of it.
+function monthRange(month?: string) {
+  return monthPeriodIST(month, new Date());
 }
 
 /** Indian financial year containing `date`, e.g. "2026-27". */
-function financialYear(date: Date): { label: string; from: Date; to: Date } {
-  const year = date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1;
-  return {
-    label: `${year}-${String((year + 1) % 100).padStart(2, '0')}`,
-    from: new Date(year, 3, 1),
-    to: new Date(year + 1, 2, 31, 23, 59, 59, 999),
-  };
-}
+const financialYear = istFinancialYear;
 
 function changePercent(current: number, previous: number): number | null {
   if (previous <= 0) return null;
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
+/** The Indian calendar date, whatever timezone the server runs in. */
 function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return istDayKey(d);
 }
 
 type PayoutRecord = Prisma.PayoutGetPayload<{ include: { _count: { select: { items: true } } } }>;
@@ -150,9 +140,9 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
 
     const [monthItems, prevItems, fyItems, openingItems, balance, payouts, methods, panBlock] =
       await Promise.all([
-        delivered({ deliveredAt: { gte: range.from, lte: range.to } }),
-        delivered({ deliveredAt: { gte: range.previousFrom, lte: range.previousTo } }),
-        delivered({ deliveredAt: { gte: fy.from, lte: fy.to } }),
+        delivered({ deliveredAt: { gte: range.from, lt: range.to } }),
+        delivered({ deliveredAt: { gte: range.previousFrom, lt: range.previousTo } }),
+        delivered({ deliveredAt: { gte: fy.from, lt: fy.to } }),
         delivered({ deliveredAt: { lt: range.from } }),
         availableBalance(sellerId),
         prisma.payout.findMany({
@@ -193,14 +183,14 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
 
     const paidInMonth = payouts
       .filter(
-        (p) => p.status !== 'FAILED' && p.requestedAt >= range.from && p.requestedAt <= range.to,
+        (p) => p.status !== 'FAILED' && p.requestedAt >= range.from && p.requestedAt < range.to,
       )
       .reduce((sum, p) => sum + p.netPaise, 0);
 
     // Daily series across the whole month.
     const days = new Map<string, { grossPaise: number; netPaise: number; feesPaise: number }>();
-    for (let d = new Date(range.from); d <= range.to && d.getMonth() === range.from.getMonth(); d.setDate(d.getDate() + 1)) {
-      days.set(dayKey(d), { grossPaise: 0, netPaise: 0, feesPaise: 0 });
+    for (let t = range.from.getTime(); t < range.monthEnd.getTime(); t += 86400000) {
+      days.set(dayKey(new Date(t)), { grossPaise: 0, netPaise: 0, feesPaise: 0 });
     }
     for (const item of earning) {
       if (!item.deliveredAt) continue;
@@ -335,9 +325,10 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         tcsCollectedPaise: fyFees.tcsPaise,
         // Withheld TDS is deposited with the payout that carried it.
         tdsDepositedPaise: payouts
-          .filter((p) => p.status === 'PAID' && p.requestedAt >= fy.from && p.requestedAt <= fy.to)
+          .filter((p) => p.status === 'PAID' && p.requestedAt >= fy.from && p.requestedAt < fy.to)
           .reduce((sum, p) => sum + p.tdsPaise, 0),
       },
+      period: periodWindow(range),
       recentPayouts: payouts.slice(0, 5).map(toPayoutRow),
       methods: methods.map(toMethodRow),
       insights,
@@ -538,7 +529,7 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
       where: {
         sellerId,
         status: 'DELIVERED',
-        deliveredAt: { gte: range.from, lte: range.to },
+        deliveredAt: { gte: range.from, lt: range.to },
       },
       orderBy: { deliveredAt: 'asc' },
       select: {
@@ -608,7 +599,7 @@ sellerPayoutsRouter.get('/tds-report', async (req, res, next) => {
     const sellerId = req.seller!.id;
     const fy = financialYear(new Date());
     const payouts = await prisma.payout.findMany({
-      where: { sellerId, requestedAt: { gte: fy.from, lte: fy.to } },
+      where: { sellerId, requestedAt: { gte: fy.from, lt: fy.to } },
       orderBy: { requestedAt: 'asc' },
     });
 
@@ -630,8 +621,8 @@ sellerPayoutsRouter.get('/tds-report', async (req, res, next) => {
         [
           p.reference,
           p.requestedAt.toISOString(),
-          p.periodFrom.toISOString().slice(0, 10),
-          p.periodTo.toISOString().slice(0, 10),
+          dayKey(p.periodFrom),
+          dayKey(p.periodTo),
           (p.grossPaise / 100).toFixed(2),
           (p.tdsPaise / 100).toFixed(2),
           (p.tcsPaise / 100).toFixed(2),

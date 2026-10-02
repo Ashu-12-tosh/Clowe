@@ -21,6 +21,8 @@ import {
   type TransactionStatus,
   type TransactionTab,
   type TransactionType,
+  istDayKey,
+  istStartOfDay,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -393,8 +395,9 @@ adminPaymentsRouter.get('/', async (req, res, next) => {
 // Summary
 // ---------------------------------------------------------------------------
 
+/** The Indian calendar date, whatever timezone the server runs in. */
 function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return istDayKey(d);
 }
 
 adminPaymentsRouter.get('/summary', async (req, res, next) => {
@@ -404,7 +407,7 @@ adminPaymentsRouter.get('/summary', async (req, res, next) => {
       .parse(req.query);
 
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfToday = istStartOfDay(now);
     const from = new Date(startOfToday.getTime() - (days - 1) * 86400000);
     const previousFrom = new Date(from.getTime() - days * 86400000);
     const settings = await getSettings();
@@ -854,7 +857,7 @@ adminPaymentsRouter.post('/reconcile', async (_req, res, next) => {
           label: RECONCILE_CHECK_LABELS.STUCK_PROCESSING_PAYOUT,
           reference: p.reference,
           orderNumber: null,
-          detail: `${p.seller.shopName}: requested ${p.requestedAt.toISOString().slice(0, 10)}, still processing`,
+          detail: `${p.seller.shopName}: requested ${dayKey(p.requestedAt)}, still processing`,
           differencePaise: p.netPaise,
         });
       }
@@ -1079,8 +1082,8 @@ adminPaymentsRouter.get('/settlement/export', async (req, res, next) => {
           p.processedAt?.toISOString() ?? '',
           p.seller.shopName,
           p.seller.user.phone,
-          p.periodFrom.toISOString().slice(0, 10),
-          p.periodTo.toISOString().slice(0, 10),
+          dayKey(p.periodFrom),
+          dayKey(p.periodTo),
           p._count.items,
           (p.grossPaise / 100).toFixed(2),
           (p.commissionPaise / 100).toFixed(2),

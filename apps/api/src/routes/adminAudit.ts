@@ -14,6 +14,7 @@ import {
   type AuditSummary,
   type AuditTab,
   type CspReportRow,
+  istDayKey,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -184,8 +185,9 @@ function changePercent(current: number, previous: number): number | null {
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
+/** The Indian calendar date, whatever timezone the server runs in. */
 function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return istDayKey(d);
 }
 
 const ACTOR_GROUPS: { key: string; label: string; roles: string[] }[] = [

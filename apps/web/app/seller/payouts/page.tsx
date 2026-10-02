@@ -10,7 +10,7 @@ import {
   type SellerPayoutRow,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
-import { formatPaise } from '@/lib/format';
+import { formatPaise, istRange } from '@/lib/format';
 import { DonutChart, MultiLineChart } from '@/components/charts/Charts';
 import {
   AddMethodModal,
@@ -52,11 +52,12 @@ function monthOptions(): string[] {
   return out;
 }
 
-function Delta({ change }: { change: number | null }) {
-  if (change === null) return <span className="text-gray-400">no prior month</span>;
+/** A change, with the days it is measured against spelled out. */
+function Delta({ change, against }: { change: number | null; against: string }) {
+  if (change === null) return <span className="text-gray-400">nothing to compare in {against}</span>;
   return (
     <span className={change >= 0 ? 'text-green-600' : 'text-red-600'}>
-      {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% vs last month
+      {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% vs {against}
     </span>
   );
 }
@@ -207,6 +208,8 @@ export default function SellerPayoutsPage() {
   }
 
   const k = overview?.kpis;
+  // The same days of last month (or, for a finished month, all of the one before).
+  const against = overview ? istRange(overview.period.previousFrom, overview.period.previousTo) : 'last month';
   const canRequest =
     !!k &&
     !!overview &&
@@ -319,13 +322,13 @@ export default function SellerPayoutsPage() {
               icon="🧾"
               label={`Gross sales (${monthLabel(month).split(' ')[0]})`}
               value={money(k.monthGrossPaise)}
-              footer={<Delta change={k.monthGrossChangePercent} />}
+              footer={<Delta against={against} change={k.monthGrossChangePercent} />}
             />
             <KpiCard
               icon="💰"
               label="Net earnings"
               value={money(k.monthNetPaise)}
-              footer={<Delta change={k.monthNetChangePercent} />}
+              footer={<Delta against={against} change={k.monthNetChangePercent} />}
             />
             <KpiCard
               icon="🏦"

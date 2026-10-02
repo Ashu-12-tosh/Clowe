@@ -20,7 +20,8 @@ export interface OverviewMetric {
 }
 
 export interface AdminOverview {
-  range: { key: OverviewRange; label: string; from: string; to: string };
+  /** The range, and the span it is compared with (same span of the day/month/year before, or the days just before). */
+  range: { key: OverviewRange; label: string; from: string; to: string; previousFrom: string; previousTo: string };
   kpis: {
     gmvPaise: OverviewMetric;
     orders: OverviewMetric;

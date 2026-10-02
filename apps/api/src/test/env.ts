@@ -16,6 +16,10 @@ export const TEST_DATABASE_URL =
 
 process.env.DATABASE_URL = TEST_DATABASE_URL;
 process.env.NODE_ENV = 'test';
+// Run on UTC, as a server does. On a developer machine in India the server's
+// own calendar is the Indian one, which would hide every bug the Indian-
+// calendar helpers exist to prevent.
+process.env.TZ = 'UTC';
 // Long enough to satisfy the env schema; never used to sign anything real.
 process.env.JWT_ACCESS_SECRET ??= 'integration-test-secret-not-a-real-key';
 // Keep every provider on its mock so a test run cannot spend money or send SMS.

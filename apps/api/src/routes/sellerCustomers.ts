@@ -16,6 +16,8 @@ import {
   type SellerCustomerPage,
   type SellerCustomerRow,
   type SellerCustomerSummary,
+  monthToDateIST,
+  periodWindow,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -269,9 +271,8 @@ const FREQUENCY_BUCKETS: { key: string; label: string; test: (n: number) => bool
 sellerCustomersRouter.get('/summary', async (req, res, next) => {
   try {
     const { rows, thresholdPaise } = await loadRows(req.seller!.id, listQuery.parse({}));
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    // This month so far against the same days of last month, by Indian time.
+    const period = monthToDateIST(new Date());
 
     const firstOrderIn = (from: Date, to?: Date) =>
       rows.filter((r) => {
@@ -279,7 +280,7 @@ sellerCustomersRouter.get('/summary', async (req, res, next) => {
         return at >= from && (!to || at < to);
       }).length;
 
-    const newThisMonth = firstOrderIn(monthStart);
+    const newThisMonth = firstOrderIn(period.from);
     const repeat = rows.filter((r) => r.orderCount >= 2).length;
     const orders = rows.reduce((sum, r) => sum + r.orderCount, 0);
     const ltvTotal = rows.reduce((sum, r) => sum + r.ltvPaise, 0);
@@ -334,12 +335,14 @@ sellerCustomersRouter.get('/summary', async (req, res, next) => {
       });
     }
 
+    const newSameDaysLastMonth = firstOrderIn(period.previousFrom, period.previousTo);
     const body: SellerCustomerSummary = {
+      period: periodWindow(period),
       kpis: {
         total: rows.length,
-        totalChangePercent: changePercent(newThisMonth, firstOrderIn(prevMonthStart, monthStart)),
+        totalChangePercent: changePercent(newThisMonth, newSameDaysLastMonth),
         newThisMonth,
-        newChangePercent: changePercent(newThisMonth, firstOrderIn(prevMonthStart, monthStart)),
+        newChangePercent: changePercent(newThisMonth, newSameDaysLastMonth),
         repeat,
         repeatRate: rows.length > 0 ? Math.round((repeat / rows.length) * 1000) / 10 : 0,
         avgLtvPaise: rows.length > 0 ? Math.round(ltvTotal / rows.length) : 0,

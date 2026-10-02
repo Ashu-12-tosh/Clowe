@@ -5,6 +5,7 @@ import {
   notificationCategory,
   type NotificationCategory,
   type NotificationList,
+  istStartOfDay,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -49,8 +50,7 @@ notificationsRouter.get('/', async (req, res, next) => {
     );
 
     const now = Date.now();
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
+    const startOfToday = istStartOfDay(new Date());
     const weekAgo = now - 7 * 24 * 3600 * 1000;
 
     const byCategory = Object.fromEntries(

@@ -1,3 +1,5 @@
+import type { PeriodWindow } from './istPeriods';
+
 // ---------------------------------------------------------------------------
 // Seller CRM
 //
@@ -101,6 +103,8 @@ export interface SellerCustomerDetail extends SellerCustomerRow {
 }
 
 export interface SellerCustomerSummary {
+  /** This month so far, and the same days of last month that every change compares with. */
+  period: PeriodWindow;
   kpis: {
     total: number;
     totalChangePercent: number | null;

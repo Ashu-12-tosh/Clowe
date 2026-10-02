@@ -9,6 +9,8 @@ import {
   type SellerTryOnOverview,
   type SellerTryOnProductRow,
   type SellerTryOnRecentRow,
+  istDayKey,
+  istStartOfDay,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -22,14 +24,13 @@ sellerTryonRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 /** Hard cap on rows pulled into memory for the aggregates. */
 const ROW_CAP = 10000;
 
+// Days by the Indian calendar, whatever timezone the server runs in.
 function startOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return istStartOfDay(d);
 }
 
 function dayKey(d: Date): string {
-  const m = `${d.getMonth() + 1}`.padStart(2, '0');
-  const day = `${d.getDate()}`.padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
+  return istDayKey(d);
 }
 
 function metric(value: number, previous: number): SellerTryOnMetric {
@@ -40,10 +41,7 @@ function metric(value: number, previous: number): SellerTryOnMetric {
 
 /** TR-20260901-AB12 — stable, readable, and free of shopper identity. */
 function requestRef(id: string, createdAt: Date): string {
-  const y = createdAt.getFullYear();
-  const m = `${createdAt.getMonth() + 1}`.padStart(2, '0');
-  const d = `${createdAt.getDate()}`.padStart(2, '0');
-  return `TR-${y}${m}${d}-${id.slice(-4).toUpperCase()}`;
+  return `TR-${istDayKey(createdAt).replace(/-/g, '')}-${id.slice(-4).toUpperCase()}`;
 }
 
 // GET /api/seller/tryon?days=30 — how shoppers try this seller's products on.
@@ -133,8 +131,7 @@ sellerTryonRouter.get('/', async (req, res, next) => {
     // Daily series over the whole window, zero-filled.
     const trendMap = new Map<string, { total: number; success: number }>();
     for (let i = 0; i < days; i += 1) {
-      const d = new Date(from);
-      d.setDate(d.getDate() + i);
+      const d = new Date(from.getTime() + i * 86400000);
       trendMap.set(dayKey(d), { total: 0, success: 0 });
     }
     for (const r of rows) {

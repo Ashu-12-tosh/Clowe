@@ -1,3 +1,4 @@
+import type { PeriodWindow } from './istPeriods';
 import { z } from 'zod';
 
 // ---------------------------------------------------------------------------
@@ -95,6 +96,8 @@ export interface SellerPromotionPage {
 }
 
 export interface SellerPromotionSummary {
+  /** This month so far, and the same days of last month that every change compares with. */
+  period: PeriodWindow;
   kpis: {
     active: number;
     newThisMonth: number;

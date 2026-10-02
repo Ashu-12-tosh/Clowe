@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { Router } from 'express';
-import { complaintCreateSchema, type ComplaintRow } from '@clowe/shared';
+import { complaintCreateSchema, istDate, type ComplaintRow } from '@clowe/shared';
 import {
   SLA_RESPONSE_HOURS,
   customerRatingSchema,
@@ -17,7 +17,7 @@ complaintsRouter.use(requireAuth);
 /** Human-readable unique complaint id, e.g. CMP-2026-48213. */
 async function generateComplaintId(): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt++) {
-    const candidate = `CMP-${new Date().getFullYear()}-${randomInt(0, 100000)
+    const candidate = `CMP-${istDate(new Date()).year}-${randomInt(0, 100000)
       .toString()
       .padStart(5, '0')}`;
     const exists = await prisma.complaint.findUnique({ where: { complaintId: candidate } });

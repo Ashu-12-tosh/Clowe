@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { PeriodWindow } from './istPeriods';
 import type { SellerKycSummary } from './kyc';
 
 // ---------------------------------------------------------------------------
@@ -132,6 +133,8 @@ export interface AdminSellerDetail extends AdminSellerListRow {
 }
 
 export interface AdminSellerSummary {
+  /** This month so far, and the same days of last month that every change compares with. */
+  period: PeriodWindow;
   kpis: {
     total: number;
     totalChangePercent: number | null;

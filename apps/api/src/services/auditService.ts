@@ -1,4 +1,5 @@
 import type { Request } from 'express';
+import { istDayKey, istStartOfDay } from '@clowe/shared';
 import { prisma } from '../db';
 
 // ---------------------------------------------------------------------------
@@ -33,10 +34,7 @@ export interface AuditInput {
 
 /** LOG-YYYYMMDD-XXXXXX, unique and sortable by eye. */
 function reference(now: Date, sequence: number): string {
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `LOG-${y}${m}${d}-${String(sequence).padStart(6, '0')}`;
+  return `LOG-${istDayKey(now).replace(/-/g, '')}-${String(sequence).padStart(6, '0')}`;
 }
 
 /** Coarse device bucket from the User-Agent. */
@@ -65,7 +63,8 @@ export function ipFrom(req: Request): string | null {
  */
 export async function recordAudit(input: AuditInput): Promise<void> {
   const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // Numbered per Indian calendar day, like the date in the reference.
+  const startOfDay = istStartOfDay(now);
 
   const data = {
     actorId: input.actorId ?? null,

@@ -25,6 +25,9 @@ import {
   type SupportDeskSummary,
   type SupportTicketDeskDetail,
   type SupportTicketDeskRow,
+  istDayKey,
+  monthToDateIST,
+  periodWindow,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -221,8 +224,9 @@ function changePercent(current: number, previous: number): number | null {
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
+/** The Indian calendar date, whatever timezone the server runs in. */
 function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return istDayKey(d);
 }
 
 adminSupportDeskRouter.get('/summary', async (req, res, next) => {
@@ -231,8 +235,8 @@ adminSupportDeskRouter.get('/summary', async (req, res, next) => {
     const rows = await loadRows(query);
 
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    // This month so far against the same days of last month, by Indian time.
+    const period = monthToDateIST(now);
     const createdIn = (from: Date, to?: Date) =>
       rows.filter((r) => {
         const at = new Date(r.createdAt);
@@ -311,11 +315,12 @@ adminSupportDeskRouter.get('/summary', async (req, res, next) => {
     });
 
     const body: SupportDeskSummary = {
+      period: periodWindow(period),
       kpis: {
         total: rows.length,
         totalChangePercent: changePercent(
-          createdIn(monthStart),
-          createdIn(prevMonthStart, monthStart),
+          createdIn(period.from),
+          createdIn(period.previousFrom, period.previousTo),
         ),
         open: byStatus.get('OPEN') ?? 0,
         inProgress: byStatus.get('IN_PROGRESS') ?? 0,

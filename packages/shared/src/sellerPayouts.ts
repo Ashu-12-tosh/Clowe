@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { KYC_REASON_LABELS, type KycCheckState, type KycReason } from './kyc';
+import type { PeriodWindow } from './istPeriods';
 
 // ---------------------------------------------------------------------------
 // Seller payouts
@@ -112,6 +113,11 @@ export interface SellerPayoutOverview {
     /** Share of finished payouts that succeeded, 0–100. */
     successRate: number;
   };
+  /**
+   * The selected month and what its changes compare with: the whole month
+   * before, or for the month still running, the same days of the month before.
+   */
+  period: PeriodWindow;
   /** Daily series over the selected month. */
   trend: { date: string; grossPaise: number; netPaise: number; feesPaise: number }[];
   /** Where the month's gross came from. */

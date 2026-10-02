@@ -4,15 +4,15 @@ import { sendToUserSafe } from './messaging';
 import { paymentProvider } from './payments';
 import { processRefund } from './refundService';
 import { postReturnReversal } from './sellerLedgerService';
-import type { SellerReturnActionInput } from '@clowe/shared';
+import { istDate, istDayStart, type SellerReturnActionInput } from '@clowe/shared';
 
 /**
  * Next return-authorisation number, e.g. RMA-2026-000042. Numbering restarts
  * each year; the unique index is the real guard, so a clash just tries again.
  */
 export async function nextRmaNumber(): Promise<string> {
-  const year = new Date().getFullYear();
-  const startOfYear = new Date(year, 0, 1);
+  const year = istDate(new Date()).year;
+  const startOfYear = istDayStart(year, 0);
   const soFar = await prisma.return.count({ where: { createdAt: { gte: startOfYear } } });
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const candidate = `RMA-${year}-${String(soFar + 1 + attempt).padStart(6, '0')}`;

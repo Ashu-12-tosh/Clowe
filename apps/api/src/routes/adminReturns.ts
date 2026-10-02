@@ -27,6 +27,8 @@ import {
   type ReturnResolutionValue,
   type ReturnRiskRow,
   type ReturnStage,
+  istDayKey,
+  istStartOfDay,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -278,8 +280,9 @@ adminReturnsRouter.get('/', async (req, res, next) => {
 // Summary
 // ---------------------------------------------------------------------------
 
+/** The Indian calendar date, whatever timezone the server runs in. */
 function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return istDayKey(d);
 }
 
 adminReturnsRouter.get('/summary', async (req, res, next) => {
@@ -288,7 +291,7 @@ adminReturnsRouter.get('/summary', async (req, res, next) => {
       .object({ days: z.coerce.number().int().min(1).max(365).default(30) })
       .parse(req.query);
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfToday = istStartOfDay(now);
     const from = new Date(startOfToday.getTime() - (days - 1) * 86400000);
     const previousFrom = new Date(from.getTime() - days * 86400000);
 

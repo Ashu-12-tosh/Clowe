@@ -22,6 +22,10 @@ import {
   type AdminSellerStatus,
   type AdminSellerSummary,
   type KycStatus,
+  istDayKey,
+  istMonthStart,
+  monthToDateIST,
+  periodWindow,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -73,9 +77,7 @@ interface SalesRollup {
 }
 
 async function salesBySeller(): Promise<Map<string, SalesRollup>> {
-  const monthStart = new Date();
-  monthStart.setDate(1);
-  monthStart.setHours(0, 0, 0, 0);
+  const monthStart = istMonthStart(new Date());
 
   const items = await prisma.orderItem.findMany({
     where: { order: { status: { not: 'PLACED' } } },
@@ -305,16 +307,16 @@ function changePercent(current: number, previous: number): number | null {
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
+/** The Indian calendar date, whatever timezone the server runs in. */
 function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return istDayKey(d);
 }
 
 adminSellersRouter.get('/summary', async (req, res, next) => {
   try {
     const rows = await loadRows(listQuery.parse({}));
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const period = monthToDateIST(now);
 
     const joinedIn = (from: Date, to?: Date) =>
       rows.filter((r) => {
@@ -325,9 +327,7 @@ adminSellersRouter.get('/summary', async (req, res, next) => {
     // Growth series over the last 30 days.
     const growth = new Map<string, number>();
     for (let i = GROWTH_DAYS - 1; i >= 0; i -= 1) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      growth.set(dayKey(d), 0);
+      growth.set(dayKey(new Date(now.getTime() - i * 86400000)), 0);
     }
     for (const row of rows) {
       const key = dayKey(new Date(row.joinedAt));
@@ -358,9 +358,10 @@ adminSellersRouter.get('/summary', async (req, res, next) => {
     const body: AdminSellerSummary = {
       kpis: {
         total: rows.length,
+        // Sign-ups this month so far against the same days of last month.
         totalChangePercent: changePercent(
-          joinedIn(monthStart),
-          joinedIn(prevMonthStart, monthStart),
+          joinedIn(period.from),
+          joinedIn(period.previousFrom, period.previousTo),
         ),
         active: statusCounts.get('APPROVED') ?? 0,
         verified: kycCounts.get('VERIFIED') ?? 0,
@@ -369,6 +370,7 @@ adminSellersRouter.get('/summary', async (req, res, next) => {
         suspended: statusCounts.get('SUSPENDED') ?? 0,
         banned: statusCounts.get('BANNED') ?? 0,
       },
+      period: periodWindow(period),
       growth: [...growth.entries()].map(([date, count]) => ({ date, count })),
       verification: KYC_STATUSES.map((key) => ({
         key,

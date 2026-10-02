@@ -8,6 +8,10 @@ import {
   type SellerDashRange,
   type SellerDashboard,
   type SellerMetric,
+  istDayKey,
+  istMonthStart,
+  istStartOfDay,
+  periodToDateIST,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -119,27 +123,28 @@ function healthMetric(input: {
 // Range helpers
 // ---------------------------------------------------------------------------
 
-function rangeBounds(key: SellerDashRange): { from: Date; to: Date; previousFrom: Date } {
+function rangeBounds(key: SellerDashRange): { from: Date; to: Date; previousFrom: Date; previousTo: Date } {
   const now = new Date();
   let from: Date;
+  // Calendar ranges by the Indian clock, against the same span of the one
+  // before (today so far vs yesterday to this time, 1–4 Oct vs 1–4 Sep).
+  // Rolling ranges against the same number of days just before.
   switch (key) {
     case 'TODAY':
-      from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      break;
+      return periodToDateIST('day', now);
+    case 'YEAR':
+      return periodToDateIST('year', now);
     case 'WEEK':
       from = new Date(now.getTime() - 6 * 86400000);
       break;
     case 'QUARTER':
       from = new Date(now.getTime() - 89 * 86400000);
       break;
-    case 'YEAR':
-      from = new Date(now.getFullYear(), 0, 1);
-      break;
     default:
-      from = new Date(now.getFullYear(), now.getMonth(), 1);
+      return periodToDateIST('month', now);
   }
   const span = now.getTime() - from.getTime();
-  return { from, to: now, previousFrom: new Date(from.getTime() - span) };
+  return { from, to: now, previousFrom: new Date(from.getTime() - span), previousTo: from };
 }
 
 function metric(value: number, previous: number): SellerMetric {
@@ -150,12 +155,13 @@ function metric(value: number, previous: number): SellerMetric {
   };
 }
 
+/** The Indian calendar date, whatever timezone the server runs in. */
 function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return istDayKey(d);
 }
 
 function startOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return istStartOfDay(d);
 }
 
 /**
@@ -200,7 +206,7 @@ sellerDashboardRouter.get('/', async (req, res, next) => {
     const seller = req.seller!;
     const sellerId = seller.id;
     const { range, granularity } = dashQuery.parse(req.query);
-    const { from, to, previousFrom } = rangeBounds(range);
+    const { from, to, previousFrom, previousTo } = rangeBounds(range);
     const settings = await getSettings();
 
     const [
@@ -241,7 +247,7 @@ sellerDashboardRouter.get('/', async (req, res, next) => {
         take: ITEM_CAP,
       }),
       prisma.orderItem.findMany({
-        where: { sellerId, order: { createdAt: { gte: previousFrom, lt: from } } },
+        where: { sellerId, order: { createdAt: { gte: previousFrom, lt: previousTo } } },
         select: {
           orderId: true,
           status: true,
@@ -459,7 +465,7 @@ sellerDashboardRouter.get('/', async (req, res, next) => {
         : null;
 
     // --- Payouts -----------------------------------------------------------
-    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const startOfMonth = istMonthStart(new Date());
     const thisMonthPaise = paidPayouts
       .filter((p) => p.processedAt && p.processedAt >= startOfMonth)
       .reduce((sum, p) => sum + p.netPaise, 0);
@@ -510,6 +516,8 @@ sellerDashboardRouter.get('/', async (req, res, next) => {
         label: SELLER_DASH_RANGE_LABELS[range],
         from: from.toISOString(),
         to: to.toISOString(),
+        previousFrom: previousFrom.toISOString(),
+        previousTo: previousTo.toISOString(),
       },
       store: {
         shopName: profile?.shopName ?? 'Your shop',

@@ -1,4 +1,5 @@
 import type { Prisma, StockMovementType, Warehouse } from '@prisma/client';
+import { istDate } from '@clowe/shared';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 
@@ -410,7 +411,7 @@ export async function setVariantTotal(
  * is handled by the caller retrying on a unique-constraint clash.
  */
 export async function nextDocumentNumber(prefix: 'PO' | 'TRF', attempt = 0): Promise<string> {
-  const year = new Date().getFullYear();
+  const year = istDate(new Date()).year;
   const count =
     prefix === 'PO' ? await prisma.purchaseOrder.count() : await prisma.stockTransfer.count();
   return `${prefix}-${year}-${String(count + 1 + attempt).padStart(6, '0')}`;

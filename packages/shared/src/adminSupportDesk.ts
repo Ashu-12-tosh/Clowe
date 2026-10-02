@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { PeriodWindow } from './istPeriods';
 import { COMPLAINT_CATEGORIES } from './complaints';
 import { httpUrlSchema } from './url';
 
@@ -151,6 +152,8 @@ export interface SupportAgent {
 }
 
 export interface SupportDeskSummary {
+  /** This month so far, and the same days of last month that every change compares with. */
+  period: PeriodWindow;
   kpis: {
     total: number;
     totalChangePercent: number | null;

@@ -47,7 +47,7 @@ function addDays(from: Date, days: number): Date {
 
 /** "27 May" — the short form used across the delivery UI. */
 function shortDate(date: Date): string {
-  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
 }
 
 function etaLabel(method: DeliveryMethod, from: Date, to: Date): string {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   HEALTH_GRADE_LABELS,
@@ -16,7 +16,7 @@ import {
   type SellerMetric,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
-import { formatPaise } from '@/lib/format';
+import { formatPaise, istRange } from '@/lib/format';
 import { DonutChart, MultiLineChart } from '@/components/charts/Charts';
 import { useSeller } from '@/components/seller/SellerContext';
 import ReferralCard from '@/components/seller/ReferralCard';
@@ -192,20 +192,9 @@ export default function SellerDashboardPage() {
 
   const k = data?.kpis;
   const rangeLabel = data ? SELLER_DASH_RANGE_LABELS[data.range.key].toLowerCase() : '';
-  const previousLabel = useMemo(() => {
-    switch (range) {
-      case 'TODAY':
-        return 'yesterday';
-      case 'WEEK':
-        return 'previous 7 days';
-      case 'QUARTER':
-        return 'previous 90 days';
-      case 'YEAR':
-        return 'last year';
-      default:
-        return 'last month';
-    }
-  }, [range]);
+  // The span each range is compared with, named: "1–4 Sep" for this month so
+  // far, yesterday's date for today, the days just before for a rolling range.
+  const previousLabel = data ? istRange(data.range.previousFrom, data.range.previousTo) : 'the period before';
 
   return (
     <div className="pb-10">

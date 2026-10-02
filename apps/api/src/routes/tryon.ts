@@ -8,6 +8,8 @@ import {
   type TryOnHistoryRow,
   type TryOnQuota,
   type TryOnResult,
+  istMonthStart,
+  istStartOfDay,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -27,14 +29,14 @@ import { categoryRulesFor } from '../services/categoryRules';
 export const tryonRouter = Router();
 tryonRouter.use(requireAuth);
 
+// The daily limit and the monthly budget reset at midnight in India, not on
+// the server's clock.
 function startOfToday(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return istStartOfDay(new Date());
 }
 
 function startOfMonth(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1);
+  return istMonthStart(new Date());
 }
 
 /** Coarse device bucket from the User-Agent — powers the admin monitor split. */

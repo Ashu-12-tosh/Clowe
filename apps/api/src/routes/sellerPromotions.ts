@@ -13,6 +13,8 @@ import {
   type SellerPromotionPage,
   type SellerPromotionRow,
   type SellerPromotionSummary,
+  monthToDateIST,
+  periodWindow,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -168,20 +170,19 @@ function changePercent(current: number, previous: number): number | null {
 sellerPromotionsRouter.get('/summary', async (req, res, next) => {
   try {
     const sellerId = req.seller!.id;
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    // This month so far against the same days of last month, by Indian time.
+    const period = monthToDateIST(new Date());
 
     const [rows, redemptions] = await Promise.all([
       loadRows(sellerId),
       prisma.promotionRedemption.findMany({
-        where: { promotion: { sellerId }, createdAt: { gte: prevMonthStart } },
+        where: { promotion: { sellerId }, createdAt: { gte: period.previousFrom } },
         select: { grossPaise: true, discountPaise: true, createdAt: true },
       }),
     ]);
 
-    const thisMonth = redemptions.filter((r) => r.createdAt >= monthStart);
-    const lastMonth = redemptions.filter((r) => r.createdAt < monthStart);
+    const thisMonth = redemptions.filter((r) => r.createdAt >= period.from);
+    const lastMonth = redemptions.filter((r) => r.createdAt < period.previousTo);
     const sum = (list: typeof redemptions, key: 'grossPaise' | 'discountPaise') =>
       list.reduce((total, r) => total + r[key], 0);
 
@@ -199,9 +200,10 @@ sellerPromotionsRouter.get('/summary', async (req, res, next) => {
     ) as Record<PromotionTab, number>;
 
     const body: SellerPromotionSummary = {
+      period: periodWindow(period),
       kpis: {
         active: rows.filter((r) => r.status === 'RUNNING').length,
-        newThisMonth: rows.filter((r) => new Date(r.createdAt) >= monthStart).length,
+        newThisMonth: rows.filter((r) => new Date(r.createdAt) >= period.from).length,
         redemptions: rows.reduce((total, r) => total + r.usedCount, 0),
         redemptionsChangePercent: changePercent(thisMonth.length, lastMonth.length),
         discountGivenPaise,
