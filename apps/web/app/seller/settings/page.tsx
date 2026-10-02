@@ -36,7 +36,6 @@ const TAB_ICONS: Record<StoreTab, string> = {
   SHIPPING: '🚚',
   RETURNS: '↩',
   HOURS: '🕐',
-  INTEGRATIONS: '🔌',
 };
 
 function Section({
@@ -155,7 +154,8 @@ export default function SellerStoreSettingsPage() {
           storePhone: form.storePhone ?? '',
           primaryCategoryId: form.primaryCategoryId ?? '',
           highlights: form.highlights,
-          socialLinks: form.socialLinks,
+          // Social links are no longer edited here: not sending them leaves
+          // what is stored untouched.
         },
       },
       BUSINESS: {
@@ -246,7 +246,7 @@ export default function SellerStoreSettingsPage() {
   }
 
   const health = data.health;
-  const savable = tab !== 'BANK' && tab !== 'INTEGRATIONS';
+  const savable = tab !== 'BANK';
 
   return (
     <div className="pb-10">
@@ -553,23 +553,6 @@ export default function SellerStoreSettingsPage() {
                   {form.highlights.length === 0 && (
                     <p className="text-xs text-gray-400">None yet — add a few from the presets.</p>
                   )}
-                </div>
-              </Section>
-
-              <Section title="Social links" subtitle="Shown on your store page">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {(['website', 'instagram', 'facebook', 'youtube'] as const).map((key) => (
-                    <Field key={key} label={key.charAt(0).toUpperCase() + key.slice(1)}>
-                      <input
-                        value={form.socialLinks[key]}
-                        onChange={(e) =>
-                          patch({ socialLinks: { ...form.socialLinks, [key]: e.target.value } })
-                        }
-                        placeholder={`https://${key === 'website' ? 'yourstore.com' : `${key}.com/yourstore`}`}
-                        className={field}
-                      />
-                    </Field>
-                  ))}
                 </div>
               </Section>
             </>
@@ -1019,38 +1002,6 @@ export default function SellerStoreSettingsPage() {
             </>
           )}
 
-          {/* --- Integrations -------------------------------------------- */}
-          {tab === 'INTEGRATIONS' && (
-            <Section
-              title="Platform integrations"
-              subtitle="Services Clowe runs on your behalf — nothing to connect per shop"
-            >
-              <ul className="divide-y divide-gray-50">
-                {data.integrations.map((i) => (
-                  <li key={i.key} className="flex items-start justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-ink-900">
-                        {i.purpose}
-                        <span className="ml-1.5 font-mono text-[11px] font-normal text-gray-400">
-                          {i.name}
-                        </span>
-                      </p>
-                      <p className="text-[11px] text-gray-500">{i.detail}</p>
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                        i.status === 'LIVE'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-yellow-100 text-yellow-700'
-                      }`}
-                    >
-                      {i.status === 'LIVE' ? 'Live' : 'Sandbox'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-          )}
         </div>
 
         {/* --- Sidebar --------------------------------------------------- */}

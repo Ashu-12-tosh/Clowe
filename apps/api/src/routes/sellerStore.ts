@@ -8,7 +8,6 @@ import {
   storeProfileSchema,
   storeReturnsSchema,
   storeShippingSchema,
-  type PlatformIntegration,
   type SellerStoreHealth,
   type SellerStoreOverview,
   type SellerStoreSettings,
@@ -22,11 +21,6 @@ import { getSettings } from '../services/settingsService';
 import { env } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { paymentProvider } from '../services/payments';
-import { shippingProvider } from '../services/shipping';
-import { payoutProvider } from '../services/payouts';
-import { aiProvider } from '../services/ai';
-import { tryOnProvider } from '../services/tryon';
 import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerStoreRouter = Router();
@@ -249,65 +243,8 @@ function storeHealth(s: SellerStoreSettings): SellerStoreHealth {
   };
 }
 
-/**
- * What the marketplace is wired to. Read-only: these are platform-level
- * choices, not something a seller connects for their own shop.
- */
-function platformIntegrations(): PlatformIntegration[] {
-  const live = (name: string) => (name === 'mock' ? 'SANDBOX' : 'LIVE');
-  return [
-    {
-      key: 'payments',
-      name: paymentProvider.name,
-      purpose: 'Customer payments at checkout',
-      status: live(paymentProvider.name),
-      detail:
-        paymentProvider.name === 'mock'
-          ? 'Sandbox gateway — payments are simulated in this environment'
-          : 'Live gateway handling UPI, cards and netbanking',
-    },
-    {
-      key: 'shipping',
-      name: shippingProvider.name,
-      purpose: 'Shipment booking and AWB generation',
-      status: live(shippingProvider.name),
-      detail: `Couriers available: ${shippingProvider.couriers.join(', ')}`,
-    },
-    {
-      key: 'payouts',
-      name: payoutProvider.name,
-      purpose: 'Transferring your earnings to the bank',
-      status: live(payoutProvider.name),
-      detail:
-        payoutProvider.name === 'mock'
-          ? 'Sandbox payouts — transfers settle instantly with a test UTR'
-          : 'Live bank transfers with UTR tracking',
-    },
-    {
-      key: 'ai',
-      name: aiProvider.name,
-      purpose: 'Description writing and the seller assistant',
-      status: live(aiProvider.name),
-      detail:
-        aiProvider.name === 'mock'
-          ? 'Offline assistant grounded in the seller handbook'
-          : 'Live model answering from the seller handbook',
-    },
-    {
-      key: 'tryon',
-      name: tryOnProvider.name,
-      purpose: 'AI Try-On previews on your listings',
-      status: live(tryOnProvider.name),
-      detail:
-        tryOnProvider.name === 'mock'
-          ? 'Mock previews — no cost per run in this environment'
-          : 'Live try-on generation',
-    },
-  ];
-}
-
 // ---------------------------------------------------------------------------
-// GET / — settings, store strength and integrations in one call
+// GET / — settings and store strength in one call
 // ---------------------------------------------------------------------------
 
 sellerStoreRouter.get('/', async (req, res, next) => {
@@ -316,7 +253,6 @@ sellerStoreRouter.get('/', async (req, res, next) => {
     const body: SellerStoreOverview = {
       settings,
       health: storeHealth(settings),
-      integrations: platformIntegrations(),
     };
     res.json({ success: true, data: body });
   } catch (err) {
@@ -329,7 +265,7 @@ async function respond(sellerId: string, res: import('express').Response) {
   const settings = await toSettings(fresh);
   res.json({
     success: true,
-    data: { settings, health: storeHealth(settings), integrations: platformIntegrations() },
+    data: { settings, health: storeHealth(settings) },
   });
 }
 

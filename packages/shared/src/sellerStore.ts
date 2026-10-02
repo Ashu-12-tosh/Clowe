@@ -17,7 +17,6 @@ export const STORE_TABS = [
   'SHIPPING',
   'RETURNS',
   'HOURS',
-  'INTEGRATIONS',
 ] as const;
 export type StoreTab = (typeof STORE_TABS)[number];
 
@@ -28,7 +27,6 @@ export const STORE_TAB_LABELS: Record<StoreTab, string> = {
   SHIPPING: 'Shipping & pickup',
   RETURNS: 'Return policy',
   HOURS: 'Hours & vacation',
-  INTEGRATIONS: 'Integrations',
 };
 
 export const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -155,19 +153,9 @@ export interface SellerStoreHealth {
   items: StoreHealthItem[];
 }
 
-/** What the platform is wired to — read-only, set by the marketplace. */
-export interface PlatformIntegration {
-  key: string;
-  name: string;
-  purpose: string;
-  status: 'LIVE' | 'SANDBOX';
-  detail: string;
-}
-
 export interface SellerStoreOverview {
   settings: SellerStoreSettings;
   health: SellerStoreHealth;
-  integrations: PlatformIntegration[];
 }
 
 const socialUrl = httpUrlSchema(200).or(z.literal(''));
@@ -315,7 +303,6 @@ export interface PublicStore {
   state: string | null;
   primaryCategoryName: string | null;
   highlights: StoreHighlight[];
-  socialLinks: { website: string; instagram: string; facebook: string; youtube: string };
   workingHours: Record<Weekday, WorkingHours>;
   /** Set when the shop is on vacation — the storefront explains the pause. */
   vacationMessage: string | null;

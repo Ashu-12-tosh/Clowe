@@ -50,13 +50,7 @@ storesRouter.get('/:slug', async (req, res, next) => {
       state: seller.state,
       primaryCategoryName: category?.name ?? null,
       highlights: Array.isArray(seller.highlights) ? (seller.highlights as unknown as StoreHighlight[]) : [],
-      socialLinks: {
-        website: '',
-        instagram: '',
-        facebook: '',
-        youtube: '',
-        ...((seller.socialLinks as Record<string, string> | null) ?? {}),
-      },
+      // Sellers' social links are kept in their profile but no longer shown.
       workingHours: {
         ...DEFAULT_HOURS,
         ...((seller.workingHours as Partial<Record<Weekday, WorkingHours>> | null) ?? {}),

@@ -71,8 +71,6 @@ export default function StorePage({ params: paramsPromise }: { params: Promise<{
     );
   }
 
-  const socials = Object.entries(store.socialLinks).filter(([, url]) => !!safeHref(url));
-
   return (
     <main className="pb-16">
       {/* --- Banner --------------------------------------------------- */}
@@ -91,7 +89,9 @@ export default function StorePage({ params: paramsPromise }: { params: Promise<{
 
       <div className="mx-auto max-w-6xl px-4">
         {/* --- Identity ----------------------------------------------- */}
-        <div className="-mt-10 flex flex-wrap items-end gap-4">
+        {/* Only the logo overlaps the banner: the name sits below it, so a long
+            or two-line name never lands on a dark banner. */}
+        <div className="relative z-10 -mt-10">
           <span className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-ink-900 font-display text-xl font-bold text-white">
             {store.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -100,8 +100,8 @@ export default function StorePage({ params: paramsPromise }: { params: Promise<{
               store.shopName.slice(0, 2).toUpperCase()
             )}
           </span>
-          <div className="min-w-0 flex-1 pb-1">
-            <h1 className="flex flex-wrap items-center gap-2 font-display text-2xl font-bold text-ink-900">
+          <div className="mt-2 min-w-0">
+            <h1 className="flex flex-wrap items-center gap-2 break-words font-display text-2xl font-bold text-brand-600">
               {store.shopName}
               {store.isVerified && (
                 <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-semibold text-green-700">
@@ -276,20 +276,6 @@ export default function StorePage({ params: paramsPromise }: { params: Promise<{
               </ul>
             </section>
 
-            {socials.length > 0 && (
-              <section className="rounded-2xl border border-gray-100 bg-white p-4">
-                <h3 className="text-sm font-bold text-ink-900">Follow this store</h3>
-                <ul className="mt-2 space-y-1 text-xs">
-                  {socials.map(([key, url]) => (
-                    <li key={key}>
-                      <ExternalLink href={url} className="capitalize text-brand-600 hover:underline">
-                        {key} →
-                      </ExternalLink>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
           </aside>
         </div>
       </div>
