@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -104,7 +104,8 @@ function HowItWorks({ onClose }: { onClose: () => void }) {
   );
 }
 
-export default function TryOnPage({ params }: { params: { slug: string } }) {
+export default function TryOnPage({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {
+  const params = use(paramsPromise);
   const { slug } = params;
   const router = useRouter();
 

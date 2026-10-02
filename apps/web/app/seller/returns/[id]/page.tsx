@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { RETURN_REASON_LABELS, type ReturnReasonValue, type SellerReturnRow } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
@@ -15,7 +15,8 @@ const returnStatusStyles: Record<string, string> = {
   REFUNDED: 'bg-green-100 text-green-700',
 };
 
-export default function SellerReturnDetailPage({ params }: { params: { id: string } }) {
+export default function SellerReturnDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = use(paramsPromise);
   const [row, setRow] = useState<SellerReturnRow | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState('');

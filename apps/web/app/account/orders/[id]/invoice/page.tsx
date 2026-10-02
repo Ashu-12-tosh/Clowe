@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { OrderDetailView } from '@clowe/shared';
 import { api } from '@/lib/api';
@@ -20,7 +20,8 @@ function fmtDateTime(iso: string): string {
  * Printable invoice. "Download" is the browser's own print-to-PDF, so there is
  * no PDF dependency and the output matches what is on screen.
  */
-export default function InvoicePage({ params }: { params: { id: string } }) {
+export default function InvoicePage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = use(paramsPromise);
   const [order, setOrder] = useState<OrderDetailView | null>(null);
   const [notFound, setNotFound] = useState(false);
 

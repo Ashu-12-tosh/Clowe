@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { WEEKDAYS, WEEKDAY_LABELS, type PublicStore, type Weekday, safeHref } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
@@ -25,7 +25,8 @@ interface StoreProductsPage {
   }[];
 }
 
-export default function StorePage({ params }: { params: { slug: string } }) {
+export default function StorePage({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {
+  const params = use(paramsPromise);
   const [store, setStore] = useState<PublicStore | null>(null);
   const [products, setProducts] = useState<StoreProductsPage | null>(null);
   const [page, setPage] = useState(1);

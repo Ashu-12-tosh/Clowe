@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { use, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { CategoryNode, ProductDetail, ProductVariantInfo, PdpOffer } from '@clowe/shared';
 import { api } from '@/lib/api';
@@ -91,7 +91,8 @@ function defaultVariant(variants: ProductVariantInfo[]): ProductVariantInfo | nu
   );
 }
 
-export default function ProductDetailPage({ params }: { params: { slug: string } }) {
+export default function ProductDetailPage({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {
+  const params = use(paramsPromise);
   const { slug } = params;
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [notFound, setNotFound] = useState(false);

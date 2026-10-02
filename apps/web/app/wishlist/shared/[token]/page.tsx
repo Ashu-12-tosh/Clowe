@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { SharedWishlist } from '@clowe/shared';
 import { api } from '@/lib/api';
@@ -9,7 +9,8 @@ import CategoryProductCard from '@/components/category/CategoryProductCard';
 import { HeartIcon } from '@/components/cart/CartIcons';
 
 /** Read-only view of a wishlist someone shared by link. */
-export default function SharedWishlistPage({ params }: { params: { token: string } }) {
+export default function SharedWishlistPage({ params: paramsPromise }: { params: Promise<{ token: string }> }) {
+  const params = use(paramsPromise);
   const [data, setData] = useState<SharedWishlist | null>(null);
   const [gone, setGone] = useState(false);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());

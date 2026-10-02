@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { SellerProductDetail } from '@clowe/shared';
 import { api } from '@/lib/api';
 import ProductForm from '@/components/seller/ProductForm';
 
-export default function EditProductPage({ params }: { params: { id: string } }) {
+export default function EditProductPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = use(paramsPromise);
   const [product, setProduct] = useState<SellerProductDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
 

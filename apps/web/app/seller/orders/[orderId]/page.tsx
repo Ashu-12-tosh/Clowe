@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { SellerOrderBulkResult, SellerOrderRow, SellerOrderSummary } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
@@ -26,7 +26,8 @@ const LABEL = 'text-[11px] uppercase tracking-wide text-gray-400';
  * The buyer is shown as name + delivery address only; the API never sends
  * their phone number or email to sellers.
  */
-export default function SellerOrderDetailPage({ params }: { params: { orderId: string } }) {
+export default function SellerOrderDetailPage({ params: paramsPromise }: { params: Promise<{ orderId: string }> }) {
+  const params = use(paramsPromise);
   const [order, setOrder] = useState<SellerOrderRow | null>(null);
   const [couriers, setCouriers] = useState<string[]>([]);
   const [courier, setCourier] = useState('');

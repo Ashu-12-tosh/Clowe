@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type {
@@ -67,7 +67,8 @@ function statusLabel(status: string): string {
     .replace(/^./, (c) => c.toUpperCase());
 }
 
-export default function OrderDetailPage({ params }: { params: { id: string } }) {
+export default function OrderDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = use(paramsPromise);
   const router = useRouter();
   const [order, setOrder] = useState<OrderDetailView | null>(null);
   const [notFound, setNotFound] = useState(false);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { AuthUser, OrderDetailView, ProductListItem } from '@clowe/shared';
@@ -86,7 +86,8 @@ function reachedIndex(status: string): number {
   }
 }
 
-export default function OrderConfirmationPage({ params }: { params: { id: string } }) {
+export default function OrderConfirmationPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = use(paramsPromise);
   const router = useRouter();
   const [order, setOrder] = useState<OrderDetailView | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);

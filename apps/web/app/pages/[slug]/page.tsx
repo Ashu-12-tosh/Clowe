@@ -4,21 +4,23 @@ import { notFound } from 'next/navigation';
 import { CONTENT_PAGES, getContentPage, renderMarkdown } from '@/lib/contentPages';
 
 interface Props {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
-export function generateStaticParams() {
-  return CONTENT_PAGES.map((p) => ({ slug: p.slug }));
-}
+// No generateStaticParams: every page renders per request so its scripts carry
+// that request's CSP nonce, and since Next 15 a page with static params is
+// prerendered whatever the root layout says. Unknown slugs still 404 below.
 
-export function generateMetadata({ params }: Props): Metadata {
-  const page = CONTENT_PAGES.find((p) => p.slug === params.slug);
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const page = CONTENT_PAGES.find((p) => p.slug === slug);
   if (!page) return {};
   return { title: page.title, description: page.description };
 }
 
-export default function ContentPage({ params }: Props) {
-  const page = getContentPage(params.slug);
+export default async function ContentPage({ params }: Props) {
+  const { slug } = await params;
+  const page = getContentPage(slug);
   if (!page) notFound();
 
   // The markdown's own "# heading" renders as the page title.
