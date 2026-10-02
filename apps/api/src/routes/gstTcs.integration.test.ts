@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { istDate, type ReconcileReport } from '@clowe/shared';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
+import { verifiedPan } from '../test/kyc';
 import { signAccessToken } from '../utils/jwt';
 import { postDeliveryEntries, postReturnReversal } from '../services/sellerLedgerService';
 import { requestPayout } from '../services/payoutService';
@@ -110,6 +111,7 @@ describe('payouts', () => {
     await prisma.sellerPayoutMethod.create({
       data: { sellerId: s.sellerId, type: 'UPI', label: 'UPI', accountName: 'TCS Seller', upiId: 'tcs@upi', isDefault: true, verified: true },
     });
+    await verifiedPan(s.sellerId);
     const payout = await requestPayout(s.sellerId);
     const row = await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } });
     expect(row.tcsPaise).toBe(TCS);

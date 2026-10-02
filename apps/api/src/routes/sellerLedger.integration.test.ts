@@ -4,6 +4,7 @@ import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
+import { verifiedPan } from '../test/kyc';
 import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
 import { invalidateCategoryRules } from '../services/categoryRules';
 import {
@@ -313,6 +314,7 @@ describe('payouts', () => {
       upiId: 'ledger@upi',
     });
     expect(method.status).toBe(200);
+    await verifiedPan(s.sellerId);
 
     const payout = await call('POST', '/api/seller/payouts/request', s.token, {});
     expect(payout.status).toBe(200);
@@ -349,6 +351,7 @@ describe('payouts', () => {
       accountName: 'Ledger Seller',
       upiId: 'slab@upi',
     });
+    await verifiedPan(s.sellerId);
     const payout = await call('POST', '/api/seller/payouts/request', s.token, {});
     const row = payout.json.data as { id: string; netPaise: number };
     const detail = await call('GET', `/api/seller/payouts/${row.id}`, s.token);

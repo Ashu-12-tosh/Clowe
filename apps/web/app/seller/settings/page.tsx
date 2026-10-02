@@ -84,6 +84,12 @@ function Field({
 
 export default function SellerStoreSettingsPage() {
   const [tab, setTab] = useState<StoreTab>('PROFILE');
+  // ?tab=BUSINESS and the like: other pages link straight to a section.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('tab');
+    const match = STORE_TABS.find((t) => t === wanted);
+    if (match) setTab(match);
+  }, []);
   const [data, setData] = useState<SellerStoreOverview | null>(null);
   const [form, setForm] = useState<SellerStoreSettings | null>(null);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
@@ -590,6 +596,8 @@ export default function SellerStoreSettingsPage() {
                 <p className="mb-3 rounded-lg bg-cream-50 px-3 py-2 text-[11px] text-gray-600">
                   GSTIN, PAN and the name on your PAN are locked now that your shop is verified. Raise
                   a support ticket if they need to change.
+                  {(!data.settings.panNumber || !data.settings.panName) &&
+                    ' Your PAN details are incomplete, so you can still add them here.'}
                 </p>
               )}
               <div className="grid gap-4 sm:grid-cols-2">
@@ -619,7 +627,8 @@ export default function SellerStoreSettingsPage() {
                   <input
                     value={form.panNumber ?? ''}
                     onChange={(e) => patch({ panNumber: e.target.value.toUpperCase() })}
-                    disabled={form.kycStatus === 'VERIFIED'}
+                    // Locked once verified, unless none was ever saved: payouts need one.
+                    disabled={form.kycStatus === 'VERIFIED' && !!data.settings.panNumber}
                     className={`${field} uppercase disabled:bg-gray-50`}
                   />
                 </Field>
@@ -627,7 +636,7 @@ export default function SellerStoreSettingsPage() {
                   <input
                     value={form.panName ?? ''}
                     onChange={(e) => patch({ panName: e.target.value })}
-                    disabled={form.kycStatus === 'VERIFIED'}
+                    disabled={form.kycStatus === 'VERIFIED' && !!data.settings.panName}
                     className={`${field} disabled:bg-gray-50`}
                   />
                 </Field>

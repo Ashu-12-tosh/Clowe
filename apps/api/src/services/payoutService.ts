@@ -1,4 +1,11 @@
-import { computeListingEconomics, type CategoryRules, type PlatformSettings } from '@clowe/shared';
+import {
+  computeListingEconomics,
+  payoutPanBlock,
+  payoutPanMessage,
+  type CategoryRules,
+  type PayoutPanBlock,
+  type PlatformSettings,
+} from '@clowe/shared';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 import { getSettings } from './settingsService';
@@ -6,6 +13,7 @@ import { payoutProvider } from './payouts';
 import { ensureLedgerCoversDeliveries, settlementPosition } from './sellerLedgerService';
 import { economicsRates } from './economicsRates';
 import { categoryRulesMap } from './categoryRules';
+import { getSellerKycSummary } from './kyc/sellerKyc';
 
 export { economicsRates };
 
@@ -244,6 +252,14 @@ async function nextReference(): Promise<string> {
  * provider. Items and ads are linked inside a transaction, so a concurrent
  * request can't settle the same line twice.
  */
+/**
+ * Why this seller cannot be paid for want of a verified PAN, or null. Reads
+ * the stored checks only: it never calls the KYC provider.
+ */
+export async function panBlockFor(sellerId: string): Promise<PayoutPanBlock | null> {
+  return payoutPanBlock((await getSellerKycSummary(sellerId)).pan);
+}
+
 export async function requestPayout(sellerId: string, methodId?: string) {
   // Checked here and not only at the route. This is the one call in the seller
   // API that moves money out, and a suspension exists largely to stop exactly
@@ -260,6 +276,11 @@ export async function requestPayout(sellerId: string, methodId?: string) {
       'SELLER_NOT_PAYABLE',
     );
   }
+
+  // TDS is deposited against the PAN, so none is paid without a verified one —
+  // whatever the admin accepted at approval.
+  const panBlock = await panBlockFor(sellerId);
+  if (panBlock) throw ApiError.forbidden(payoutPanMessage(panBlock), panBlock.code);
 
   const settings = await getSettings();
 

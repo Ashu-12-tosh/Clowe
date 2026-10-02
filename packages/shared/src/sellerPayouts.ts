@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { KYC_REASON_LABELS, type KycCheckState, type KycReason } from './kyc';
 
 // ---------------------------------------------------------------------------
 // Seller payouts
@@ -146,6 +147,74 @@ export interface SellerPayoutOverview {
   recentPayouts: SellerPayoutRow[];
   methods: SellerPayoutMethodRow[];
   insights: { key: string; tone: 'GOOD' | 'INFO' | 'WARN'; title: string; body: string }[];
+  /** Set while payouts are blocked for want of a verified PAN. */
+  panBlock: PayoutPanBlock | null;
+}
+
+// ---------------------------------------------------------------------------
+// A verified PAN before any payout
+//
+// TDS under section 194-O is deposited against the seller's PAN, and without
+// one the rate is not ours to choose. So no money leaves without a PAN the
+// provider has confirmed — whatever was decided at approval.
+// ---------------------------------------------------------------------------
+
+export interface PayoutPanBlock {
+  code: 'PAN_NOT_VERIFIED';
+  panState: KycCheckState;
+  /** Why payouts are on hold, in the seller's terms. */
+  reason: string;
+  /** What to do about it. */
+  action: string;
+}
+
+const WHERE = 'Store settings → Business';
+
+/** Null when the PAN is verified; otherwise why payouts wait, and how to fix it. */
+export function payoutPanBlock(pan: { state: KycCheckState; reason: KycReason | null }): PayoutPanBlock | null {
+  const block = (reason: string, action: string): PayoutPanBlock => ({
+    code: 'PAN_NOT_VERIFIED',
+    panState: pan.state,
+    reason,
+    action,
+  });
+  const why = pan.reason ? KYC_REASON_LABELS[pan.reason] : null;
+  switch (pan.state) {
+    case 'VERIFIED':
+      return null;
+    case 'NOT_PROVIDED':
+      return block(
+        'There is no PAN on file.',
+        `Add your PAN and the name printed on it in ${WHERE}, then press Verify.`,
+      );
+    case 'INVALID_FORMAT':
+      return block(
+        'The PAN on file is not a valid PAN (it looks like ABCDE1234F).',
+        `Correct it in ${WHERE}, then press Verify.`,
+      );
+    case 'NOT_RUN':
+      return pan.reason === 'NAME_MISSING'
+        ? block(
+            'Your PAN cannot be verified without the name printed on it.',
+            `Add the name exactly as on your PAN card in ${WHERE}, then press Verify.`,
+          )
+        : block('Your PAN has not been verified yet.', `Press Verify in ${WHERE}.`);
+    case 'ERROR':
+      return block(
+        `The PAN check could not complete${why ? ` (${why})` : ''}.`,
+        `Press Verify again in ${WHERE}. If it keeps failing, contact seller support.`,
+      );
+    case 'FAILED':
+      return block(
+        `Your PAN could not be verified${why ? `: ${why}` : ''}.`,
+        `Check the PAN and name in ${WHERE}, correct them and verify again, or contact seller support.`,
+      );
+  }
+}
+
+/** The error text when a payout is refused for want of a verified PAN. */
+export function payoutPanMessage(block: PayoutPanBlock): string {
+  return `Payouts need a verified PAN, because TDS is deposited against it. ${block.reason} ${block.action}`;
 }
 
 export const payoutRequestSchema = z.object({

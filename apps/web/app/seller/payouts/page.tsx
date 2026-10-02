@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   PAYOUT_STATUSES,
   type SellerPayoutMethodRow,
@@ -207,7 +208,11 @@ export default function SellerPayoutsPage() {
 
   const k = overview?.kpis;
   const canRequest =
-    !!k && !!overview && k.payablePaise >= overview.rates.minPayoutPaise && overview.methods.length > 0;
+    !!k &&
+    !!overview &&
+    !overview.panBlock &&
+    k.payablePaise >= overview.rates.minPayoutPaise &&
+    overview.methods.length > 0;
 
   return (
     <div className="pb-10">
@@ -259,7 +264,9 @@ export default function SellerPayoutsPage() {
             title={
               !overview
                 ? undefined
-                : overview.methods.length === 0
+                : overview.panBlock
+                  ? 'Payouts need a verified PAN'
+                  : overview.methods.length === 0
                   ? 'Add a payout method first'
                   : k && k.payablePaise < overview.rates.minPayoutPaise
                     ? `Minimum payout is ${money(overview.rates.minPayoutPaise)}`
@@ -271,6 +278,27 @@ export default function SellerPayoutsPage() {
           </button>
         </div>
       </div>
+
+      {overview?.panBlock && (
+        <div
+          data-pan-block={overview.panBlock.panState}
+          className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div>
+            <p className="font-semibold">Payouts are on hold until your PAN is verified</p>
+            <p className="mt-0.5 text-xs">
+              TDS under section 194-O is deposited against your PAN. {overview.panBlock.reason}{' '}
+              {overview.panBlock.action}
+            </p>
+          </div>
+          <Link
+            href="/seller/settings?tab=BUSINESS"
+            className="shrink-0 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-700"
+          >
+            Add or verify PAN
+          </Link>
+        </div>
+      )}
 
       {error && (
         <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">

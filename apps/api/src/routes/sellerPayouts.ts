@@ -23,6 +23,7 @@ import {
   availableBalance,
   describeMethod,
   feesFor,
+  panBlockFor,
   requestPayout,
   sumFees,
   taxRulesFor,
@@ -147,7 +148,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         },
       });
 
-    const [monthItems, prevItems, fyItems, openingItems, balance, payouts, methods] =
+    const [monthItems, prevItems, fyItems, openingItems, balance, payouts, methods, panBlock] =
       await Promise.all([
         delivered({ deliveredAt: { gte: range.from, lte: range.to } }),
         delivered({ deliveredAt: { gte: range.previousFrom, lte: range.previousTo } }),
@@ -163,6 +164,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
           where: { sellerId },
           orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
         }),
+        panBlockFor(sellerId),
       ]);
 
     // Returned lines were earned then reversed — they don't count as income.
@@ -255,7 +257,9 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         body: `Deliveries clear ${settings.payoutHoldDays} days after the buyer receives them (return window).`,
       });
     }
-    if (balance.payablePaise >= settings.payoutMinPaise) {
+    if (panBlock) {
+      insights.push({ key: 'pan', tone: 'WARN', title: 'Payouts need a verified PAN', body: panBlock.reason });
+    } else if (balance.payablePaise >= settings.payoutMinPaise) {
       insights.push({
         key: 'payable',
         tone: 'GOOD',
@@ -337,6 +341,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       recentPayouts: payouts.slice(0, 5).map(toPayoutRow),
       methods: methods.map(toMethodRow),
       insights,
+      panBlock,
     };
 
     res.json({ success: true, data: body });

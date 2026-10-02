@@ -384,11 +384,16 @@ sellerStoreRouter.put('/business', async (req, res, next) => {
     const seller = req.seller!;
     const input = storeBusinessSchema.parse(req.body);
     const locked = seller.kycStatus === 'VERIFIED';
+    // The lock protects what was verified. A PAN that was never on file can
+    // still be added: payouts wait for one, so a seller approved without it
+    // must have a way to supply it.
+    const addingPan = locked && !seller.panNumber && !!input.panNumber;
+    const addingPanName = locked && !seller.panName && !!input.panName;
 
     if (locked) {
       const changingGst = input.gstNumber && input.gstNumber !== seller.gstNumber;
-      const changingPan = input.panNumber && input.panNumber !== seller.panNumber;
-      const changingPanName = input.panName && input.panName !== seller.panName;
+      const changingPan = input.panNumber && input.panNumber !== seller.panNumber && !addingPan;
+      const changingPanName = input.panName && input.panName !== seller.panName && !addingPanName;
       if (changingGst || changingPan || changingPanName) {
         throw ApiError.badRequest(
           'GSTIN and PAN details are locked after verification — raise a support ticket to change them',
@@ -402,7 +407,10 @@ sellerStoreRouter.put('/business', async (req, res, next) => {
       data: {
         businessType: input.businessType || null,
         ...(locked
-          ? {}
+          ? {
+              ...(addingPan ? { panNumber: input.panNumber } : {}),
+              ...(addingPanName ? { panName: input.panName } : {}),
+            }
           : {
               gstNumber: input.gstNumber || null,
               panNumber: input.panNumber || null,
