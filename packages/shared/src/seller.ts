@@ -1,6 +1,7 @@
 import { imageUrlSchema } from './imageUrl';
 import { httpUrlSchema } from './url';
 import { assetRefSchema } from './assets';
+import { SHIPPING_LIMITS } from './shipping';
 import { z } from 'zod';
 import { optionValuesSchema } from './variants';
 import { productAttributeInputSchema, type ProductAttribute } from './productAttributes';
@@ -133,10 +134,12 @@ export const sellerProductUpsertSchema = z
     attributes: z.array(productAttributeInputSchema).max(20).optional(),
     highlights: z.array(z.string().trim().min(3).max(120)).max(8).optional(),
     variants: z.array(sellerVariantInputSchema).max(60),
-    weightGrams: z.number().int().min(0).max(200000).nullable().optional(),
-    lengthMm: z.number().int().min(0).max(300000).nullable().optional(),
-    widthMm: z.number().int().min(0).max(300000).nullable().optional(),
-    heightMm: z.number().int().min(0).max(300000).nullable().optional(),
+    // Blank is fine on a draft; sending anything to review needs all four
+    // within range (parcelProblems).
+    weightGrams: z.number().int().min(0).max(SHIPPING_LIMITS.maxWeightGrams).nullable().optional(),
+    lengthMm: z.number().int().min(0).max(SHIPPING_LIMITS.maxSideMm).nullable().optional(),
+    widthMm: z.number().int().min(0).max(SHIPPING_LIMITS.maxSideMm).nullable().optional(),
+    heightMm: z.number().int().min(0).max(SHIPPING_LIMITS.maxSideMm).nullable().optional(),
     shippingTemplate: z.enum(SHIPPING_TEMPLATES).optional(),
     metaTitle: z.string().trim().max(70).optional(),
     metaDescription: z.string().trim().max(160).optional(),

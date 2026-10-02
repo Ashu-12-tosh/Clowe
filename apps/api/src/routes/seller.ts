@@ -10,6 +10,7 @@ import {
   normaliseAttributes,
   optionAxisKeys,
   optionValuesFromJson,
+  parcelProblems,
   variantOptionFields,
   type CategoryRules,
   AD_PLACEMENT_LABELS,
@@ -469,6 +470,14 @@ function variantRowsFrom(input: SellerProductUpsertInput) {
   return rows;
 }
 
+/** Weight and size must be sensible before anything goes to review: couriers price on them. */
+function assertParcelForReview(input: SellerProductUpsertInput) {
+  const problems = parcelProblems(input);
+  if (problems.length > 0) {
+    throw ApiError.badRequest(`Before review, add ${problems.join(', ')}`, 'SHIPPING_DETAILS_REQUIRED');
+  }
+}
+
 /** Spec fields the category marks required must be filled before review. */
 /**
  * Every colour must have pictures before a listing goes for review.
@@ -531,6 +540,7 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
     if (!category) throw ApiError.badRequest('Category not found', 'CATEGORY_NOT_FOUND');
     const rules = await categoryRulesFor(category.id);
     assertRequiredAttributes(input, rules);
+    if (input.mode !== 'DRAFT') assertParcelForReview(input);
     assertVariantImages(input, new Map());
     const variantRows = variantRowsFrom(input);
 
@@ -643,6 +653,8 @@ async function saveLiveEdit(
   };
   const changed = contentDiffers(content, product);
   const status: ProductRevisionStatus = input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING';
+  // Only an edit sent to review needs the parcel; a price change does not.
+  if (changed && status === 'PENDING') assertParcelForReview(input);
   const liveRules = await categoryRulesFor(product.categoryId);
 
   await prisma.$transaction([
@@ -743,6 +755,7 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
     }
 
     // A live listing stays live: its content waits for review, the rest saves now.
+    if (product.status !== 'APPROVED' && input.mode !== 'DRAFT') assertParcelForReview(input);
     if (product.status === 'APPROVED') {
       const revisionStatus = await saveLiveEdit(input, product, rules, variantRows, keptIds, {
         changed: videoChanged,

@@ -4,9 +4,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   MAX_VARIANT_AXES,
+  SHIPPING_LIMITS,
   SHIPPING_TEMPLATES,
   SHIPPING_TEMPLATE_LABELS,
+  VOLUMETRIC_DIVISOR,
   axisLabel,
+  billedWeightGrams,
+  oversizedBox,
+  parcelProblems,
+  volumetricWeightGrams,
   describeTaxDefault,
   optionsKeyOf,
   sellerProductUpsertSchema,
@@ -201,6 +207,14 @@ export default function ProductForm({ initial }: Props) {
     w: initial?.widthMm != null ? String(initial.widthMm / 10) : '',
     h: initial?.heightMm != null ? String(initial.heightMm / 10) : '',
   });
+  // The parcel in the units the API stores (g, mm), for the hint and the checks.
+  const parcel = {
+    weightGrams: weight.trim() ? Math.round(Number(weight) * 1000) : null,
+    lengthMm: dims.l.trim() ? Math.round(Number(dims.l) * 10) : null,
+    widthMm: dims.w.trim() ? Math.round(Number(dims.w) * 10) : null,
+    heightMm: dims.h.trim() ? Math.round(Number(dims.h) * 10) : null,
+  };
+  const volumetricGrams = volumetricWeightGrams(parcel.lengthMm, parcel.widthMm, parcel.heightMm);
   const [shippingTemplate, setShippingTemplate] = useState<ShippingTemplateValue>(
     initial?.shippingTemplate ?? 'STANDARD',
   );
@@ -435,7 +449,7 @@ export default function ProductForm({ initial }: Props) {
     { key: 'variants', label: hasVariants ? 'Variants' : 'Price & stock', done: variantInputs.length > 0 },
     { key: 'inventory', label: 'Inventory', done: totalStock > 0 },
     { key: 'pricing', label: 'Pricing', done: !!cheapest },
-    { key: 'shipping', label: 'Shipping', done: !!weight.trim() },
+    { key: 'shipping', label: 'Shipping', done: parcelProblems(parcel).length === 0 },
     { key: 'seo', label: 'SEO & visibility', done: !!metaTitle.trim() || tags.length > 0 },
   ];
   const completeness = Math.round((checklist.filter((c) => c.done).length / checklist.length) * 100);
@@ -488,6 +502,15 @@ export default function ProductForm({ initial }: Props) {
   async function save(mode: ProductSaveMode) {
     setError('');
     setNotice('');
+
+    // A live listing's price-only save needs no parcel; the API says so when
+    // its edit goes to review. Everything else sent to review needs one.
+    const problems = parcelProblems(parcel);
+    if (mode === 'SUBMIT' && initial?.status !== 'APPROVED' && problems.length > 0) {
+      setError(`Before review, add ${problems.join(', ')}`);
+      setStep('SHIPPING');
+      return;
+    }
 
     if (mode === 'SUBMIT' && !isLeaf) {
       setError('Pick the most specific category for this product');
@@ -1544,6 +1567,30 @@ export default function ProductForm({ initial }: Props) {
                       </div>
                     ))}
                   </div>
+                  {volumetricGrams !== null && (
+                    <p className="mt-2 text-xs text-gray-600" data-volumetric>
+                      Volumetric weight: <span className="font-semibold">{(volumetricGrams / 1000).toFixed(2)} kg</span>{' '}
+                      (L × W × H ÷ {VOLUMETRIC_DIVISOR}). Couriers charge for the higher of this and the actual weight
+                      {parcel.weightGrams ? (
+                        <>
+                          : <span className="font-semibold">{(billedWeightGrams(parcel.weightGrams, volumetricGrams)! / 1000).toFixed(2)} kg</span>.
+                        </>
+                      ) : (
+                        '.'
+                      )}
+                    </p>
+                  )}
+                  {oversizedBox(parcel.weightGrams, volumetricGrams) && (
+                    <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800" data-oversized>
+                      The box is more than twice as heavy by size ({(volumetricGrams! / 1000).toFixed(2)} kg) as the item
+                      itself ({(parcel.weightGrams! / 1000).toFixed(2)} kg), so shipping is charged on its size. A box that fits
+                      the item more closely costs less to send.
+                    </p>
+                  )}
+                  <p className="mt-2 text-[11px] text-gray-400">
+                    Needed for review: a weight of {SHIPPING_LIMITS.minWeightGrams / 1000}–{SHIPPING_LIMITS.maxWeightGrams / 1000} kg
+                    and each side {SHIPPING_LIMITS.minSideMm / 10}–{SHIPPING_LIMITS.maxSideMm / 10} cm.
+                  </p>
                 </div>
               </div>
             </div>

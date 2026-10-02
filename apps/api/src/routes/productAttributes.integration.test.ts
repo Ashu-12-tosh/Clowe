@@ -86,6 +86,11 @@ function listing(s: { packingVideoRef: string }, overrides: Record<string, unkno
     description: 'A phone that exists to test the spec sheet.',
     imageUrls: ['https://example.com/phone.jpg'],
     packingVideoRef: s.packingVideoRef,
+    // A parcel, which anything sent to review needs.
+    weightGrams: 350,
+    lengthMm: 300,
+    widthMm: 200,
+    heightMm: 50,
     variants: [{ optionValues: {}, pricePaise: 1_000_000, stock: 5 }],
     ...overrides,
   };

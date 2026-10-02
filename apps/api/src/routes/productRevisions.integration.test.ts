@@ -84,6 +84,10 @@ function body(l: Listing, changes: Record<string, unknown> = {}) {
     description: 'The approved description.',
     imageUrls: ['/uploads/demo/a.jpg', '/uploads/demo/b.jpg'],
     variants: [{ id: l.variant.id, optionValues: { size: 'M' }, pricePaise: 50_000, stock: 10 }],
+    weightGrams: 350,
+    lengthMm: 300,
+    widthMm: 200,
+    heightMm: 50,
     mode: 'SUBMIT',
     ...changes,
   };
@@ -208,6 +212,32 @@ describe('reviewing an edit', () => {
     const detail = (await call('GET', `/api/seller/products/${l.product.id}`, l.token)).json.data as SellerProductDetail;
     expect(detail.revision).toMatchObject({ status: 'REJECTED', rejectionReason: 'Misleading title' });
     expect(await prisma.notification.count({ where: { userId: l.userId, type: 'PRODUCT_EDIT_REJECTED' } })).toBe(1);
+  });
+});
+
+describe('the parcel (weight and size)', () => {
+  const noParcel = { weightGrams: null, lengthMm: null, widthMm: null, heightMm: null };
+
+  it('is needed to send a listing to review, not to save a draft', async () => {
+    const l = await listing(ProductStatus.DRAFT);
+    const submitted = await save(l, { ...noParcel });
+    expect(submitted.status).toBe(400);
+    expect(submitted.json.error?.code).toBe('SHIPPING_DETAILS_REQUIRED');
+    expect((await save(l, { ...noParcel, mode: 'DRAFT' })).status).toBe(200);
+  });
+
+  it('is not needed for a price change on a live listing, only for an edit sent to review', async () => {
+    const l = await listing();
+    const price = await save(l, { ...noParcel, variants: [{ id: l.variant.id, optionValues: { size: 'M' }, pricePaise: 41_000, stock: 10 }] });
+    expect(price.status).toBe(200);
+    const edit = await save(l, { ...noParcel, title: 'Needs A Parcel' });
+    expect(edit.json.error?.code).toBe('SHIPPING_DETAILS_REQUIRED');
+  });
+
+  it('refuses a weight entered in grams where kilograms were meant', async () => {
+    const l = await listing(ProductStatus.DRAFT);
+    const res = await save(l, { weightGrams: 3_500_000 });
+    expect(res.status).toBe(400);
   });
 });
 

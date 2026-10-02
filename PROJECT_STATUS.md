@@ -189,6 +189,14 @@ the main reason pages feel slow. The demo images were meant to be downloaded
 locally first; `npm run db:localize-images -w @clowe/api` does exactly that and
 has not been run against production.
 
+**The shipping template does nothing yet.** Standard / Express / Heavy is saved
+with a listing and shown back on the form, and nothing else reads it. It is left
+as it is on purpose: it gets real meaning with the Delhivery integration (service
+type and rate card). Weight and dimensions, by contrast, are checked: required in
+range before anything goes to review (10 g–100 kg, each side 1–300 cm), with a
+live volumetric-weight hint (L × W × H ÷ 5000) and a warning when the box weighs
+more than twice the item by size.
+
 **Two "Smartphones" categories.** The catalogue has one under *Mobiles* and
 another under *Electronics*. This is why an inferred category may only rank
 results and never filter them — filtering on a guessed slug would hide over half

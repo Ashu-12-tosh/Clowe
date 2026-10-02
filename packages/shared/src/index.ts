@@ -25,6 +25,7 @@ export * from './url';
 export * from './csp';
 export * from './assets';
 export * from './istPeriods';
+export * from './shipping';
 export * from './catalog';
 export * from './search';
 export * from './searchAnalytics';
