@@ -37,10 +37,19 @@ function num(n: number): string {
   return n.toLocaleString('en-IN');
 }
 
-function compact(n: number): string {
-  if (n >= 100000) return `${(n / 100000).toFixed(1)}L`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return String(n);
+/**
+ * Counts written out in full with Indian grouping — 97,712 and 1,00,512 —
+ * rather than abbreviated. The abbreviations switched units inside one
+ * column (97.7K next to 1.0L), which read as two different scales.
+ */
+function count(n: number): string {
+  return n.toLocaleString('en-IN');
+}
+
+/** SKU, views and sales — the second line under a product's name. */
+function rowFacts(row: SellerProductRow): string {
+  const sold = row.unitsSold > 0 ? `${count(row.unitsSold)} sold · ${formatPaise(row.salesPaise)}` : 'no sales yet';
+  return `${row.sku} · ${count(row.views)} views · ${sold}`;
 }
 
 function Delta({ change }: { change: number | null }) {
@@ -172,6 +181,76 @@ export default function SellerProductsPage() {
 
   const k = summary?.kpis;
 
+  /** View / edit / more — one copy, used by the table row and the phone card. */
+  const rowActions = (row: SellerProductRow) => (
+    <div className="relative flex items-center gap-1">
+      {row.status === 'APPROVED' ? (
+        <Link
+          href={`/products/${row.slug}`}
+          target="_blank"
+          title="View on storefront"
+          className="rounded-lg border border-gray-300 px-2 py-1 hover:bg-gray-50"
+        >
+          👁
+        </Link>
+      ) : (
+        <span
+          title="Not live yet"
+          className="cursor-not-allowed rounded-lg border border-gray-200 px-2 py-1 opacity-40"
+        >
+          👁
+        </span>
+      )}
+      <Link
+        href={`/seller/products/${row.id}/edit`}
+        title="Edit"
+        className="rounded-lg border border-gray-300 px-2 py-1 hover:bg-gray-50"
+      >
+        ✎
+      </Link>
+      <button
+        onClick={() => setMenuId(menuId === row.id ? null : row.id)}
+        disabled={busyId === row.id}
+        title="More"
+        className="rounded-lg border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
+      >
+        ⋮
+      </button>
+      {menuId === row.id && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setMenuId(null)} />
+          <div className="absolute right-0 top-8 z-20 w-52 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg">
+            <button
+              onClick={() => void toggleVisibility(row)}
+              disabled={row.status !== 'APPROVED'}
+              className="block w-full px-3 py-2 text-left hover:bg-cream-50 disabled:opacity-40"
+            >
+              {row.isVisible ? '🚫 Hide from storefront' : '✅ Show on storefront'}
+            </button>
+            <Link
+              href={`/seller/products/${row.id}/edit`}
+              className="block px-3 py-2 hover:bg-cream-50"
+            >
+              ✎ Edit listing
+            </Link>
+            <Link
+              href={`/seller/ads/new?productId=${row.id}`}
+              className="block px-3 py-2 hover:bg-cream-50"
+            >
+              📣 Promote this product
+            </Link>
+            <button
+              onClick={() => void archive(row)}
+              className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
+            >
+              🗑 Archive
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="pb-10">
       {/* --- Header ---------------------------------------------------- */}
@@ -233,7 +312,7 @@ export default function SellerProductsPage() {
             <KpiCard
               icon="👁"
               label="Views (30 days)"
-              value={compact(k.views30d)}
+              value={count(k.views30d)}
               footer={<Delta change={k.viewsChangePercent} />}
             />
             <KpiCard
@@ -250,8 +329,14 @@ export default function SellerProductsPage() {
         )}
       </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-4">
-        <div className="xl:col-span-3">
+      {/*
+        minmax(0,1fr), not a bare grid: an auto column grew to the table's
+        natural width (865px) at every width below xl, so on a phone or a
+        tablet the card ran off the page under a clip and the actions were
+        cut off. The rail sits beside the list only at xl.
+      */}
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_17rem]">
+        <div className="min-w-0">
           {/* --- Filters ------------------------------------------------- */}
           <div className="flex flex-wrap items-center gap-2 rounded-t-2xl border border-b-0 border-gray-100 bg-white p-3">
             <input
@@ -310,18 +395,31 @@ export default function SellerProductsPage() {
           </div>
 
           {/* --- Table --------------------------------------------------- */}
-          <div className="overflow-x-auto rounded-b-2xl border border-gray-100 bg-white">
-            <table className="w-full min-w-[640px] text-xs">
+          {/*
+            No horizontal scroll at any width. Even the widest this card ever
+            gets (858px: the shell caps content at max-w-6xl and the rail takes
+            a quarter) was 7px short of the old nine-column table, so the table
+            itself has to fit: fixed-width columns for the short values and the
+            product column takes the rest, with SKU, views and sales on its
+            second line. Below md the rows become cards.
+          */}
+          <div className="rounded-b-2xl border border-gray-100 bg-white">
+            <table className="hidden w-full table-fixed text-xs md:table">
+              <colgroup>
+                <col />
+                <col className="w-28" />
+                <col className="w-24" />
+                <col className="w-20" />
+                <col className="w-28" />
+                <col className="w-[7.5rem]" />
+              </colgroup>
               <thead>
                 <tr className="text-left uppercase tracking-wide text-gray-500">
                   <th className="px-3 py-2.5 font-semibold">Product</th>
-                  <th className="px-3 py-2.5 font-semibold">SKU</th>
                   <th className="px-3 py-2.5 font-semibold">Category</th>
                   <th className="px-3 py-2.5 font-semibold">Price</th>
                   <th className="px-3 py-2.5 font-semibold">Stock</th>
                   <th className="px-3 py-2.5 font-semibold">Status</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">Views</th>
-                  <th className="px-3 py-2.5 text-right font-semibold">Sales</th>
                   <th className="px-3 py-2.5 font-semibold">Actions</th>
                 </tr>
               </thead>
@@ -341,15 +439,18 @@ export default function SellerProductsPage() {
                           <div className="h-11 w-9 rounded-lg bg-cream-100" />
                         )}
                         <div className="min-w-0">
-                          <p className="max-w-52 truncate font-medium text-ink-900">{row.title}</p>
-                          <p className="max-w-52 truncate text-[11px] text-gray-400">
-                            {row.brand ?? row.shortDescription ?? `${row.variantCount} variant(s)`}
+                          {/* Two lines, never one truncated line: the name is
+                              what a seller scans for. */}
+                          <p data-product-name className="line-clamp-2 break-words font-medium text-ink-900" title={row.title}>
+                            {row.title}
                           </p>
+                          <p className="break-words text-[11px] text-gray-400">{rowFacts(row)}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-2.5 font-mono text-gray-600">{row.sku}</td>
-                    <td className="px-3 py-2.5 text-gray-600">{row.categoryName}</td>
+                    <td className="truncate px-3 py-2.5 text-gray-600" title={row.categoryName}>
+                      {row.categoryName}
+                    </td>
                     <td className="px-3 py-2.5">
                       <p className="font-semibold text-ink-900">{formatPaise(row.pricePaise)}</p>
                       {row.mrpPaise && row.mrpPaise > row.pricePaise && (
@@ -386,84 +487,14 @@ export default function SellerProductsPage() {
                         {LISTING_STATE_LABELS[row.listingState]}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-right text-gray-600">{compact(row.views)}</td>
-                    <td className="px-3 py-2.5 text-right">
-                      <p className="font-semibold text-ink-900">{row.unitsSold}</p>
-                      <p className="text-[11px] text-gray-400">{formatPaise(row.salesPaise)}</p>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="relative flex items-center gap-1">
-                        {row.status === 'APPROVED' ? (
-                          <Link
-                            href={`/products/${row.slug}`}
-                            target="_blank"
-                            title="View on storefront"
-                            className="rounded-lg border border-gray-300 px-2 py-1 hover:bg-gray-50"
-                          >
-                            👁
-                          </Link>
-                        ) : (
-                          <span
-                            title="Not live yet"
-                            className="cursor-not-allowed rounded-lg border border-gray-200 px-2 py-1 opacity-40"
-                          >
-                            👁
-                          </span>
-                        )}
-                        <Link
-                          href={`/seller/products/${row.id}/edit`}
-                          title="Edit"
-                          className="rounded-lg border border-gray-300 px-2 py-1 hover:bg-gray-50"
-                        >
-                          ✎
-                        </Link>
-                        <button
-                          onClick={() => setMenuId(menuId === row.id ? null : row.id)}
-                          disabled={busyId === row.id}
-                          title="More"
-                          className="rounded-lg border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
-                        >
-                          ⋮
-                        </button>
-                        {menuId === row.id && (
-                          <>
-                            <div className="fixed inset-0 z-10" onClick={() => setMenuId(null)} />
-                            <div className="absolute right-0 top-8 z-20 w-52 overflow-hidden rounded-xl border border-gray-100 bg-white py-1 shadow-lg">
-                              <button
-                                onClick={() => void toggleVisibility(row)}
-                                disabled={row.status !== 'APPROVED'}
-                                className="block w-full px-3 py-2 text-left hover:bg-cream-50 disabled:opacity-40"
-                              >
-                                {row.isVisible ? '🚫 Hide from storefront' : '✅ Show on storefront'}
-                              </button>
-                              <Link
-                                href={`/seller/products/${row.id}/edit`}
-                                className="block px-3 py-2 hover:bg-cream-50"
-                              >
-                                ✎ Edit listing
-                              </Link>
-                              <Link
-                                href={`/seller/ads/new?productId=${row.id}`}
-                                className="block px-3 py-2 hover:bg-cream-50"
-                              >
-                                📣 Promote this product
-                              </Link>
-                              <button
-                                onClick={() => void archive(row)}
-                                className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
-                              >
-                                🗑 Archive
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
+                    <td className="px-3 py-2.5" data-product-actions>
+                      {rowActions(row)}
                     </td>
                   </tr>
                 ))}
                 {data && data.rows.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-3 py-12 text-center text-gray-500">
+                    <td colSpan={6} className="px-3 py-12 text-center text-gray-500">
                       No products match these filters.{' '}
                       <Link href="/seller/products/new" className="font-semibold text-brand-600">
                         Add your first product →
@@ -473,13 +504,50 @@ export default function SellerProductsPage() {
                 )}
                 {!data && (
                   <tr>
-                    <td colSpan={9} className="px-3 py-12 text-center text-gray-400">
+                    <td colSpan={6} className="px-3 py-12 text-center text-gray-400">
                       Loading…
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+
+            {/* Below md: one card per product, nothing wider than the screen. */}
+            <ul className="divide-y divide-gray-100 md:hidden">
+              {data?.rows.map((row) => (
+                <li key={row.id} className="flex gap-3 p-3 text-xs">
+                  {row.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={row.imageUrl} alt="" className="h-14 w-11 shrink-0 rounded-lg border border-gray-200 object-cover" />
+                  ) : (
+                    <div className="h-14 w-11 shrink-0 rounded-lg bg-cream-100" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p data-product-name className="line-clamp-2 break-words font-medium text-ink-900">
+                      {row.title}
+                    </p>
+                    <p className="truncate text-[11px] text-gray-400">{row.categoryName}</p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="font-semibold text-ink-900">{formatPaise(row.pricePaise)}</span>
+                      <span className={row.totalStock === 0 ? 'text-red-600' : row.totalStock <= row.lowStockAlert ? 'text-yellow-600' : 'text-green-700'}>
+                        {row.totalStock} in stock
+                      </span>
+                      <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATE_STYLES[row.listingState]}`}>
+                        {LISTING_STATE_LABELS[row.listingState]}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-[11px] text-gray-400">{rowFacts(row)}</p>
+                    <div className="mt-2" data-product-actions>
+                      {rowActions(row)}
+                    </div>
+                  </div>
+                </li>
+              ))}
+              {data && data.rows.length === 0 && (
+                <li className="p-6 text-center text-gray-500">No products match these filters.</li>
+              )}
+              {!data && <li className="p-6 text-center text-gray-400">Loading…</li>}
+            </ul>
 
             {data && data.total > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-3 py-2.5 text-xs">

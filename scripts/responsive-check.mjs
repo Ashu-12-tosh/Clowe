@@ -29,6 +29,17 @@
  *                            expected to scroll inside its own container, so
  *                            anything with an overflow-x ancestor is ignored.
  *
+ *   scrollableCount === 0    On seller pages, no horizontal scroller inside the
+ *                            page either. The products table scrolled sideways
+ *                            at every laptop width while the body did not, so
+ *                            neither assertion above could see it — and a
+ *                            seller scrolling a table loses the product names
+ *                            off its left edge. Storefront pages keep their
+ *                            intended scrollers (category nav, carousels).
+ *
+ * The seller's products page runs signed in as the demo seller (9000000001,
+ * from the seed) on localhost; elsewhere pass --seller-phone=... .
+ *
  *   clippedTextCount === 0   Nothing readable may be cut off at the viewport
  *                            edge by an overflow-hidden ancestor either. The
  *                            cart at 768 laid its single grid column out at
@@ -59,6 +70,8 @@
 const argv = process.argv.slice(2);
 const BASE = (argv.find((a) => !a.startsWith('--')) ?? 'http://localhost:4300').replace(/\/$/, '');
 const PHONE = argv.find((a) => a.startsWith('--phone='))?.slice('--phone='.length);
+const SELLER_PHONE = argv.find((a) => a.startsWith('--seller-phone='))?.slice('--seller-phone='.length);
+const DEMO_SELLER_PHONE = '9000000001';
 /** Width and a height typical of a device that width. */
 const VIEWPORTS = [
   { width: 360, height: 780 },
@@ -72,6 +85,8 @@ const VIEWPORTS = [
 ];
 /** Pages that need a signed-in shopper with a cart. */
 const AUTH_PAGES = new Set(['/cart', '/checkout']);
+/** Pages that need the signed-in seller, and get the no-scroller assertion. */
+const SELLER_PAGES = new Set(['/seller/products']);
 /** Below this the field cannot show a useful amount of a query. */
 const MIN_SEARCH_PX = 180;
 
@@ -159,6 +174,10 @@ function measure() {
     searchBoxPx: Math.round(visibleWidth(input)),
     truncatedNodes: truncated,
     navScrollableBy: nav ? Math.round(nav.scrollWidth - nav.clientWidth) : 0,
+    scrollableCount: [...document.querySelectorAll('main *')].filter((el) => {
+      const ov = getComputedStyle(el).overflowX;
+      return (ov === 'auto' || ov === 'scroll') && el.scrollWidth > el.clientWidth + 1;
+    }).length,
   };
 }
 
@@ -237,12 +256,28 @@ async function openSession() {
   return { session: { token, user: verified.data.user, slug }, why: null };
 }
 
+/** The demo seller, signed in. Only automatic against localhost. */
+async function openSellerSession() {
+  const local = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(BASE);
+  if (!local && !SELLER_PHONE) return { session: null, why: 'not localhost; pass --seller-phone to sign in' };
+  const phone = SELLER_PHONE ?? DEMO_SELLER_PHONE;
+  const otp = await api('/api/auth/request-otp', { method: 'POST', body: { phone } });
+  const code = otp.data?.devOtp;
+  if (!code) return { session: null, why: `no devOtp for ${phone}: ${otp.error?.code ?? 'unknown'}` };
+  const verified = await api('/api/auth/verify-otp', { method: 'POST', body: { phone, code } });
+  const token = verified.data?.accessToken;
+  if (!token) return { session: null, why: `verify-otp failed: ${verified.error?.code ?? 'unknown'}` };
+  return { session: { token, user: verified.data.user }, why: null };
+}
+
 const browser = await launch();
 const { session, why } = await openSession();
 if (!session) console.log(`cart and checkout skipped: ${why}`);
+const { session: sellerSession, why: sellerWhy } = await openSellerSession();
+if (!sellerSession) console.log(`seller pages skipped: ${sellerWhy}`);
 
 const firstProduct = session?.slug ?? (await api('/api/products?limit=1')).data?.items?.[0]?.slug;
-const PAGES = ['/', '/products', ...(firstProduct ? [`/products/${firstProduct}`] : []), '/cart', '/checkout', '/track'];
+const PAGES = ['/', '/products', ...(firstProduct ? [`/products/${firstProduct}`] : []), '/cart', '/checkout', '/track', '/seller/products'];
 
 // One context for everything: the session, when there is one, lives in
 // localStorage exactly as the app stores it, and pages are opened from it.
@@ -254,24 +289,39 @@ if (session) {
   }, { token: session.token, user: session.user });
 }
 
+// The seller gets a context of their own, so neither session leaks into the
+// other's pages.
+const sellerContext = await browser.newContext();
+if (sellerSession) {
+  await sellerContext.addInitScript(({ token, user }) => {
+    localStorage.setItem('clowe.accessToken', token);
+    localStorage.setItem('clowe.user', JSON.stringify(user));
+  }, { token: sellerSession.token, user: sellerSession.user });
+}
+
 const rows = [];
 let failures = 0;
 let skipped = 0;
 
 for (const path of PAGES) {
-  if (AUTH_PAGES.has(path) && !session) {
+  const isSellerPage = SELLER_PAGES.has(path);
+  if ((AUTH_PAGES.has(path) && !session) || (isSellerPage && !sellerSession)) {
     skipped += VIEWPORTS.length;
     continue;
   }
   for (const { width, height } of VIEWPORTS) {
-    const page = await context.newPage();
+    const page = await (isSellerPage ? sellerContext : context).newPage();
     await page.setViewportSize({ width, height });
     try {
       await page.goto(BASE + path, { waitUntil: 'networkidle', timeout: 30000 });
       const overlayed = await openSearchOverlay(page);
       const m = await page.evaluate(measure);
 
-      const overflowBad = m.bodyOverflowPx > 0 || m.unclippedCount > 0 || m.clippedTextCount > 0;
+      const overflowBad =
+        m.bodyOverflowPx > 0 ||
+        m.unclippedCount > 0 ||
+        m.clippedTextCount > 0 ||
+        (isSellerPage && m.scrollableCount > 0);
       const searchBad = m.searchBoxPx > 0 && m.searchBoxPx < MIN_SEARCH_PX;
       if (overflowBad || searchBad) failures += 1;
 
@@ -283,6 +333,7 @@ for (const path of PAGES) {
         clipped: m.clippedTextCount,
         search: m.searchBoxPx + (overlayed ? ' (overlay)' : ''),
         navScroll: m.navScrollableBy,
+        scrollers: m.scrollableCount,
         trunc: m.truncatedNodes,
         ok: overflowBad || searchBad ? 'FAIL' : 'ok',
       });
