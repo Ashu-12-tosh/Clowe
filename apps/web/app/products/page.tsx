@@ -284,9 +284,10 @@ function ProductsPageInner() {
               dropped={dropped}
               categoryName={
                 data.search.parsed.filters.inferredCategorySlug
-                  ? (categories.find(
-                      (c) => c.slug === data.search!.parsed.filters.inferredCategorySlug,
-                    )?.name ?? null)
+                  ? // The guess can be a subcategory ("Headphones"), not only a department.
+                    (categories
+                      .flatMap((root) => [root, ...root.children])
+                      .find((c) => c.slug === data.search!.parsed.filters.inferredCategorySlug)?.name ?? null)
                   : null
               }
               onDrop={(key) =>
