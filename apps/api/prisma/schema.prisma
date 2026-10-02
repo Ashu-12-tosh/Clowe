@@ -725,6 +725,8 @@ model Category {
   variantAxes      Json?
   // Spec-sheet fields sellers fill in: [{ key, label, type, unit?, required?, options? }].
   attributeSchema  Json?
+  // Filter facets: { add, hide, order } applied to the parent's set (shared/facets.ts).
+  facets           Json?
   // AI Try-On and the size guide only make sense for wearables.
   tryOnEligible    Boolean?
   sizeGuide        Boolean?

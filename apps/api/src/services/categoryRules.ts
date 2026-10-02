@@ -1,9 +1,12 @@
 import type { Prisma } from '@prisma/client';
 import {
   categoryRuleFieldsFromRow,
+  facetConfigFromJson,
   resolveCategoryRules,
+  resolveFacets,
   type CategoryRuleFields,
   type CategoryRules,
+  type ResolvedFacet,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { getSettings } from './settingsService';
@@ -29,6 +32,7 @@ const RULE_SELECT = {
   defaultTaxRatePercent: true,
   hsnCode: true,
   returnWindowDays: true,
+  facets: true,
 } satisfies Prisma.CategorySelect;
 
 export type CategoryRuleRow = Prisma.CategoryGetPayload<{ select: typeof RULE_SELECT }>;
@@ -99,6 +103,25 @@ export async function resolveCategory(categoryId: string): Promise<ResolvedCateg
     path: [...chain].reverse().map((c) => ({ id: c.id, name: c.name, slug: c.slug })),
     depth: Math.max(0, chain.length - 1),
   };
+}
+
+/** A category's filter facets: its ancestors' sets with each level's edits applied. */
+export function facetsFromChain(chain: { id: string; facets: unknown }[]): ResolvedFacet[] {
+  return resolveFacets([...chain].reverse().map((c) => ({ id: c.id, config: facetConfigFromJson(c.facets) })));
+}
+
+export async function facetsFor(categoryId: string): Promise<ResolvedFacet[]> {
+  return facetsFromChain(chainOf(await categoryRows(), categoryId));
+}
+
+/** Facets for many categories at once (one tree read). */
+export async function facetsMap(categoryIds: Iterable<string>): Promise<Map<string, ResolvedFacet[]>> {
+  const rows = await categoryRows();
+  const out = new Map<string, ResolvedFacet[]>();
+  for (const id of categoryIds) {
+    if (!out.has(id)) out.set(id, facetsFromChain(chainOf(rows, id)));
+  }
+  return out;
 }
 
 export async function categoryRulesFor(categoryId: string): Promise<CategoryRules> {

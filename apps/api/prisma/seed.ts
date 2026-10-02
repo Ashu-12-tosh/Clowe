@@ -8,6 +8,7 @@ import { generateReferralCode } from '../src/utils/crypto';
 import { variantOptionFields } from '@clowe/shared';
 import { seedMarketplace } from './seed/marketplace';
 import { seedCategoryRules } from './seed/categoryRules';
+import { seedCategoryFacets } from './seed/facets';
 import { seedDemoAttributes } from './seed/demoAttributes';
 import { seedElectronics } from './seed/electronics';
 import { seedFashion } from './seed/fashion';
@@ -366,6 +367,7 @@ async function main() {
   await seedReviews();
   await seedMarketplace(prisma);
   console.log(`[seed] Category rules applied to ${await seedCategoryRules(prisma)} roots`);
+  console.log(`[seed] Filter facets set on ${(await seedCategoryFacets(prisma, true)).written.length} categories`);
   await seedElectronics(prisma);
   await seedFashion(prisma);
   // The clothing catalog above is written before the rules exist, and a

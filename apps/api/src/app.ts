@@ -12,6 +12,7 @@ import { searchRouter } from './routes/search';
 import { wishlistRouter } from './routes/wishlist';
 import { sellerRouter } from './routes/seller';
 import { adminRouter } from './routes/admin';
+import { adminCategoryFacetsRouter } from './routes/adminCategoryFacets';
 import { cartRouter } from './routes/cart';
 import { addressesRouter } from './routes/addresses';
 import { ordersRouter } from './routes/orders';
@@ -147,6 +148,7 @@ export function createApp() {
   // otherwise answer (or 404) their paths before they are reached.
   app.use('/api/admin/tryon', adminTryonRouter);
   app.use('/api/admin/sellers', adminSellersRouter);
+  app.use('/api/admin/category-facets', adminCategoryFacetsRouter);
   app.use('/api/admin/audit', adminAuditRouter);
   app.use('/api/admin/search', adminSearchRouter);
   app.use('/api/admin/support-desk', adminSupportDeskRouter);

@@ -83,3 +83,4 @@ export * from './sellerTryon';
 export * from './voiceSearch';
 export * from './couponSurfaces';
 export * from './ifscBanks';
+export * from './facets';
