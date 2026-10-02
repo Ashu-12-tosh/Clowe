@@ -172,7 +172,6 @@ function ProductReviewPanel({ productId }: { productId: string }) {
             <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">
               Packing video
             </h3>
-            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
               src={detail.packingVideoUrl}
               controls

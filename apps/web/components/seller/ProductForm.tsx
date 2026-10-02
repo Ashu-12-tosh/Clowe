@@ -1059,7 +1059,6 @@ export default function ProductForm({ initial }: Props) {
               </div>
               {packingVideoUrl && (
                 <div className="mt-3 flex items-start gap-3">
-                  {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                   <video src={packingVideoUrl} controls className="h-36 rounded-lg border border-gray-200 bg-black" />
                   <button
                     type="button"
