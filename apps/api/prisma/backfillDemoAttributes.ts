@@ -12,7 +12,8 @@
 // listing is never touched, nor is any product that already has rows.
 // Safe to re-run: the second run fills 0.
 //
-// Run with: npm run db:backfill-demo-attributes --workspace=@clowe/api
+// Run with: npm run db:backfill-demo-attributes --workspace=@clowe/api (a dev checkout)
+// On production: dc exec api npx tsx prisma/backfillDemoAttributes.ts (npm run fails there: tsx is pruned)
 // On the server: dc exec api npx tsx prisma/backfillDemoAttributes.ts
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';

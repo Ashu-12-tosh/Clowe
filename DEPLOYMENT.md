@@ -84,7 +84,7 @@ curl http://localhost/api/health
 
 Visit `http://yourdomain.com` — the store should load. 🎉
 
-> **Seed note:** the production image prunes dev dependencies, so if `tsx` is unavailable run the seed from your laptop against the VPS DB instead: temporarily add `ports: ["5433:5432"]` to the `db` service, then run `DATABASE_URL=postgresql://clowe:PASSWORD@VPS_IP:5433/clowe npm run db:seed -w @clowe/api` locally, and remove the port again. Seeding is optional — it creates the admin user (which you can also get by registering with `ADMIN_PHONE`... the seed is the supported way) and demo catalog.
+> **Seed note:** on the server, seed with `dc exec api npx tsx prisma/seed.ts` ([DEPLOY_RUNBOOK.md §3.4](DEPLOY_RUNBOOK.md)). `npm run db:seed` does not work inside the container (`tsx: not found`): the production image prunes dev dependencies, and `npx` fetches `tsx` on demand instead. Only if the VPS cannot reach the npm registry, run the seed from a repo checkout against the VPS DB: temporarily publish Postgres on the VPS's loopback only (`ports: ["127.0.0.1:5433:5432"]` on the `db` service, then `dc up -d db`), open an SSH tunnel from your machine (`ssh -N -L 5433:localhost:5433 root@VPS_IP`), run `DATABASE_URL=postgresql://clowe:PASSWORD@localhost:5433/clowe npm run db:seed -w @clowe/api` locally, then close the tunnel, remove the port and `dc up -d db` again. Never publish Postgres on a public interface. Seeding is optional — it creates the admin user (which you can also get by registering with `ADMIN_PHONE`... the seed is the supported way) and demo catalog.
 
 ## 6. Enable HTTPS (Let's Encrypt)
 

@@ -8,7 +8,8 @@
 // Safe to re-run: files already on disk are reused, rows already local are
 // skipped, and a failed download leaves the row on its external URL.
 //
-// Run with: npm run db:localize-images --workspace=@clowe/api
+// Run with: npm run db:localize-images --workspace=@clowe/api (a dev checkout)
+// On production: dc exec api npx tsx prisma/localizeImages.ts (npm run fails there: tsx is pruned)
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import fs from 'node:fs/promises';

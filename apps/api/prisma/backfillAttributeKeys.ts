@@ -13,7 +13,8 @@
 // their label, and junk the UI could never render is dropped. Rows already
 // canonical are untouched. Safe to re-run: a second run reports 0 changed.
 //
-// Run with: npm run db:backfill-attribute-keys --workspace=@clowe/api
+// Run with: npm run db:backfill-attribute-keys --workspace=@clowe/api (a dev checkout)
+// On production: dc exec api npx tsx prisma/backfillAttributeKeys.ts (npm run fails there: tsx is pruned)
 // On the server: dc exec api npx tsx prisma/backfillAttributeKeys.ts
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';

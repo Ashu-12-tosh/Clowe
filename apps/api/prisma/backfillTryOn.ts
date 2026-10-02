@@ -11,7 +11,8 @@
 // (first 100 shops). It only turns things on. Safe to re-run: a second run
 // finds nothing to do.
 //
-// Run with: npm run db:backfill-tryon --workspace=@clowe/api
+// Run with: npm run db:backfill-tryon --workspace=@clowe/api (a dev checkout)
+// On production: dc exec api npx tsx prisma/backfillTryOn.ts (npm run fails there: tsx is pruned)
 // On the server: dc exec api npx tsx prisma/backfillTryOn.ts
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';

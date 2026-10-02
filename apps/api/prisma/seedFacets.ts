@@ -9,8 +9,10 @@
  *
  * Dry run by default; pass --apply to write. Safe to re-run.
  *
- *   npm run db:seed-facets --workspace=@clowe/api [-- --apply]
- *   dc exec api npx tsx prisma/seedFacets.ts [--apply]
+ *   dc exec api npx tsx prisma/seedFacets.ts [--apply]                 # production
+ *   npm run db:seed-facets --workspace=@clowe/api [-- --apply]        # dev checkout only
+ *
+ * npm run fails on the server (tsx: not found): the image prunes dev dependencies.
  */
 // env first: it layers .env.local over .env, and nothing may load .env before it.
 import '../src/env';

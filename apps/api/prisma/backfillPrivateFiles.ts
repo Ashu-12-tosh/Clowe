@@ -15,8 +15,11 @@
  * Dry run by default; pass --apply to do it. Safe to run again: rewritten
  * rows hold references, which are skipped.
  *
- *   npm run db:backfill-private-files -w @clowe/api              # dry run
- *   npm run db:backfill-private-files -w @clowe/api -- --apply
+ *   dc exec api npx tsx prisma/backfillPrivateFiles.ts           # production, dry run
+ *   dc exec api npx tsx prisma/backfillPrivateFiles.ts --apply
+ *   npm run db:backfill-private-files -w @clowe/api              # dev checkout only
+ *
+ * npm run fails on the server (tsx: not found): the image prunes dev dependencies.
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';

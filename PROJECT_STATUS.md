@@ -186,8 +186,8 @@ rediscovered as surprises.
 **Product images load from a third party.** Live product images point at
 `loremflickr.com`, so every image on every page is an external request — this is
 the main reason pages feel slow. The demo images were meant to be downloaded
-locally first; `npm run db:localize-images -w @clowe/api` does exactly that and
-has not been run against production.
+locally first; `dc exec api npx tsx prisma/localizeImages.ts` does exactly that
+on the server and has not been run against production.
 
 **Apparel and footwear priced ₹2,625.01–₹2,950 have no consistent GST rate —
 needs a CA's confirmation before launch.** The 5% / 18% line is ₹2,500 per piece
@@ -324,6 +324,14 @@ compiled into the web bundle, so changing it requires a rebuild rather than a
 restart; and `KYC_FINGERPRINT_SECRET` must be set once and never rotated,
 because a new key makes every verified document look changed and re-bills every
 verification.
+
+Data one-offs (the seed, backfills, facet seeding) run on the server as
+`dc exec api npx tsx prisma/<file>.ts`. The `npm run db:...` scripts are for a
+dev checkout only: in the API container they fail with `tsx: not found`,
+because the image prunes dev dependencies. Since 2026-10-03 every one-off in
+the runbook ("One-off data fixes"), DEPLOYMENT.md and the scripts' own headers
+is written in the `dc exec` form, including the two facet scripts the runbook
+did not list (`seedFacets.ts`, `backfillDemoFacets.ts`).
 
 ---
 

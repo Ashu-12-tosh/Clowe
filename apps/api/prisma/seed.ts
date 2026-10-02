@@ -1,7 +1,8 @@
 // Seed script.
 // Phase 1: admin account (ADMIN_PHONE from apps/api/.env).
 // Phase 2: demo seller + category tree + dummy clothing catalog.
-// Run with: npm run db:seed --workspace=@clowe/api
+// Run with: npm run db:seed --workspace=@clowe/api (a dev checkout)
+// On production: dc exec api npx tsx prisma/seed.ts (npm run fails there: tsx is pruned)
 import 'dotenv/config';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { generateReferralCode } from '../src/utils/crypto';

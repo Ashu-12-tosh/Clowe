@@ -7,8 +7,10 @@
  * Demo products only, and only facets a product has no value for. Dry run by
  * default; pass --apply to write. Safe to re-run: a second run writes nothing.
  *
- *   npm run db:backfill-demo-facets --workspace=@clowe/api [-- --apply]
- *   dc exec api npx tsx prisma/backfillDemoFacets.ts [--apply]
+ *   dc exec api npx tsx prisma/backfillDemoFacets.ts [--apply]                 # production
+ *   npm run db:backfill-demo-facets --workspace=@clowe/api [-- --apply]        # dev checkout only
+ *
+ * npm run fails on the server (tsx: not found): the image prunes dev dependencies.
  */
 // env first: it layers .env.local over .env, and nothing may load .env before it.
 import '../src/env';

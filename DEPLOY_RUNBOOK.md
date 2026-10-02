@@ -901,6 +901,13 @@ reads a month, and no charge for downloads.
 Some fixes change data the seed already wrote, so they ship as scripts to run
 once on an existing catalog rather than as migrations. Each is safe to re-run.
 
+On the server, always run them as `dc exec api npx tsx prisma/<file>.ts`, as
+below. The `npm run db:...` names in `apps/api/package.json` are for a dev
+checkout: inside the API container they fail with `tsx: not found`, because
+`tsx` is a dev dependency and the production image prunes those; `npx`
+fetches it on demand instead (the npm warning that prints is expected, see
+3.4).
+
 ```sh
 # "Try On Me" on every eligible fashion product, and launch credits for the
 # demo sellers. A catalog seeded before 2026-10-01 has neither, so the button
@@ -926,6 +933,19 @@ dc exec api npx tsx prisma/backfillBrandIds.ts
 # write (same slug-seeded pools). Only products the seeds wrote, and only
 # those with no rows; a seller's own listing is never touched.
 dc exec api npx tsx prisma/backfillDemoAttributes.ts
+
+# Every category gets its starting filter facets (the search filter rail).
+# Only categories with no facets of their own are written, so an admin's edits
+# stay. Dry run first: it prints each category's resolved facets and any seed
+# entry this database has no category for.
+dc exec api npx tsx prisma/seedFacets.ts
+dc exec api npx tsx prisma/seedFacets.ts --apply
+
+# Demo products get the facet values their spec sheets never had, with facet
+# coverage per category printed before and after. Demo products only, and only
+# empty values. Run after seedFacets. Dry run first.
+dc exec api npx tsx prisma/backfillDemoFacets.ts
+dc exec api npx tsx prisma/backfillDemoFacets.ts --apply
 
 # Return photos, try-on photos and results, and packing videos uploaded before
 # private storage sit in the public uploads folder. This moves each into

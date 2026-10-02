@@ -12,7 +12,8 @@
 // updates 0. Colours the lookup cannot place are printed, not guessed: add
 // them to packages/shared/src/colorFamily.ts and run again.
 //
-// Run with: npm run db:backfill-color-families --workspace=@clowe/api
+// Run with: npm run db:backfill-color-families --workspace=@clowe/api (a dev checkout)
+// On production: dc exec api npx tsx prisma/backfillColorFamilies.ts (npm run fails there: tsx is pruned)
 // On the server: dc exec api npx tsx prisma/backfillColorFamilies.ts
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';

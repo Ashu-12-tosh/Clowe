@@ -10,7 +10,8 @@
 // to) and creates one when there is none, then points the products at it.
 // Products already linked are not touched, so a second run links 0.
 //
-// Run with: npm run db:backfill-brand-ids --workspace=@clowe/api
+// Run with: npm run db:backfill-brand-ids --workspace=@clowe/api (a dev checkout)
+// On production: dc exec api npx tsx prisma/backfillBrandIds.ts (npm run fails there: tsx is pruned)
 // On the server: dc exec api npx tsx prisma/backfillBrandIds.ts
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
