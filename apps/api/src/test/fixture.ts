@@ -246,6 +246,10 @@ export async function seedFixture(prisma: PrismaClient): Promise<void> {
   // checkout tests do) must not leave the next file unable to rebuild the
   // catalog. Items and payments go with their order.
   await prisma.payout.deleteMany();
+  // Returns (and their refunds) point at order lines; a file that raised one
+  // must not leave the next unable to clear the orders.
+  await prisma.refund.deleteMany();
+  await prisma.return.deleteMany();
   await prisma.order.deleteMany();
   // Ads point at products the same way (the promotion credit tests book them).
   await prisma.ad.deleteMany();

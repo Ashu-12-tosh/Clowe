@@ -40,7 +40,7 @@ import {
   SELLER_REFERRAL_TARGET_PAISE,
   deliveredSalesPaise,
 } from '../services/sellerReferralService';
-import { resolveFileUrl, withPhotoUrls } from '../services/assets';
+import { withPhotoUrls } from '../services/assets';
 
 export const adminRouter = Router();
 
@@ -234,7 +234,6 @@ adminRouter.get('/products/:id', async (req, res, next) => {
       categoryName: p.category.name,
       description: p.description,
       imageUrls: p.images.map((i) => i.url),
-      packingVideoUrl: await resolveFileUrl(p.packingVideoUrl),
       variants: p.variants.map((v) => ({
         sku: v.sku,
         size: v.size,

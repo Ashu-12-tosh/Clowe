@@ -29,7 +29,7 @@ import {
   type ShippingTemplateValue,
   type VariantAxis,
 } from '@clowe/shared';
-import { api, ApiRequestError, uploadImages, uploadVideo } from '@/lib/api';
+import { api, ApiRequestError, uploadImages } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { PricingBreakdown, loadRates } from '@/components/seller/PricingBreakdown';
 
@@ -171,9 +171,6 @@ export default function ProductForm({ initial }: Props) {
   const [imageUrls, setImageUrls] = useState<string[]>(initial?.imageUrls ?? []);
   const [videoUrl, setVideoUrl] = useState(initial?.videoUrl ?? '');
   // The clip is private: the reference is what the listing stores, the URL only previews it.
-  const [packingVideoRef, setPackingVideoRef] = useState(initial?.packingVideoRef ?? '');
-  const [packingVideoUrl, setPackingVideoUrl] = useState(initial?.packingVideoUrl ?? '');
-  const [videoUploading, setVideoUploading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
@@ -477,7 +474,6 @@ export default function ProductForm({ initial }: Props) {
       description: description.trim(),
       imageUrls,
       videoUrl: videoUrl.trim() || undefined,
-      packingVideoRef: packingVideoRef || undefined,
       attributes: attributes.filter((a) => a.label?.trim() && a.value.trim()),
       highlights: highlights.filter((h) => h.trim().length >= 3),
       variants: variantInputs,
@@ -590,21 +586,6 @@ export default function ProductForm({ initial }: Props) {
       setError(err instanceof ApiRequestError ? err.message : 'AI generation failed');
     } finally {
       setAiBusy(false);
-    }
-  }
-
-  async function onUploadPackingVideo(file: File | null) {
-    if (!file) return;
-    setError('');
-    setVideoUploading(true);
-    try {
-      const uploaded = await uploadVideo(file);
-      setPackingVideoRef(uploaded.ref);
-      setPackingVideoUrl(uploaded.url);
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Video upload failed');
-    } finally {
-      setVideoUploading(false);
     }
   }
 
@@ -1065,46 +1046,6 @@ export default function ProductForm({ initial }: Props) {
                   )}
                 </div>
               ))}
-            </div>
-
-            <div className="mt-5 rounded-xl border border-brand-100 bg-brand-50/40 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-bold text-ink-900">Packing video (optional)</p>
-                  <p className="mt-0.5 text-xs text-gray-500">
-                    A short clip of this product being packed. Not needed for review. MP4/WebM/MOV,
-                    up to 50 MB. Kept for 10 days, then removed automatically.
-                  </p>
-                </div>
-                <label className="inline-block cursor-pointer rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800">
-                  {videoUploading ? 'Uploading…' : packingVideoRef ? 'Replace video' : 'Upload video'}
-                  <input
-                    type="file"
-                    accept="video/mp4,video/webm,video/quicktime"
-                    className="hidden"
-                    disabled={videoUploading}
-                    onChange={(e) => {
-                      void onUploadPackingVideo(e.target.files?.[0] ?? null);
-                      e.target.value = '';
-                    }}
-                  />
-                </label>
-              </div>
-              {packingVideoUrl && (
-                <div className="mt-3 flex items-start gap-3">
-                  <video src={packingVideoUrl} controls className="h-36 rounded-lg border border-gray-200 bg-black" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPackingVideoRef('');
-                      setPackingVideoUrl('');
-                    }}
-                    className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
-                  >
-                    ✕ Remove
-                  </button>
-                </div>
-              )}
             </div>
 
             <div className="mt-4">
@@ -1766,10 +1707,6 @@ export default function ProductForm({ initial }: Props) {
               <div className="flex justify-between">
                 <dt className="text-gray-500">Images</dt>
                 <dd className="font-semibold">{imageUrls.length}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-gray-500">Packing video</dt>
-                <dd className="font-semibold">{packingVideoRef ? 'Uploaded' : 'Not added (optional)'}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">Details</dt>

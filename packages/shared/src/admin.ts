@@ -132,7 +132,6 @@ export interface AdminProductDetail {
   description: string;
   imageUrls: string[];
   /** Packing video uploaded with the listing (expires after 10 days). */
-  packingVideoUrl: string | null;
   variants: {
     sku: string;
     size: string;

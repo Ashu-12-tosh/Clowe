@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import {
   gstRateFor,
+  packingVideoAttachSchema,
+  PACKING_VIDEO_REQUIRED_MESSAGE,
   SELLER_ORDER_TABS,
   SELLER_ORDER_TAB_LABELS,
   SELLER_ORDER_TAB_STATUSES,
@@ -33,6 +35,9 @@ import { shippingProvider } from '../services/shipping';
 import { sendMessageSafe } from '../services/messaging';
 import { checkSellerReferralReward } from '../services/sellerReferralService';
 import { blockSuspendedWrites, requireSeller } from './seller';
+import { removeStoredFile } from './uploads';
+import { assertOwnAssets } from '../services/assets';
+import { hasPackingVideo, packingVideoView } from '../services/packingVideos';
 import {
   aggregateStatus,
   settleCodIfDelivered,
@@ -159,6 +164,7 @@ const ORDER_INCLUDE = (sellerId: string) =>
         return: { select: { id: true, status: true } },
       },
     },
+    packingVideos: { where: { sellerId }, select: { uploadedAt: true, deletedAt: true } },
   }) satisfies Prisma.OrderInclude;
 
 type OrderRecord = Prisma.OrderGetPayload<{ include: ReturnType<typeof ORDER_INCLUDE> }>;
@@ -232,6 +238,14 @@ function toRow(order: OrderRecord): SellerOrderRow {
     isGift: order.isGift,
     status,
     mixedStatus: mixed,
+    // The link is signed per view, on the order page only.
+    packingVideo: order.packingVideos[0]
+      ? {
+          url: null,
+          uploadedAt: order.packingVideos[0].uploadedAt.toISOString(),
+          deleted: order.packingVideos[0].deletedAt !== null,
+        }
+      : null,
   };
 }
 
@@ -466,10 +480,12 @@ async function applyAction(
   }
 
   if (action === 'ship') {
-    // Packing is optional — a seller can ship straight from a new order.
+    // Packing as a step is optional — a seller can ship straight from a new
+    // order — but the packing video is not: no clip, no dispatch.
     if (item.status !== 'CONFIRMED' && item.status !== 'PACKED') {
       return `Cannot ship an item in status ${item.status}`;
     }
+    if (!(await hasPackingVideo(item.orderId, item.sellerId))) return PACKING_VIDEO_REQUIRED_MESSAGE;
     const shipment = await shippingProvider.createShipment({
       orderNumber: item.order.orderNumber,
       orderItemId: item.id,
@@ -544,7 +560,9 @@ sellerOrdersRouter.patch('/:itemId/status', async (req, res, next) => {
     if (!item || item.sellerId !== req.seller!.id) throw ApiError.notFound('Order item not found');
 
     const skipped = await applyAction(item, input.action, input.courier);
-    if (skipped) throw ApiError.badRequest(skipped);
+    if (skipped) {
+      throw ApiError.badRequest(skipped, skipped === PACKING_VIDEO_REQUIRED_MESSAGE ? 'PACKING_VIDEO_REQUIRED' : undefined);
+    }
 
     if (input.action === 'deliver') {
       checkSellerReferralReward(req.seller!.id).catch((err) =>
@@ -830,7 +848,45 @@ sellerOrdersRouter.get('/:orderId', async (req, res, next) => {
       include: ORDER_INCLUDE(sellerId),
     });
     if (!order || order.items.length === 0) throw ApiError.notFound('Order not found');
-    res.json({ success: true, data: toRow(order) });
+    const row = toRow(order);
+    res.json({ success: true, data: { ...row, packingVideo: await packingVideoView(order.id, sellerId) } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /:orderId/packing-video — attach the clip (uploaded via /api/uploads/video)
+// ---------------------------------------------------------------------------
+
+sellerOrdersRouter.post('/:orderId/packing-video', async (req, res, next) => {
+  try {
+    const sellerId = req.seller!.id;
+    const { ref } = packingVideoAttachSchema.parse(req.body);
+    const items = await prisma.orderItem.findMany({
+      where: { orderId: req.params.orderId, sellerId },
+      select: { status: true },
+    });
+    if (items.length === 0) throw ApiError.notFound('Order not found');
+    // Once something has gone out, the clip is the record of what went: it
+    // can be added if missing, never swapped.
+    const existing = await prisma.orderPackingVideo.findUnique({
+      where: { orderId_sellerId: { orderId: req.params.orderId, sellerId } },
+    });
+    const dispatched = items.some((i) => !['PLACED', 'CONFIRMED', 'PACKED', 'CANCELLED'].includes(i.status));
+    if (existing && !existing.deletedAt && dispatched) {
+      throw ApiError.badRequest('This order has shipped: its packing video can no longer be replaced', 'PACKING_VIDEO_LOCKED');
+    }
+    await assertOwnAssets([ref], { ownerId: req.auth!.userId, purpose: 'PACKING_VIDEO' });
+
+    await prisma.orderPackingVideo.upsert({
+      where: { orderId_sellerId: { orderId: req.params.orderId, sellerId } },
+      create: { orderId: req.params.orderId, sellerId, fileRef: ref },
+      update: { fileRef: ref, uploadedAt: new Date(), deletedAt: null },
+    });
+    // The clip it replaced is freed once the order points at the new one.
+    if (existing && existing.fileRef !== ref && !existing.deletedAt) await removeStoredFile(existing.fileRef);
+    res.json({ success: true, data: await packingVideoView(req.params.orderId, sellerId) });
   } catch (err) {
     next(err);
   }

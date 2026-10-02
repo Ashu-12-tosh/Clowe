@@ -1,8 +1,8 @@
 import { imageUrlSchema } from './imageUrl';
 import { httpUrlSchema } from './url';
-import { assetRefSchema } from './assets';
 import { SHIPPING_LIMITS } from './shipping';
 import { z } from 'zod';
+import type { PackingVideoView } from './sellerOrders';
 import { optionValuesSchema } from './variants';
 import { productAttributeInputSchema, type ProductAttribute } from './productAttributes';
 
@@ -130,7 +130,6 @@ export const sellerProductUpsertSchema = z
      * reference from POST /api/uploads/video. (A per-order clip is planned to
      * replace it.)
      */
-    packingVideoRef: assetRefSchema.optional().or(z.literal('')),
     attributes: z.array(productAttributeInputSchema).max(20).optional(),
     highlights: z.array(z.string().trim().min(3).max(120)).max(8).optional(),
     variants: z.array(sellerVariantInputSchema).max(60),
@@ -200,10 +199,6 @@ export interface SellerProductDetail {
   rejectionReason: string | null;
   imageUrls: string[];
   videoUrl: string | null;
-  /** Packing video to play now (null once the 10-day retention lapses)… */
-  packingVideoUrl: string | null;
-  /** …and the reference to send back when saving. */
-  packingVideoRef: string | null;
   attributes: ProductAttribute[];
   highlights: string[];
   weightGrams: number | null;
@@ -271,6 +266,8 @@ export interface SellerReturnRow {
   adminOverrideAt: string | null;
   refund: { status: string; amountPaise: number; providerRefundId: string | null } | null;
   requestedAt: string;
+  /** On the return's own page: the seller's packing clip for the order (never sent to the buyer). */
+  packingVideo?: PackingVideoView | null;
 }
 
 export interface SellerStats {

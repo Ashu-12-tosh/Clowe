@@ -166,20 +166,6 @@ function ProductReviewPanel({ productId }: { productId: string }) {
           </p>
         </div>
 
-        {/* Packing video (expires 10 days after upload) */}
-        {detail.packingVideoUrl && (
-          <div>
-            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">
-              Packing video
-            </h3>
-            <video
-              src={detail.packingVideoUrl}
-              controls
-              className="mt-2 max-h-56 rounded-lg border border-gray-200 bg-black"
-            />
-          </div>
-        )}
-
         {/* Variants */}
         <div>
           <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">

@@ -123,7 +123,9 @@ uploadsRouter.post('/private', requireAuth, uploadLimiter, privateImageUpload.ar
 });
 
 // ---------------------------------------------------------------------------
-// Packing videos (sellers) — one clip per listing, kept for 10 days. Private.
+// Packing videos (sellers) — one clip per order, attached with
+// POST /api/seller/orders/:orderId/packing-video. Private; kept until 45 days
+// after delivery and while a return is open (services/packingVideos.ts).
 // ---------------------------------------------------------------------------
 
 const VIDEO_ALLOWED = new Set(['video/mp4', 'video/webm', 'video/quicktime']);

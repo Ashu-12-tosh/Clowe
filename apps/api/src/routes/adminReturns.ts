@@ -38,6 +38,7 @@ import { postReturnReversal } from '../services/sellerLedgerService';
 import { getSettings, setSetting } from '../services/settingsService';
 import { creditExpiryFrom } from './credits';
 import { withPhotoUrls } from '../services/assets';
+import { packingVideoView } from '../services/packingVideos';
 
 export const adminReturnsRouter = Router();
 adminReturnsRouter.use(requireAuth, requireRole('ADMIN'));
@@ -573,6 +574,7 @@ adminReturnsRouter.get('/:id', async (req, res, next) => {
       qcNote: r.qcNote,
       adminOverrideAt: r.adminOverrideAt?.toISOString() ?? null,
       adminOverrideNote: r.adminOverrideNote,
+      packingVideo: await packingVideoView(r.orderItem.orderId, r.orderItem.sellerId),
       timeline: [
         {
           key: 'requested',

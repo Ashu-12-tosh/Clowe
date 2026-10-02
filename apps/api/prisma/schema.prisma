@@ -453,6 +453,7 @@ model SellerProfile {
   referralsReceived SellerReferral[] @relation("SellerReferred")
   payouts           Payout[]
   payoutMethods     SellerPayoutMethod[]
+  packingVideos     OrderPackingVideo[]
   promotions        Promotion[]
   notes             SellerNote[]
   tickets           SupportTicket[]
@@ -1174,6 +1175,7 @@ model Order {
   payment    Payment?
   complaints Complaint[]
   refunds    Refund[]
+  packingVideos OrderPackingVideo[]
   creditLedger CreditLedger[]
   promotionRedemptions PromotionRedemption[]
 
@@ -2061,6 +2063,26 @@ model Asset {
   @@index([ownerId])
   @@index([purpose, createdAt])
   @@map("assets")
+}
+
+/// A seller's packing clip for their part of an order: required before
+/// dispatch, private (that seller and admins, never the buyer), and kept until
+/// 45 days after delivery and while a return on the order is open.
+model OrderPackingVideo {
+  id         String        @id @default(cuid())
+  orderId    String
+  order      Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sellerId   String
+  seller     SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  /// asset:<id> reference to the private file.
+  fileRef    String
+  uploadedAt DateTime      @default(now())
+  /// Set when retention ends and the file is deleted; the row stays as the record.
+  deletedAt  DateTime?
+
+  @@unique([orderId, sellerId])
+  @@index([deletedAt, uploadedAt])
+  @@map("order_packing_videos")
 }
 
 enum ProductRevisionStatus {

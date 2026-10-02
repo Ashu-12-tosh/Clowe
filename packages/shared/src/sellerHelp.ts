@@ -6,6 +6,8 @@
 // contradict the documentation.
 // ---------------------------------------------------------------------------
 
+import { PACKING_VIDEO_RETENTION_DAYS } from './sellerOrders';
+
 export const HELP_TOPICS = [
   {
     id: 'account',
@@ -87,8 +89,10 @@ Low stock alert is per product — a variant at or below that number is flagged 
     title: 'Order fulfilment: confirm → pack → ship → deliver',
     summary: 'The four stages, what each one does, and the dispatch SLA.',
     popular: true,
-    tags: ['order', 'pack', 'ship', 'dispatch', 'awb', 'courier'],
-    body: `A paid order arrives as New. From Orders you can mark items Packed, then Ship, then Delivered. Packing is optional — you can ship straight from a new order.
+    tags: ['order', 'pack', 'ship', 'dispatch', 'awb', 'courier', 'packing video'],
+    body: `A paid order arrives as New. From Orders you can mark items Packed, then Ship, then Delivered. Marking items Packed is optional — you can ship straight from a new order.
+
+The packing video is not optional. On the order's page, record or upload a short clip of the items going into the box; Ship is refused until there is one. It is private to you and Clowe's team — the buyer never sees it — and it is what settles a disputed return. It is kept until ${PACKING_VIDEO_RETENTION_DAYS} days after delivery, and for as long as a return on the order is open.
 
 Shipping books a shipment with the courier and records an AWB and tracking link. You may pick the courier before shipping, or let Clowe assign one. Each line moves independently, so a multi-item order can be part shipped.
 

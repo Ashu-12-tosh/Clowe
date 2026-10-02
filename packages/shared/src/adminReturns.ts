@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ReturnReasonValue } from './checkout';
+import type { PackingVideoView } from './sellerOrders';
 
 // ---------------------------------------------------------------------------
 // Returns & refund management (admin)
@@ -140,6 +141,8 @@ export interface AdminReturnDetail extends AdminReturnListRow {
   qcNote: string | null;
   adminOverrideAt: string | null;
   adminOverrideNote: string | null;
+  /** The seller's packing clip for this order: what went into the box. */
+  packingVideo: PackingVideoView | null;
   timeline: { key: string; label: string; at: string | null; note: string | null }[];
   /** How often this shopper returns things — the real numbers, not a score. */
   customerHistory: {

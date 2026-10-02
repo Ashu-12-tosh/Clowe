@@ -30,13 +30,12 @@ import {
 import { prisma } from '../db';
 import { categoryRulesFor } from '../services/categoryRules';
 import { brandSuggestions, linkBrand } from '../services/brands';
+import { packingVideoView } from '../services/packingVideos';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { applyReturnDecision, findSellerReturn } from '../services/returnService';
 import { getSettings } from '../services/settingsService';
 import { spendPromotionCredits } from '../services/sellerLedgerService';
-import { removeStoredFile } from './uploads';
-import { assertOwnAssets, resolveFileUrl } from '../services/assets';
 import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
 import { isListingBelowTryOnAge } from '../services/tryon/ageGate';
 import { expireDueAds } from './ads';
@@ -333,8 +332,6 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
       rejectionReason: p.rejectionReason,
       imageUrls: edit ? edit.imageUrls : p.images.map((i) => i.url),
       videoUrl: edit ? edit.videoUrl : p.videoUrl,
-      packingVideoUrl: await resolveFileUrl(p.packingVideoUrl),
-      packingVideoRef: p.packingVideoUrl,
       attributes: normaliseAttributes(edit ? edit.attributes : p.attributes, rules.attributeSchema),
       highlights: edit ? edit.highlights : ((p.highlights as string[] | null) ?? []),
       weightGrams: p.weightGrams,
@@ -417,7 +414,6 @@ function productDataFrom(input: SellerProductUpsertInput, rules: CategoryRules) 
     shortDescription: input.shortDescription?.trim() || null,
     description: input.description,
     videoUrl: input.videoUrl?.trim() || null,
-    packingVideoUrl: input.packingVideoRef?.trim() || null,
     attributes: canonicalAttributes(input.attributes ?? [], rules.attributeSchema) as object,
     highlights: (input.highlights ?? []) as object,
     weightGrams: input.weightGrams ?? null,
@@ -559,17 +555,11 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
     const variantRows = variantRowsFrom(input);
 
     const slug = `${slugify(`${input.brand ?? ''} ${input.title}`)}-${randomBytes(3).toString('hex')}`;
-    // The packing clip must be this seller's own upload.
-    if (input.packingVideoRef?.trim()) {
-      await assertOwnAssets([input.packingVideoRef.trim()], { ownerId: req.auth!.userId, purpose: 'PACKING_VIDEO' });
-    }
-
     const product = await prisma.product.create({
       data: {
         sellerId: req.seller!.id,
         ...productDataFrom(input, rules),
         slug,
-        packingVideoUploadedAt: input.packingVideoRef?.trim() ? new Date() : null,
         basePricePaise: basePriceOf(input),
         // Drafts stay private until the seller submits them for review.
         status: input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING',
@@ -619,7 +609,6 @@ async function saveLiveEdit(
   rules: CategoryRules,
   variantRows: ReturnType<typeof variantRowsFrom>,
   keptIds: string[],
-  packing: { changed: boolean; ref: string | null },
 ): Promise<ProductRevisionStatus | null> {
   // Removing every live variant would take the listing down while the new
   // ones wait for review.
@@ -675,8 +664,6 @@ async function saveLiveEdit(
     prisma.product.update({
       where: { id: product.id },
       data: {
-        packingVideoUrl: packing.ref,
-        ...(packing.changed ? { packingVideoUploadedAt: packing.ref ? new Date() : null } : {}),
         weightGrams: proposed.weightGrams,
         lengthMm: proposed.lengthMm,
         widthMm: proposed.widthMm,
@@ -761,22 +748,10 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
       );
     }
 
-    // A replaced or removed packing video frees its file straight away; a fresh
-    // upload restarts the 10-day retention clock.
-    const newPackingVideo = input.packingVideoRef?.trim() || null;
-    const videoChanged = newPackingVideo !== product.packingVideoUrl;
-    if (videoChanged && newPackingVideo) {
-      await assertOwnAssets([newPackingVideo], { ownerId: req.auth!.userId, purpose: 'PACKING_VIDEO' });
-    }
-
     // A live listing stays live: its content waits for review, the rest saves now.
     if (product.status !== 'APPROVED' && input.mode !== 'DRAFT') assertParcelForReview(input);
     if (product.status === 'APPROVED') {
-      const revisionStatus = await saveLiveEdit(input, product, rules, variantRows, keptIds, {
-        changed: videoChanged,
-        ref: newPackingVideo,
-      });
-      if (videoChanged && product.packingVideoUrl) await removeStoredFile(product.packingVideoUrl);
+      const revisionStatus = await saveLiveEdit(input, product, rules, variantRows, keptIds);
       res.json({ success: true, data: { id: product.id, status: 'APPROVED', revisionStatus } });
       return;
     }
@@ -789,9 +764,6 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
         where: { id: product.id },
         data: {
           ...productDataFrom(input, rules),
-          ...(videoChanged
-            ? { packingVideoUploadedAt: newPackingVideo ? new Date() : null }
-            : {}),
           basePricePaise: basePriceOf(input),
           // Saving a draft keeps it private; submitting sends it for re-approval.
           status: input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING',
@@ -889,8 +861,6 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
           }),
         ),
     ]);
-    // Only once the listing points at the new clip is the old one freed.
-    if (videoChanged && product.packingVideoUrl) await removeStoredFile(product.packingVideoUrl);
     res.json({
       success: true,
       data: { id: product.id, status: input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING' },
@@ -1098,7 +1068,9 @@ sellerRouter.get('/returns/:id', requireSeller, async (req, res, next) => {
   try {
     const r = await findSellerReturn(req.seller!.id, req.params.id);
     if (!r) throw ApiError.notFound('Return not found');
-    res.json({ success: true, data: (await withPhotoUrls([toReturnRow(r)]))[0] });
+    const [row] = await withPhotoUrls([toReturnRow(r)]);
+    // What went into the box, beside what the buyer says came out of it.
+    res.json({ success: true, data: { ...row, packingVideo: await packingVideoView(r.orderItem.orderId, req.seller!.id) } });
   } catch (err) {
     next(err);
   }

@@ -6,6 +6,7 @@ import { RETURN_REASON_LABELS, type ReturnReasonValue, type SellerReturnRow } fr
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { ExternalLink } from '@/components/ExternalLink';
+import { PackingVideoEvidence } from '@/components/seller/orders/PackingVideoPanel';
 
 const returnStatusStyles: Record<string, string> = {
   REQUESTED: 'bg-orange-100 text-orange-700',
@@ -130,6 +131,10 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
             ))}
           </div>
         )}
+        {/* What went into the box, beside what the buyer says came out. */}
+        <div className="mt-4">
+          <PackingVideoEvidence video={row.packingVideo} />
+        </div>
         {row.rejectionReason && (
           <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
             Declined: {row.rejectionReason}

@@ -2,11 +2,17 @@
 
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { SellerOrderBulkResult, SellerOrderRow, SellerOrderSummary } from '@clowe/shared';
+import {
+  PACKING_VIDEO_REQUIRED_MESSAGE,
+  type SellerOrderBulkResult,
+  type SellerOrderRow,
+  type SellerOrderSummary,
+} from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { StatusPill } from '@/components/seller/orders/StatusPill';
 import { DispatchCountdown } from '@/components/seller/orders/DispatchCountdown';
+import { PackingVideoPanel } from '@/components/seller/orders/PackingVideoPanel';
 import { ExternalLink } from '@/components/ExternalLink';
 
 type Action = 'pack' | 'ship' | 'deliver';
@@ -128,6 +134,9 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
 
   const packable = order.lines.filter((l) => l.canPack).length;
   const shippable = order.lines.filter((l) => l.canShip).length;
+  // No clip, no dispatch: the API refuses it too, this just says why up front.
+  const hasClip = order.packingVideo !== null && !order.packingVideo.deleted;
+  const dispatched = order.lines.some((l) => !['PLACED', 'CONFIRMED', 'PACKED', 'CANCELLED'].includes(l.status));
   const deliverable = order.lines.filter((l) => l.canDeliver).length;
   const allItemIds = order.lines.map((l) => l.id).join(',');
   const shipToLine =
@@ -190,6 +199,17 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
       <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         {/* --- Left: fulfilment ------------------------------------------ */}
         <div className="space-y-4">
+          <PackingVideoPanel
+            orderId={order.orderId}
+            video={order.packingVideo}
+            locked={dispatched && hasClip}
+            onChange={(packingVideo) => setOrder((o) => (o ? { ...o, packingVideo } : o))}
+          />
+          {shippable > 0 && !hasClip && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800" data-ship-blocked>
+              {PACKING_VIDEO_REQUIRED_MESSAGE}
+            </p>
+          )}
           {(packable > 0 || shippable > 0 || deliverable > 0) && (
             <div className={`${CARD} flex flex-wrap items-center gap-2`}>
               <p className="mr-auto text-xs font-semibold text-gray-500">
@@ -206,7 +226,8 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
               )}
               {shippable > 0 && (
                 <button
-                  disabled={busy !== null}
+                  disabled={busy !== null || !hasClip}
+                  title={hasClip ? undefined : PACKING_VIDEO_REQUIRED_MESSAGE}
                   onClick={() => void actAll('ship')}
                   className="rounded-lg bg-ink-900 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                 >
@@ -309,7 +330,8 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                 )}
                 {line.canShip && (
                   <button
-                    disabled={busy !== null}
+                    disabled={busy !== null || !hasClip}
+                    title={hasClip ? undefined : PACKING_VIDEO_REQUIRED_MESSAGE}
                     onClick={() => void act(line.id, 'ship')}
                     className="rounded-lg bg-ink-900 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                   >

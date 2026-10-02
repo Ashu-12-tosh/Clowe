@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { assetRefSchema } from './assets';
 
 // ---------------------------------------------------------------------------
 // Seller Order Management
@@ -128,6 +129,8 @@ export interface SellerOrderRow {
   status: string;
   /** True when the seller's lines are in more than one stage. */
   mixedStatus: boolean;
+  /** The seller's packing clip for this order; required before dispatch. */
+  packingVideo: PackingVideoView | null;
 }
 
 export interface SellerOrderPage {
@@ -268,3 +271,29 @@ export interface SellerInvoice {
   totalPaise: number;
   qr: SellerQr;
 }
+
+// ---------------------------------------------------------------------------
+// Packing video, per order
+//
+// A seller records what went into the box, once per order, before it ships:
+// the proof both sides can look at if a return is disputed. Private to that
+// seller and admins — the buyer never sees it — and kept until 45 days after
+// delivery and for as long as a return on the order is open.
+// ---------------------------------------------------------------------------
+
+export const PACKING_VIDEO_RETENTION_DAYS = 45;
+
+export interface PackingVideoView {
+  /** Signed, short-lived link to play it; null in lists, and once the file is gone. */
+  url: string | null;
+  uploadedAt: string;
+  /** Retention ended and the file was deleted; the record stays. */
+  deleted: boolean;
+}
+
+export const packingVideoAttachSchema = z.object({ ref: assetRefSchema });
+export type PackingVideoAttachInput = z.infer<typeof packingVideoAttachSchema>;
+
+/** Why "Mark shipped" is refused, in the seller's terms. */
+export const PACKING_VIDEO_REQUIRED_MESSAGE =
+  'Record the packing video for this order before you ship it: it shows what went into the box if a return is disputed.';

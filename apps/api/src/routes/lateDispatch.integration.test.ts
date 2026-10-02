@@ -86,7 +86,7 @@ async function makeSeller() {
   return { sellerId: seller.id, token: signAccessToken({ sub: user.id, role: 'SELLER' }), product, variant, shopperId: shopper.id };
 }
 
-/** A confirmed, unshipped line placed `hoursAgo` hours ago. */
+/** A confirmed, unshipped line placed `hoursAgo` hours ago, its packing video recorded. */
 async function makeLine(s: Awaited<ReturnType<typeof makeSeller>>, hoursAgo: number) {
   seq += 1;
   const placedAt = new Date(Date.now() - hoursAgo * HOUR);
@@ -108,6 +108,8 @@ async function makeLine(s: Awaited<ReturnType<typeof makeSeller>>, hoursAgo: num
       payment: { create: { provider: 'mock', amountPaise: 100_000, status: 'PAID' } },
     },
   });
+  // Dispatch needs the clip; these tests are about the clock, not the clip.
+  await prisma.orderPackingVideo.create({ data: { orderId: order.id, sellerId: s.sellerId, fileRef: `asset:late-${seq}` } });
   return prisma.orderItem.create({
     data: {
       orderId: order.id,

@@ -27,6 +27,7 @@ import {
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { BarList, DonutChart, LineChart } from '@/components/charts/Charts';
+import { PackingVideoEvidence } from '@/components/seller/orders/PackingVideoPanel';
 
 // ---------------------------------------------------------------------------
 // Shared bits
@@ -1146,6 +1147,9 @@ function ReturnDrawer({
             ))}
           </div>
         )}
+        <div className="mt-3">
+          <PackingVideoEvidence video={detail.packingVideo} />
+        </div>
       </Panel>
 
       <Panel title="Timeline">
