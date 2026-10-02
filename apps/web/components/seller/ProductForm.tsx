@@ -432,7 +432,6 @@ export default function ProductForm({ initial }: Props) {
         (rules.attributeSchema.length === 0 || attributes.some((a) => a.value.trim())),
     },
     { key: 'images', label: 'Images', done: imageUrls.length > 0 },
-    { key: 'packing_video', label: 'Packing video', done: !!packingVideoRef },
     { key: 'variants', label: hasVariants ? 'Variants' : 'Price & stock', done: variantInputs.length > 0 },
     { key: 'inventory', label: 'Inventory', done: totalStock > 0 },
     { key: 'pricing', label: 'Pricing', done: !!cheapest },
@@ -504,11 +503,6 @@ export default function ProductForm({ initial }: Props) {
     if (mode === 'SUBMIT' && missingRequired.length > 0) {
       setError(`Please fill in: ${missingRequired.join(', ')}`);
       setStep('CATEGORY');
-      return;
-    }
-    if (mode === 'SUBMIT' && !packingVideoRef) {
-      setError('Upload a short video of the product being packed - it is required for review');
-      setStep('MEDIA');
       return;
     }
     const parsed = sellerProductUpsertSchema.safeParse(buildPayload(mode));
@@ -1020,9 +1014,9 @@ export default function ProductForm({ initial }: Props) {
             <div className="mt-5 rounded-xl border border-brand-100 bg-brand-50/40 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-bold text-ink-900">Packing video *</p>
+                  <p className="text-sm font-bold text-ink-900">Packing video (optional)</p>
                   <p className="mt-0.5 text-xs text-gray-500">
-                    A short clip of this product being packed - required before review. MP4/WebM/MOV,
+                    A short clip of this product being packed. Not needed for review. MP4/WebM/MOV,
                     up to 50 MB. Kept for 10 days, then removed automatically.
                   </p>
                 </div>
@@ -1696,7 +1690,7 @@ export default function ProductForm({ initial }: Props) {
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">Packing video</dt>
-                <dd className="font-semibold">{packingVideoRef ? 'Uploaded' : 'Missing'}</dd>
+                <dd className="font-semibold">{packingVideoRef ? 'Uploaded' : 'Not added (optional)'}</dd>
               </div>
               <div className="flex justify-between">
                 <dt className="text-gray-500">Details</dt>

@@ -181,3 +181,16 @@ describe('rows stored before keys existed', () => {
     expect(second.productsChanged).toBe(0);
   });
 });
+
+describe('the packing video', () => {
+  it('is not required to submit a listing for review', async () => {
+    const s = await makeSeller();
+    const { status, body } = await call('POST', '/api/seller/products', s.token, listing(s, {
+      mode: 'SUBMIT',
+      attributes: [{ name: 'warranty', value: '2 years' }],
+      packingVideoRef: '',
+    }));
+    expect(status).toBe(200);
+    expect(body.data.status).toBe('PENDING');
+  });
+});

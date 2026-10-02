@@ -125,8 +125,9 @@ export const sellerProductUpsertSchema = z
     imageUrls: z.array(imageUrlSchema).max(8),
     videoUrl: httpUrlSchema(300).optional().or(z.literal('')),
     /**
-     * Packing-process clip - required to submit for review; auto-removed after
-     * 10 days. The reference from POST /api/uploads/video.
+     * Packing-process clip - optional; auto-removed after 10 days. The
+     * reference from POST /api/uploads/video. (A per-order clip is planned to
+     * replace it.)
      */
     packingVideoRef: assetRefSchema.optional().or(z.literal('')),
     attributes: z.array(productAttributeInputSchema).max(20).optional(),

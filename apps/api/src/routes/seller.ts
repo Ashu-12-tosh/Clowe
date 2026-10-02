@@ -439,17 +439,6 @@ function variantRowsFrom(input: SellerProductUpsertInput) {
   return rows;
 }
 
-/** The packing clip is part of every reviewed listing - drafts may still skip it. */
-function assertPackingVideo(input: SellerProductUpsertInput) {
-  if (input.mode === 'DRAFT') return;
-  if (!input.packingVideoRef?.trim()) {
-    throw ApiError.badRequest(
-      'Upload a short video of the product being packed before submitting for review',
-      'PACKING_VIDEO_REQUIRED',
-    );
-  }
-}
-
 /** Spec fields the category marks required must be filled before review. */
 /**
  * Every colour must have pictures before a listing goes for review.
@@ -512,7 +501,6 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
     if (!category) throw ApiError.badRequest('Category not found', 'CATEGORY_NOT_FOUND');
     const rules = await categoryRulesFor(category.id);
     assertRequiredAttributes(input, rules);
-    assertPackingVideo(input);
     assertVariantImages(input, new Map());
     const variantRows = variantRowsFrom(input);
 
@@ -569,7 +557,6 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
     const product = await ownProduct(req, req.params.id);
     const rules = await categoryRulesFor(input.categoryId);
     assertRequiredAttributes(input, rules);
-    assertPackingVideo(input);
     assertVariantImages(
       input,
       new Map(product.variants.map((v) => [v.id, v.images.length])),
