@@ -5,6 +5,7 @@ import {
   LISTING_STATES,
   LISTING_STATE_LABELS,
   SELLER_PRODUCT_SORTS,
+  monthToDateIST,
   type ListingState,
   type SellerCatalogSummary,
   type SellerProductPage,
@@ -202,10 +203,11 @@ sellerProductsRouter.get('/summary', async (req, res, next) => {
     const now = new Date();
     const windowStart = new Date(now.getTime() - VIEW_WINDOW_DAYS * 86400000);
     const previousStart = new Date(now.getTime() - 2 * VIEW_WINDOW_DAYS * 86400000);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    // Months by the Indian calendar, whatever timezone the server runs in;
+    // sales compare this month so far with the same days of last month.
+    const period = monthToDateIST(now);
 
-    const [rows, views30d, viewsPrev30d, newThisMonth, newPrevMonth, soldItems] = await Promise.all([
+    const [rows, views30d, viewsPrev30d, soldItems] = await Promise.all([
       loadRows(sellerId, listQuery.parse({})),
       prisma.productView.count({
         where: { product: { sellerId }, createdAt: { gte: windowStart } },
@@ -213,32 +215,24 @@ sellerProductsRouter.get('/summary', async (req, res, next) => {
       prisma.productView.count({
         where: { product: { sellerId }, createdAt: { gte: previousStart, lt: windowStart } },
       }),
-      prisma.product.count({
-        where: { sellerId, status: { not: 'ARCHIVED' }, createdAt: { gte: monthStart } },
-      }),
-      prisma.product.count({
-        where: {
-          sellerId,
-          status: { not: 'ARCHIVED' },
-          createdAt: { gte: prevMonthStart, lt: monthStart },
-        },
-      }),
       prisma.orderItem.findMany({
         where: {
           sellerId,
           status: { notIn: ['PLACED', 'CANCELLED', 'RETURNED'] },
-          order: { createdAt: { gte: prevMonthStart } },
+          order: { createdAt: { gte: period.previousFrom } },
         },
         select: { pricePaise: true, quantity: true, order: { select: { createdAt: true } } },
       }),
     ]);
 
-    const salesIn = (from: Date, to?: Date) =>
+    const salesIn = (from: Date, to: Date) =>
       soldItems
-        .filter((i) => i.order.createdAt >= from && (!to || i.order.createdAt < to))
+        .filter((i) => i.order.createdAt >= from && i.order.createdAt < to)
         .reduce((sum, i) => sum + i.pricePaise * i.quantity, 0);
-    const salesThisMonth = salesIn(monthStart);
-    const salesPrevMonth = salesIn(prevMonthStart, monthStart);
+    const salesThisMonth = salesIn(period.from, new Date(period.to.getTime() + 1));
+    const salesPrevious = salesIn(period.previousFrom, period.previousTo);
+    // The catalogue as it stood when the month began: today's listings that existed then.
+    const totalAtMonthStart = rows.filter((r) => new Date(r.createdAt) < period.from).length;
 
     const counts = new Map<ListingState, number>();
     for (const row of rows) {
@@ -255,7 +249,8 @@ sellerProductsRouter.get('/summary', async (req, res, next) => {
     const body: SellerCatalogSummary = {
       kpis: {
         total: rows.length,
-        totalChangePercent: changePercent(newThisMonth, newPrevMonth),
+        totalAtMonthStart,
+        totalChangePercent: changePercent(rows.length, totalAtMonthStart),
         active: counts.get('ACTIVE') ?? 0,
         outOfStock: counts.get('OUT_OF_STOCK') ?? 0,
         lowStock: rows.filter(
@@ -263,8 +258,16 @@ sellerProductsRouter.get('/summary', async (req, res, next) => {
         ).length,
         views30d,
         viewsChangePercent: changePercent(views30d, viewsPrev30d),
-        salesPaise: rows.reduce((sum, r) => sum + r.salesPaise, 0),
-        salesChangePercent: changePercent(salesThisMonth, salesPrevMonth),
+        salesPaise: salesThisMonth,
+        salesPreviousPaise: salesPrevious,
+        salesChangePercent: changePercent(salesThisMonth, salesPrevious),
+        salesLifetimePaise: rows.reduce((sum, r) => sum + r.salesPaise, 0),
+      },
+      period: {
+        from: period.from.toISOString(),
+        to: period.to.toISOString(),
+        previousFrom: period.previousFrom.toISOString(),
+        previousTo: period.previousTo.toISOString(),
       },
       statusBreakdown: LISTING_STATES.map((state) => ({
         key: state,

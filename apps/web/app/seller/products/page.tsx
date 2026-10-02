@@ -56,14 +56,27 @@ function count(n: number): string {
 /** SKU, views and sales — the second line under a product's name. */
 function rowFacts(row: SellerProductRow): string {
   const sold = row.unitsSold > 0 ? `${count(row.unitsSold)} sold · ${formatPaise(row.salesPaise)}` : 'no sales yet';
-  return `${row.sku} · ${count(row.views)} views · ${sold}`;
+  return `${row.sku} · ${count(row.views)} views all time · ${sold}`;
 }
 
-function Delta({ change }: { change: number | null }) {
-  if (change === null) return <span className="text-gray-400">no prior month</span>;
+/** "4 Oct", by the Indian calendar the periods are counted in. */
+function istDay(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+}
+
+/** "1–4 Oct": a period that ends at `to` (inclusive of that day). */
+function istRange(from: string, to: string): string {
+  // The end instant is exclusive for a whole previous month; step back a moment to name its last day.
+  const end = new Date(new Date(to).getTime() - 1).toISOString();
+  return istDay(from) === istDay(end) ? istDay(from) : `${istDay(from).split(' ')[0]}–${istDay(end)}`;
+}
+
+/** A change, with what it is measured against spelled out. */
+function Delta({ change, against }: { change: number | null; against: string }) {
+  if (change === null) return <span className="text-gray-400">nothing to compare with {against}</span>;
   return (
     <span className={change >= 0 ? 'text-green-600' : 'text-red-600'}>
-      {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% vs last month
+      {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% vs {against}
     </span>
   );
 }
@@ -302,7 +315,12 @@ export default function SellerProductsPage() {
               icon="👕"
               label="Total products"
               value={num(k.total)}
-              footer={<Delta change={k.totalChangePercent} />}
+              footer={
+                <Delta
+                  change={k.totalChangePercent}
+                  against={`${num(k.totalAtMonthStart)} on ${summary ? istDay(summary.period.from) : ''}`}
+                />
+              }
             />
             <KpiCard
               icon="✅"
@@ -318,15 +336,23 @@ export default function SellerProductsPage() {
             />
             <KpiCard
               icon="👁"
-              label="Views (30 days)"
+              label="Views · last 30 days"
               value={count(k.views30d)}
-              footer={<Delta change={k.viewsChangePercent} />}
+              footer={<Delta change={k.viewsChangePercent} against="the 30 days before" />}
             />
             <KpiCard
               icon="₹"
-              label="Total sales"
+              label={summary ? `Sales · ${istRange(summary.period.from, summary.period.to)}` : 'Sales this month'}
               value={formatPaise(k.salesPaise)}
-              footer={<Delta change={k.salesChangePercent} />}
+              footer={
+                <>
+                  <Delta
+                    change={k.salesChangePercent}
+                    against={summary ? `${istRange(summary.period.previousFrom, summary.period.previousTo)} (${formatPaise(k.salesPreviousPaise)})` : 'last month'}
+                  />
+                  <span className="block text-gray-400">All time: {formatPaise(k.salesLifetimePaise)}</span>
+                </>
+              }
             />
           </>
         ) : (

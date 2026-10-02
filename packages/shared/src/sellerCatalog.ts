@@ -83,8 +83,14 @@ export interface SellerProductPage {
 }
 
 export interface SellerCatalogSummary {
+  /**
+   * Every change compares like with like, over periods named in `period`
+   * (months by the Indian calendar).
+   */
   kpis: {
+    /** Listings now, against the catalogue as it stood when this month began. */
     total: number;
+    totalAtMonthStart: number;
     totalChangePercent: number | null;
     active: number;
     outOfStock: number;
@@ -92,9 +98,15 @@ export interface SellerCatalogSummary {
     /** Views in the last 30 days, and the change vs the 30 before that. */
     views30d: number;
     viewsChangePercent: number | null;
+    /** Sales this month so far, against the same days of last month. */
     salesPaise: number;
+    salesPreviousPaise: number;
     salesChangePercent: number | null;
+    /** Every sale ever, for context. */
+    salesLifetimePaise: number;
   };
+  /** ISO instants: this month so far and the same span of last month (Asia/Kolkata). */
+  period: { from: string; to: string; previousFrom: string; previousTo: string };
   statusBreakdown: { key: ListingState; label: string; count: number; share: number }[];
   topProducts: {
     id: string;
