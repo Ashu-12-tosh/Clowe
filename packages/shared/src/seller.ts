@@ -139,7 +139,8 @@ export const sellerProductUpsertSchema = z
     lengthMm: z.number().int().min(0).max(SHIPPING_LIMITS.maxSideMm).nullable().optional(),
     widthMm: z.number().int().min(0).max(SHIPPING_LIMITS.maxSideMm).nullable().optional(),
     heightMm: z.number().int().min(0).max(SHIPPING_LIMITS.maxSideMm).nullable().optional(),
-    shippingTemplate: z.enum(SHIPPING_TEMPLATES).optional(),
+    // No shippingTemplate: hidden until the Delhivery integration gives it
+    // meaning. A stale form that still sends one has it stripped here.
     metaTitle: z.string().trim().max(70).optional(),
     metaDescription: z.string().trim().max(160).optional(),
     tags: z.array(z.string().trim().min(2).max(30)).max(15).optional(),

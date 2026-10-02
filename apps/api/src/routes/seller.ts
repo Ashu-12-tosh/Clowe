@@ -420,7 +420,8 @@ function productDataFrom(input: SellerProductUpsertInput, rules: CategoryRules) 
     lengthMm: input.lengthMm ?? null,
     widthMm: input.widthMm ?? null,
     heightMm: input.heightMm ?? null,
-    shippingTemplate: input.shippingTemplate ?? null,
+    // shippingTemplate is not the seller's to set until the courier
+    // integration gives it meaning: never written here, so what is stored stays.
     metaTitle: input.metaTitle?.trim() || null,
     metaDescription: input.metaDescription?.trim() || null,
     tags: input.tags ?? [],
@@ -668,7 +669,6 @@ async function saveLiveEdit(
         lengthMm: proposed.lengthMm,
         widthMm: proposed.widthMm,
         heightMm: proposed.heightMm,
-        shippingTemplate: proposed.shippingTemplate,
         metaTitle: proposed.metaTitle,
         metaDescription: proposed.metaDescription,
         tags: proposed.tags,

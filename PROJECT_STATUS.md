@@ -217,10 +217,12 @@ the marketplace's. Approval does warn "PAN has not been provided", but the admin
 can acknowledge it and approve. Either payouts should require a verified PAN,
 or TDS should switch to 5% when none is on file.
 
-**The shipping template does nothing yet.** Standard / Express / Heavy is saved
-with a listing and shown back on the form, and nothing else reads it. It is left
-as it is on purpose: it gets real meaning with the Delhivery integration (service
-type and rate card). Weight and dimensions, by contrast, are checked: required in
+**The shipping template is hidden until Delhivery.** Standard / Express / Heavy
+did nothing, so the field is gone from the seller's product form (2026-10-03),
+and the API no longer accepts or writes it: values already stored stay in
+`products.shippingTemplate`, untouched, and new listings have none. It comes
+back with the Delhivery integration, which gives it meaning (service type and
+rate card). Weight and dimensions, by contrast, are checked: required in
 range before anything goes to review (10 g–100 kg, each side 1–300 cm), with a
 live volumetric-weight hint (L × W × H ÷ 5000) and a warning when the box weighs
 more than twice the item by size.

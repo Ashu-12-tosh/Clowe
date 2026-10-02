@@ -252,3 +252,29 @@ describe('a listing that is not live yet', () => {
     expect(await imageIds(l.product.id)).toEqual(before);
   });
 });
+
+/**
+ * The shipping template is hidden from the product form until the courier
+ * integration gives it meaning. Saving a listing must leave what is stored
+ * alone, including when an old form still sends one.
+ */
+describe('the shipping template', () => {
+  const template = async (productId: string) =>
+    (await prisma.product.findUniqueOrThrow({ where: { id: productId } })).shippingTemplate;
+
+  it('is kept when a live listing is saved without it, or with a stale one', async () => {
+    const l = await listing();
+    await prisma.product.update({ where: { id: l.product.id }, data: { shippingTemplate: 'EXPRESS' } });
+    expect((await save(l, { title: 'Edited Title' })).status).toBe(200);
+    expect(await template(l.product.id)).toBe('EXPRESS');
+    expect((await save(l, { shippingTemplate: 'HEAVY' })).status).toBe(200);
+    expect(await template(l.product.id)).toBe('EXPRESS');
+  });
+
+  it('is kept when a draft is saved', async () => {
+    const l = await listing(ProductStatus.DRAFT);
+    await prisma.product.update({ where: { id: l.product.id }, data: { shippingTemplate: 'HEAVY' } });
+    expect((await save(l, { title: 'Draft Title', mode: 'DRAFT' })).status).toBe(200);
+    expect(await template(l.product.id)).toBe('HEAVY');
+  });
+});

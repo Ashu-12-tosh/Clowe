@@ -5,8 +5,6 @@ import { useRouter } from 'next/navigation';
 import {
   MAX_VARIANT_AXES,
   SHIPPING_LIMITS,
-  SHIPPING_TEMPLATES,
-  SHIPPING_TEMPLATE_LABELS,
   VOLUMETRIC_DIVISOR,
   axisLabel,
   billedWeightGrams,
@@ -26,7 +24,6 @@ import {
   type SellerProductDetail,
   type SellerProductUpsertInput,
   type SellerVariantInput,
-  type ShippingTemplateValue,
   type VariantAxis,
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadImages } from '@/lib/api';
@@ -223,9 +220,6 @@ export default function ProductForm({ initial }: Props) {
     heightMm: dims.h.trim() ? Math.round(Number(dims.h) * 10) : null,
   };
   const volumetricGrams = volumetricWeightGrams(parcel.lengthMm, parcel.widthMm, parcel.heightMm);
-  const [shippingTemplate, setShippingTemplate] = useState<ShippingTemplateValue>(
-    initial?.shippingTemplate ?? 'STANDARD',
-  );
   const [metaTitle, setMetaTitle] = useState(initial?.metaTitle ?? '');
   const [metaDescription, setMetaDescription] = useState(initial?.metaDescription ?? '');
   const [tagsText, setTagsText] = useState((initial?.tags ?? []).join(', '));
@@ -481,7 +475,6 @@ export default function ProductForm({ initial }: Props) {
       lengthMm: dims.l.trim() ? Math.round(Number(dims.l) * 10) : null,
       widthMm: dims.w.trim() ? Math.round(Number(dims.w) * 10) : null,
       heightMm: dims.h.trim() ? Math.round(Number(dims.h) * 10) : null,
-      shippingTemplate,
       metaTitle: metaTitle.trim() || undefined,
       metaDescription: metaDescription.trim() || undefined,
       tags,
@@ -1506,20 +1499,8 @@ export default function ProductForm({ initial }: Props) {
                     placeholder="0.35"
                   />
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Shipping template</label>
-                  <select
-                    value={shippingTemplate}
-                    onChange={(e) => setShippingTemplate(e.target.value as ShippingTemplateValue)}
-                    className={`mt-1 ${field}`}
-                  >
-                    {SHIPPING_TEMPLATES.map((t) => (
-                      <option key={t} value={t}>
-                        {SHIPPING_TEMPLATE_LABELS[t]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* No shipping template: hidden until the Delhivery integration
+                    gives it meaning. A stored value is kept by the API. */}
                 <div className="sm:col-span-2 min-w-0">
                   <label className="text-sm font-medium">Dimensions (cm)</label>
                   <div className="mt-1 grid grid-cols-3 gap-2">
