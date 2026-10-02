@@ -26,6 +26,7 @@ const NAV: DashNavItem[] = [
   { href: '/admin/ads', label: 'Ads', icon: '📣' },
   { href: '/admin/seller-referrals', label: 'Referrals', icon: '🤝' },
   { href: '/admin/audit', label: 'Audit Logs', icon: '📋' },
+  { href: '/admin/csp-reports', label: 'CSP Reports', icon: '🛡' },
   { href: '/admin/settings', label: 'Settings', icon: '⚙' },
 ];
 

@@ -62,6 +62,24 @@ export default function config(phase) {
     transpilePackages: ['@clowe/shared'],
     // Self-contained server bundle for the production Docker image.
     output: 'standalone',
+    // Security headers that do not change per request. The
+    // Content-Security-Policy carries a per-request nonce, so it is set in
+    // middleware.ts instead.
+    async headers() {
+      const headers = [
+        { key: 'X-Content-Type-Options', value: 'nosniff' },
+        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        // Belt and braces with frame-ancestors 'none', for browsers that only know this one.
+        { key: 'X-Frame-Options', value: 'DENY' },
+        // Voice search needs the microphone; nothing here uses the camera or location.
+        { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=(), browsing-topics=()' },
+      ];
+      if (!isDev) {
+        // The API already sends this for the same host; pages say it too.
+        headers.push({ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' });
+      }
+      return [{ source: '/:path*', headers }];
+    },
     async rewrites() {
       if (!isDev) return [];
       return [

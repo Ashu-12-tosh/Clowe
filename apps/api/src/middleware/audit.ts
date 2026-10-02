@@ -108,6 +108,8 @@ const IGNORED = [
   /^\/api\/notifications/,
   /^\/api\/track/,
   /^\/api\/uploads/,
+  // Browser-sent policy reports: counted in their own table, not audited.
+  /^\/api\/csp-reports/,
 ];
 
 function matchRule(method: string, path: string): RouteRule | null {

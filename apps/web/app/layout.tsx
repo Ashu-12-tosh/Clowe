@@ -24,6 +24,11 @@ const cormorant = localFont({
   adjustFontFallback: 'Times New Roman',
 });
 
+// Every page renders per request: the Content-Security-Policy nonce
+// (middleware.ts) is fresh each time, and a page built ahead of time would
+// carry inline scripts without it.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
   title: {

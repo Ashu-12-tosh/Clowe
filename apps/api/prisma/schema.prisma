@@ -1994,3 +1994,28 @@ model SearchQuery {
   @@index([createdAt])
   @@map("search_queries")
 }
+
+/// Content-Security-Policy violations the browsers report, grouped: one row
+/// per (directive, blocked source, page path, disposition) with a count, so a
+/// noisy page is one row, not a million. No query strings or full URLs are
+/// kept, only origins and paths.
+model CspReport {
+  id          String   @id @default(cuid())
+  /// sha256 of the grouping key below.
+  fingerprint String   @unique
+  directive   String
+  /// Origin or scheme of what was blocked, or 'inline' / 'eval'.
+  blocked     String
+  /// Path of the page that triggered it.
+  page        String
+  /// 'report' (Report-Only) or 'enforce'.
+  disposition String
+  /// Start of the offending inline script, when the browser sends one.
+  sample      String?
+  count       Int      @default(1)
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  @@index([lastSeenAt])
+  @@map("csp_reports")
+}

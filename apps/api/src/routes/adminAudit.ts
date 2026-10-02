@@ -13,6 +13,7 @@ import {
   type AuditStatusValue,
   type AuditSummary,
   type AuditTab,
+  type CspReportRow,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -500,6 +501,31 @@ adminAuditRouter.get('/export', async (req, res, next) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="clowe-audit-log.csv"');
     res.send(lines.join('\n'));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /csp-reports — grouped Content-Security-Policy violations, newest first.
+// Declared before /:id, which would otherwise take it for a log id.
+// ---------------------------------------------------------------------------
+
+adminAuditRouter.get('/csp-reports', async (_req, res, next) => {
+  try {
+    const rows = await prisma.cspReport.findMany({ orderBy: { lastSeenAt: 'desc' }, take: 200 });
+    const data: CspReportRow[] = rows.map((r) => ({
+      id: r.id,
+      directive: r.directive,
+      blocked: r.blocked,
+      page: r.page,
+      disposition: r.disposition === 'enforce' ? 'enforce' : 'report',
+      sample: r.sample,
+      count: r.count,
+      firstSeenAt: r.firstSeenAt.toISOString(),
+      lastSeenAt: r.lastSeenAt.toISOString(),
+    }));
+    res.json({ success: true, data });
   } catch (err) {
     next(err);
   }
