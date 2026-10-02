@@ -18,6 +18,8 @@ import {
   PayoutStatusPill,
 } from '@/components/seller/payouts/PayoutModals';
 import { LedgerPanel } from '@/components/seller/payouts/LedgerPanel';
+import { PenaltiesPanel } from '@/components/seller/payouts/PenaltiesPanel';
+import { PromotionBalanceCard } from '@/components/seller/payouts/PromotionBalanceCard';
 
 function money(paise: number): string {
   return formatPaise(paise);
@@ -568,6 +570,16 @@ export default function SellerPayoutsPage() {
               </div>
             )}
           </section>
+
+          {/* --- Penalties and promotion credits: shown even at zero ----- */}
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="min-w-0 lg:col-span-2">
+              <PenaltiesPanel refreshKey={ledgerRefresh} />
+            </div>
+            <div className="min-w-0">
+              <PromotionBalanceCard />
+            </div>
+          </div>
 
           {/* --- Ledger ------------------------------------------------ */}
           <LedgerPanel

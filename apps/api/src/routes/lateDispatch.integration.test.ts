@@ -300,3 +300,93 @@ describe('what the seller is told', () => {
     expect(rows[0].note).toBe('Dispatched 15h after placement; window 12h');
   });
 });
+
+type PenaltiesView = {
+  rule: { enabled: boolean; penaltyPaise: number; windowHours: number };
+  rows: {
+    entryId: string;
+    orderNumber: string | null;
+    itemTitle: string | null;
+    amountPaise: number;
+    reason: string | null;
+    waived: boolean;
+    waiverNote: string | null;
+  }[];
+  total: number;
+  chargedPaise: number;
+  waivedPaise: number;
+  netPaise: number;
+};
+
+const penaltiesView = async (token: string) =>
+  (await call('GET', '/api/seller/ledger/penalties', token)).json.data as unknown as PenaltiesView;
+
+describe('the payouts page penalties section', () => {
+  it('answers with the rule from settings and empty rows when there are none', async () => {
+    const s = await makeSeller();
+    const view = await penaltiesView(s.token);
+    expect(view.rule).toEqual({
+      enabled: DEFAULT_SETTINGS.penaltyEnabled,
+      penaltyPaise: DEFAULT_SETTINGS.lateDispatchPenaltyPaise,
+      windowHours: DEFAULT_SETTINGS.dispatchWindowHours,
+    });
+    expect(view.rows).toEqual([]);
+    expect([view.total, view.chargedPaise, view.waivedPaise, view.netPaise]).toEqual([0, 0, 0, 0]);
+
+    await setSetting('penaltyEnabled', false);
+    await setSetting('dispatchWindowHours', 48);
+    await setSetting('lateDispatchPenaltyPaise', 12_345);
+    expect((await penaltiesView(s.token)).rule).toEqual({ enabled: false, penaltyPaise: 12_345, windowHours: 48 });
+  });
+
+  it('lists each penalty with its order, reason and waived status, and totals them', async () => {
+    const s = await makeSeller();
+    const admin = await makeAdmin();
+    const kept = await makeLine(s, 14);
+    const forgiven = await makeLine(s, 18);
+    await ship(s, kept.id);
+    await ship(s, forgiven.id);
+    const [toWaive] = await penalties(forgiven.id);
+    const waive = await call('POST', `/api/admin/sellers/${s.sellerId}/ledger/${toWaive.id}/waive`, admin.token, {
+      reason: 'Courier missed the pickup',
+    });
+    expect(waive.status).toBe(200);
+
+    const view = await penaltiesView(s.token);
+    expect(view.total).toBe(2);
+    const byReason = new Map(view.rows.map((r) => [r.reason, r]));
+    const keptRow = byReason.get('Dispatched 14h after placement; window 12h');
+    const waivedRow = byReason.get('Dispatched 18h after placement; window 12h');
+    expect(keptRow).toMatchObject({ amountPaise: PENALTY, waived: false, waiverNote: null, itemTitle: s.product.title });
+    expect(keptRow?.orderNumber).toMatch(/^CLW-LATE-/);
+    expect(waivedRow).toMatchObject({
+      entryId: toWaive.id,
+      amountPaise: PENALTY,
+      waived: true,
+      waiverNote: 'Waived: Courier missed the pickup',
+    });
+    expect(view.chargedPaise).toBe(2 * PENALTY);
+    expect(view.waivedPaise).toBe(PENALTY);
+    expect(view.netPaise).toBe(PENALTY);
+    // The section and the ledger agree on what penalties cost.
+    expect(-(await balance(s.sellerId, 'SETTLEMENT'))).toBe(view.netPaise);
+  });
+
+  it("shows only the signed-in seller's penalties", async () => {
+    const s = await makeSeller();
+    const other = await makeSeller();
+    const line = await makeLine(s, 20);
+    await ship(s, line.id);
+    expect((await penaltiesView(s.token)).total).toBe(1);
+    expect((await penaltiesView(other.token)).total).toBe(0);
+  });
+});
+
+describe('the payouts page promotion balance', () => {
+  it('answers at zero for a seller who never bought credits', async () => {
+    const s = await makeSeller();
+    const page = await call('GET', '/api/seller/ledger?bucket=PROMOTION&page=1&pageSize=5', s.token);
+    expect(page.status).toBe(200);
+    expect(page.json.data).toMatchObject({ bucket: 'PROMOTION', balancePaise: 0, rows: [], total: 0 });
+  });
+});

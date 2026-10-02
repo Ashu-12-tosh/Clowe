@@ -6,6 +6,7 @@ import {
   type SellerLedgerEntryRow,
   type SellerLedgerPage,
   type SellerLedgerTypeValue,
+  type SellerPenaltiesView,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
@@ -290,6 +291,72 @@ export async function waivePenalty(
     outcome: posted ? 'WAIVED' : 'ALREADY_WAIVED',
     amountPaise: -entry.amountPaise,
     orderItemId: entry.orderItemId,
+  };
+}
+
+/**
+ * The seller's late-dispatch penalties, each paired with its waiver if one
+ * was posted, plus the rule as settings have it now. Totals cover every
+ * penalty; the rows are the newest `limit`.
+ */
+export async function penaltiesView(
+  sellerId: string,
+  limit = 50,
+  db: Db = prisma,
+): Promise<SellerPenaltiesView> {
+  const settings = await getSettings();
+  const [penalties, waivers] = await Promise.all([
+    db.sellerLedgerEntry.findMany({
+      where: { sellerId, type: 'LATE_DISPATCH_PENALTY' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { id: true, orderId: true, orderItemId: true, amountPaise: true, note: true, createdAt: true },
+    }),
+    db.sellerLedgerEntry.findMany({
+      where: { sellerId, type: 'PENALTY_WAIVER' },
+      select: { orderItemId: true, amountPaise: true, note: true, createdAt: true },
+    }),
+  ]);
+  const waiverByItem = new Map(waivers.filter((w) => w.orderItemId).map((w) => [w.orderItemId!, w]));
+
+  const shown = penalties.slice(0, limit);
+  const itemIds = shown.map((p) => p.orderItemId).filter((id): id is string => !!id);
+  const items = itemIds.length
+    ? await db.orderItem.findMany({
+        where: { id: { in: itemIds } },
+        select: { id: true, title: true, order: { select: { orderNumber: true } } },
+      })
+    : [];
+  const itemById = new Map(items.map((i) => [i.id, i]));
+
+  const chargedPaise = penalties.reduce((sum, p) => sum - p.amountPaise, 0);
+  const waivedPaise = waivers.reduce((sum, w) => sum + w.amountPaise, 0);
+
+  return {
+    rule: {
+      enabled: settings.penaltyEnabled,
+      penaltyPaise: settings.lateDispatchPenaltyPaise,
+      windowHours: settings.dispatchWindowHours,
+    },
+    rows: shown.map((p) => {
+      const item = p.orderItemId ? itemById.get(p.orderItemId) : undefined;
+      const waiver = p.orderItemId ? waiverByItem.get(p.orderItemId) : undefined;
+      return {
+        entryId: p.id,
+        orderId: p.orderId,
+        orderNumber: item?.order.orderNumber ?? null,
+        itemTitle: item?.title ?? null,
+        chargedAt: p.createdAt.toISOString(),
+        amountPaise: -p.amountPaise,
+        reason: p.note,
+        waived: !!waiver,
+        waivedAt: waiver ? waiver.createdAt.toISOString() : null,
+        waiverNote: waiver?.note ?? null,
+      };
+    }),
+    total: penalties.length,
+    chargedPaise,
+    waivedPaise,
+    netPaise: chargedPaise - waivedPaise,
   };
 }
 

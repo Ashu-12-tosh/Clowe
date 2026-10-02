@@ -636,7 +636,7 @@ export default function SellerDashboardPage() {
           </div>
 
           {/* Promotion credits ------------------------------------------ */}
-          <div className="mt-4">
+          <div id="promotion-credits" className="mt-4 scroll-mt-20">
             <PromotionCreditsCard />
           </div>
         </>

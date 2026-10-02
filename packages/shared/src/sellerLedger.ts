@@ -77,6 +77,44 @@ export interface SellerLedgerPage {
   totalPages: number;
 }
 
+/** The late-dispatch rule as the platform currently runs it, from settings. */
+export interface LateDispatchRule {
+  enabled: boolean;
+  /** Charged once per order line shipped after the window. */
+  penaltyPaise: number;
+  windowHours: number;
+}
+
+/** One late-dispatch penalty and whether it was forgiven. */
+export interface SellerPenaltyRow {
+  /** The LATE_DISPATCH_PENALTY ledger entry. */
+  entryId: string;
+  orderId: string | null;
+  orderNumber: string | null;
+  itemTitle: string | null;
+  chargedAt: string;
+  /** What was charged, as a positive number. */
+  amountPaise: number;
+  /** Why: the dispatch arithmetic written when it was charged. */
+  reason: string | null;
+  waived: boolean;
+  waivedAt: string | null;
+  /** The admin's reason, as recorded on the waiver. */
+  waiverNote: string | null;
+}
+
+/** GET /api/seller/ledger/penalties. Always answers, even with no penalties. */
+export interface SellerPenaltiesView {
+  rule: LateDispatchRule;
+  rows: SellerPenaltyRow[];
+  /** Penalties in `rows`, newest first, capped; `total` counts them all. */
+  total: number;
+  chargedPaise: number;
+  waivedPaise: number;
+  /** charged − waived: what penalties have cost, all time. */
+  netPaise: number;
+}
+
 export const sellerLedgerQuerySchema = z.object({
   bucket: z.enum(SELLER_LEDGER_BUCKETS).default('SETTLEMENT'),
   page: z.coerce.number().int().min(1).default(1),
