@@ -146,6 +146,17 @@ export default function ProductForm({ initial }: Props) {
   // --- Basic ---
   const [title, setTitle] = useState(initial?.title ?? '');
   const [brand, setBrand] = useState(initial?.brand ?? '');
+  // Brands to suggest: ones shoppers already see, and new ones an admin added.
+  const [brandOptions, setBrandOptions] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    const q = brand.trim();
+    const timer = setTimeout(() => {
+      api<{ id: string; name: string }[]>(`/api/seller/brands?q=${encodeURIComponent(q)}`, { auth: true })
+        .then(setBrandOptions)
+        .catch(() => setBrandOptions([]));
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [brand]);
   const [shortDescription, setShortDescription] = useState(initial?.shortDescription ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
 
@@ -240,6 +251,9 @@ export default function ProductForm({ initial }: Props) {
   const selectedNode = path[path.length - 1];
   const isLeaf = !!selectedNode && selectedNode.children.length === 0;
   const rules = selectedNode?.rules ?? NO_RULES;
+  // The spec sheet: the category's own fields plus the filter facets' fields,
+  // with a dropdown wherever the facet knows the values (what shoppers filter by).
+  const specFields = useMemo(() => selectedNode?.specFields ?? [], [selectedNode]);
 
   // A fresh listing takes its option axes from the category until the seller edits them.
   useEffect(() => {
@@ -414,21 +428,21 @@ export default function ProductForm({ initial }: Props) {
   /** Spec-sheet fields the category requires that are still empty. */
   const missingRequired = useMemo(
     () =>
-      rules.attributeSchema
+      specFields
         .filter(
           (def) =>
             def.required &&
             !attributes.some((a) => attributeMatchesDef(a, def) && a.value.trim()),
         )
         .map((def) => def.label),
-    [rules.attributeSchema, attributes],
+    [specFields, attributes],
   );
 
   /** Attributes the seller added on top of the category's spec sheet. */
   const customAttributeIndexes = attributes
     .map((a, i) => ({ a, i }))
     .filter(
-      ({ a }) => !rules.attributeSchema.some((def) => attributeMatchesDef(a, def)),
+      ({ a }) => !specFields.some((def) => attributeMatchesDef(a, def)),
     )
     .map(({ i }) => i);
 
@@ -438,12 +452,12 @@ export default function ProductForm({ initial }: Props) {
     { key: 'category', label: 'Category', done: isLeaf },
     {
       key: 'details',
-      label: rules.attributeSchema.some((d) => d.required) ? 'Required details' : 'Product details',
+      label: specFields.some((d) => d.required) ? 'Required details' : 'Product details',
       // Not "done" until a category is picked - before that there is nothing to judge.
       done:
         !!selectedNode &&
         missingRequired.length === 0 &&
-        (rules.attributeSchema.length === 0 || attributes.some((a) => a.value.trim())),
+        (specFields.length === 0 || attributes.some((a) => a.value.trim())),
     },
     { key: 'images', label: 'Images', done: imageUrls.length > 0 },
     { key: 'variants', label: hasVariants ? 'Variants' : 'Price & stock', done: variantInputs.length > 0 },
@@ -716,14 +730,29 @@ export default function ProductForm({ initial }: Props) {
                 />
               </div>
               <div>
-                <label className="text-sm font-medium">Brand</label>
+                <label className="text-sm font-medium" htmlFor="brand-input">
+                  Brand
+                </label>
                 <input
+                  id="brand-input"
                   value={brand}
                   onChange={(e) => setBrand(e.target.value)}
                   maxLength={40}
-                  placeholder="Brand or manufacturer"
+                  list="brand-suggestions"
+                  autoComplete="off"
+                  placeholder="Start typing to pick your brand"
                   className={`mt-1 ${field}`}
                 />
+                <datalist id="brand-suggestions">
+                  {brandOptions.map((b) => (
+                    <option key={b.id} value={b.name} />
+                  ))}
+                </datalist>
+                <p className="mt-1 text-[11px] text-gray-400">
+                  {brand.trim() && !brandOptions.some((b) => b.name.toLowerCase() === brand.trim().toLowerCase())
+                    ? 'Not one of our brands yet — a new brand is checked when the listing is reviewed.'
+                    : 'Pick from the list where your brand is there, so shoppers find it under one name.'}
+                </p>
               </div>
               <div className="sm:col-span-2">
                 <div className="flex items-center justify-between">
@@ -814,15 +843,15 @@ export default function ProductForm({ initial }: Props) {
             <div className="mt-5">
               <label className="text-sm font-medium">Product details</label>
               <p className="mt-1 text-xs text-gray-400">
-                {rules.attributeSchema.length > 0
-                  ? 'The spec sheet shoppers see on the product page. Fields marked * are required for this category.'
+                {specFields.length > 0
+                  ? 'The spec sheet shoppers see on the product page, and filter by. Fields marked * are required for this category.'
                   : selectedNode
                     ? 'The spec sheet shoppers see on the product page.'
                     : 'Pick a category to see the details it needs.'}
               </p>
-              {rules.attributeSchema.length > 0 && (
+              {specFields.length > 0 && (
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {rules.attributeSchema.map((def) => {
+                  {specFields.map((def) => {
                     const current = attributes.find((a) => attributeMatchesDef(a, def))?.value ?? '';
                     return (
                       <div key={def.key}>
@@ -838,6 +867,10 @@ export default function ProductForm({ initial }: Props) {
                             className={`mt-1 ${field}`}
                           >
                             <option value="">Select…</option>
+                            {/* A value saved before this list existed stays visible, to be replaced. */}
+                            {current && !def.options.includes(current) && (
+                              <option value={current}>{current} (not in the list — pick one)</option>
+                            )}
                             {def.options.map((o) => (
                               <option key={o} value={o}>
                                 {o}
