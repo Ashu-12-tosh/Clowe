@@ -10,6 +10,7 @@ import { seedMarketplace } from './seed/marketplace';
 import { seedCategoryRules } from './seed/categoryRules';
 import { seedCategoryFacets } from './seed/facets';
 import { seedDemoAttributes } from './seed/demoAttributes';
+import { seedDemoFacetValues } from './seed/demoFacetValues';
 import { seedElectronics } from './seed/electronics';
 import { seedFashion } from './seed/fashion';
 import { seedTryOns } from './seed/tryon';
@@ -375,6 +376,8 @@ async function main() {
   // here, from the same slug-seeded pools the department seeds draw from.
   const sheets = await seedDemoAttributes(prisma);
   console.log(`[seed] Spec sheets: ${sheets.filled} of ${sheets.empty} demo products filled (${sheets.rows} rows)`);
+  // Filter facets the department pools never covered (screen size, processor, type…).
+  console.log(`[seed] Facet values filled on ${(await seedDemoFacetValues(prisma, true)).products} demo products`);
   await seedTryOnEligibility();
   await seedCoupons();
   await seedTryOns(prisma);

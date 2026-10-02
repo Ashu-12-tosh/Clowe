@@ -21,6 +21,7 @@
     "db:backfill-brand-ids": "tsx prisma/backfillBrandIds.ts",
     "db:backfill-demo-attributes": "tsx prisma/backfillDemoAttributes.ts",
     "db:seed-facets": "tsx prisma/seedFacets.ts",
+    "db:backfill-demo-facets": "tsx prisma/backfillDemoFacets.ts",
     "db:backfill-private-files": "tsx prisma/backfillPrivateFiles.ts",
     "seed:tryon-demo": "tsx scripts/seedTryOnDemoProduct.ts",
     "tryon:check": "tsx scripts/tryonCheck.ts",

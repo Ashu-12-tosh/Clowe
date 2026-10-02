@@ -40,7 +40,7 @@ const NETWORK = ['5G', '4G', 'Wi-Fi only'];
 const CONNECTION = ['Wireless', 'Wired', 'Wireless + wired'];
 const APPLIANCE_TYPES = [
   'Refrigerator', 'Washing machine', 'Microwave', 'Air conditioner', 'Air purifier', 'Vacuum cleaner',
-  'Water purifier', 'Mixer grinder', 'Blender', 'Air fryer', 'Coffee maker', 'Kettle', 'Induction cooktop',
+  'Water purifier', 'Mixer grinder', 'Blender', 'Air fryer', 'Coffee maker', 'Kettle', 'Induction cooktop', 'Fan',
 ];
 const SLEEVE = ['Half sleeve', 'Short sleeve', 'Three-quarter sleeve', 'Full sleeve', 'Sleeveless'];
 const FIT = ['Slim', 'Regular', 'Relaxed', 'Oversized'];
@@ -108,7 +108,10 @@ export const FACET_SEED: Record<string, CategoryFacetConfig> = {
   }),
   'electronics-accessories': config({
     add: [
-      list('accessory_type', 'Type', ['Keyboard', 'Mouse', 'Keyboard & mouse', 'Webcam', 'USB hub', 'Monitor', 'Mouse pad', 'Laptop stand']),
+      list('accessory_type', 'Type', [
+        'Keyboard', 'Mouse', 'Keyboard & mouse', 'Webcam', 'USB hub', 'Monitor', 'Mouse pad', 'Laptop stand',
+        'Portable storage', 'Power bank', 'Headset',
+      ]),
       list('connection', 'Connection', CONNECTION),
       list('switch', 'Switch'),
     ],
