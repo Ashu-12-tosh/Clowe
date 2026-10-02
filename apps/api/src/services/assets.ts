@@ -91,7 +91,13 @@ export async function resolveFileUrls(values: (string | null | undefined)[]): Pr
       const asset = byId.get(id);
       if (!asset || asset.deletedAt) return null;
       const ttl = asset.contentType.startsWith('video/') ? VIDEO_URL_TTL_SECONDS : IMAGE_URL_TTL_SECONDS;
-      return storageFor(asset.provider).signedUrl(asset.key, ttl);
+      try {
+        return await storageFor(asset.provider).signedUrl(asset.key, ttl);
+      } catch (err) {
+        // A file whose store is not configured shows as missing; the page still loads.
+        console.error(`[clowe-api] no URL for asset ${asset.id}:`, err instanceof Error ? err.message : err);
+        return null;
+      }
     }),
   );
 }

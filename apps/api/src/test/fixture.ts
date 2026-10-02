@@ -257,6 +257,9 @@ export async function seedFixture(prisma: PrismaClient): Promise<void> {
   await prisma.brand.deleteMany();
   await prisma.category.deleteMany();
   await prisma.sellerProfile.deleteMany();
+  // Stored-file rows: some tests write rows with no bytes behind them, which
+  // must not reach a later file that scans every asset.
+  await prisma.asset.deleteMany();
   await prisma.user.deleteMany();
 
   const user = await prisma.user.create({

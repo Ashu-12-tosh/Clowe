@@ -38,6 +38,12 @@ services:
       # only by signed /api/files URLs. Its own volume, below.
       PRIVATE_UPLOAD_DIR: uploads-private
       FILE_URL_SECRET: ${FILE_URL_SECRET:-}
+      # Private files in Cloudflare R2 once these are set (auto); local until then.
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-auto}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_PRIVATE_BUCKET: ${R2_PRIVATE_BUCKET:-}
       # Providers — mock until real keys are configured
       OTP_PROVIDER: ${OTP_PROVIDER:-mock}
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}

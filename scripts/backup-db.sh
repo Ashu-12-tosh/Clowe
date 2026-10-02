@@ -31,6 +31,15 @@ if docker volume inspect "${PROJECT}_private_uploads_data" >/dev/null 2>&1; then
     alpine tar czf "/backup/private-uploads-$STAMP.tar.gz" -C /private .
 fi
 
+# 2c. Private files in Cloudflare R2, once they live there: a mirror on this
+#     server, and a dated archive of it, so losing the R2 account loses nothing.
+#     Needs rclone and a read-only remote, e.g. R2_BACKUP_REMOTE=r2:clowe-private
+#     (DEPLOY_RUNBOOK, "Private files in R2"). Skipped when either is missing.
+if [ -n "${R2_BACKUP_REMOTE:-}" ] && command -v rclone >/dev/null 2>&1; then
+  rclone sync "$R2_BACKUP_REMOTE" "$BACKUP_DIR/r2-private"
+  tar czf "$BACKUP_DIR/r2-private-$STAMP.tar.gz" -C "$BACKUP_DIR/r2-private" .
+fi
+
 # 3. Prune backups older than KEEP_DAYS
 find "$BACKUP_DIR" -name '*.gz' -mtime "+$KEEP_DAYS" -delete
 

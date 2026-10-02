@@ -16,7 +16,7 @@ app.listen(env.PORT, () => {
   // Reports the live try-on provider, and warns at boot if the key is bad.
   void logTryOnProviderStatus();
   logKycProviderStatus();
-  logStorageStatus();
+  void logStorageStatus();
 });
 
 // Packing videos expire after 10 days - swept at boot and hourly after that.

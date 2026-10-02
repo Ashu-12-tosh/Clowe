@@ -854,6 +854,48 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 Migrations run automatically when the API container starts. The database and
 uploads live in named volumes, so nothing is lost.
 
+### Private files in R2
+
+Return photos, try-on photos and results, and packing videos are private:
+never on a public URL, shown only through links that expire in minutes. They
+live on the server's `private_uploads_data` volume until R2 is configured,
+then in a private R2 bucket. Nothing else changes: the same links, the same
+screens. Free tier: 10 GB-month of storage, 1 million writes and 10 million
+reads a month, and no charge for downloads.
+
+1. **Bucket.** Cloudflare dashboard → R2 → Create bucket, e.g.
+   `clowe-private`. Leave public access off and add no custom domain.
+2. **App token.** R2 → Manage API tokens → Create: *Object Read & Write*,
+   limited to that one bucket. Note the Access Key ID, the Secret Access Key
+   and your account ID (it is in the S3 endpoint it shows).
+3. **Packing videos expire by themselves too.** The bucket → Settings →
+   Object lifecycle rules → Add: prefix `packing-video/`, delete objects 11
+   days after upload. The app removes them at 10 days; this is the backstop
+   if it ever doesn't. Add no rule for the other folders: saved try-on photos
+   and return photos must not expire on their own.
+4. **Switch.** Put the four values in `.env.production` (`R2_ACCOUNT_ID`,
+   `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_PRIVATE_BUCKET`), then
+   `dc up -d api`. ✅ `dc logs api | grep "private files"` says
+   `private files: R2 - Bucket clowe-private reachable`.
+5. **Move what is already stored.** Dry run, then for real:
+   ```sh
+   dc exec api npx tsx prisma/moveAssets.ts
+   dc exec api npx tsx prisma/moveAssets.ts --apply
+   ```
+   Each file is copied, read back and compared before the original is
+   deleted. A second run reports nothing to move.
+6. **Backups.** A second token, *Object Read* only, same bucket. Install
+   rclone (`apt install rclone`), then `rclone config` → new remote `r2`,
+   storage *s3*, provider *Cloudflare*, that token's keys, endpoint
+   `https://<account id>.r2.cloudflarestorage.com`. ✅
+   `rclone ls r2:clowe-private` lists files. Then add the remote to the
+   backup cron line:
+   ```
+   0 2 * * * cd /root/clowe && R2_BACKUP_REMOTE=r2:clowe-private ./scripts/backup-db.sh >> backups/backup.log 2>&1
+   ```
+   Every night mirrors the bucket into `backups/r2-private/` and archives it,
+   which the off-box copy then carries.
+
 ### One-off data fixes
 
 Some fixes change data the seed already wrote, so they ship as scripts to run

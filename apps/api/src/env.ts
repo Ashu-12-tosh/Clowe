@@ -110,9 +110,17 @@ const envSchema = z.object({
   // when they are stored locally. Never served statically: only through a
   // signed /api/files URL. Must be on a persistent volume in production.
   PRIVATE_UPLOAD_DIR: z.string().default('uploads-private'),
-  // Where private files live: 'local' (PRIVATE_UPLOAD_DIR), or 'auto' to use
-  // the best configured provider.
-  STORAGE_PROVIDER: z.enum(['auto', 'local']).default('auto'),
+  // Where private files live: 'local' (PRIVATE_UPLOAD_DIR), 'r2', or 'auto'
+  // (R2 when its four settings below are present, else local).
+  STORAGE_PROVIDER: z.enum(['auto', 'local', 'r2']).default('auto'),
+  // Cloudflare R2, for private files. An API token scoped to the one bucket,
+  // with Object Read & Write. The bucket has no public access.
+  R2_ACCOUNT_ID: optionalSecret,
+  R2_ACCESS_KEY_ID: optionalSecret,
+  R2_SECRET_ACCESS_KEY: optionalSecret,
+  R2_PRIVATE_BUCKET: optionalSecret,
+  // Another S3-compatible endpoint instead of R2's. Tests only.
+  R2_ENDPOINT: optionalSecret,
   // Signs the short-lived URLs for locally stored private files. Falls back to
   // JWT_ACCESS_SECRET, so nothing breaks when it is unset.
   FILE_URL_SECRET: optionalSecret,
