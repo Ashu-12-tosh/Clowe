@@ -1887,6 +1887,7 @@ enum SellerLedgerType {
   // the pricing calculator posts alongside PLATFORM_FEE.
   DELIVERY_FEE // - fixed delivery fee charged to the seller, per shipment
   CLOSING_FEE // - fixed closing fee, per unit
+  GST_TCS // - GST TCS the marketplace collects under s.52 CGST Act
 }
 
 /// Settlement money can be paid out; promotion credits never can. Keeping them

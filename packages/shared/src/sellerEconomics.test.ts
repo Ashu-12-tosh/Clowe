@@ -4,7 +4,10 @@ import { computeListingEconomics, gstInclusiveShare, percentOf } from './sellerE
 const RATES = {
   commissionPercent: 10,
   gatewayPercent: 2,
-  tdsPercent: 1,
+  // The rates in force: TDS 0.1% (s.194-O since 1.10.2024), TCS 0.5% (s.52
+  // CGST since 10.07.2024), both on the value ex-GST.
+  tdsPercent: 0.1,
+  tcsPercent: 0.5,
   gst: { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 250_000 },
   platformFeePaise: 900,
   deliveryFeePaise: 6000,
@@ -20,8 +23,10 @@ describe('computeListingEconomics', () => {
     expect(e.platformFeePaise).toBe(900);
     expect(e.deliveryFeePaise).toBe(6_000);
     expect(e.closingFeePaise).toBe(2_000);
-    expect(e.tdsPaise).toBe(1_000);
-    expect(e.sellerReceivesPaise).toBe(100_000 - 10_000 - 2_000 - 900 - 6_000 - 2_000 - 1_000);
+    // ₹1,000 at 18% is ₹847.46 ex-GST: TDS 0.1% = ₹0.85, TCS 0.5% = ₹4.24.
+    expect(e.tdsPaise).toBe(85);
+    expect(e.tcsPaise).toBe(424);
+    expect(e.sellerReceivesPaise).toBe(100_000 - 10_000 - 2_000 - 900 - 6_000 - 2_000 - 85 - 424);
   });
 
   it('shows the GST inside the price without deducting it', () => {
@@ -47,13 +52,14 @@ describe('computeListingEconomics', () => {
     const e = computeListingEconomics({ sellerPricePaise: 33_333, rates: RATES });
     expect(e.commissionPaise).toBe(3_333);
     expect(e.gatewayFeePaise).toBe(667);
-    expect(e.tdsPaise).toBe(333);
-    // 33,333 / 1.18 = 28,248.3 → 28,248 taxable, 5,085 GST.
+    // 33,333 / 1.18 = 28,248.3 → 28,248 taxable, 5,085 GST; TDS and TCS on 28,248.
     expect(e.gstPaise).toBe(33_333 - 28_248);
+    expect(e.tdsPaise).toBe(28);
+    expect(e.tcsPaise).toBe(141);
     for (const l of e.lines) expect(Number.isInteger(l.amountPaise)).toBe(true);
     const sum = e.lines.reduce((s, l) => s + l.amountPaise, 0);
     expect(sum).toBe(e.sellerReceivesPaise);
-    expect(e.sellerReceivesPaise).toBe(33_333 - 3_333 - 667 - 333 - 900 - 6_000 - 2_000);
+    expect(e.sellerReceivesPaise).toBe(33_333 - 3_333 - 667 - 28 - 141 - 900 - 6_000 - 2_000);
   });
 
   it('takes percentages on the line total, fixed fees per line, closing per unit', () => {
@@ -77,7 +83,9 @@ describe('computeListingEconomics', () => {
       ['PLATFORM_FEE', -900],
       ['DELIVERY_FEE', -6_000],
       ['CLOSING_FEE', -2_000],
-      ['TDS', -500],
+      // ₹500 at 18% is ₹423.73 ex-GST.
+      ['TDS', -42],
+      ['GST_TCS', -212],
     ]);
   });
 
@@ -88,6 +96,7 @@ describe('computeListingEconomics', () => {
         commissionPercent: 15,
         gatewayPercent: 0,
         tdsPercent: 0,
+        tcsPercent: 0,
         gst: { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 250_000 },
         platformFeePaise: 0,
         deliveryFeePaise: 4_500,
@@ -137,5 +146,24 @@ describe('computeListingEconomics — GST comes from the category, via gstRateFo
 
   it('uses the standard rate before a category is chosen', () => {
     expect(computeListingEconomics({ sellerPricePaise: 100_000, rates: RATES }).gstRatePercent).toBe(18);
+  });
+});
+
+describe('computeListingEconomics — TDS and TCS on the value ex-GST', () => {
+  it('takes them off what the seller sold, not what the buyer paid in tax', () => {
+    // A ₹2,625 shirt is ₹2,500 ex-GST at 5%: TDS 0.1% = ₹2.50, TCS 0.5% = ₹12.50.
+    const e = computeListingEconomics({
+      sellerPricePaise: 262_500,
+      rates: RATES,
+      taxRules: { taxRule: 'VALUE_SLAB', defaultTaxRatePercent: null },
+    });
+    expect(e.exGstPaise).toBe(250_000);
+    expect(e.tdsPaise).toBe(250);
+    expect(e.tcsPaise).toBe(1_250);
+  });
+
+  it('posts TCS as its own ledger line', () => {
+    const e = computeListingEconomics({ sellerPricePaise: 100_000, rates: RATES });
+    expect(e.lines.find((l) => l.key === 'tcs')).toMatchObject({ ledgerType: 'GST_TCS', amountPaise: -424 });
   });
 });

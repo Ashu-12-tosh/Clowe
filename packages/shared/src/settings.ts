@@ -43,6 +43,12 @@ export interface PlatformSettings {
   payoutGatewayPercent: number;
   /** Section 194-O TDS withheld on gross sales, in percent. */
   payoutTdsPercent: number;
+  /**
+   * GST TCS the marketplace collects under s.52 CGST Act, percent of the
+   * seller's taxable value (ex-GST): 0.5% (0.25% CGST + 0.25% SGST, or 0.5%
+   * IGST) since 10.07.2024, Notification 15/2024-Central Tax.
+   */
+  gstTcsPercent: number;
   /** Smallest payout a seller may request (paise). */
   payoutMinPaise: number;
   /** Days after delivery before earnings clear (covers the return window). */
@@ -145,6 +151,7 @@ export const updateSettingsSchema = z.object({
   payoutCommissionPercent: z.number().min(0).max(50).optional(),
   payoutGatewayPercent: z.number().min(0).max(20).optional(),
   payoutTdsPercent: z.number().min(0).max(20).optional(),
+  gstTcsPercent: z.number().min(0).max(5).optional(),
   payoutMinPaise: z.number().int().min(0).optional(),
   payoutHoldDays: z.number().int().min(0).max(90).optional(),
   dispatchWindowHours: z.number().int().min(1).max(336).optional(),

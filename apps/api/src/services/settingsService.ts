@@ -14,7 +14,11 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   tryonMonthlyBudgetPaise: 0, // unlimited
   payoutCommissionPercent: 10,
   payoutGatewayPercent: 2,
-  payoutTdsPercent: 1, // section 194-O
+  // s.194-O: 0.1% since 1.10.2024 (Finance (No. 2) Act 2024, s.61); s.393(1)
+  // Sl. 8(v) of the Income-tax Act 2025 from 1.4.2026, same rate.
+  payoutTdsPercent: 0.1,
+  // s.52 CGST Act: 0.5% since 10.07.2024 (Notification 15/2024-Central Tax).
+  gstTcsPercent: 0.5,
   payoutMinPaise: 100000, // ₹1,000
   payoutHoldDays: env.RETURN_WINDOW_DAYS,
   dispatchWindowHours: 12,
@@ -89,6 +93,8 @@ export async function getSettings(): Promise<PlatformSettings> {
       DEFAULT_SETTINGS.payoutGatewayPercent,
     payoutTdsPercent:
       (byKey.get('payoutTdsPercent') as number | undefined) ?? DEFAULT_SETTINGS.payoutTdsPercent,
+    gstTcsPercent:
+      (byKey.get('gstTcsPercent') as number | undefined) ?? DEFAULT_SETTINGS.gstTcsPercent,
     payoutMinPaise:
       (byKey.get('payoutMinPaise') as number | undefined) ?? DEFAULT_SETTINGS.payoutMinPaise,
     payoutHoldDays:

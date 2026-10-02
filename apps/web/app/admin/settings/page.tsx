@@ -28,6 +28,7 @@ export default function AdminSettingsPage() {
     commission: '',
     gateway: '',
     tds: '',
+    tcs: '',
     minRupees: '',
     holdDays: '',
   });
@@ -77,6 +78,7 @@ export default function AdminSettingsPage() {
           commission: String(s.payoutCommissionPercent),
           gateway: String(s.payoutGatewayPercent),
           tds: String(s.payoutTdsPercent),
+          tcs: String(s.gstTcsPercent),
           minRupees: toRupees(s.payoutMinPaise),
           holdDays: String(s.payoutHoldDays),
         });
@@ -108,6 +110,7 @@ export default function AdminSettingsPage() {
           payoutCommissionPercent: Number(payout.commission) || 0,
           payoutGatewayPercent: Number(payout.gateway) || 0,
           payoutTdsPercent: Number(payout.tds) || 0,
+          gstTcsPercent: Number(payout.tcs) || 0,
           payoutMinPaise: toPaise(payout.minRupees),
           payoutHoldDays: Math.max(0, Math.round(Number(payout.holdDays) || 0)),
           kycNameMatchMinScore: Math.min(100, Math.max(0, Math.round(Number(kycMinScore) || 0))),
@@ -352,11 +355,29 @@ export default function AdminSettingsPage() {
               type="number"
               min={0}
               max={20}
-              step="0.1"
+              step="0.01"
               value={payout.tds}
               onChange={(e) => setPayout((p) => ({ ...p, tds: e.target.value }))}
               className={field}
             />
+            <p className="mt-1 text-[11px] text-gray-400">
+              0.1% since 1 Oct 2024. On the value ex-GST (CBDT Circular 20/2023).
+            </p>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">GST TCS u/s 52 (%)</label>
+            <input
+              type="number"
+              min={0}
+              max={5}
+              step="0.01"
+              value={payout.tcs}
+              onChange={(e) => setPayout((p) => ({ ...p, tcs: e.target.value }))}
+              className={field}
+            />
+            <p className="mt-1 text-[11px] text-gray-400">
+              0.5% since 10 Jul 2024 (Notification 15/2024-CT). On the value ex-GST.
+            </p>
           </div>
           <div>
             <label className="text-xs text-gray-500">Minimum payout (₹)</label>

@@ -628,6 +628,7 @@ adminRouter.put('/settings', async (req, res, next) => {
       'payoutCommissionPercent',
       'payoutGatewayPercent',
       'payoutTdsPercent',
+      'gstTcsPercent',
       'payoutMinPaise',
       'payoutHoldDays',
       // Dispatch discipline — the window and what missing it costs.

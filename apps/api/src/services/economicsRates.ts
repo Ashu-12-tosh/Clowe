@@ -24,6 +24,7 @@ export function economicsRates(settings: PlatformSettings): SellerEconomicsRates
     commissionPercent: settings.payoutCommissionPercent,
     gatewayPercent: settings.payoutGatewayPercent,
     tdsPercent: settings.payoutTdsPercent,
+    tcsPercent: settings.gstTcsPercent,
     gst: gstSettings(settings),
     platformFeePaise: settings.platformFeePaise,
     deliveryFeePaise: settings.deliveryFeePaise,

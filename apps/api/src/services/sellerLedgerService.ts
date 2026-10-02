@@ -39,6 +39,7 @@ export const DELIVERY_ENTRY_TYPES: readonly SellerLedgerTypeValue[] = [
   'DELIVERY_FEE',
   'CLOSING_FEE',
   'TDS',
+  'GST_TCS',
 ];
 
 export interface PostEntryInput {

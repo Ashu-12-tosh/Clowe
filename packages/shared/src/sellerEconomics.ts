@@ -27,8 +27,14 @@ export interface SellerEconomicsRates {
   commissionPercent: number;
   /** Payment gateway / collection charge, percent of the line total. */
   gatewayPercent: number;
-  /** Section 194-O TDS withheld, percent of the line total. */
+  /**
+   * Section 194-O TDS withheld, percent of the line's value EX-GST: CBDT
+   * Circular 20/2023 excludes GST shown separately on the invoice when TDS is
+   * deducted at credit, which is when the ledger posts it (on delivery).
+   */
   tdsPercent: number;
+  /** GST TCS collected under s.52 CGST Act, percent of the line's value ex-GST. */
+  tcsPercent: number;
   /**
    * GST settings. The rate itself is never a single platform number: it is
    * gstRateFor(price, the product's category rules, these) — the same call
@@ -83,6 +89,9 @@ export interface SellerEconomics {
   deliveryFeePaise: number;
   closingFeePaise: number;
   tdsPaise: number;
+  tcsPaise: number;
+  /** The line's value net of GST: the base for TDS and TCS. */
+  exGstPaise: number;
   /** What Clowe settles to the seller for this line: gross less every deduction. */
   sellerReceivesPaise: number;
   /** sellerReceives less the GST they remit — the seller's real take. */
@@ -111,7 +120,10 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
   const gstPaise = gstInclusiveShare(grossPaise, gst.ratePercent);
   const commissionPaise = percentOf(grossPaise, rates.commissionPercent);
   const gatewayFeePaise = percentOf(grossPaise, rates.gatewayPercent);
-  const tdsPaise = percentOf(grossPaise, rates.tdsPercent);
+  // TDS and TCS are levied on the value net of GST, not on what the buyer paid.
+  const exGstPaise = grossPaise - gstPaise;
+  const tdsPaise = percentOf(exGstPaise, rates.tdsPercent);
+  const tcsPaise = percentOf(exGstPaise, rates.tcsPercent);
   // Fixed fees only exist when something was sold: a zero-quantity line
   // (or a zero price, for the preview) owes nothing.
   const sold = grossPaise > 0;
@@ -141,7 +153,8 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
       amountPaise: -closingFeePaise,
       ledgerType: 'CLOSING_FEE',
     },
-    { key: 'tds', label: `TDS 194-O (${rates.tdsPercent}%)`, amountPaise: -tdsPaise, ledgerType: 'TDS' },
+    { key: 'tds', label: `TDS (${rates.tdsPercent}%)`, amountPaise: -tdsPaise, ledgerType: 'TDS' },
+    { key: 'tcs', label: `TCS (${rates.tcsPercent}%)`, amountPaise: -tcsPaise, ledgerType: 'GST_TCS' },
   ];
 
   // The seller's share is the sum of the posted lines, not a separate formula,
@@ -162,6 +175,8 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
     deliveryFeePaise,
     closingFeePaise,
     tdsPaise,
+    tcsPaise,
+    exGstPaise,
     sellerReceivesPaise,
     sellerKeepsAfterGstPaise: sellerReceivesPaise - gstPaise,
     lines,

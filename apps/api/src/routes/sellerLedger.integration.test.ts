@@ -29,18 +29,21 @@ let base: string;
 let categoryId: string;
 let seq = 0;
 
-// ₹3,000 at the default 10% / 2% / 1%, plus the default fixed fees.
+// ₹3,000 at the default 10% commission and 2% gateway, plus the default fixed
+// fees. The fixture category carries no GST rule, so the standard 18% applies:
+// ₹2,542.37 ex-GST, on which TDS is 0.1% and TCS 0.5%.
 const PRICE = 300_000;
 const COMMISSION = 30_000;
 const GATEWAY = 6_000;
-const TDS = 3_000;
+const TDS = 254;
+const TCS = 1_271;
 const PLATFORM = DEFAULT_SETTINGS.platformFeePaise;
 const DELIVERY = DEFAULT_SETTINGS.deliveryFeePaise;
 const CLOSING = DEFAULT_SETTINGS.closingFeePaise;
 const FIXED = PLATFORM + DELIVERY + CLOSING;
-const NET = PRICE - COMMISSION - GATEWAY - TDS - FIXED;
+const NET = PRICE - COMMISSION - GATEWAY - TDS - TCS - FIXED;
 /** Entries one delivered unit posts. */
-const ENTRIES_PER_DELIVERY = 7;
+const ENTRIES_PER_DELIVERY = 8;
 
 beforeAll(async () => {
   await seedFixture(prisma);
@@ -212,6 +215,7 @@ describe('delivery', () => {
       ['TDS', -TDS, 'SETTLEMENT'],
       ['DELIVERY_FEE', -DELIVERY, 'SETTLEMENT'],
       ['CLOSING_FEE', -CLOSING, 'SETTLEMENT'],
+      ['GST_TCS', -TCS, 'SETTLEMENT'],
     ]);
     expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(NET);
   });

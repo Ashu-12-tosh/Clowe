@@ -1,11 +1,13 @@
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { PrismaClient, Role, SellerStatus } from '@prisma/client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { computeListingEconomics, type SellerEconomicsRates } from '@clowe/shared';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
-import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
+import { DEFAULT_SETTINGS, getSettings, setSetting } from '../services/settingsService';
 import { signAccessToken } from '../utils/jwt';
 
 /**
@@ -29,6 +31,7 @@ beforeAll(async () => {
 afterEach(async () => {
   await setSetting('gstValueSlabThresholdPaise', DEFAULT_SETTINGS.gstValueSlabThresholdPaise);
   await setSetting('closingFeePaise', DEFAULT_SETTINGS.closingFeePaise);
+  await setSetting('payoutTdsPercent', DEFAULT_SETTINGS.payoutTdsPercent);
 });
 
 afterAll(async () => {
@@ -60,6 +63,7 @@ describe('GET /api/seller/pricing-rates', () => {
       commissionPercent: DEFAULT_SETTINGS.payoutCommissionPercent,
       gatewayPercent: DEFAULT_SETTINGS.payoutGatewayPercent,
       tdsPercent: DEFAULT_SETTINGS.payoutTdsPercent,
+      tcsPercent: DEFAULT_SETTINGS.gstTcsPercent,
       gst: {
         meritPercent: DEFAULT_SETTINGS.gstMeritPercent,
         standardPercent: DEFAULT_SETTINGS.gstStandardPercent,
@@ -96,5 +100,33 @@ describe('GET /api/seller/pricing-rates', () => {
     expect(status).toBe(403);
     const anon = await fetch(`${base}/api/seller/pricing-rates`);
     expect(anon.status).toBe(401);
+  });
+});
+
+describe('the TDS rate migration', () => {
+  // The statement the migration ships, run against stored values: the old 1%
+  // default is corrected to the 0.1% in force since 1.10.2024; a rate an admin
+  // set on purpose is left alone.
+  const sql = readFileSync(
+    path.resolve(__dirname, '../../prisma/migrations/20261002130000_tds_tcs_current_rates/migration.sql'),
+    'utf8',
+  );
+  const update = sql.split(/\r?\n/).find((l) => l.startsWith('UPDATE "platform_settings"'))!;
+
+  it('corrects a stored 1%', async () => {
+    await setSetting('payoutTdsPercent', 1);
+    await prisma.$executeRawUnsafe(update);
+    expect((await getSettings()).payoutTdsPercent).toBe(0.1);
+  });
+
+  it('leaves a deliberate rate alone', async () => {
+    await setSetting('payoutTdsPercent', 0.5);
+    await prisma.$executeRawUnsafe(update);
+    expect((await getSettings()).payoutTdsPercent).toBe(0.5);
+  });
+
+  it('defaults to the rates in force', () => {
+    expect(DEFAULT_SETTINGS.payoutTdsPercent).toBe(0.1);
+    expect(DEFAULT_SETTINGS.gstTcsPercent).toBe(0.5);
   });
 });
