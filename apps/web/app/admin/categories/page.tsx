@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  TAX_RATES,
+  GST_RATES_PERCENT,
+  type GstSettings,
+  type PlatformSettings,
   axisLabel,
   describeTaxDefault,
   type AdminCategoryRow,
@@ -11,6 +13,22 @@ import {
   type VariantAxis,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+
+// The GST settings describeTaxDefault needs, read once from the admin settings.
+let gstCache: Promise<GstSettings> | null = null;
+function loadGst(): Promise<GstSettings> {
+  gstCache ??= api<PlatformSettings>('/api/admin/settings', { auth: true })
+    .then((s) => ({
+      meritPercent: s.gstMeritPercent,
+      standardPercent: s.gstStandardPercent,
+      valueSlabThresholdPaise: s.gstValueSlabThresholdPaise,
+    }))
+    .catch((err) => {
+      gstCache = null;
+      throw err;
+    });
+  return gstCache;
+}
 
 const field =
   'rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -91,14 +109,18 @@ function RulesEditor({
   onSaved: () => void;
   onClose: () => void;
 }) {
+  const [gst, setGst] = useState<GstSettings | null>(null);
+  useEffect(() => {
+    loadGst().then(setGst).catch(() => {});
+  }, []);
   const own = row.own;
   const [axesText, setAxesText] = useState(axesToText(own.variantAxes));
   const [attrs, setAttrs] = useState<AttrDraft[]>(attrsToDraft(own.attributeSchema));
   const [tryOn, setTryOn] = useState(own.tryOnEligible === null ? '' : String(own.tryOnEligible));
   const [sizeGuide, setSizeGuide] = useState(own.sizeGuide === null ? '' : String(own.sizeGuide));
   const [tax, setTax] = useState(
-    own.taxRule === 'APPAREL_SLAB'
-      ? 'APPAREL_SLAB'
+    own.taxRule === 'VALUE_SLAB'
+      ? 'VALUE_SLAB'
       : own.defaultTaxRatePercent !== null
         ? String(own.defaultTaxRatePercent)
         : '',
@@ -121,8 +143,8 @@ function RulesEditor({
       attributeSchema: attrs.some((a) => a.label.trim()) ? attrsFromDraft(attrs) : null,
       tryOnEligible: bool(tryOn),
       sizeGuide: bool(sizeGuide),
-      taxRule: tax === 'APPAREL_SLAB' ? 'APPAREL_SLAB' : null,
-      defaultTaxRatePercent: tax !== '' && tax !== 'APPAREL_SLAB' ? Number(tax) : null,
+      taxRule: tax === 'VALUE_SLAB' ? 'VALUE_SLAB' : null,
+      defaultTaxRatePercent: tax !== '' && tax !== 'VALUE_SLAB' ? Number(tax) : null,
       hsnCode: hsn.trim() || null,
       returnWindowDays: returnDays.trim() === '' ? null : Number(returnDays),
     };
@@ -198,9 +220,11 @@ function RulesEditor({
         <div>
           <label className="text-xs font-semibold text-gray-700">GST default</label>
           <select value={tax} onChange={(e) => setTax(e.target.value)} className={`mt-1 w-full ${field}`}>
-            <option value="">Inherit ({describeTaxDefault(inherited)})</option>
-            <option value="APPAREL_SLAB">Apparel slab (5% up to ₹1,000, 12% above)</option>
-            {TAX_RATES.map((r) => (
+            <option value="">Inherit ({gst ? describeTaxDefault(inherited, gst) : '…'})</option>
+            <option value="VALUE_SLAB">
+              Value slab — apparel, made-up textiles, footwear ({gst ? describeTaxDefault({ taxRule: 'VALUE_SLAB', defaultTaxRatePercent: null }, gst) : '…'})
+            </option>
+            {GST_RATES_PERCENT.map((r) => (
               <option key={r} value={r}>
                 {r}%
               </option>
@@ -346,6 +370,10 @@ function RulesEditor({
 
 export default function AdminCategoriesPage() {
   const [rows, setRows] = useState<AdminCategoryRow[] | null>(null);
+  const [gst, setGst] = useState<GstSettings | null>(null);
+  useEffect(() => {
+    loadGst().then(setGst).catch(() => {});
+  }, []);
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('');
   const [parentId, setParentId] = useState('');
@@ -410,7 +438,7 @@ export default function AdminCategoriesPage() {
     const r = row.rules;
     const bits = [
       r.variantAxes.length ? r.variantAxes.map((a) => a.label).join(' × ') : 'single SKU',
-      `GST ${describeTaxDefault(r)}`,
+      `GST ${gst ? describeTaxDefault(r, gst) : '…'}`,
       r.returnWindowDays !== null ? `${r.returnWindowDays}d returns` : 'platform returns',
     ];
     if (r.tryOnEligible) bits.push('try-on');

@@ -28,6 +28,8 @@ import {
   type OrderTab,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { getSettings } from '../services/settingsService';
+import { gstSettings } from '../services/economicsRates';
 import { categoryRulesMap } from '../services/categoryRules';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -414,7 +416,6 @@ adminOrdersRouter.get('/:id', async (req, res, next) => {
             return: { select: { status: true } },
             product: {
               select: {
-                taxRatePercent: true,
                 categoryId: true,
                 images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } },
               },
@@ -443,9 +444,10 @@ adminOrdersRouter.get('/:id', async (req, res, next) => {
     // per-listing with the category rule as the fallback - the same rule the
     // seller invoice uses.
     const taxRules = await categoryRulesMap(order.items.map((i) => i.product.categoryId));
+    const gst = gstSettings(await getSettings());
     const taxPaise = order.items.reduce((sum, i) => {
       const gross = i.pricePaise * i.quantity;
-      const rate = gstRateFor(i.pricePaise, i.product.taxRatePercent, taxRules.get(i.product.categoryId)!);
+      const rate = gstRateFor(i.pricePaise, taxRules.get(i.product.categoryId), gst).ratePercent;
       return sum + (gross - Math.round(gross / (1 + rate / 100)));
     }, 0);
 

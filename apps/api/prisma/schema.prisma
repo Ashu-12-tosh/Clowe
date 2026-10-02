@@ -727,7 +727,8 @@ model Category {
   tryOnEligible    Boolean?
   sizeGuide        Boolean?
   // GST default for listings without their own slab: a flat rate, or
-  // taxRule = APPAREL_SLAB (5% up to Rs 1,000, 12% above).
+  // taxRule = VALUE_SLAB: GST 2.0 slab, 5% up to Rs 2,500 per piece ex-GST, 18% above
+  // (both rates and the threshold are platform settings). gstRateFor decides every rate.
   taxRule               String?
   defaultTaxRatePercent Int?
   hsnCode               String?
@@ -819,7 +820,6 @@ model Product {
   packingVideoUrl        String?
   packingVideoUploadedAt DateTime?
   // GST slab for this listing; null falls back to the category rule.
-  taxRatePercent  Int?
   // Logistics, used for shipping estimates and the packing slip.
   weightGrams     Int?
   lengthMm        Int?

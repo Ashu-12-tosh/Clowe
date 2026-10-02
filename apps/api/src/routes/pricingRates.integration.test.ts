@@ -27,7 +27,7 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  await setSetting('gstRatePercent', DEFAULT_SETTINGS.gstRatePercent);
+  await setSetting('gstValueSlabThresholdPaise', DEFAULT_SETTINGS.gstValueSlabThresholdPaise);
   await setSetting('closingFeePaise', DEFAULT_SETTINGS.closingFeePaise);
 });
 
@@ -60,7 +60,11 @@ describe('GET /api/seller/pricing-rates', () => {
       commissionPercent: DEFAULT_SETTINGS.payoutCommissionPercent,
       gatewayPercent: DEFAULT_SETTINGS.payoutGatewayPercent,
       tdsPercent: DEFAULT_SETTINGS.payoutTdsPercent,
-      gstPercent: DEFAULT_SETTINGS.gstRatePercent,
+      gst: {
+        meritPercent: DEFAULT_SETTINGS.gstMeritPercent,
+        standardPercent: DEFAULT_SETTINGS.gstStandardPercent,
+        valueSlabThresholdPaise: DEFAULT_SETTINGS.gstValueSlabThresholdPaise,
+      },
       platformFeePaise: DEFAULT_SETTINGS.platformFeePaise,
       deliveryFeePaise: DEFAULT_SETTINGS.deliveryFeePaise,
       closingFeePaise: DEFAULT_SETTINGS.closingFeePaise,
@@ -68,14 +72,18 @@ describe('GET /api/seller/pricing-rates', () => {
   });
 
   it('follows the settings, so the form and the ledger move together', async () => {
-    await setSetting('gstRatePercent', 5);
+    // Lower the value-slab threshold to ₹1,000: a ₹1,050 apparel piece is then
+    // ₹1,000 ex-GST at 5%, and ₹1,100 is over it.
+    await setSetting('gstValueSlabThresholdPaise', 100_000);
     await setSetting('closingFeePaise', 0);
     const { json } = await rates(await sellerToken());
-    expect(json.data?.gstPercent).toBe(5);
+    expect(json.data?.gst.valueSlabThresholdPaise).toBe(100_000);
     expect(json.data?.closingFeePaise).toBe(0);
     // And the breakdown the form would show from these rates:
-    const e = computeListingEconomics({ sellerPricePaise: 100_000, rates: json.data! });
-    expect(e.gstPaise).toBe(100_000 - 95_238);
+    const slab = { taxRule: 'VALUE_SLAB' as const, defaultTaxRatePercent: null };
+    expect(computeListingEconomics({ sellerPricePaise: 105_000, rates: json.data!, taxRules: slab }).gstRatePercent).toBe(5);
+    const e = computeListingEconomics({ sellerPricePaise: 110_000, rates: json.data!, taxRules: slab });
+    expect(e.gstRatePercent).toBe(18);
     expect(e.closingFeePaise).toBe(0);
   });
 

@@ -111,7 +111,6 @@ async function main() {
     approvedAt: new Date(),
     isNew: true,
     weightGrams: 220,
-    taxRatePercent: 5,
   };
 
   const product = await prisma.product.upsert({

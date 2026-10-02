@@ -10,7 +10,7 @@ export interface RootRules {
   attributeSchema: AttributeDef[];
   tryOnEligible: boolean;
   sizeGuide: boolean;
-  taxRule: 'APPAREL_SLAB' | null;
+  taxRule: 'VALUE_SLAB' | null;
   defaultTaxRatePercent: number | null;
   hsnCode: string | null;
   returnWindowDays: number;
@@ -84,7 +84,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     ],
     tryOnEligible: true,
     sizeGuide: true,
-    taxRule: 'APPAREL_SLAB',
+    taxRule: 'VALUE_SLAB',
     defaultTaxRatePercent: null,
     hsnCode: '6109',
     returnWindowDays: 7,
@@ -155,7 +155,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     tryOnEligible: false,
     sizeGuide: false,
     taxRule: null,
-    defaultTaxRatePercent: 18,
+    defaultTaxRatePercent: 5,
     hsnCode: '2106',
     returnWindowDays: 7,
   },
@@ -171,7 +171,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     tryOnEligible: false,
     sizeGuide: true,
     taxRule: null,
-    defaultTaxRatePercent: 12,
+    defaultTaxRatePercent: 5,
     hsnCode: '9506',
     returnWindowDays: 7,
   },
@@ -188,7 +188,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     sizeGuide: false,
     taxRule: null,
     defaultTaxRatePercent: 18,
-    hsnCode: null,
+    hsnCode: '9504',
     returnWindowDays: 7,
   },
   grocery: {
@@ -222,7 +222,7 @@ export const ROOT_RULES: Record<string, RootRules> = {
     tryOnEligible: false,
     sizeGuide: false,
     taxRule: null,
-    defaultTaxRatePercent: 12,
+    defaultTaxRatePercent: 5,
     hsnCode: '9503',
     returnWindowDays: 7,
   },
@@ -260,6 +260,46 @@ export const CHILD_RULE_OVERRIDES: Record<string, Partial<RootRules>> = {
   'electronics-accessories': { variantAxes: [COLOR, SWITCH] },
 };
 
+/**
+ * GST by department, where a child differs from its root. GST 2.0 rates
+ * (Notification 9/2025-Central Tax (Rate), in force 22.09.2025; nil list
+ * 10/2025-CT(R)). Categories marked mixed hold goods at more than one rate;
+ * the dominant one is used until products carry their own classification.
+ * The migration 20261002120000_gst_two_point_zero applies the same table to
+ * a live catalog — both are generated from one list, so they cannot drift.
+ */
+export const CHILD_GST_OVERRIDES: Record<string, Pick<RootRules, 'taxRule' | 'defaultTaxRatePercent' | 'hsnCode'>> = {
+  'fashion-footwear': { taxRule: 'VALUE_SLAB', defaultTaxRatePercent: null, hsnCode: '6403' }, // per pair: Sch I 392 / Sch II 202-206
+  'fashion-bags': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '4202' }, // Sch II 145 (cotton/jute handbags 5%: mixed)
+  'fashion-watches': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '9102' }, // Sch II 583-584
+  'fashion-sunglasses': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '9004' }, // Sch II 558
+  'fashion-jewellery': { taxRule: null, defaultTaxRatePercent: 3, hsnCode: '7117' }, // Sch IV 10, 14
+  'fashion-caps': { taxRule: null, defaultTaxRatePercent: 5, hsnCode: '6505' }, // textile caps: Sch I 393-394
+  'fashion-accessories': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '4203' }, // belts Sch II 146 (umbrellas, combs 5%: mixed)
+  'electronics-accessories': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '8471' }, // 
+  'electronics-appliances': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '8516' }, // mixed appliances, all 18%
+  'electronics-cameras': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '8525' }, // Sch II 497
+  'electronics-drones': { taxRule: null, defaultTaxRatePercent: 5, hsnCode: '8806' }, // Sch I 464
+  'electronics-gaming': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '9504' }, // Sch II 617
+  'electronics-headphones': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '8518' }, // Sch II 491
+  'electronics-laptops': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '8471' }, // Sch II 456
+  'electronics-smartphones': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '8517' }, // Sch II 490
+  'electronics-smartwatches': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '8517' }, // Sch II 490
+  'electronics-speakers': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '8518' }, // Sch II 491
+  'electronics-tablets': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '8471' }, // Sch II 456
+  'electronics-tvs': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '8528' }, // Sch II 500, all sizes (was 28)
+  'home-bedding': { taxRule: 'VALUE_SLAB', defaultTaxRatePercent: null, hsnCode: '6302' }, // made-up textiles per piece: Sch I 390 / Sch II 199
+  'home-cookware': { taxRule: null, defaultTaxRatePercent: 5, hsnCode: '7323' }, // metal/ceramic utensils Sch I 416-419 (plastic 18%: mixed)
+  'home-decor': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: null }, // mixed (carpets, candles 5%); standard rate
+  'home-furniture': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '9403' }, // Sch II 612
+  'home-appliances': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: null }, // 
+  'beauty-haircare': { taxRule: null, defaultTaxRatePercent: 5, hsnCode: '3305' }, // shampoo, hair oil Sch I 245-246 (other hair products 18%: mixed)
+  'beauty-fragrances': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '3303' }, // Sch II 64
+  'sports-fitness': { taxRule: null, defaultTaxRatePercent: 18, hsnCode: '9506' }, // gym equipment Sch II 619
+  'sports-sportswear': { taxRule: 'VALUE_SLAB', defaultTaxRatePercent: null, hsnCode: '6211' }, // apparel
+  'toys-school': { taxRule: null, defaultTaxRatePercent: 0, hsnCode: '4820' }, // notebooks, pencils nil (pens, diaries, bags 18%: mixed)
+};
+
 /** Apply ROOT_RULES to the seeded roots (idempotent). */
 export async function seedCategoryRules(prisma: PrismaClient): Promise<number> {
   let updated = 0;
@@ -283,6 +323,10 @@ export async function seedCategoryRules(prisma: PrismaClient): Promise<number> {
   // Then the per-child exceptions, which only set the fields they name.
   for (const [slug, overrides] of Object.entries(CHILD_RULE_OVERRIDES)) {
     const result = await prisma.category.updateMany({ where: { slug }, data: overrides });
+    updated += result.count;
+  }
+  for (const [slug, gst] of Object.entries(CHILD_GST_OVERRIDES)) {
+    const result = await prisma.category.updateMany({ where: { slug }, data: gst });
     updated += result.count;
   }
   return updated;

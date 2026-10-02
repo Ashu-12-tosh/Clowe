@@ -6,13 +6,13 @@ import {
   MAX_VARIANT_AXES,
   SHIPPING_TEMPLATES,
   SHIPPING_TEMPLATE_LABELS,
-  TAX_RATES,
   axisLabel,
   describeTaxDefault,
   optionsKeyOf,
   sellerProductUpsertSchema,
   type CategoryNode,
   type CategoryRules,
+  type GstSettings,
   attributeMatchesDef,
   type AttributeDef,
   type ProductAttributeInput,
@@ -25,7 +25,7 @@ import {
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadImages, uploadVideo } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
-import { PricingBreakdown } from '@/components/seller/PricingBreakdown';
+import { PricingBreakdown, loadRates } from '@/components/seller/PricingBreakdown';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -181,9 +181,14 @@ export default function ProductForm({ initial }: Props) {
   );
 
   // --- Inventory / pricing / shipping / SEO ---
-  const [taxRate, setTaxRate] = useState<string>(
-    initial?.taxRatePercent != null ? String(initial.taxRatePercent) : '',
-  );
+  // GST is never the seller's choice: it is derived from the category (see
+  // gstRateFor). The settings it needs come with the pricing rates.
+  const [gst, setGst] = useState<GstSettings | null>(null);
+  useEffect(() => {
+    loadRates()
+      .then((r) => setGst(r.gst))
+      .catch(() => {});
+  }, []);
   const [lowStockAlert, setLowStockAlert] = useState(String(initial?.lowStockAlert ?? 5));
   const [allowBackorders, setAllowBackorders] = useState(initial?.allowBackorders ?? false);
   const [weight, setWeight] = useState(
@@ -447,7 +452,6 @@ export default function ProductForm({ initial }: Props) {
       attributes: attributes.filter((a) => a.label?.trim() && a.value.trim()),
       highlights: highlights.filter((h) => h.trim().length >= 3),
       variants: variantInputs,
-      taxRatePercent: taxRate === '' ? null : Number(taxRate),
       weightGrams: weight.trim() ? Math.round(Number(weight) * 1000) : null,
       lengthMm: dims.l.trim() ? Math.round(Number(dims.l) * 10) : null,
       widthMm: dims.w.trim() ? Math.round(Number(dims.w) * 10) : null,
@@ -779,7 +783,7 @@ export default function ProductForm({ initial }: Props) {
             )}
             {selectedNode && (
               <p className="mt-2 text-xs text-gray-400">
-                {path.map((c) => c.name).join(' › ')} · GST default {describeTaxDefault(rules)} ·
+                {path.map((c) => c.name).join(' › ')} · GST {gst ? describeTaxDefault(rules, gst) : '…'} ·
                 {rules.returnWindowDays != null ? ` ${rules.returnWindowDays}-day returns` : ' platform return window'}
                 {rules.tryOnEligible ? ' · AI Try-On available' : ''}
               </p>
@@ -1441,22 +1445,11 @@ export default function ProductForm({ initial }: Props) {
                 </p>
               </div>
               <div>
-                <label className="text-sm font-medium">Tax class (GST)</label>
-                <select
-                  value={taxRate}
-                  onChange={(e) => setTaxRate(e.target.value)}
-                  className={`mt-1 ${field}`}
-                >
-                  <option value="">Category default ({describeTaxDefault(rules)})</option>
-                  {TAX_RATES.map((r) => (
-                    <option key={r} value={r}>
-                      GST {r}%
-                    </option>
-                  ))}
-                </select>
+                <p className="text-sm font-medium">GST</p>
+                <p className="mt-1 text-sm text-ink-900">{gst ? describeTaxDefault(rules, gst) : '…'}</p>
                 <p className="mt-1 text-xs text-gray-400">
-                  Used on the tax invoice you issue for each order
-                  {rules.hsnCode ? ` · HSN ${rules.hsnCode}` : ''}.
+                  Set by the category under GST 2.0, not chosen per listing. Used on the tax invoice
+                  for each order{rules.hsnCode ? ` · HSN ${rules.hsnCode}` : ''}.
                 </p>
               </div>
               <label className="flex items-center gap-2 text-sm sm:col-span-2">
@@ -1494,7 +1487,7 @@ export default function ProductForm({ initial }: Props) {
               </p>
             </div>
 
-            <PricingBreakdown listingPricePaise={cheapest ? cheapest.pricePaise : null} />
+            <PricingBreakdown listingPricePaise={cheapest ? cheapest.pricePaise : null} taxRules={selectedNode ? rules : null} />
           </section>
         )}
 
@@ -1705,7 +1698,7 @@ export default function ProductForm({ initial }: Props) {
               <div className="flex justify-between">
                 <dt className="text-gray-500">GST</dt>
                 <dd className="font-semibold">
-                  {taxRate === '' ? `Category default (${describeTaxDefault(rules)})` : `${taxRate}%`}
+                  {gst ? describeTaxDefault(rules, gst) : '…'}
                 </dd>
               </div>
               <div className="flex justify-between">

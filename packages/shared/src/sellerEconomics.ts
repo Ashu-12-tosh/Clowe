@@ -1,3 +1,4 @@
+import { gstRateFor, type CategoryRules, type GstSettings } from './categoryRules';
 import type { SellerLedgerTypeValue } from './sellerLedger';
 
 // ---------------------------------------------------------------------------
@@ -29,11 +30,11 @@ export interface SellerEconomicsRates {
   /** Section 194-O TDS withheld, percent of the line total. */
   tdsPercent: number;
   /**
-   * GST contained in the listed price, percent. One platform-wide rate for
-   * now; category-wise GST (books 0%, apparel under ₹1,000 at 5%) is a known
-   * follow-up, and the tax invoice already applies those category rules.
+   * GST settings. The rate itself is never a single platform number: it is
+   * gstRateFor(price, the product's category rules, these) — the same call
+   * the tax invoice makes.
    */
-  gstPercent: number;
+  gst: GstSettings;
   /** Fixed platform fee, per order line. */
   platformFeePaise: number;
   /** Fixed delivery fee charged to the seller, per shipment (one per line). */
@@ -48,6 +49,8 @@ export interface SellerEconomicsInput {
   /** Units on the line; defaults to one for the listing preview. */
   quantity?: number;
   rates: SellerEconomicsRates;
+  /** The product's category GST rule; null before a category is chosen (standard rate). */
+  taxRules?: Pick<CategoryRules, 'taxRule' | 'defaultTaxRatePercent'> | null;
 }
 
 /** One row of the breakdown, signed the way the ledger records it. */
@@ -68,8 +71,12 @@ export interface SellerEconomics {
   /** What the buyer is charged for this line (shipping is per order, not here). */
   buyerPaysPaise: number;
   grossPaise: number;
-  /** GST inside the price at the platform rate; the seller's to remit. */
+  /** GST inside the price, at the rate for this product and price; the seller's to remit. */
   gstPaise: number;
+  /** The rate that applied, from gstRateFor. */
+  gstRatePercent: number;
+  /** Set when the unit price is in the value-slab band where a lower price would be 5%. */
+  gstSlabBand: { fromPaise: number; toPaise: number; meritUpToPaise: number } | null;
   commissionPaise: number;
   gatewayFeePaise: number;
   platformFeePaise: number;
@@ -100,7 +107,8 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
   const grossPaise = price * quantity;
   const { rates } = input;
 
-  const gstPaise = gstInclusiveShare(grossPaise, rates.gstPercent);
+  const gst = gstRateFor(price, input.taxRules ?? null, rates.gst);
+  const gstPaise = gstInclusiveShare(grossPaise, gst.ratePercent);
   const commissionPaise = percentOf(grossPaise, rates.commissionPercent);
   const gatewayFeePaise = percentOf(grossPaise, rates.gatewayPercent);
   const tdsPaise = percentOf(grossPaise, rates.tdsPercent);
@@ -146,6 +154,8 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
     buyerPaysPaise: grossPaise,
     grossPaise,
     gstPaise,
+    gstRatePercent: gst.ratePercent,
+    gstSlabBand: gst.slabBand,
     commissionPaise,
     gatewayFeePaise,
     platformFeePaise,

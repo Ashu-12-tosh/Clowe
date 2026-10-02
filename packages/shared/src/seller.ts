@@ -106,8 +106,6 @@ export const SHIPPING_TEMPLATE_LABELS: Record<ShippingTemplateValue, string> = {
   HEAVY: 'Heavy / bulky (5–8 days)',
 };
 
-/** GST slabs a seller may pick; null means "use the category default". */
-export const TAX_RATES = [0, 5, 12, 18, 28] as const;
 
 
 /** Draft = private work in progress; Pending = submitted for admin review. */
@@ -129,7 +127,6 @@ export const sellerProductUpsertSchema = z
     attributes: z.array(productAttributeInputSchema).max(20).optional(),
     highlights: z.array(z.string().trim().min(3).max(120)).max(8).optional(),
     variants: z.array(sellerVariantInputSchema).max(60),
-    taxRatePercent: z.number().int().min(0).max(28).nullable().optional(),
     weightGrams: z.number().int().min(0).max(200000).nullable().optional(),
     lengthMm: z.number().int().min(0).max(300000).nullable().optional(),
     widthMm: z.number().int().min(0).max(300000).nullable().optional(),
@@ -189,7 +186,6 @@ export interface SellerProductDetail {
   packingVideoUrl: string | null;
   attributes: ProductAttribute[];
   highlights: string[];
-  taxRatePercent: number | null;
   weightGrams: number | null;
   lengthMm: number | null;
   widthMm: number | null;

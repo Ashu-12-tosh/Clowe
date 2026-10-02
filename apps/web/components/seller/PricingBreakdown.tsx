@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { computeListingEconomics, type SellerEconomicsRates } from '@clowe/shared';
+import { computeListingEconomics, type CategoryRules, type SellerEconomicsRates } from '@clowe/shared';
 import { api } from '@/lib/api';
 
 let ratesCache: Promise<SellerEconomicsRates> | null = null;
-function loadRates(): Promise<SellerEconomicsRates> {
+/** The calculator's rates, GST settings included — fetched once per page. */
+export function loadRates(): Promise<SellerEconomicsRates> {
   ratesCache ??= api<SellerEconomicsRates>('/api/seller/pricing-rates', { auth: true }).catch((err) => {
     ratesCache = null;
     throw err;
@@ -23,7 +24,14 @@ function money(paise: number): string {
  * is exactly what delivery will post. `listingPricePaise` follows the
  * cheapest variant; the seller can also type any price to try it.
  */
-export function PricingBreakdown({ listingPricePaise }: { listingPricePaise: number | null }) {
+export function PricingBreakdown({
+  listingPricePaise,
+  taxRules,
+}: {
+  listingPricePaise: number | null;
+  /** The chosen category's GST rule; null until a category is picked. */
+  taxRules: Pick<CategoryRules, 'taxRule' | 'defaultTaxRatePercent'> | null;
+}) {
   const [rates, setRates] = useState<SellerEconomicsRates | null>(null);
   const [typed, setTyped] = useState<string | null>(null);
 
@@ -41,8 +49,8 @@ export function PricingBreakdown({ listingPricePaise }: { listingPricePaise: num
     typed !== null ? Math.max(0, Math.round(Number(typed || '0') * 100)) : (listingPricePaise ?? 0);
 
   const economics = useMemo(
-    () => (rates ? computeListingEconomics({ sellerPricePaise: pricePaise, rates }) : null),
-    [rates, pricePaise],
+    () => (rates ? computeListingEconomics({ sellerPricePaise: pricePaise, rates, taxRules }) : null),
+    [rates, pricePaise, taxRules],
   );
 
   return (
@@ -72,7 +80,7 @@ export function PricingBreakdown({ listingPricePaise }: { listingPricePaise: num
             <dd>{money(economics.buyerPaysPaise)}</dd>
           </div>
           <div className="flex justify-between text-gray-500">
-            <dt className="pl-3">includes GST ({rates!.gstPercent}%), which you remit</dt>
+            <dt className="pl-3">includes GST ({economics.gstRatePercent}%), which you remit</dt>
             <dd>{money(economics.gstPaise)}</dd>
           </div>
           {economics.lines
@@ -92,6 +100,16 @@ export function PricingBreakdown({ listingPricePaise }: { listingPricePaise: num
             <dd className="font-semibold">{money(economics.sellerKeepsAfterGstPaise)}</dd>
           </div>
         </dl>
+      )}
+
+      {economics?.gstSlabBand && (
+        // The value-slab band where neither GST rate is self-consistent: say
+        // what the seller can do about it, in their own numbers.
+        <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
+          Priced between {money(economics.gstSlabBand.fromPaise)} and {money(economics.gstSlabBand.toPaise)}, this
+          item is taxed at {economics.gstRatePercent}%. At {money(economics.gstSlabBand.meritUpToPaise)} or less it
+          would be {rates!.gst.meritPercent}%.
+        </p>
       )}
 
       <p className="mt-2 text-[11px] text-gray-400">

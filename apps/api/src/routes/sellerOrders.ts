@@ -23,6 +23,8 @@ import {
 } from '@clowe/shared';
 import QRCode from 'qrcode';
 import { prisma } from '../db';
+import { getSettings } from '../services/settingsService';
+import { gstSettings } from '../services/economicsRates';
 import { categoryRulesMap } from '../services/categoryRules';
 import { webPublicUrl } from '../env';
 import { requireAuth } from '../middleware/auth';
@@ -663,18 +665,20 @@ sellerOrdersRouter.get('/:orderId/invoice', async (req, res, next) => {
         payment: { select: { status: true } },
         items: {
           where: { sellerId: seller.id },
-          include: { product: { select: { taxRatePercent: true, categoryId: true } } },
+          include: { product: { select: { categoryId: true } } },
         },
       },
     });
     if (!order || order.items.length === 0) throw ApiError.notFound('Order not found');
     if (order.status === 'PLACED') throw ApiError.badRequest('This order is not paid yet');
-    // GST: the listing's own slab, else the category rule (apparel slab, flat 18%, 0% for books...).
+    // GST: gstRateFor, the one rate function — the category's rule (value
+    // slab per piece, or a flat rate) with the admin's GST settings.
     const taxRules = await categoryRulesMap(order.items.map((i) => i.product.categoryId));
+    const gst = gstSettings(await getSettings());
 
     const lines = order.items.map((i) => {
       const gross = i.pricePaise * i.quantity;
-      const rate = gstRateFor(i.pricePaise, i.product.taxRatePercent, taxRules.get(i.product.categoryId)!);
+      const rate = gstRateFor(i.pricePaise, taxRules.get(i.product.categoryId), gst).ratePercent;
       const taxable = Math.round(gross / (1 + rate / 100));
       return {
         title: i.title,
@@ -686,6 +690,7 @@ sellerOrdersRouter.get('/:orderId/invoice', async (req, res, next) => {
         grossPaise: gross,
         taxablePaise: taxable,
         gstPaise: gross - taxable,
+        gstRatePercent: rate,
       };
     });
 
@@ -720,14 +725,7 @@ sellerOrdersRouter.get('/:orderId/invoice', async (req, res, next) => {
       },
       customer: { name: order.user.name ?? order.shipName },
       lines,
-      gstRatePercent:
-        order.items.length > 0
-          ? gstRateFor(
-              order.items[0].pricePaise,
-              order.items[0].product.taxRatePercent,
-              taxRules.get(order.items[0].product.categoryId)!,
-            )
-          : 5,
+      gstRatePercent: lines[0].gstRatePercent,
       taxablePaise,
       gstPaise,
       isIntraState:

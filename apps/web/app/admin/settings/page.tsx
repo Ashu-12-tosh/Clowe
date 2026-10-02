@@ -33,7 +33,14 @@ export default function AdminSettingsPage() {
   });
   const [couponsEnabled, setCouponsEnabled] = useState(false);
   const [dispatch, setDispatch] = useState({ windowHours: '', penaltyRupees: '', enabled: true });
-  const [economics, setEconomics] = useState({ gst: '', platformRupees: '', deliveryRupees: '', closingRupees: '' });
+  const [economics, setEconomics] = useState({
+    gstMerit: '',
+    gstStandard: '',
+    gstThresholdRupees: '',
+    platformRupees: '',
+    deliveryRupees: '',
+    closingRupees: '',
+  });
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -54,7 +61,9 @@ export default function AdminSettingsPage() {
             prices[`${pl}:${d}`] = toRupees(s.adPricing[pl][String(d) as '7' | '15' | '30']);
         setAdPrices(prices);
         setEconomics({
-          gst: String(s.gstRatePercent),
+          gstMerit: String(s.gstMeritPercent),
+          gstStandard: String(s.gstStandardPercent),
+          gstThresholdRupees: toRupees(s.gstValueSlabThresholdPaise),
           platformRupees: toRupees(s.platformFeePaise),
           deliveryRupees: toRupees(s.deliveryFeePaise),
           closingRupees: toRupees(s.closingFeePaise),
@@ -106,7 +115,9 @@ export default function AdminSettingsPage() {
           dispatchWindowHours: Math.max(1, Math.round(Number(dispatch.windowHours) || 0)),
           lateDispatchPenaltyPaise: toPaise(dispatch.penaltyRupees),
           penaltyEnabled: dispatch.enabled,
-          gstRatePercent: Number(economics.gst) || 0,
+          gstMeritPercent: Number(economics.gstMerit) || 0,
+          gstStandardPercent: Number(economics.gstStandard) || 0,
+          gstValueSlabThresholdPaise: toPaise(economics.gstThresholdRupees),
           platformFeePaise: toPaise(economics.platformRupees),
           deliveryFeePaise: toPaise(economics.deliveryRupees),
           closingFeePaise: toPaise(economics.closingRupees),
@@ -379,23 +390,54 @@ export default function AdminSettingsPage() {
       <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
         <h2 className="text-sm font-bold">🧮 Listing economics</h2>
         <p className="mt-1 text-xs text-gray-400">
-          The fixed fees and GST rate behind the pricing breakdown sellers see as they type a
-          price, and behind the entries posted to their ledger on delivery &mdash; one shared
-          formula, with the commission, gateway and TDS rates below.
+          The fixed fees behind the pricing breakdown sellers see as they type a price, and
+          behind the entries posted to their ledger on delivery &mdash; one shared formula, with
+          the commission, gateway and TDS rates below.
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <p className="mt-2 text-xs text-gray-400">
+          GST is not one platform rate: each category carries its own (Categories page), and these
+          three settings drive the GST 2.0 value slab for apparel, made-up textiles and footwear
+          &mdash; the merit rate when one piece or pair is worth at most the threshold ex-GST, the
+          standard rate above it. The standard rate is also used for any category with no rate.
+          Notification 9/2025-Central Tax (Rate), in force 22 September 2025.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div>
-            <label className="text-xs text-gray-500">GST in price (%)</label>
+            <label className="text-xs text-gray-500">GST merit rate (%)</label>
             <input
               type="number"
               min={0}
-              max={28}
+              max={40}
               step="0.5"
-              value={economics.gst}
-              onChange={(e) => setEconomics((v) => ({ ...v, gst: e.target.value }))}
+              value={economics.gstMerit}
+              onChange={(e) => setEconomics((v) => ({ ...v, gstMerit: e.target.value }))}
               className={field}
             />
           </div>
+          <div>
+            <label className="text-xs text-gray-500">GST standard rate (%)</label>
+            <input
+              type="number"
+              min={0}
+              max={40}
+              step="0.5"
+              value={economics.gstStandard}
+              onChange={(e) => setEconomics((v) => ({ ...v, gstStandard: e.target.value }))}
+              className={field}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Value-slab threshold (₹ per piece, ex-GST)</label>
+            <input
+              type="number"
+              min={0}
+              value={economics.gstThresholdRupees}
+              onChange={(e) => setEconomics((v) => ({ ...v, gstThresholdRupees: e.target.value }))}
+              className={field}
+            />
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div>
             <label className="text-xs text-gray-500">Platform fee (₹, per line)</label>
             <input

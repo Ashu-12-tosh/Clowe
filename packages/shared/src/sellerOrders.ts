@@ -256,8 +256,10 @@ export interface SellerInvoice {
     grossPaise: number;
     taxablePaise: number;
     gstPaise: number;
+    /** This line's rate — lines of one order can sit in different slabs. */
+    gstRatePercent: number;
   }[];
-  /** GST rate applied, e.g. 5 or 12. */
+  /** GST rate of the first line, e.g. 5 or 18; each line carries its own. */
   gstRatePercent: number;
   taxablePaise: number;
   gstPaise: number;

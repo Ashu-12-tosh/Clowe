@@ -20,7 +20,10 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   dispatchWindowHours: 12,
   lateDispatchPenaltyPaise: 8000, // ₹80
   penaltyEnabled: true,
-  gstRatePercent: 18,
+  // GST 2.0, Notification 9/2025-Central Tax (Rate), in force 22.09.2025.
+  gstMeritPercent: 5,
+  gstStandardPercent: 18,
+  gstValueSlabThresholdPaise: 250000, // ₹2,500 per piece / pair, ex-GST
   platformFeePaise: 900, // ₹9 per line
   deliveryFeePaise: 6000, // ₹60 per shipment
   closingFeePaise: 2000, // ₹20 per unit — placeholder
@@ -97,8 +100,13 @@ export async function getSettings(): Promise<PlatformSettings> {
       DEFAULT_SETTINGS.lateDispatchPenaltyPaise,
     penaltyEnabled:
       (byKey.get('penaltyEnabled') as boolean | undefined) ?? DEFAULT_SETTINGS.penaltyEnabled,
-    gstRatePercent:
-      (byKey.get('gstRatePercent') as number | undefined) ?? DEFAULT_SETTINGS.gstRatePercent,
+    gstMeritPercent:
+      (byKey.get('gstMeritPercent') as number | undefined) ?? DEFAULT_SETTINGS.gstMeritPercent,
+    gstStandardPercent:
+      (byKey.get('gstStandardPercent') as number | undefined) ?? DEFAULT_SETTINGS.gstStandardPercent,
+    gstValueSlabThresholdPaise:
+      (byKey.get('gstValueSlabThresholdPaise') as number | undefined) ??
+      DEFAULT_SETTINGS.gstValueSlabThresholdPaise,
     platformFeePaise:
       (byKey.get('platformFeePaise') as number | undefined) ?? DEFAULT_SETTINGS.platformFeePaise,
     deliveryFeePaise:

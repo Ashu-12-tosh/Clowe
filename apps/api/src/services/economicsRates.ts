@@ -1,4 +1,13 @@
-import type { PlatformSettings, SellerEconomicsRates } from '@clowe/shared';
+import type { GstSettings, PlatformSettings, SellerEconomicsRates } from '@clowe/shared';
+
+/** The GST settings gstRateFor needs, from platform settings. */
+export function gstSettings(settings: PlatformSettings): GstSettings {
+  return {
+    meritPercent: settings.gstMeritPercent,
+    standardPercent: settings.gstStandardPercent,
+    valueSlabThresholdPaise: settings.gstValueSlabThresholdPaise,
+  };
+}
 
 /**
  * The rates the shared calculator needs, lifted from platform settings. One
@@ -15,7 +24,7 @@ export function economicsRates(settings: PlatformSettings): SellerEconomicsRates
     commissionPercent: settings.payoutCommissionPercent,
     gatewayPercent: settings.payoutGatewayPercent,
     tdsPercent: settings.payoutTdsPercent,
-    gstPercent: settings.gstRatePercent,
+    gst: gstSettings(settings),
     platformFeePaise: settings.platformFeePaise,
     deliveryFeePaise: settings.deliveryFeePaise,
     closingFeePaise: settings.closingFeePaise,

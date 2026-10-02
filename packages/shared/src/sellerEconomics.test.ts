@@ -5,7 +5,7 @@ const RATES = {
   commissionPercent: 10,
   gatewayPercent: 2,
   tdsPercent: 1,
-  gstPercent: 18,
+  gst: { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 250_000 },
   platformFeePaise: 900,
   deliveryFeePaise: 6000,
   closingFeePaise: 2000,
@@ -88,11 +88,13 @@ describe('computeListingEconomics', () => {
         commissionPercent: 15,
         gatewayPercent: 0,
         tdsPercent: 0,
-        gstPercent: 5,
+        gst: { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 250_000 },
         platformFeePaise: 0,
         deliveryFeePaise: 4_500,
         closingFeePaise: 0,
       },
+      // A flat 5% category: the rate comes from the category, not the rates.
+      taxRules: { taxRule: null, defaultTaxRatePercent: 5 },
     });
     expect(e.commissionPaise).toBe(15_000);
     expect(e.gatewayFeePaise).toBe(0);
@@ -113,5 +115,27 @@ describe('gstInclusiveShare', () => {
   it('extracts the tax from an inclusive amount, and is zero at 0%', () => {
     expect(gstInclusiveShare(118_00, 18)).toBe(18_00);
     expect(gstInclusiveShare(100_000, 0)).toBe(0);
+  });
+});
+
+describe('computeListingEconomics — GST comes from the category, via gstRateFor', () => {
+  const SLAB = { taxRule: 'VALUE_SLAB' as const, defaultTaxRatePercent: null };
+
+  it('takes 5% out of a ₹2,625 shirt and 18% out of a ₹2,990 one', () => {
+    const cheap = computeListingEconomics({ sellerPricePaise: 262_500, rates: RATES, taxRules: SLAB });
+    expect(cheap.gstRatePercent).toBe(5);
+    expect(cheap.gstPaise).toBe(12_500);
+    const dear = computeListingEconomics({ sellerPricePaise: 299_000, rates: RATES, taxRules: SLAB });
+    expect(dear.gstRatePercent).toBe(18);
+    expect(dear.gstPaise).toBe(45_610);
+  });
+
+  it('flags the ambiguous band for the seller', () => {
+    expect(computeListingEconomics({ sellerPricePaise: 280_000, rates: RATES, taxRules: SLAB }).gstSlabBand).not.toBeNull();
+    expect(computeListingEconomics({ sellerPricePaise: 299_000, rates: RATES, taxRules: SLAB }).gstSlabBand).toBeNull();
+  });
+
+  it('uses the standard rate before a category is chosen', () => {
+    expect(computeListingEconomics({ sellerPricePaise: 100_000, rates: RATES }).gstRatePercent).toBe(18);
   });
 });

@@ -1,7 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import {
   categoryRuleFieldsFromRow,
-  gstRateFor,
   resolveCategoryRules,
   type CategoryRuleFields,
   type CategoryRules,
@@ -133,15 +132,6 @@ export async function descendantIds(categoryId: string): Promise<string[]> {
     for (const child of byParent.get(id) ?? []) stack.push(child.id);
   }
   return out;
-}
-
-/** GST rate for a listing: its own slab, else the category rule. */
-export async function gstRateForListing(
-  unitPricePaise: number,
-  listingRate: number | null | undefined,
-  categoryId: string,
-): Promise<number> {
-  return gstRateFor(unitPricePaise, listingRate, await categoryRulesFor(categoryId));
 }
 
 /**

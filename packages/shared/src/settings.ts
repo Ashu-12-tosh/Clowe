@@ -63,7 +63,12 @@ export interface PlatformSettings {
    * follow-up. The tax invoice already applies the category rules; this
    * rate only drives what the product form and ledger explain to sellers.
    */
-  gstRatePercent: number;
+  /** GST 2.0 merit rate (5%): the lower value slab. */
+  gstMeritPercent: number;
+  /** GST 2.0 standard rate (18%): the upper value slab and the default for a category with none. */
+  gstStandardPercent: number;
+  /** Value-slab threshold per piece or pair, ex-GST, in paise (₹2,500). */
+  gstValueSlabThresholdPaise: number;
   /** Fixed platform fee charged to the seller per delivered order line (paise). */
   platformFeePaise: number;
   /** Fixed delivery fee charged to the seller per shipment (paise). */
@@ -143,7 +148,9 @@ export const updateSettingsSchema = z.object({
   payoutMinPaise: z.number().int().min(0).optional(),
   payoutHoldDays: z.number().int().min(0).max(90).optional(),
   dispatchWindowHours: z.number().int().min(1).max(336).optional(),
-  gstRatePercent: z.number().min(0).max(28).optional(),
+  gstMeritPercent: z.number().min(0).max(40).optional(),
+  gstStandardPercent: z.number().min(0).max(40).optional(),
+  gstValueSlabThresholdPaise: z.number().int().min(0).optional(),
   platformFeePaise: z.number().int().min(0).optional(),
   deliveryFeePaise: z.number().int().min(0).optional(),
   closingFeePaise: z.number().int().min(0).optional(),

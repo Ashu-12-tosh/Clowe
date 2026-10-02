@@ -10,6 +10,7 @@ import {
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 import { economicsRates } from './economicsRates';
+import { categoryRulesMap } from './categoryRules';
 import { getSettings } from './settingsService';
 
 // ---------------------------------------------------------------------------
@@ -112,15 +113,25 @@ export async function balance(
 export async function postDeliveryEntries(orderItemId: string, db: Db = prisma): Promise<number> {
   const item = await db.orderItem.findUnique({
     where: { id: orderItemId },
-    select: { id: true, orderId: true, sellerId: true, pricePaise: true, quantity: true, status: true },
+    select: {
+      id: true,
+      orderId: true,
+      sellerId: true,
+      pricePaise: true,
+      quantity: true,
+      status: true,
+      product: { select: { categoryId: true } },
+    },
   });
   if (!item || item.status !== 'DELIVERED') return 0;
 
   const settings = await getSettings();
+  const taxRules = (await categoryRulesMap([item.product.categoryId])).get(item.product.categoryId);
   const economics = computeListingEconomics({
     sellerPricePaise: item.pricePaise,
     quantity: item.quantity,
     rates: economicsRates(settings),
+    taxRules,
   });
 
   const rows = economics.lines
