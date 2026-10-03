@@ -1,6 +1,6 @@
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Role, SellerStatus } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
@@ -20,6 +20,7 @@ const P = {
   withoutPin: '9194000002',
   deactivated: '9194000003',
   fresh: '9194000004',
+  seller: '9194000005',
   unknown: '9194000999',
 };
 
@@ -35,6 +36,8 @@ beforeAll(async () => {
   await make(P.withoutPin);
   await make(P.deactivated, { pin: '1357', active: false });
   await make(P.fresh, { pin: '9753' });
+  const seller = await prisma.user.create({ data: { phone: P.seller, name: 'Enum Seller', role: Role.SELLER, referralCode: 'ENUM-S' } });
+  await prisma.sellerProfile.create({ data: { userId: seller.id, shopName: 'Enum Shop', status: SellerStatus.APPROVED } });
   server = createApp().listen(0);
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -79,7 +82,7 @@ describe('PIN login', () => {
   });
 });
 
-describe('the old phone check, kept for pages loaded before the change', () => {
+describe('the old phone checks, kept for pages loaded before the change', () => {
   it('gives every number the same answer, which sends it to OTP', async () => {
     const answers = [];
     for (const phone of [P.withPin, P.withoutPin, P.deactivated, P.fresh, P.unknown]) {
@@ -88,5 +91,15 @@ describe('the old phone check, kept for pages loaded before the change', () => {
     for (const a of answers) expect(a).toEqual(answers[0]);
     expect(answers[0].status).toBe(200);
     expect(JSON.parse(answers[0].text).data).toEqual({ exists: false, hasPin: false });
+  });
+
+  it('gives every number the same seller answer, which lets it go on to OTP', async () => {
+    const answers = [];
+    for (const phone of [P.seller, P.withPin, P.unknown]) {
+      answers.push(await post('/api/seller/check-phone', { phone }));
+    }
+    for (const a of answers) expect(a).toEqual(answers[0]);
+    expect(answers[0].status).toBe(200);
+    expect(JSON.parse(answers[0].text).data).toEqual({ isSeller: true });
   });
 });

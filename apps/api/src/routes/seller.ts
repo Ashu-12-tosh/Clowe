@@ -152,16 +152,14 @@ function slugify(text: string): string {
 }
 
 
-// Public: is this phone registered as a seller? The seller-only login page
-// uses this to refuse OTPs for non-seller numbers.
+// No longer used by the seller login page, which sends an OTP to any number
+// and says whether it has a seller account only after it is verified. Kept
+// for pages loaded before that change: the same answer for every number,
+// which lets them go on to the OTP. To be removed in a later release.
 sellerRouter.post('/check-phone', async (req, res, next) => {
   try {
-    const { phone } = z.object({ phone: phoneSchema }).parse(req.body);
-    const user = await prisma.user.findUnique({
-      where: { phone },
-      include: { sellerProfile: { select: { id: true } } },
-    });
-    res.json({ success: true, data: { isSeller: !!user?.sellerProfile } });
+    z.object({ phone: phoneSchema }).parse(req.body);
+    res.json({ success: true, data: { isSeller: true } });
   } catch (err) {
     next(err);
   }

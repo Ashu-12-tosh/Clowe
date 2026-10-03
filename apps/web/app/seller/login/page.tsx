@@ -3,14 +3,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { AuthTokensResponse } from '@clowe/shared';
+import type { AuthTokensResponse, SellerProfileInfo } from '@clowe/shared';
 import { api, ApiRequestError, saveSession } from '@/lib/api';
 import { useSeller } from '@/components/seller/SellerContext';
 
 export default function SellerLoginPage() {
   const router = useRouter();
   const { reload } = useSeller();
-  const [step, setStep] = useState<'phone' | 'otp'>('phone');
+  const [step, setStep] = useState<'phone' | 'otp' | 'no-seller'>('phone');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [devOtp, setDevOtp] = useState('');
@@ -21,14 +21,8 @@ export default function SellerLoginPage() {
     setError('');
     setBusy(true);
     try {
-      // Seller-only gate: OTP goes out only for registered seller numbers.
-      const check = await api<{ isSeller: boolean }>('/api/seller/check-phone', {
-        body: { phone },
-      });
-      if (!check.isSeller) {
-        setError('This number is not registered as a seller. Register your shop first.');
-        return;
-      }
+      // Any number gets an OTP; whether it has a seller account is told only
+      // after it is verified.
       const otp = await api<{ devOtp?: string }>('/api/auth/request-otp', { body: { phone } });
       if (otp.devOtp) {
         setDevOtp(otp.devOtp);
@@ -50,6 +44,16 @@ export default function SellerLoginPage() {
         body: { phone, code },
       });
       saveSession(data);
+      try {
+        await api<SellerProfileInfo>('/api/seller/profile', { auth: true });
+      } catch (err) {
+        if (err instanceof ApiRequestError && err.code === 'SELLER_PROFILE_REQUIRED') {
+          setStep('no-seller');
+          setBusy(false);
+          return;
+        }
+        throw err;
+      }
       reload();
       // Deep links (e.g. a scanned label QR) send the seller back where they started.
       const next = new URLSearchParams(window.location.search).get('next');
@@ -65,17 +69,12 @@ export default function SellerLoginPage() {
       <p className="text-sm font-semibold uppercase tracking-widest text-brand-600">Seller Panel</p>
       <h1 className="mt-1 text-3xl font-bold tracking-tight text-brand-900">Seller Login</h1>
       <p className="mt-2 text-sm text-gray-500">
-        Only registered seller numbers can login here — you&apos;ll land straight on your dashboard.
+        Login with your seller mobile number — you&apos;ll land straight on your dashboard.
       </p>
 
       {error && (
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}{' '}
-          {error.includes('not registered') && (
-            <Link href="/sell" className="font-semibold underline">
-              Sell on Clowe →
-            </Link>
-          )}
+          {error}
         </div>
       )}
 
@@ -97,7 +96,7 @@ export default function SellerLoginPage() {
               maxLength={10}
               value={phone}
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-              placeholder="Registered seller mobile number"
+              placeholder="Seller mobile number"
               className="w-full px-3 py-2.5 text-sm outline-none"
               autoFocus
             />
@@ -107,7 +106,7 @@ export default function SellerLoginPage() {
             disabled={busy || phone.length !== 10}
             className="w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
           >
-            {busy ? 'Checking…' : 'Send OTP'}
+            {busy ? 'Sending…' : 'Send OTP'}
           </button>
           <p className="text-center text-xs text-gray-500">
             New to selling?{' '}
@@ -156,6 +155,26 @@ export default function SellerLoginPage() {
             {busy ? 'Logging in…' : 'Login to Dashboard →'}
           </button>
         </form>
+      )}
+
+      {step === 'no-seller' && (
+        <div className="mt-6 space-y-4 rounded-lg border border-gray-200 bg-white p-5">
+          <p className="text-sm text-gray-700">
+            <span className="font-semibold">+91 {phone}</span> has no seller account yet.
+          </p>
+          <Link
+            href="/seller/register"
+            className="block w-full rounded-lg bg-brand-600 py-2.5 text-center text-sm font-semibold text-white hover:bg-brand-700"
+          >
+            Register your shop →
+          </Link>
+          <p className="text-center text-xs text-gray-500">
+            Here to shop?{' '}
+            <Link href="/" className="font-semibold text-brand-600 hover:underline">
+              Continue to Clowe
+            </Link>
+          </p>
+        </div>
       )}
     </main>
   );
