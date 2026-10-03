@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSearchQuery, parseSuggestQuery, type SearchCatalog } from './searchQuery';
+import { CATEGORY_WORDS, parseSearchQuery, parseSuggestQuery, type SearchCatalog } from './searchQuery';
 
 /**
  * A stand-in for what the backend will inject from the database. Deliberately
@@ -483,5 +483,42 @@ describe('a category word in the singular is that category', () => {
   it('gives a canonical synonym its category, not only its aliases', () => {
     expect(parse('television').filters.inferredCategorySlug).toBe('electronics-tvs');
     expect(parse('refrigerator').filters.inferredCategorySlug).toBe('electronics-appliances');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Everyday words for a category
+// ---------------------------------------------------------------------------
+
+describe('words for a category', () => {
+  const FULL = {
+    brands: [],
+    categories: CATEGORY_WORDS.map((e) => ({ slug: e.categorySlug, name: `Category ${e.categorySlug}` })),
+  };
+  const wordsParse = (q: string) => parseSearchQuery(q, FULL);
+
+  it.each(CATEGORY_WORDS.flatMap((e) => e.words.map((w) => [w, e.categorySlug] as const)))(
+    '%s -> %s, and stays a search word',
+    (word, slug) => {
+      const { filters, cleanedKeywords } = wordsParse(word);
+      expect(filters.inferredCategorySlug).toBe(slug);
+      expect(cleanedKeywords).not.toBe('');
+    },
+  );
+
+  it('matches plurals and singulars of each word', () => {
+    expect(wordsParse('dresses').filters.inferredCategorySlug).toBe('fashion-women');
+    expect(wordsParse('earring').filters.inferredCategorySlug).toBe('fashion-jewellery');
+    expect(wordsParse('lamps').filters.inferredCategorySlug).toBe('home-decor');
+  });
+
+  it('never matches inside another word', () => {
+    expect(wordsParse('pendant').filters.inferredCategorySlug).toBeUndefined();
+    expect(wordsParse('capri').filters.inferredCategorySlug).toBeUndefined();
+    expect(wordsParse('steam iron').filters.inferredCategorySlug).toBeUndefined();
+  });
+
+  it('applies only when the category exists', () => {
+    expect(parse('saree').filters.inferredCategorySlug).toBeUndefined();
   });
 });

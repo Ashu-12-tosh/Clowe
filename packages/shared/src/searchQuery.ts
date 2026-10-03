@@ -72,6 +72,55 @@ export const SEARCH_SYNONYMS: SynonymEntry[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Words for a category
+// ---------------------------------------------------------------------------
+
+/**
+ * Everyday words for what a category holds, where the category's own name
+ * does not say it ("saree" is Ethnic Wear, "lamp" is Home Decor). A word that
+ * spans several categories maps to their parent ("shirt" → Fashion). Like a
+ * synonym's hint, the word only ranks: it stays in the search, so "shirt"
+ * still has to match a shirt. Plural and singular forms are matched for each
+ * word. Applied only when that category exists in the catalog.
+ */
+export const CATEGORY_WORDS: { categorySlug: string; words: string[] }[] = [
+  { categorySlug: 'fashion', words: ['shirt', 't-shirt', 'tshirt', 'jeans', 'jacket', 'sweater'] },
+  { categorySlug: 'fashion-women', words: ['dress', 'lingerie', 'bra'] },
+  { categorySlug: 'fashion-ethnic', words: ['saree', 'kurta'] },
+  { categorySlug: 'fashion-footwear', words: ['shoe', 'shoes', 'sneakers'] },
+  { categorySlug: 'fashion-bags', words: ['bag', 'handbag', 'backpack', 'wallet'] },
+  { categorySlug: 'fashion-jewellery', words: ['earrings', 'necklace', 'jewelry'] },
+  { categorySlug: 'fashion-caps', words: ['cap', 'hat'] },
+  { categorySlug: 'fashion-accessories', words: ['belt'] },
+  { categorySlug: 'books-fiction', words: ['novel'] },
+  { categorySlug: 'beauty-fragrances', words: ['perfume'] },
+  { categorySlug: 'beauty-makeup', words: ['lipstick'] },
+  { categorySlug: 'beauty-skincare', words: ['moisturiser', 'moisturizer'] },
+  { categorySlug: 'beauty-haircare', words: ['shampoo'] },
+  { categorySlug: 'grocery-staples', words: ['rice'] },
+  { categorySlug: 'grocery-snacks', words: ['snacks', 'coffee', 'tea'] },
+  { categorySlug: 'home-furniture', words: ['chair', 'sofa'] },
+  { categorySlug: 'home-bedding', words: ['bed'] },
+  { categorySlug: 'home-decor', words: ['decor', 'lamp'] },
+  { categorySlug: 'home-appliances', words: ['ac', 'microwave', 'cooker'] },
+  { categorySlug: 'home-cookware', words: ['pan'] },
+  { categorySlug: 'electronics-speakers', words: ['speaker'] },
+  { categorySlug: 'sports-outdoor', words: ['football', 'cricket bat'] },
+  { categorySlug: 'toys-baby-care', words: ['baby', 'diaper'] },
+  { categorySlug: 'toys-school', words: ['stationery', 'pen'] },
+];
+
+/** A word with its plural or singular: "dress"/"dresses", "earrings"/"earring". */
+function wordForms(word: string): string[] {
+  const w = word.toLowerCase();
+  const forms = new Set([w]);
+  if (/(s|x|ch|sh)$/.test(w) && !/[^s]s$/.test(w)) forms.add(`${w}es`);
+  else if (/[^s]s$/.test(w)) forms.add(w.slice(0, -1));
+  else forms.add(`${w}s`);
+  return [...forms];
+}
+
+// ---------------------------------------------------------------------------
 // Intent words -> sort order
 // ---------------------------------------------------------------------------
 
@@ -387,10 +436,21 @@ export function parseSearchQuery(raw: string, catalog: SearchCatalog): ParsedSea
     }
   }
 
+  const knownSlugs = new Set(catalog.categories.map((c) => c.slug));
+
+  // -- 4b. Words for a category ----------------------------------------------
+  // Before synonyms rewrite them ("t-shirt" → "tshirt"); the word stays.
+  if (!filters.inferredCategorySlug) {
+    const words = CATEGORY_WORDS.filter((e) => knownSlugs.has(e.categorySlug))
+      .flatMap((e) => e.words.flatMap(wordForms).map((form) => ({ form, slug: e.categorySlug })))
+      .sort((a, b) => b.form.length - a.form.length);
+    const hit = words.find(({ form }) => new RegExp(String.raw`(?:^|[^\p{L}\p{N}-])${escapeRegex(form)}(?=$|[^\p{L}\p{N}-])`, 'iu').test(text));
+    if (hit) filters.inferredCategorySlug = hit.slug;
+  }
+
   // -- 5. Synonyms ----------------------------------------------------------
   // Rewrite what people say into what the catalog calls it, and take the
   // category hint when this deployment actually has that category.
-  const knownSlugs = new Set(catalog.categories.map((c) => c.slug));
   for (const entry of SEARCH_SYNONYMS) {
     // The canonical word itself ("laptop", "television") hints at the category too.
     if (

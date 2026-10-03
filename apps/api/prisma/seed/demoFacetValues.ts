@@ -53,9 +53,12 @@ const GARMENT_TYPE = title([
   [/track ?pants/i, 'Track pants'], [/tracksuit/i, 'Tracksuit'], [/sports bra/i, 'Sports bra'], [/tights|leggings/i, 'Tights'],
   [/kurta set/i, 'Kurta set'], [/kurti/i, 'Kurti'], [/kurta/i, 'Kurta'], [/saree|sari\b/i, 'Saree'], [/lehenga/i, 'Lehenga'],
   [/salwar|anarkali|churidar/i, 'Salwar suit'], [/sherwani/i, 'Sherwani'], [/dupatta/i, 'Dupatta'], [/nehru/i, 'Nehru jacket'],
-  [/polo/i, 'Polo'], [/t-?shirt|\btee\b/i, 'T-shirt'], [/shirt/i, 'Shirt'], [/jeans|denim/i, 'Jeans'], [/chinos?/i, 'Chinos'],
+  // Hoodies and sweatshirts before shirts ("Sweatshirt" contains "tshirt");
+  // denim is jeans only when it is not a jacket ("Denim Trucker Jacket").
+  [/hoodie/i, 'Hoodie'], [/sweatshirt/i, 'Sweatshirt'],
+  [/polo/i, 'Polo'], [/\bt-?shirt|\btee\b/i, 'T-shirt'], [/shirt/i, 'Shirt'], [/jeans|denim(?!.*\bjacket\b)/i, 'Jeans'], [/chinos?/i, 'Chinos'],
   [/trousers|pants|palazzo/i, 'Trousers'], [/shorts/i, 'Shorts'], [/joggers/i, 'Joggers'], [/puffer/i, 'Puffer jacket'],
-  [/hoodie/i, 'Hoodie'], [/sweatshirt/i, 'Sweatshirt'], [/sweater|pullover|cardigan/i, 'Sweater'], [/coat|parka/i, 'Coat'],
+  [/sweater|pullover|cardigan/i, 'Sweater'], [/coat|parka/i, 'Coat'],
   [/thermal/i, 'Thermal'], [/shawl|stole/i, 'Shawl'], [/jacket|bomber|windcheater/i, 'Jacket'], [/jumpsuit/i, 'Jumpsuit'],
   [/co-?ord/i, 'Co-ord set'], [/frock/i, 'Frock'], [/dress/i, 'Dress'], [/skirt/i, 'Skirt'], [/top|blouse|tunic|camisole/i, 'Top'],
   [/briefs/i, 'Briefs'], [/trunks/i, 'Trunks'], [/boxers/i, 'Boxers'], [/\bvests?\b/i, 'Vest'], [/\bbra\b/i, 'Bra'],
