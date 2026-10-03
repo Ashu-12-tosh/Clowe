@@ -15,6 +15,10 @@ import { otpProvider } from './otp';
 
 const OTP_RESEND_COOLDOWN_SEC = 45;
 const PIN_MAX_ATTEMPTS = 5;
+/** The one answer to a failed PIN login, whatever the reason. */
+const PIN_LOGIN_FAILED = "That number and PIN don't match. Use OTP if you've forgotten your PIN.";
+/** Compared against when a number has no PIN, so the work is the same either way. */
+const NO_PIN_HASH = sha256('no-pin-set');
 
 /** PIN is peppered + scoped to the user before hashing (never stored raw). */
 function pinPlain(userId: string, pin: string): string {
@@ -182,28 +186,31 @@ export const authService = {
     return { user: toAuthUser(user), ...tokens, isNewUser };
   },
 
-  /** Quick login with the 4-digit PIN (5 attempts, then OTP-only). */
+  /**
+   * Quick login with the 4-digit PIN (5 attempts, then OTP-only).
+   *
+   * Every failure looks the same — no such number, no PIN set, locked out,
+   * wrong PIN — down to the work done for it, so the answer says nothing
+   * about which numbers have accounts. Whether an account is deactivated is
+   * told only to someone who got its PIN right.
+   */
   async pinLogin(phone: string, pin: string): Promise<AuthTokensResponse> {
     const user = await prisma.user.findUnique({ where: { phone } });
-    if (!user || !user.pinHash) {
-      throw ApiError.badRequest('PIN login is not set up for this number', 'PIN_NOT_SET');
+    const ok =
+      hashMatches(pinPlain(user?.id ?? 'no-account', pin), user?.pinHash ?? NO_PIN_HASH) &&
+      !!user?.pinHash &&
+      user.pinAttempts < PIN_MAX_ATTEMPTS;
+    if (!ok || !user) {
+      // The same write whatever went wrong: counts a real PIN's failed try,
+      // and matches nothing for a number without one.
+      await prisma.user.updateMany({
+        where: { phone, pinHash: { not: null } },
+        data: { pinAttempts: { increment: 1 } },
+      });
+      throw ApiError.badRequest(PIN_LOGIN_FAILED, 'PIN_INVALID');
     }
     if (!user.isActive) {
       throw ApiError.forbidden('This account has been deactivated', 'ACCOUNT_DISABLED');
-    }
-    if (user.pinAttempts >= PIN_MAX_ATTEMPTS) {
-      throw ApiError.tooMany('Too many attempts — please login with OTP', 'PIN_LOCKED');
-    }
-    if (!hashMatches(pinPlain(user.id, pin), user.pinHash)) {
-      const attempts = user.pinAttempts + 1;
-      await prisma.user.update({ where: { id: user.id }, data: { pinAttempts: attempts } });
-      if (attempts >= PIN_MAX_ATTEMPTS) {
-        throw ApiError.tooMany('Too many attempts — please login with OTP', 'PIN_LOCKED');
-      }
-      throw ApiError.badRequest(
-        `Incorrect PIN — ${PIN_MAX_ATTEMPTS - attempts} attempt${PIN_MAX_ATTEMPTS - attempts > 1 ? 's' : ''} left`,
-        'PIN_INCORRECT',
-      );
     }
     await prisma.user.update({ where: { id: user.id }, data: { pinAttempts: 0 } });
     const tokens = await issueTokens(user);
