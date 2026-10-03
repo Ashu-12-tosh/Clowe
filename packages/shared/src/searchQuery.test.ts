@@ -200,7 +200,6 @@ describe('brand and category detection', () => {
 describe('synonyms', () => {
   it.each([
     ['phone', 'smartphone', 'mobiles'],
-    ['mobile', 'smartphone', 'mobiles'],
     ['cellphone', 'smartphone', 'mobiles'],
     ['tv', 'television', 'electronics-tvs'],
     ['fridge', 'refrigerator', 'electronics-appliances'],
@@ -224,7 +223,9 @@ describe('discount words', () => {
     (input) => {
       const { filters, cleanedKeywords } = parse(input);
       expect(filters.onSale).toBe(true);
-      expect(cleanedKeywords).toBe('laptop');
+      // "laptop" is the Laptops category, and with nothing else left it is the topic.
+      expect(filters.inferredCategorySlug).toBe('electronics-laptops');
+      expect(cleanedKeywords).toBe('');
     },
   );
 
@@ -440,5 +441,47 @@ describe('punctuation a transcript adds', () => {
 
   it('leaves punctuation that is part of a word alone', () => {
     expect(parse('usb-c cable').cleanedKeywords).toBe('usb-c cable');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Category words, singular or plural
+// ---------------------------------------------------------------------------
+
+describe('a category word in the singular is that category', () => {
+  it.each([
+    ['laptop', 'electronics-laptops'],
+    ['laptops', 'electronics-laptops'],
+    ['book', 'books'],
+    ['tablet', 'electronics-tablets'],
+    ['headphone', 'electronics-headphones'],
+    ['mobile', 'mobiles'],
+    ['home appliance', 'electronics-appliances'],
+  ])('%s -> %s, and is the topic when it is all there is', (input, slug) => {
+    const { filters, cleanedKeywords } = parse(input);
+    expect(filters.inferredCategorySlug).toBe(slug);
+    expect(cleanedKeywords).toBe('');
+  });
+
+  it('stays a keyword beside other words, so the search needs both', () => {
+    const { filters, cleanedKeywords } = parse('laptop stand');
+    expect(filters.inferredCategorySlug).toBe('electronics-laptops');
+    expect(cleanedKeywords).toBe('laptop stand');
+  });
+
+  it('writes "&" as "and" too', () => {
+    expect(parse('tv and home entertainment').filters.inferredCategorySlug).toBe('electronics-tvs');
+  });
+
+  it('never takes an intent word: "top rated" is a sort even with a Tops category', () => {
+    const { sort, filters } = parse('top rated laptop');
+    expect(sort).toBe('rating');
+    expect(filters.inferredCategorySlug).toBe('electronics-laptops');
+    expect(parse('tops').filters.inferredCategorySlug).toBe('fashion-tops');
+  });
+
+  it('gives a canonical synonym its category, not only its aliases', () => {
+    expect(parse('television').filters.inferredCategorySlug).toBe('electronics-tvs');
+    expect(parse('refrigerator').filters.inferredCategorySlug).toBe('electronics-appliances');
   });
 });

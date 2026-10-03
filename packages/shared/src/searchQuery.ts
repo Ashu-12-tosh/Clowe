@@ -241,6 +241,28 @@ function tidy(text: string): string {
     .join(' ');
 }
 
+/**
+ * The ways a shopper writes a category's name: as named, with "and" for "&",
+ * and with its last word singular ("Laptops" → "laptop", "Accessories" →
+ * "accessory", "Watches" → "watch", "Home Appliances" → "home appliance").
+ * Category names are plural nouns; one in the singular is the same category.
+ */
+export function categoryNameForms(name: string): string[] {
+  const base = name.toLowerCase().trim();
+  const forms = new Set<string>();
+  for (const spelled of [base, base.replace(/\s*&\s*/g, ' and ')]) {
+    forms.add(spelled);
+    const words = spelled.split(/\s+/);
+    const last = words[words.length - 1] ?? '';
+    let singular: string | null = null;
+    if (/ies$/.test(last)) singular = last.replace(/ies$/, 'y');
+    else if (/(ches|shes|sses|xes)$/.test(last)) singular = last.replace(/es$/, '');
+    else if (/[^s']s$/.test(last)) singular = last.replace(/s$/, '');
+    if (singular && singular.length >= 3) forms.add([...words.slice(0, -1), singular].join(' '));
+  }
+  return [...forms];
+}
+
 const MAX_WORDS = String.raw`(?:under|below|less than|lesser than|upto|up to|within|max|maximum|at most|cheaper than|not more than|no more than)`;
 const MIN_WORDS = String.raw`(?:above|over|more than|greater than|starting at|starting from|min|minimum|at least|upwards of)`;
 
@@ -330,12 +352,28 @@ export function parseSearchQuery(raw: string, catalog: SearchCatalog): ParsedSea
     }
   }
 
-  const categoriesByLength = [...catalog.categories].sort((a, b) => b.name.length - a.name.length);
-  for (const category of categoriesByLength) {
-    if (!category.name.trim()) continue;
-    const re = new RegExp(String.raw`\b${escapeRegex(category.name.toLowerCase())}\b`, 'gi');
+  // Every way each category's name is written, longest first, so "home
+  // appliance" wins over "appliance". The words matched are kept aside: when
+  // they are all there is, the category is the topic of the query; when other
+  // words remain ("laptop stand"), they go back into the keywords, so the
+  // search still needs both and the category only ranks.
+  const categoryWords: string[] = [];
+  // A singular never takes an intent word: "Tops" is a category, but "top" in
+  // "top rated" is the ranking hint.
+  const intentPhrases = new Set(INTENT_TO_SORT.map((i) => i.phrase));
+  const forms = catalog.categories
+    .filter((c) => c.name.trim())
+    .flatMap((c) =>
+      categoryNameForms(c.name)
+        .filter((form) => form === c.name.toLowerCase() || !intentPhrases.has(form))
+        .map((form) => ({ form, slug: c.slug })),
+    )
+    .sort((a, b) => b.form.length - a.form.length);
+  for (const { form, slug } of forms) {
+    const re = new RegExp(String.raw`\b${escapeRegex(form)}\b`, 'gi');
     if (re.test(text)) {
-      filters.inferredCategorySlug ??= category.slug;
+      filters.inferredCategorySlug ??= slug;
+      categoryWords.push(form);
       text = text.replace(re, ' ');
     }
   }
@@ -354,6 +392,14 @@ export function parseSearchQuery(raw: string, catalog: SearchCatalog): ParsedSea
   // category hint when this deployment actually has that category.
   const knownSlugs = new Set(catalog.categories.map((c) => c.slug));
   for (const entry of SEARCH_SYNONYMS) {
+    // The canonical word itself ("laptop", "television") hints at the category too.
+    if (
+      entry.categorySlug &&
+      knownSlugs.has(entry.categorySlug) &&
+      new RegExp(String.raw`\b${escapeRegex(entry.canonical)}\b`, 'i').test(text)
+    ) {
+      filters.inferredCategorySlug ??= entry.categorySlug;
+    }
     const aliases = [...entry.aliases].sort((a, b) => b.length - a.length);
     for (const alias of aliases) {
       const re = new RegExp(String.raw`\b${escapeRegex(alias)}\b`, 'gi');
@@ -366,7 +412,9 @@ export function parseSearchQuery(raw: string, catalog: SearchCatalog): ParsedSea
   }
 
   // -- 6. What is left is the keywords --------------------------------------
-  const cleanedKeywords = tidy(text);
+  // A category word goes back in beside other words (see step 3).
+  const rest = tidy(text);
+  const cleanedKeywords = rest && categoryWords.length ? tidy(`${categoryWords.join(' ')} ${rest}`) : rest;
 
   return {
     // A query that parsed into nothing but filters leaves no keywords, which

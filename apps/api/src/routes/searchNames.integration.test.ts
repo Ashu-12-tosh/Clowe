@@ -24,6 +24,8 @@ const NAMES = {
   coreBook: 'names-novatech-corebook',
   bookshelf: 'names-casa-bookshelf',
   plainLaptop: 'names-vertex-flex-laptop',
+  stand: 'names-novatech-laptop-stand',
+  plantStand: 'names-casa-plant-stand',
 };
 
 beforeAll(async () => {
@@ -43,6 +45,8 @@ beforeAll(async () => {
     [NAMES.coreBook, 'NovaTech CoreBook Pro Laptop', laptops.id],
     [NAMES.plainLaptop, 'Vertex Flex 14 Laptop', laptops.id],
     [NAMES.bookshelf, 'Casa Nova Bookshelf 5-Tier', furniture.id],
+    [NAMES.stand, 'NovaTech Laptop Stand Aluminium', furniture.id],
+    [NAMES.plantStand, 'Casa Nova Plant Stand', furniture.id],
   ];
   for (const [i, [slug, title, categoryId]] of products.entries()) {
     const p = await prisma.product.create({
@@ -109,5 +113,26 @@ describe('the type-ahead never cuts into a word', () => {
     expect(slugs).toContain(NAMES.bookGo);
     expect(slugs).not.toContain(NAMES.airBook);
     expect(slugs).not.toContain(NAMES.coreBook);
+  });
+});
+
+describe('a category word, singular or plural, is understood as the category', () => {
+  it('"book" is the Books category, as "books" is', async () => {
+    const { slugs, search: meta } = await search('book');
+    expect(meta?.parsed.filters.inferredCategorySlug).toBe('books');
+    expect(slugs[0]).toBe(FIXTURE.book);
+    expect(slugs).not.toContain(NAMES.airBook);
+  });
+
+  it('"laptop" infers Laptops for ranking, and hides nothing the word finds', async () => {
+    const { slugs, search: meta } = await search('laptop');
+    expect(meta?.parsed.filters.inferredCategorySlug).toBe('electronics-laptops');
+    for (const slug of [NAMES.bookGo, NAMES.airBook, NAMES.coreBook, NAMES.plainLaptop]) expect(slugs).toContain(slug);
+  });
+
+  it('"laptop stand" still needs both words: the stand, not every laptop', async () => {
+    const { slugs, search: meta } = await search('laptop stand');
+    expect(meta?.parsed.filters.inferredCategorySlug).toBe('electronics-laptops');
+    expect(slugs).toEqual([NAMES.stand]);
   });
 });
