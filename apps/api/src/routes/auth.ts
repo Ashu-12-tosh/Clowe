@@ -48,23 +48,13 @@ function refreshTokenFrom(req: { cookies?: Record<string, string>; body?: unknow
   return req.cookies?.[REFRESH_COOKIE] ?? refreshToken;
 }
 
-// Pre-login lookup: does this account exist and have a quick-login PIN?
-// Drives the login page's PIN-vs-OTP branch.
+// No longer used by the login page, which lets the person pick PIN or OTP.
+// Kept for pages loaded before that change: it gives the same answer for
+// every number, which sends them to OTP. To be removed in a later release.
 authRouter.post('/check-phone', async (req, res, next) => {
   try {
-    const { phone } = checkPhoneSchema.parse(req.body);
-    const user = await prisma.user.findUnique({
-      where: { phone },
-      select: { pinHash: true, pinAttempts: true, isActive: true },
-    });
-    res.json({
-      success: true,
-      data: {
-        exists: !!user && user.isActive,
-        // Locked PINs route straight to OTP.
-        hasPin: !!user?.pinHash && user.pinAttempts < 5,
-      },
-    });
+    checkPhoneSchema.parse(req.body);
+    res.json({ success: true, data: { exists: false, hasPin: false } });
   } catch (err) {
     next(err);
   }

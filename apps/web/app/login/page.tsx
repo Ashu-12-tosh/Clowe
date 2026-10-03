@@ -26,6 +26,29 @@ function dashboardFor(role: UserRole): string {
   return '/';
 }
 
+/**
+ * How this device signs in. OTP unless the person picked their PIN here
+ * before; the page never asks the server whether a number has a PIN.
+ */
+type LoginMethod = 'otp' | 'pin';
+const LOGIN_METHOD_KEY = 'clowe.loginMethod';
+
+function rememberedMethod(): LoginMethod {
+  try {
+    return localStorage.getItem(LOGIN_METHOD_KEY) === 'pin' ? 'pin' : 'otp';
+  } catch {
+    return 'otp';
+  }
+}
+
+function rememberMethod(method: LoginMethod) {
+  try {
+    localStorage.setItem(LOGIN_METHOD_KEY, method);
+  } catch {
+    // Storage blocked (private window): the choice just isn't remembered.
+  }
+}
+
 function maskedPhone(phone: string): string {
   return `+91 ${phone.slice(0, 2)}XXX XX${phone.slice(7)}`;
 }
@@ -190,26 +213,23 @@ export default function LoginPage() {
     }
   }
 
-  /** Step 1 → does this account have a PIN? */
+  /** Step 1 → OTP, or the PIN if that is how this device signs in. */
   async function continueFromPhone() {
-    setError('');
     setNotice('');
-    setBusy(true);
-    try {
-      const info = await api<{ exists: boolean; hasPin: boolean }>('/api/auth/check-phone', {
-        body: { phone },
-      });
-      if (info.exists && info.hasPin) {
-        setPin('');
-        setBusy(false);
-        setStep('pin');
-      } else {
-        await sendOtp();
-      }
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
-      setBusy(false);
-    }
+    if (rememberedMethod() === 'pin') choosePin();
+    else await chooseOtp();
+  }
+
+  function choosePin() {
+    rememberMethod('pin');
+    setError('');
+    setPin('');
+    setStep('pin');
+  }
+
+  async function chooseOtp() {
+    rememberMethod('otp');
+    await sendOtp();
   }
 
   async function loginWithPin(pinValue: string) {
@@ -222,11 +242,7 @@ export default function LoginPage() {
       finishAuth(data);
     } catch (err) {
       setPin('');
-      if (err instanceof ApiRequestError && err.code === 'PIN_LOCKED') {
-        await sendOtp("Too many attempts — we've sent an OTP instead.");
-      } else {
-        setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
-      }
+      setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
     } finally {
       setBusy(false);
     }
@@ -304,6 +320,7 @@ export default function LoginPage() {
         auth: true,
       });
       setStoredUser(me);
+      rememberMethod('pin');
       router.push(dashboardFor(me.role));
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not save PIN');
@@ -429,6 +446,14 @@ export default function LoginPage() {
                 >
                   {busy ? 'Please wait…' : 'Continue'}
                 </button>
+                <button
+                  type="button"
+                  onClick={choosePin}
+                  disabled={busy || phone.length !== 10}
+                  className="w-full text-center text-sm text-brand-600 hover:underline disabled:text-gray-400 disabled:no-underline"
+                >
+                  Use my PIN instead
+                </button>
               </form>
             )}
 
@@ -436,7 +461,7 @@ export default function LoginPage() {
             {step === 'pin' && (
               <div className="mt-6 space-y-5">
                 <p className="text-center text-sm text-gray-600">
-                  Welcome back, <span className="font-semibold">{maskedPhone(phone)}</span>{' '}
+                  PIN login for <span className="font-semibold">{maskedPhone(phone)}</span>{' '}
                   <button onClick={() => setStep('phone')} className="text-brand-600 hover:underline">
                     Change number
                   </button>
@@ -462,7 +487,7 @@ export default function LoginPage() {
                   {busy ? 'Logging in…' : 'Login'}
                 </button>
                 <div className="flex items-center justify-between text-sm">
-                  <button onClick={() => void sendOtp()} className="text-brand-600 hover:underline">
+                  <button onClick={() => void chooseOtp()} className="text-brand-600 hover:underline">
                     Use OTP instead
                   </button>
                   <button

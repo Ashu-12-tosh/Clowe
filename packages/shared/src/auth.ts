@@ -95,7 +95,7 @@ export type UpdatePreferencesInput = z.infer<typeof updatePreferencesSchema>;
 /** 4-digit quick-login PIN. */
 export const pinSchema = z.string().regex(/^\d{4}$/, 'PIN must be 4 digits');
 
-/** POST /api/auth/check-phone — does this account exist / have a PIN? */
+/** POST /api/auth/check-phone: kept for older pages, same answer for every number. */
 export const checkPhoneSchema = z.object({ phone: phoneSchema });
 
 /** POST /api/auth/pin-login */

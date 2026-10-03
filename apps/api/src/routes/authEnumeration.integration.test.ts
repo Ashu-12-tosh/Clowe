@@ -78,3 +78,15 @@ describe('PIN login', () => {
     expect(JSON.parse(disabled.text).error.code).toBe('ACCOUNT_DISABLED');
   });
 });
+
+describe('the old phone check, kept for pages loaded before the change', () => {
+  it('gives every number the same answer, which sends it to OTP', async () => {
+    const answers = [];
+    for (const phone of [P.withPin, P.withoutPin, P.deactivated, P.fresh, P.unknown]) {
+      answers.push(await post('/api/auth/check-phone', { phone }));
+    }
+    for (const a of answers) expect(a).toEqual(answers[0]);
+    expect(answers[0].status).toBe(200);
+    expect(JSON.parse(answers[0].text).data).toEqual({ exists: false, hasPin: false });
+  });
+});
