@@ -596,13 +596,13 @@ export default function SellerPayoutsPage() {
                 <dl className="space-y-2 text-xs">
                   <div className="flex justify-between">
                     <dt className="text-gray-500">
-                      Commission ({overview.rates.commissionPercent}%)
+                      Commission ({overview.rates.commissionPercent}% of your price, before GST)
                     </dt>
                     <dd className="font-semibold">{money(overview.fees.commissionPaise)}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-gray-500">
-                      Gateway / collection ({overview.rates.gatewayPercent}%)
+                      Gateway / collection ({overview.rates.gatewayPercent}% of what buyers paid)
                     </dt>
                     <dd className="font-semibold">{money(overview.fees.gatewayPaise)}</dd>
                   </div>

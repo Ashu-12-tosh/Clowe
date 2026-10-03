@@ -19,7 +19,8 @@ describe('computeListingEconomics', () => {
   it('splits a plain price into each component', () => {
     const e = computeListingEconomics({ buyerPricePaise: 100_000, rates: RATES });
     expect(e.buyerPaysPaise).toBe(100_000);
-    expect(e.commissionPaise).toBe(10_000);
+    // Commission on the seller's price (₹847.46 before GST), gateway on what the buyer paid.
+    expect(e.commissionPaise).toBe(8_475);
     expect(e.gatewayFeePaise).toBe(2_000);
     expect(e.platformFeePaise).toBe(900);
     expect(e.deliveryFeePaise).toBe(6_000);
@@ -28,7 +29,7 @@ describe('computeListingEconomics', () => {
     // ₹1,000 at 18% is ₹847.46 ex-GST: TDS 0.1% = ₹0.85, TCS 0.5% = ₹4.24.
     expect(e.tdsPaise).toBe(85);
     expect(e.tcsPaise).toBe(424);
-    expect(e.sellerReceivesPaise).toBe(100_000 - 10_000 - 2_000 - 900 - 6_000 - 2_000 - 3_000 - 85 - 424);
+    expect(e.sellerReceivesPaise).toBe(100_000 - 8_475 - 2_000 - 900 - 6_000 - 2_000 - 3_000 - 85 - 424);
   });
 
   it('shows the GST inside the price without deducting it', () => {
@@ -50,9 +51,9 @@ describe('computeListingEconomics', () => {
   });
 
   it('rounds every component to a whole paisa, and the lines still add up', () => {
-    // ₹333.33 at 10% is 3,333.3 paise: rounded per component, never carried.
+    // Rounded per component, never carried: 10% of 28,248 is 2,824.8, 2% of 33,333 is 666.66.
     const e = computeListingEconomics({ buyerPricePaise: 33_333, rates: RATES });
-    expect(e.commissionPaise).toBe(3_333);
+    expect(e.commissionPaise).toBe(2_825);
     expect(e.gatewayFeePaise).toBe(667);
     // 33,333 / 1.18 = 28,248.3 → 28,248 taxable, 5,085 GST; TDS and TCS on 28,248.
     expect(e.gstPaise).toBe(33_333 - 28_248);
@@ -61,16 +62,18 @@ describe('computeListingEconomics', () => {
     for (const l of e.lines) expect(Number.isInteger(l.amountPaise)).toBe(true);
     const sum = e.lines.reduce((s, l) => s + l.amountPaise, 0);
     expect(sum).toBe(e.sellerReceivesPaise);
-    expect(e.sellerReceivesPaise).toBe(33_333 - 3_333 - 667 - 28 - 141 - 900 - 6_000 - 2_000 - 3_000);
+    expect(e.sellerReceivesPaise).toBe(33_333 - 2_825 - 667 - 28 - 141 - 900 - 6_000 - 2_000 - 3_000);
   });
 
   it('takes percentages on the line total, fixed fees per line, closing per unit', () => {
     const one = computeListingEconomics({ buyerPricePaise: 33_333, rates: RATES });
     const three = computeListingEconomics({ buyerPricePaise: 33_333, quantity: 3, rates: RATES });
     expect(three.grossPaise).toBe(99_999);
-    // Rounding once on 99,999 (10,000) is not three roundings of 33,333 (9,999).
-    expect(three.commissionPaise).toBe(10_000);
-    expect(three.commissionPaise).not.toBe(one.commissionPaise * 3);
+    // Rounding once on the line total, not per unit: 2% of 99,999 is 2,000,
+    // where three roundings of 666.66 would be 2,001.
+    expect(three.gatewayFeePaise).toBe(2_000);
+    expect(three.gatewayFeePaise).not.toBe(one.gatewayFeePaise * 3);
+    expect(three.commissionPaise).toBe(percentOf(three.exGstPaise, 10));
     expect(three.platformFeePaise).toBe(900);
     expect(three.deliveryFeePaise).toBe(6_000);
     expect(three.closingFeePaise).toBe(6_000);
@@ -81,7 +84,8 @@ describe('computeListingEconomics', () => {
     const e = computeListingEconomics({ buyerPricePaise: 50_000, rates: RATES });
     expect(e.lines.map((l) => [l.ledgerType, l.amountPaise])).toEqual([
       ['SALE_EARNING', 50_000],
-      ['COMMISSION', -5_000],
+      // 10% of ₹423.73, the seller's price before GST.
+      ['COMMISSION', -4_237],
       ['GATEWAY_FEE', -1_000],
       ['PLATFORM_FEE', -900],
       ['DELIVERY_FEE', -6_000],
@@ -110,11 +114,12 @@ describe('computeListingEconomics', () => {
       // A flat 5% category: the rate comes from the category, not the rates.
       taxRules: { taxRule: null, defaultTaxRatePercent: 5 },
     });
-    expect(e.commissionPaise).toBe(15_000);
+    // 15% of ₹952.38, the seller's price before 5% GST.
+    expect(e.commissionPaise).toBe(14_286);
     expect(e.gatewayFeePaise).toBe(0);
     expect(e.deliveryFeePaise).toBe(4_500);
     expect(e.gstPaise).toBe(100_000 - 95_238);
-    expect(e.sellerReceivesPaise).toBe(80_500);
+    expect(e.sellerReceivesPaise).toBe(100_000 - 14_286 - 4_500);
   });
 });
 
@@ -208,21 +213,45 @@ describe('breakdownRows', () => {
   const rows = (price: number, taxRules?: { taxRule: 'VALUE_SLAB'; defaultTaxRatePercent: null }) =>
     breakdownRows(computeListingEconomics({ buyerPricePaise: price, rates: RATES, taxRules }));
 
-  it('reads top to bottom in the order the seller follows the money', () => {
+  it('reads top to bottom: buyer pays, then GST first among the deductions, then the earning', () => {
     expect(rows(100_000).map((r) => [r.kind, r.label])).toEqual([
       ['start', 'Buyer pays'],
-      ['deduction', 'Commission (10%)'],
-      ['deduction', 'Payment gateway (2%)'],
+      ['deduction', 'GST (18%)'],
+      ['deduction', 'Commission (10% of your price)'],
+      ['deduction', 'Payment gateway (2% of what the buyer pays)'],
       ['deduction', 'Platform fee'],
       ['deduction', 'Delivery fee'],
       ['deduction', 'Closing fee'],
       ['deduction', 'GT charge'],
-      ['deduction', 'TDS (0.1%)'],
-      ['deduction', 'TCS (0.5%)'],
-      ['subtotal', 'Paid to your bank'],
-      ['tax', 'GST you remit (18%)'],
+      ['deduction', 'TDS (0.1% of your price)'],
+      ['deduction', 'TCS (0.5% of your price)'],
       ['total', 'Your earning'],
     ]);
+  });
+
+  it('ends on the earning, and the bank gets that plus the GST: what the ledger posts', () => {
+    const e = computeListingEconomics({ buyerPricePaise: 100_000, rates: RATES });
+    const r = breakdownRows(e);
+    expect(r[r.length - 1].amountPaise).toBe(e.sellerKeepsAfterGstPaise);
+    expect(e.sellerKeepsAfterGstPaise + e.gstPaise).toBe(e.sellerReceivesPaise);
+    const posted = e.lines.filter((l) => l.ledgerType !== null).reduce((s, l) => s + l.amountPaise, 0);
+    expect(posted).toBe(e.sellerReceivesPaise);
+  });
+
+  it('takes commission on the seller price and the gateway on what the buyer pays', () => {
+    // Seller ₹100 at 18%: the buyer pays ₹118.
+    const e = computeListingEconomics({ sellerPricePaise: 10_000, rates: RATES });
+    expect(e.commissionPaise).toBe(1_000);
+    expect(e.gatewayFeePaise).toBe(236);
+    expect(e.tdsPaise).toBe(10);
+    expect(e.tcsPaise).toBe(50);
+  });
+
+  it('goes negative when the fees outweigh a low price', () => {
+    // ₹100 cannot carry ₹119 of fixed fees.
+    const e = computeListingEconomics({ sellerPricePaise: 10_000, rates: RATES });
+    expect(e.sellerKeepsAfterGstPaise).toBeLessThan(0);
+    expect(breakdownRows(e).at(-1)?.amountPaise).toBe(e.sellerKeepsAfterGstPaise);
   });
 
   it('signs every row, and each total is the sum of the rows above it', () => {
@@ -239,6 +268,6 @@ describe('breakdownRows', () => {
 
   it('shows the rate the category gave, in the GST row', () => {
     const gst = rows(262_500, { taxRule: 'VALUE_SLAB', defaultTaxRatePercent: null }).find((r) => r.key === 'gst');
-    expect(gst).toEqual({ key: 'gst', label: 'GST you remit (5%)', amountPaise: -12_500, kind: 'tax' });
+    expect(gst).toEqual({ key: 'gst', label: 'GST (5%)', amountPaise: -12_500, kind: 'deduction' });
   });
 });

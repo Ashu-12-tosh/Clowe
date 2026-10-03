@@ -31,11 +31,12 @@ let base: string;
 let categoryId: string;
 let seq = 0;
 
-// ₹3,000 at the default 10% commission and 2% gateway, plus the default fixed
-// fees. The fixture category carries no GST rule, so the standard 18% applies:
-// ₹2,542.37 ex-GST, on which TDS is 0.1% and TCS 0.5%.
+// A ₹3,000 sale (what the buyer paid). The fixture category carries no GST
+// rule, so the standard 18% applies: ₹2,542.37 is the seller's price before
+// GST, the base for the 10% commission, TDS 0.1% and TCS 0.5%. The 2% gateway
+// is on the ₹3,000 the buyer paid. Plus the default fixed fees.
 const PRICE = 300_000;
-const COMMISSION = 30_000;
+const COMMISSION = 25_424;
 const GATEWAY = 6_000;
 const TDS = 254;
 const TCS = 1_271;
@@ -287,7 +288,8 @@ describe('delivery', () => {
     const line = await makeLine(s, 'SHIPPED');
     await call('PATCH', `/api/seller/orders/${line.id}/status`, s.token, { action: 'deliver' });
     const commission = (await entriesFor(line.id)).find((r) => r.type === 'COMMISSION');
-    expect(commission?.amountPaise).toBe(-75_000);
+    // 25% of the ₹2,542.37 seller price, not of the ₹3,000 the buyer paid.
+    expect(commission?.amountPaise).toBe(-63_559);
   });
 });
 

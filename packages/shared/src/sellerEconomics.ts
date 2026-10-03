@@ -24,9 +24,9 @@ import type { SellerLedgerTypeValue } from './sellerLedger';
 
 /** The rates in force. Every one of these is an admin-editable platform setting. */
 export interface SellerEconomicsRates {
-  /** Marketplace commission, percent of the line total. */
+  /** Marketplace commission, percent of the seller's price (before GST) × quantity. */
   commissionPercent: number;
-  /** Payment gateway / collection charge, percent of the line total. */
+  /** Payment gateway / collection charge, percent of what the buyer pays (GST included). */
   gatewayPercent: number;
   /**
    * Section 194-O TDS withheld, percent of the line's value EX-GST: CBDT
@@ -138,10 +138,11 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
     grossPaise = unitPaise * quantity;
     gstPaise = gstInclusiveShare(grossPaise, gstRatePercent);
   }
-  const commissionPaise = percentOf(grossPaise, rates.commissionPercent);
-  const gatewayFeePaise = percentOf(grossPaise, rates.gatewayPercent);
-  // TDS and TCS are levied on the value net of GST, not on what the buyer paid.
+  // The seller's price before GST: the base for commission, TDS and TCS. The
+  // gateway charges on what it collects, which is what the buyer pays.
   const exGstPaise = grossPaise - gstPaise;
+  const commissionPaise = percentOf(exGstPaise, rates.commissionPercent);
+  const gatewayFeePaise = percentOf(grossPaise, rates.gatewayPercent);
   const tdsPaise = percentOf(exGstPaise, rates.tdsPercent);
   const tcsPaise = percentOf(exGstPaise, rates.tcsPercent);
   // Fixed fees only exist when something was sold: a zero-quantity line
@@ -156,13 +157,13 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
     { key: 'sale', label: 'Sale', amountPaise: grossPaise, ledgerType: 'SALE_EARNING' },
     {
       key: 'commission',
-      label: `Commission (${rates.commissionPercent}%)`,
+      label: `Commission (${rates.commissionPercent}% of your price)`,
       amountPaise: -commissionPaise,
       ledgerType: 'COMMISSION',
     },
     {
       key: 'gateway',
-      label: `Payment gateway (${rates.gatewayPercent}%)`,
+      label: `Payment gateway (${rates.gatewayPercent}% of what the buyer pays)`,
       amountPaise: -gatewayFeePaise,
       ledgerType: 'GATEWAY_FEE',
     },
@@ -180,8 +181,8 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
       amountPaise: -gtChargePaise,
       ledgerType: 'GT_CHARGE',
     },
-    { key: 'tds', label: `TDS (${rates.tdsPercent}%)`, amountPaise: -tdsPaise, ledgerType: 'TDS' },
-    { key: 'tcs', label: `TCS (${rates.tcsPercent}%)`, amountPaise: -tcsPaise, ledgerType: 'GST_TCS' },
+    { key: 'tds', label: `TDS (${rates.tdsPercent}% of your price)`, amountPaise: -tdsPaise, ledgerType: 'TDS' },
+    { key: 'tcs', label: `TCS (${rates.tcsPercent}% of your price)`, amountPaise: -tcsPaise, ledgerType: 'GST_TCS' },
   ];
 
   // The seller's share is the sum of the posted lines, not a separate formula,
@@ -210,12 +211,8 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
   };
 }
 
-/**
- * How a breakdown row reads: where the money starts, what the platform
- * deducts, the running totals, and the GST the seller remits — tax they owe
- * the government, not a charge, so a screen can set it apart.
- */
-export type BreakdownRowKind = 'start' | 'deduction' | 'subtotal' | 'tax' | 'total';
+/** How a breakdown row reads: where the money starts, what comes off it, what is left. */
+export type BreakdownRowKind = 'start' | 'deduction' | 'total';
 
 export interface BreakdownRow {
   key: string;
@@ -226,18 +223,19 @@ export interface BreakdownRow {
 }
 
 /**
- * The breakdown as the seller reads it, top to bottom: buyer pays, each
- * deduction, what reaches the bank, the GST they remit, what they earn.
- * Every running total is the sum of the rows above it.
+ * The breakdown as the seller reads it, top to bottom: what the buyer pays,
+ * then GST and every fee and tax in one list of deductions, then what they
+ * earn — the sum of the rows above it. What reaches their bank is that plus
+ * the GST, which they file themselves (sellerReceivesPaise), and it is what
+ * the ledger posts and payouts pay.
  */
 export function breakdownRows(e: SellerEconomics): BreakdownRow[] {
   return [
     { key: 'buyer', label: 'Buyer pays', amountPaise: e.buyerPaysPaise, kind: 'start' },
+    { key: 'gst', label: `GST (${e.gstRatePercent}%)`, amountPaise: -e.gstPaise, kind: 'deduction' },
     ...e.lines
       .filter((l) => l.key !== 'sale')
       .map((l): BreakdownRow => ({ key: l.key, label: l.label, amountPaise: l.amountPaise, kind: 'deduction' })),
-    { key: 'bank', label: 'Paid to your bank', amountPaise: e.sellerReceivesPaise, kind: 'subtotal' },
-    { key: 'gst', label: `GST you remit (${e.gstRatePercent}%)`, amountPaise: -e.gstPaise, kind: 'tax' },
     { key: 'earning', label: 'Your earning', amountPaise: e.sellerKeepsAfterGstPaise, kind: 'total' },
   ];
 }

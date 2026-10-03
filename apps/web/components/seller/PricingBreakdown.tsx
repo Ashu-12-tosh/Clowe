@@ -26,22 +26,14 @@ function money(paise: number): string {
 
 /** A row's amount with its sign: what it takes away, or the total it is. */
 function signed(paise: number, kind: BreakdownRowKind): string {
-  if (kind === 'deduction' || kind === 'tax') return `− ${money(-paise)}`;
-  return money(paise);
+  if (kind === 'deduction') return `− ${money(-paise)}`;
+  return paise < 0 ? `− ${money(-paise)}` : money(paise);
 }
 
 /** Classes for both cells of a row, so a rule or a gap spans the whole line. */
 const ROW: Record<BreakdownRowKind, { cell: string; label: string; amount: string }> = {
   start: { cell: 'py-1', label: 'font-semibold text-ink-900', amount: 'font-semibold text-ink-900' },
   deduction: { cell: 'py-0.5', label: 'text-gray-600', amount: 'text-red-600' },
-  subtotal: {
-    cell: 'mt-1 border-t border-gray-300 pt-1.5 pb-1',
-    label: 'font-semibold text-ink-900',
-    amount: 'font-semibold text-ink-900',
-  },
-  // GST is the seller's own tax, not something Clowe takes: set apart by a
-  // gap and a dashed rule, in neutral grey rather than deduction red.
-  tax: { cell: 'mt-2 border-t border-dashed border-gray-300 pt-2 pb-1', label: 'text-gray-500', amount: 'text-gray-500' },
   total: {
     cell: 'border-t border-gray-300 pt-1.5',
     label: 'text-sm font-bold text-ink-900',
@@ -113,21 +105,32 @@ export function PricingBreakdown({
             const style = ROW[row.kind];
             return (
               <div key={row.key} className="contents" data-row={row.key}>
-                <dt className={`${style.cell} ${style.label} break-words`}>
-                  {row.label}
-                  {row.kind === 'tax' && (
-                    <span className="mt-0.5 block text-[11px] leading-snug text-gray-400">
-                      Collected from the buyer inside the price. You pay it in your GST return; Clowe keeps none of it.
-                    </span>
-                  )}
-                </dt>
-                <dd className={`${style.cell} ${style.amount} whitespace-nowrap pl-4 text-right`}>
+                <dt className={`${style.cell} ${style.label} break-words`}>{row.label}</dt>
+                <dd
+                  className={`${style.cell} ${row.kind === 'total' && row.amountPaise < 0 ? 'text-sm font-bold text-red-600' : style.amount} whitespace-nowrap pl-4 text-right`}
+                >
                   {signed(row.amountPaise, row.kind)}
                 </dd>
               </div>
             );
           })}
         </dl>
+      )}
+
+      {economics && (
+        // What actually reaches the bank: the earning plus the GST collected
+        // from the buyer, which the seller files. It is what the ledger posts.
+        <p className="mt-1 text-right text-[11px] text-gray-500" data-bank>
+          Paid to your bank: {signed(economics.sellerReceivesPaise, 'total')} (includes the GST you file)
+        </p>
+      )}
+
+      {economics && pricePaise > 0 && economics.sellerKeepsAfterGstPaise <= 0 && (
+        <p className="mt-2 rounded-lg bg-red-50 px-2.5 py-2 text-[11px] font-semibold text-red-700" data-loss>
+          {economics.sellerKeepsAfterGstPaise < 0
+            ? `At this price you lose ${money(-economics.sellerKeepsAfterGstPaise)} per unit`
+            : 'At this price you make nothing per unit'}
+        </p>
       )}
 
       <p className="mt-2 text-[11px] text-gray-400">

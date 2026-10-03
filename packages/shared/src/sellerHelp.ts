@@ -162,8 +162,8 @@ If all of that checks out, raise a ticket under Payouts & payments with the payo
     tags: ['commission', 'fees', 'tds', '194-O', 'gst', 'invoice'],
     body: `Three deductions apply to your delivered sales:
 
-• Commission — the marketplace fee, a percentage of the line total.
-• Payment gateway / collection charge — a percentage covering online payment or COD collection.
+• Commission — the marketplace fee, a percentage of your price (before GST) for the units sold.
+• Payment gateway / collection charge — a percentage of what the buyer pays (GST included), covering online payment or COD collection.
 • Fixed fees — a platform fee per order line, a delivery fee per shipment, and a closing fee and a GT (goods transfer) charge per unit. The amounts in force are on your Payouts page and in the pricing calculator.
 • TDS under section 194-O — withheld against your PAN and deposited with the payout that carried it. Download the TDS report from the Payouts page for your accountant.
 
