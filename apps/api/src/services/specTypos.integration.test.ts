@@ -38,6 +38,21 @@ beforeAll(async () => {
     });
     ids[name] = p.id;
   };
+  // A category where "plan" is a real value: the same token must not be rewritten there.
+  const other = await prisma.category.create({
+    data: {
+      name: 'Typo Other', slug: 'typo-other', isActive: true,
+      facets: { add: [{ key: 'pattern', label: 'Pattern', kind: 'list', values: ['plan', 'Grid'] }], hide: [] },
+    },
+  });
+  invalidateCategoryRules();
+  const otherProduct = await prisma.product.create({
+    data: {
+      sellerId: seller.id, categoryId: other.id, title: 'Typo d', slug: 'typo-d', description: 'Typo report test.',
+      basePricePaise: 50_000, status: ProductStatus.APPROVED, attributes: [{ key: 'pattern', label: 'Pattern', value: 'plan' }],
+    },
+  });
+  ids.d = otherProduct.id;
   const sleeve = (value: string) => ({ key: 'sleeve', label: 'Sleeve', value });
   const pattern = (value: string) => ({ key: 'pattern', label: 'Pattern', value });
   await make('a', [sleeve('hlaf'), pattern('plan'), { key: 'fabric', label: 'Fabric', value: 'Cotton' }]);
@@ -65,7 +80,9 @@ describe('the typo report', () => {
   });
 
   it('writes only what is approved, and leaves the rest of the sheet as it was', async () => {
-    const changed = await applySpecFixes([{ key: 'sleeve', from: 'HLAF', to: 'Half sleeve' }]);
+    const report = await findSpecTypos();
+    const flagged = (token: string) => report.find((t) => t.token === token)!.productIds;
+    const changed = await applySpecFixes([{ key: 'sleeve', from: 'HLAF', to: 'Half sleeve', productIds: flagged('sleeve:hlaf') }]);
     expect(changed).toBe(2);
     expect(await attrs('a')).toEqual([
       { key: 'sleeve', label: 'Sleeve', value: 'Half sleeve' },
@@ -76,5 +93,14 @@ describe('the typo report', () => {
     const left = (await findSpecTypos()).map((t) => t.token);
     expect(left).not.toContain('sleeve:hlaf');
     expect(left).toContain('pattern:plan');
+  });
+
+  it('rewrites only the products flagged, never the same value where it is on the list', async () => {
+    const report = await findSpecTypos();
+    const plan = report.find((t) => t.token === 'pattern:plan')!;
+    expect(plan.productIds).toEqual([ids.a]); // "plan" is a real value in Typo Other
+    expect(await applySpecFixes([{ key: 'pattern', from: 'plan', to: 'Solid', productIds: plan.productIds }])).toBe(1);
+    expect((await attrs('a')).find((r) => r.key === 'pattern')?.value).toBe('Solid');
+    expect((await attrs('d')).find((r) => r.key === 'pattern')?.value).toBe('plan');
   });
 });

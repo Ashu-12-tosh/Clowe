@@ -8,7 +8,8 @@ import { facetsMap } from './categoryRules';
 //
 // Read-only until approved: findSpecTypos lists every value a seller typed
 // that is not on its facet's list, with a suggested match; applySpecFixes
-// rewrites only the (key, value) pairs it is given.
+// rewrites only the (key, value) pairs it is given, on the products the
+// report flagged for them.
 // ---------------------------------------------------------------------------
 
 export interface SpecTypo extends SpecValueSuggestion {
@@ -65,20 +66,37 @@ export interface SpecFix {
   from: string;
   /** The known value to write instead. */
   to: string;
+  /**
+   * The products the report flagged. Only these are rewritten: the same value
+   * can be off one category's list and on another's ("Jeans" on a jacket in
+   * Winter Wear, and on every pair of jeans in Men).
+   */
+  productIds: string[];
 }
 
 /**
- * Rewrite each approved value on every product carrying it. Only the matching
- * spec row changes; the rest of the sheet is written back as stored.
- * Returns how many products were changed.
+ * Rewrite each approved value on the products the report flagged for it.
+ * Only the matching spec row changes; the rest of the sheet is written back as
+ * stored. Returns how many products were changed.
  */
 export async function applySpecFixes(fixes: SpecFix[]): Promise<number> {
   if (fixes.length === 0) return 0;
-  const byToken = new Map(fixes.map((f) => [specTypoToken(f.key, f.from), f.to]));
-  const products = await prisma.product.findMany({ select: { id: true, attributes: true } });
+  const toFor = new Map<string, Map<string, string>>();
+  for (const f of fixes) {
+    for (const id of f.productIds) {
+      const perProduct = toFor.get(id) ?? new Map<string, string>();
+      perProduct.set(specTypoToken(f.key, f.from), f.to);
+      toFor.set(id, perProduct);
+    }
+  }
+  const products = await prisma.product.findMany({
+    where: { id: { in: [...toFor.keys()] } },
+    select: { id: true, attributes: true },
+  });
   let changed = 0;
   for (const p of products) {
     if (!Array.isArray(p.attributes)) continue;
+    const byToken = toFor.get(p.id)!;
     let touched = false;
     const rows = (p.attributes as Record<string, unknown>[]).map((row) => {
       if (!row || typeof row !== 'object' || typeof row.key !== 'string' || typeof row.value !== 'string') return row;

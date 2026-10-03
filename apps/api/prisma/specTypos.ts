@@ -47,7 +47,9 @@ function report(typos: SpecTypo[]) {
 /** "--approve=a:b,c:d=Target" into fixes, checked against the report. */
 function approvals(arg: string, typos: SpecTypo[]): SpecFix[] {
   const byToken = new Map(typos.map((t) => [t.token, t]));
-  if (arg === 'all') return typos.filter((t) => t.suggestion).map((t) => ({ key: t.key, from: t.value, to: t.suggestion! }));
+  if (arg === 'all') {
+    return typos.filter((t) => t.suggestion).map((t) => ({ key: t.key, from: t.value, to: t.suggestion!, productIds: t.productIds }));
+  }
   return arg.split(',').map((part) => {
     const [tokenRaw, target] = part.split('=');
     const token = tokenRaw.trim().toLowerCase();
@@ -57,7 +59,7 @@ function approvals(arg: string, typos: SpecTypo[]): SpecFix[] {
     if (!to) throw new Error(`[spec-typos] ${token} has no suggestion: give one as ${token}=Target`);
     const known = typo.known.find((k) => k.toLowerCase() === to.toLowerCase());
     if (!known) throw new Error(`[spec-typos] "${to}" is not a known ${typo.label} value (${typo.known.join(', ')})`);
-    return { key: typo.key, from: typo.value, to: known };
+    return { key: typo.key, from: typo.value, to: known, productIds: typo.productIds };
   });
 }
 
