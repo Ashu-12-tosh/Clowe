@@ -1,8 +1,6 @@
 import { Prisma, type SellerLedgerBucket, type SellerLedgerType } from '@prisma/client';
 import {
   computeListingEconomics,
-  isLateDispatch,
-  lateDispatchNote,
   type SellerLedgerEntryRow,
   type SellerLedgerPage,
   type SellerLedgerTypeValue,
@@ -57,6 +55,8 @@ export interface PostEntryInput {
   createdById?: string | null;
   /** GST_TCS only: the taxable value the TCS was taken on. */
   taxablePaise?: number | null;
+  /** For uniqueness the column pairs cannot express (one penalty per order). */
+  idempotencyKey?: string | null;
 }
 
 /**
@@ -86,6 +86,7 @@ function toRow(input: PostEntryInput): Prisma.SellerLedgerEntryCreateManyInput {
     note: input.note ?? null,
     createdById: input.createdById ?? null,
     taxablePaise: input.taxablePaise ?? null,
+    idempotencyKey: input.idempotencyKey ?? null,
   };
 }
 
@@ -215,53 +216,20 @@ export async function ensureLedgerCoversDeliveries(sellerId: string, db: Db = pr
 }
 
 // ---------------------------------------------------------------------------
-// Dispatch
+// Late-dispatch penalties (charged by services/lateDispatch.ts)
 // ---------------------------------------------------------------------------
 
-/**
- * Charge the late-dispatch penalty if this line shipped after its window.
- * Judged on the order's placement time and the line's own shippedAt, so the
- * same answer comes out whichever path marked it shipped. Returns true only
- * when a penalty was posted now; a replay finds the (orderItemId, type) pair
- * already taken and posts nothing. With penalties switched off nothing is
- * posted and nothing already posted is touched.
- */
-export async function postLateDispatchPenalty(orderItemId: string, db: Db = prisma): Promise<boolean> {
-  const settings = await getSettings();
-  if (!settings.penaltyEnabled || settings.lateDispatchPenaltyPaise <= 0) return false;
-
-  const item = await db.orderItem.findUnique({
-    where: { id: orderItemId },
-    select: {
-      sellerId: true,
-      orderId: true,
-      shippedAt: true,
-      order: { select: { createdAt: true } },
-    },
-  });
-  if (!item?.shippedAt) return false;
-  if (!isLateDispatch(item.order.createdAt, item.shippedAt, settings.dispatchWindowHours)) return false;
-
-  return postEntry(
-    {
-      sellerId: item.sellerId,
-      type: 'LATE_DISPATCH_PENALTY',
-      bucket: 'SETTLEMENT',
-      amountPaise: -settings.lateDispatchPenaltyPaise,
-      orderId: item.orderId,
-      orderItemId,
-      note: lateDispatchNote(item.order.createdAt, item.shippedAt, settings.dispatchWindowHours),
-    },
-    db,
-  );
-}
+/** One late-dispatch penalty per order and seller; its waiver likewise. */
+export const latePenaltyKey = (orderId: string, sellerId: string) => `late-dispatch:${orderId}:${sellerId}`;
+const lateWaiverKey = (orderId: string, sellerId: string) => `late-dispatch-waiver:${orderId}:${sellerId}`;
 
 export type WaiveOutcome = 'WAIVED' | 'ALREADY_WAIVED' | 'NOT_A_PENALTY';
 
 /**
- * Forgive one penalty: post the opposite amount against the same line. The
- * (orderItemId, PENALTY_WAIVER) pair means a line can be forgiven once,
- * however many admins click.
+ * Forgive one penalty: post the opposite amount against the same order (or,
+ * for a penalty charged per line before 2026-10-08, the same line). The
+ * waiver's key, or the (orderItemId, PENALTY_WAIVER) pair, means a penalty
+ * can be forgiven once, however many admins click.
  */
 export async function waivePenalty(
   entryId: string,
@@ -271,7 +239,7 @@ export async function waivePenalty(
   db: Db = prisma,
 ): Promise<{ outcome: WaiveOutcome; amountPaise: number; orderItemId: string | null }> {
   const entry = await db.sellerLedgerEntry.findFirst({ where: { id: entryId, sellerId } });
-  if (!entry || entry.type !== 'LATE_DISPATCH_PENALTY' || !entry.orderItemId) {
+  if (!entry || entry.type !== 'LATE_DISPATCH_PENALTY' || (!entry.orderItemId && !entry.orderId)) {
     return { outcome: 'NOT_A_PENALTY', amountPaise: 0, orderItemId: null };
   }
   const posted = await postEntry(
@@ -282,6 +250,7 @@ export async function waivePenalty(
       amountPaise: -entry.amountPaise,
       orderId: entry.orderId,
       orderItemId: entry.orderItemId,
+      idempotencyKey: entry.orderItemId ? null : lateWaiverKey(entry.orderId!, sellerId),
       note: `Waived: ${reason}`,
       createdById: adminId,
     },
@@ -313,20 +282,30 @@ export async function penaltiesView(
     }),
     db.sellerLedgerEntry.findMany({
       where: { sellerId, type: 'PENALTY_WAIVER' },
-      select: { orderItemId: true, amountPaise: true, note: true, createdAt: true },
+      select: { orderId: true, orderItemId: true, amountPaise: true, note: true, createdAt: true },
     }),
   ]);
-  const waiverByItem = new Map(waivers.filter((w) => w.orderItemId).map((w) => [w.orderItemId!, w]));
+  // A penalty is per order now; one charged before that is per line.
+  const keyOf = (e: { orderId: string | null; orderItemId: string | null }) =>
+    e.orderItemId ? `item:${e.orderItemId}` : `order:${e.orderId}`;
+  const waiverByKey = new Map(waivers.map((w) => [keyOf(w), w]));
 
   const shown = penalties.slice(0, limit);
   const itemIds = shown.map((p) => p.orderItemId).filter((id): id is string => !!id);
-  const items = itemIds.length
-    ? await db.orderItem.findMany({
-        where: { id: { in: itemIds } },
-        select: { id: true, title: true, order: { select: { orderNumber: true } } },
-      })
-    : [];
+  const orderIds = shown.map((p) => p.orderId).filter((id): id is string => !!id);
+  const [items, orders] = await Promise.all([
+    itemIds.length
+      ? db.orderItem.findMany({
+          where: { id: { in: itemIds } },
+          select: { id: true, title: true, order: { select: { orderNumber: true } } },
+        })
+      : [],
+    orderIds.length
+      ? db.order.findMany({ where: { id: { in: orderIds } }, select: { id: true, orderNumber: true } })
+      : [],
+  ]);
   const itemById = new Map(items.map((i) => [i.id, i]));
+  const orderNumberById = new Map(orders.map((o) => [o.id, o.orderNumber]));
 
   const chargedPaise = penalties.reduce((sum, p) => sum - p.amountPaise, 0);
   const waivedPaise = waivers.reduce((sum, w) => sum + w.amountPaise, 0);
@@ -335,15 +314,16 @@ export async function penaltiesView(
     rule: {
       enabled: settings.penaltyEnabled,
       penaltyPaise: settings.lateDispatchPenaltyPaise,
-      windowHours: settings.dispatchWindowHours,
+      afterHours: settings.lateDispatchPenaltyAfterHours,
+      slaHours: settings.dispatchSlaHours,
     },
     rows: shown.map((p) => {
       const item = p.orderItemId ? itemById.get(p.orderItemId) : undefined;
-      const waiver = p.orderItemId ? waiverByItem.get(p.orderItemId) : undefined;
+      const waiver = waiverByKey.get(keyOf(p));
       return {
         entryId: p.id,
         orderId: p.orderId,
-        orderNumber: item?.order.orderNumber ?? null,
+        orderNumber: item?.order.orderNumber ?? (p.orderId ? (orderNumberById.get(p.orderId) ?? null) : null),
         itemTitle: item?.title ?? null,
         chargedAt: p.createdAt.toISOString(),
         amountPaise: -p.amountPaise,
@@ -511,6 +491,7 @@ interface HistoryRow {
   bucket: SellerLedgerBucket;
   amountPaise: number;
   note: string | null;
+  orderId: string | null;
   orderItemId: string | null;
   payoutId: string | null;
   adId: string | null;
@@ -535,7 +516,7 @@ export async function history(
     balance(sellerId, bucket, db),
     db.$queryRaw<HistoryRow[]>(Prisma.sql`
       SELECT
-        e.id, e.type, e.bucket, e."amountPaise", e.note, e."orderItemId", e."payoutId", e."adId",
+        e.id, e.type, e.bucket, e."amountPaise", e.note, e."orderId", e."orderItemId", e."payoutId", e."adId",
         e."createdAt",
         SUM(e."amountPaise") OVER (
           ORDER BY e."createdAt", e.id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
@@ -549,7 +530,8 @@ export async function history(
 
   const itemIds = rows.map((r) => r.orderItemId).filter((id): id is string => !!id);
   const payoutIds = rows.map((r) => r.payoutId).filter((id): id is string => !!id);
-  const [items, payouts] = await Promise.all([
+  const orderOnlyIds = rows.filter((r) => r.orderId && !r.orderItemId).map((r) => r.orderId!);
+  const [items, payouts, orders] = await Promise.all([
     itemIds.length
       ? db.orderItem.findMany({
           where: { id: { in: itemIds } },
@@ -559,9 +541,13 @@ export async function history(
     payoutIds.length
       ? db.payout.findMany({ where: { id: { in: payoutIds } }, select: { id: true, reference: true } })
       : [],
+    orderOnlyIds.length
+      ? db.order.findMany({ where: { id: { in: orderOnlyIds } }, select: { id: true, orderNumber: true } })
+      : [],
   ]);
   const itemById = new Map(items.map((i) => [i.id, i]));
   const payoutById = new Map(payouts.map((p) => [p.id, p]));
+  const orderNumberById = new Map(orders.map((o) => [o.id, o.orderNumber]));
 
   const out: SellerLedgerEntryRow[] = rows.map((r) => {
     const item = r.orderItemId ? itemById.get(r.orderItemId) : undefined;
@@ -573,7 +559,8 @@ export async function history(
       runningBalancePaise: r.running,
       note: r.note,
       reference: {
-        orderNumber: item?.order.orderNumber ?? null,
+        orderNumber: item?.order.orderNumber ?? (r.orderId ? (orderNumberById.get(r.orderId) ?? null) : null),
+        orderId: r.orderId,
         orderItemId: r.orderItemId,
         itemTitle: item?.title ?? null,
         payoutReference: r.payoutId ? (payoutById.get(r.payoutId)?.reference ?? null) : null,

@@ -25,8 +25,11 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   // requested leaves DELIVERED and is never paid anyway), and 7 also covers
   // lines sold under the earlier 7-day window.
   payoutHoldDays: 7,
-  dispatchWindowHours: 12,
-  lateDispatchPenaltyPaise: 8000, // ₹80
+  // The dispatch promise sellers are asked to meet, and the later point at
+  // which an order not yet dispatched is charged the penalty, once.
+  dispatchSlaHours: 18,
+  lateDispatchPenaltyAfterHours: 24,
+  lateDispatchPenaltyPaise: 8000, // ₹80 per order
   penaltyEnabled: true,
   // GST 2.0, Notification 9/2025-Central Tax (Rate), in force 22.09.2025.
   gstMeritPercent: 5,
@@ -107,8 +110,11 @@ export async function getSettings(): Promise<PlatformSettings> {
       (byKey.get('payoutMinPaise') as number | undefined) ?? DEFAULT_SETTINGS.payoutMinPaise,
     payoutHoldDays:
       (byKey.get('payoutHoldDays') as number | undefined) ?? DEFAULT_SETTINGS.payoutHoldDays,
-    dispatchWindowHours:
-      (byKey.get('dispatchWindowHours') as number | undefined) ?? DEFAULT_SETTINGS.dispatchWindowHours,
+    dispatchSlaHours:
+      (byKey.get('dispatchSlaHours') as number | undefined) ?? DEFAULT_SETTINGS.dispatchSlaHours,
+    lateDispatchPenaltyAfterHours:
+      (byKey.get('lateDispatchPenaltyAfterHours') as number | undefined) ??
+      DEFAULT_SETTINGS.lateDispatchPenaltyAfterHours,
     lateDispatchPenaltyPaise:
       (byKey.get('lateDispatchPenaltyPaise') as number | undefined) ??
       DEFAULT_SETTINGS.lateDispatchPenaltyPaise,
@@ -162,7 +168,9 @@ export async function getPublicSettings(): Promise<PublicSettings> {
   const s = await getSettings();
   return {
     tryonMinPricePaise: s.tryonMinPricePaise,
-    dispatchWindowHours: s.dispatchWindowHours,
+    dispatchSlaHours: s.dispatchSlaHours,
+    lateDispatchPenaltyAfterHours: s.lateDispatchPenaltyAfterHours,
+    lateDispatchPenaltyPaise: s.lateDispatchPenaltyPaise,
     penaltyEnabled: s.penaltyEnabled,
     socialLinks: s.socialLinks,
     supportEmails: s.supportEmails,

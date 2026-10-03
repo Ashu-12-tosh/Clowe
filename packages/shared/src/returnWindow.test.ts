@@ -54,6 +54,30 @@ describe('no hard-coded return window', () => {
     return out;
   }
 
+  /**
+   * The dispatch promise and penalty time are settings too ({{dispatchSla}},
+   * {{penaltyAfter}}). "Working days" belonged to the old promise.
+   */
+  it('finds no hard-coded dispatch time either', () => {
+    const dispatch = new RegExp(
+      String.raw`working days?|\b(dispatch|ship)\w*\b.{0,25}\b\d+(\s*[–-]\s*\d+)?\s*(h|hrs?|hours?|days?)\b`,
+      'i',
+    );
+    const hits: string[] = [];
+    for (const dir of dirs) {
+      for (const file of files(path.join(root, dir))) {
+        fs.readFileSync(file, 'utf8')
+          .split('\n')
+          .forEach((line, i) => {
+            // Comments may show example output ("Dispatch within 6h 12m").
+            if (/^\s*(\*|\/\/|\/\*|\{\/\*)/.test(line)) return;
+            if (dispatch.test(line)) hits.push(`${path.relative(root, file)}:${i + 1}: ${line.trim()}`);
+          });
+      }
+    }
+    expect(hits).toEqual([]);
+  });
+
   it('finds none', () => {
     const hits: string[] = [];
     for (const dir of dirs) {

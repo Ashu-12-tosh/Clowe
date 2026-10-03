@@ -441,6 +441,10 @@ model SellerProfile {
   // Vacation mode hides the shop's listings without archiving anything.
   vacationMode  Boolean   @default(false)
   vacationUntil DateTime?
+  // When vacation mode was last switched on and off. Vacation stops the
+  // late-dispatch penalty clock, and these say for how long.
+  vacationStartedAt DateTime?
+  vacationEndedAt   DateTime?
   vacationMessage String?
 
   // Seller-to-seller referral program.
@@ -1936,6 +1940,9 @@ model SellerLedgerEntry {
   // GST_TCS only: the net taxable value (ex-GST) the TCS was taken on, as
   // calculated when it was posted. GSTR-8 reports it.
   taxablePaise Int?
+  // Uniqueness for posters the pairs below cannot express, e.g. one
+  // late-dispatch penalty per order and seller: "late-dispatch:<order>:<seller>".
+  idempotencyKey String? @unique
   // The admin behind a manual entry; null for entries the system posted.
   createdById String?
   createdBy   User?              @relation("SellerLedgerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)

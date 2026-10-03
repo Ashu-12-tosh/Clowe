@@ -59,7 +59,7 @@ export const HIGHLIGHT_PRESETS: StoreHighlight[] = [
   { icon: '🏷', title: '100% Original', subtitle: 'Genuine products only' },
   { icon: '↩', title: 'Easy returns', subtitle: 'Hassle-free within the window' },
   { icon: '🔒', title: 'Secure payments', subtitle: 'Protected checkout' },
-  { icon: '🚚', title: 'Fast dispatch', subtitle: 'Shipped in 1–2 days' },
+  { icon: '🚚', title: 'Fast dispatch', subtitle: 'Packed and shipped quickly' },
   { icon: '✅', title: 'Quality checked', subtitle: 'Inspected before shipping' },
   { icon: '💬', title: 'Responsive support', subtitle: 'We answer quickly' },
 ];
@@ -253,7 +253,8 @@ export const storeShippingSchema = z.object({
     .regex(/^\d{6}$/, 'PIN code is 6 digits')
     .optional()
     .or(z.literal('')),
-  dispatchDays: z.number().int().min(1).max(10),
+  /** No longer sent by the form: the dispatch promise is a platform setting. Kept if absent. */
+  dispatchDays: z.number().int().min(1).max(10).optional(),
   codEnabled: z.boolean(),
 });
 export type StoreShippingInput = z.infer<typeof storeShippingSchema>;

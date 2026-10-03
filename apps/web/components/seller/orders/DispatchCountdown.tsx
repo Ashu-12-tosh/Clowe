@@ -1,42 +1,53 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { dispatchCountdown, type PublicSettings } from '@clowe/shared';
-import { getPublicSettings } from '@/lib/settings';
+import { dispatchCountdown, type SellerDispatchClock } from '@clowe/shared';
 
 /**
- * "Dispatch within 4h 12m" / "Late by 2h" for a line that has not shipped.
- * Computed on the client from the order's placement time and the published
- * dispatch window, ticking once a minute, so the chip is right without a
- * round trip per order.
+ * Two chips for an order with something left to dispatch: the promise
+ * ("Dispatch within 6h 12m") and the penalty ("Penalty after 12h 12m").
+ * The deadlines come from the API, vacation pauses included; the client only
+ * counts down, ticking once a minute.
  */
-export function DispatchCountdown({ placedAt, className = '' }: { placedAt: string; className?: string }) {
-  const [settings, setSettings] = useState<PublicSettings | null>(null);
+export function DispatchCountdown({
+  clock,
+  className = '',
+}: {
+  clock: SellerDispatchClock | null;
+  className?: string;
+}) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    getPublicSettings().then(setSettings).catch(() => {});
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
 
-  if (!settings) return null;
-  const c = dispatchCountdown(new Date(placedAt), new Date(now), settings.dispatchWindowHours);
-  const tone = c.late
-    ? 'bg-red-100 text-red-700'
-    : c.deadline.getTime() - now < 2 * 3_600_000
-      ? 'bg-amber-100 text-amber-800'
+  if (!clock) return null;
+  const view = dispatchCountdown(clock, new Date(now));
+  const promiseTone = view.dispatch.late
+    ? 'bg-amber-100 text-amber-800'
+    : new Date(clock.dispatchBy).getTime() - now < 2 * 3_600_000
+      ? 'bg-amber-50 text-amber-800'
       : 'bg-cream-100 text-gray-700';
+  const penaltyTone =
+    view.penalty?.state === 'DUE' || view.penalty?.state === 'CHARGED'
+      ? 'bg-red-100 text-red-700'
+      : view.penalty?.state === 'PAUSED'
+        ? 'bg-gray-100 text-gray-600'
+        : 'bg-white text-gray-600 ring-1 ring-gray-200';
+  const chip = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold';
+
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${tone} ${className}`}
-      title={
-        settings.penaltyEnabled
-          ? `Ship within ${settings.dispatchWindowHours}h of placement to avoid the late-dispatch penalty.`
-          : `Ship within ${settings.dispatchWindowHours}h of placement.`
-      }
-    >
-      ⏱ {c.label}
+    <span className={`inline-flex flex-wrap gap-1 ${className}`} data-dispatch-countdown>
+      <span className={`${chip} ${promiseTone}`} data-dispatch-promise>
+        ⏱ {view.dispatch.label}
+      </span>
+      {view.penalty && (
+        <span className={`${chip} ${penaltyTone}`} data-dispatch-penalty={view.penalty.state}>
+          {view.penalty.label}
+        </span>
+      )}
     </span>
   );
 }

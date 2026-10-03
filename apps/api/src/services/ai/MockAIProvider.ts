@@ -125,7 +125,7 @@ export class MockAIProvider implements AIProvider {
       [/track|kaha|where.*order|status/, 'You can track every order from the "Orders" page (top menu after login). Each item shows its live status — Confirmed, Shipped, or Delivered.'],
       [/return|refund|exchange|wapas/, 'Returns are easy! Once an item is Delivered, open Orders → your order → "Request return" on that item and tell us why. Refunds for paid orders are processed after the seller receives the item back.'],
       [/cancel/, 'You can cancel an order any time before it ships: Orders → open the order → "Cancel order". Stock and payment are released immediately.'],
-      [/ship|delivery|charge|kitna time/, 'Shipping is FREE on orders of ₹999 or more; below that a flat ₹49 applies. Sellers usually ship within 1–2 days and delivery takes 3–7 days depending on your pincode.'],
+      [/ship|delivery|charge|kitna time/, 'Shipping is FREE on orders of ₹999 or more; below that a flat ₹49 applies. Sellers are asked to dispatch quickly and delivery takes 3–7 days depending on your pincode.'],
       [/try.?on|photo|virtual/, 'Try On Me ✨ lets you see clothes on yourself! Open any product, tap "Try On Me", upload a full-body photo, and our AI generates a preview. You get 10 try-ons per day.'],
       [/sell|seller|shop kholna|register.*shop/, 'To sell on Clowe: login, click "Sell" in the header, and submit your shop details. Our team reviews every application, and once approved you can list products right away.'],
       [/pay|payment|upi|card|razorpay/, 'We accept UPI, cards, and netbanking via Razorpay. Payment is confirmed instantly and your order moves to Confirmed status.'],

@@ -40,6 +40,7 @@ export * from './sellerSupport';
 export * from './sellerDashboard';
 export * from './sellerHelp';
 export * from './returnWindow';
+export * from './policyText';
 export * from './sellerOrders';
 export * from './sellerPayouts';
 export * from './sellerLedger';

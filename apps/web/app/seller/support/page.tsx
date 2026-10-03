@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  fillReturnWindow,
+  fillPolicyText,
   HELP_ARTICLES,
+  type PublicSettings,
   HELP_TOPICS,
   SELLER_POLICIES,
   TICKET_CATEGORIES,
@@ -119,14 +120,14 @@ export default function SellerSupportPage() {
   const [creating, setCreating] = useState(false);
   // From platform settings, where admins can change it without a deploy.
   const [vendorEmail, setVendorEmail] = useState('');
-  // Articles quote the return window from settings too.
-  const [windowDays, setWindowDays] = useState<number | null>(null);
+  // Articles and policies quote the return window and dispatch rules from settings too.
+  const [policy, setPolicy] = useState<PublicSettings | null>(null);
 
   useEffect(() => {
     getPublicSettings()
       .then((s) => {
         setVendorEmail(s.supportEmails.vendor);
-        setWindowDays(s.returnWindowDays);
+        setPolicy(s);
       })
       .catch(() => {});
   }, []);
@@ -582,7 +583,7 @@ export default function SellerSupportPage() {
                   </button>
                   {openArticle?.id === article.id && (
                     <p className="whitespace-pre-line pb-3 text-xs leading-relaxed text-gray-700">
-                      {fillReturnWindow(article.body, windowDays)}
+                      {fillPolicyText(article.body, policy)}
                     </p>
                   )}
                 </li>
@@ -654,10 +655,10 @@ export default function SellerSupportPage() {
           <section className="rounded-2xl border border-gray-100 bg-white p-4">
             <h2 className="text-sm font-bold text-ink-900">Policy centre</h2>
             <ul className="mt-2 divide-y divide-gray-50">
-              {SELLER_POLICIES.map((policy) => (
-                <li key={policy.id} className="py-2">
-                  <p className="text-xs font-semibold text-ink-900">{policy.title}</p>
-                  <p className="text-[11px] leading-relaxed text-gray-500">{policy.summary}</p>
+              {SELLER_POLICIES.map((rule) => (
+                <li key={rule.id} className="py-2">
+                  <p className="text-xs font-semibold text-ink-900">{rule.title}</p>
+                  <p className="text-[11px] leading-relaxed text-gray-500">{fillPolicyText(rule.summary, policy)}</p>
                 </li>
               ))}
             </ul>

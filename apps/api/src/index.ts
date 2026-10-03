@@ -1,6 +1,7 @@
 import { env } from './env';
 import { createApp } from './app';
 import { startPackingVideoCleanup } from './services/packingVideos';
+import { startLateDispatchJob } from './services/lateDispatch';
 import { startTryOnPhotoRetention } from './services/tryonPhotoRetention';
 import { logStorageStatus } from './services/storage';
 import { logTryOnProviderStatus } from './services/tryon';
@@ -21,6 +22,9 @@ app.listen(env.PORT, () => {
 
 // Packing videos expire 45 days after delivery (never while a return is open) - swept at boot and hourly.
 startPackingVideoCleanup();
+
+// Late-dispatch penalties are charged when the deadline passes, shipped or not - at boot and every 5 minutes.
+startLateDispatchJob();
 
 // Shoppers' try-on photos expire after 30 days unless saved - same schedule.
 startTryOnPhotoRetention();

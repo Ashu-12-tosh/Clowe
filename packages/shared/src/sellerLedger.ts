@@ -59,6 +59,8 @@ export interface SellerLedgerEntryRow {
   note: string | null;
   reference: {
     orderNumber: string | null;
+    /** Set on order-level entries (a late-dispatch penalty) as well as per-line ones. */
+    orderId: string | null;
     orderItemId: string | null;
     itemTitle: string | null;
     payoutReference: string | null;
@@ -80,9 +82,12 @@ export interface SellerLedgerPage {
 /** The late-dispatch rule as the platform currently runs it, from settings. */
 export interface LateDispatchRule {
   enabled: boolean;
-  /** Charged once per order line shipped after the window. */
+  /** Charged once per order not dispatched by the deadline. */
   penaltyPaise: number;
-  windowHours: number;
+  /** Hours after placement the penalty falls due. */
+  afterHours: number;
+  /** The dispatch promise, earlier than the penalty. */
+  slaHours: number;
 }
 
 /** One late-dispatch penalty and whether it was forgiven. */

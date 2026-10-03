@@ -43,7 +43,13 @@ import {
   settleCodIfDelivered,
   syncOrderStatus,
 } from '../services/orderStatusService';
-import { postDeliveryEntries, postLateDispatchPenalty } from '../services/sellerLedgerService';
+import { postDeliveryEntries } from '../services/sellerLedgerService';
+import {
+  chargeLateDispatchIfDue,
+  dispatchClock,
+  dispatchContext,
+  type DispatchContext,
+} from '../services/lateDispatch';
 
 export const sellerOrdersRouter = Router();
 sellerOrdersRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
@@ -210,7 +216,8 @@ function toLine(item: OrderRecord['items'][number], orderCancelled: boolean): Se
   };
 }
 
-function toRow(order: OrderRecord): SellerOrderRow {
+/** `dispatch` carries the clocks for screens that show them; the CSV export passes none. */
+function toRow(order: OrderRecord, dispatch?: DispatchContext): SellerOrderRow {
   const lines = order.items.map((i) => toLine(i, order.status === 'CANCELLED'));
   const { status, mixed } = aggregateStatus(lines);
   return {
@@ -246,6 +253,16 @@ function toRow(order: OrderRecord): SellerOrderRow {
           deleted: order.packingVideos[0].deletedAt !== null,
         }
       : null,
+    dispatch:
+      dispatch && order.status !== 'CANCELLED'
+        ? dispatchClock({
+            placedAt: order.createdAt,
+            lines: order.items,
+            settings: dispatch.settings,
+            vacation: dispatch.vacation,
+            penaltyCharged: dispatch.penalized.has(order.id),
+          })
+        : null,
   };
 }
 
@@ -291,13 +308,14 @@ sellerOrdersRouter.get('/', async (req, res, next) => {
           include: ORDER_INCLUDE(sellerId),
         })
       : [];
+    const ctx = await dispatchContext(sellerId, pageIds);
 
     // findMany doesn't preserve `in` order — restore the ranking.
     const byId = new Map(orders.map((o) => [o.id, o]));
     const rows = pageIds
       .map((id) => byId.get(id))
       .filter(Boolean)
-      .map((o) => toRow(o!));
+      .map((o) => toRow(o!, ctx));
 
     const body: SellerOrderPage = {
       rows,
@@ -520,8 +538,9 @@ async function applyAction(
       body: `Your Clowe item "${item.title}" has shipped via ${shipment.courierName} (AWB ${shipment.awbNumber}). Track: /track 🚚`,
     });
     await syncOrderStatus(item.orderId);
-    // Shipped late? The penalty is judged and posted here, once per line.
-    await postLateDispatchPenalty(item.id);
+    // Shipped after the penalty deadline? Charged here if the sweep has not
+    // already; once per order either way.
+    await chargeLateDispatchIfDue(item.orderId, item.sellerId);
     return null;
   }
 
@@ -848,7 +867,7 @@ sellerOrdersRouter.get('/:orderId', async (req, res, next) => {
       include: ORDER_INCLUDE(sellerId),
     });
     if (!order || order.items.length === 0) throw ApiError.notFound('Order not found');
-    const row = toRow(order);
+    const row = toRow(order, await dispatchContext(sellerId, [order.id]));
     res.json({ success: true, data: { ...row, packingVideo: await packingVideoView(order.id, sellerId) } });
   } catch (err) {
     next(err);

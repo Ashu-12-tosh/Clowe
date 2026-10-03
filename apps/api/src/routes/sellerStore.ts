@@ -449,12 +449,20 @@ sellerStoreRouter.put('/hours', async (req, res, next) => {
     const seller = req.seller!;
     const input = storeHoursSchema.parse(req.body);
     const until = input.vacationUntil ? new Date(input.vacationUntil) : null;
+    // Vacation stops the late-dispatch penalty clock; record for how long.
+    const now = new Date();
+    const vacationStamps = input.vacationMode && !seller.vacationMode
+      ? { vacationStartedAt: now, vacationEndedAt: null }
+      : !input.vacationMode && seller.vacationMode
+        ? { vacationEndedAt: now }
+        : {};
 
     await prisma.sellerProfile.update({
       where: { id: seller.id },
       data: {
         workingHours: input.workingHours as object,
         vacationMode: input.vacationMode,
+        ...vacationStamps,
         vacationUntil: until && !Number.isNaN(until.getTime()) ? until : null,
         vacationMessage: input.vacationMessage?.trim() || null,
       },

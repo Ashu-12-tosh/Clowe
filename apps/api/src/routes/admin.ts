@@ -709,6 +709,18 @@ adminRouter.get('/settings', async (_req, res, next) => {
 adminRouter.put('/settings', async (req, res, next) => {
   try {
     const input = updateSettingsSchema.parse(req.body);
+    // The penalty is for missing the promise by a margin, never before it.
+    if (input.dispatchSlaHours !== undefined || input.lateDispatchPenaltyAfterHours !== undefined) {
+      const current = await getSettings();
+      const sla = input.dispatchSlaHours ?? current.dispatchSlaHours;
+      const after = input.lateDispatchPenaltyAfterHours ?? current.lateDispatchPenaltyAfterHours;
+      if (after < sla) {
+        throw ApiError.badRequest(
+          `The penalty (${after}h) cannot fall due before the dispatch promise (${sla}h)`,
+          'PENALTY_BEFORE_PROMISE',
+        );
+      }
+    }
     if (input.tryonMinPricePaise !== undefined) {
       await setSetting('tryonMinPricePaise', input.tryonMinPricePaise);
     }
@@ -724,8 +736,9 @@ adminRouter.put('/settings', async (req, res, next) => {
       'gstTcsPercent',
       'payoutMinPaise',
       'payoutHoldDays',
-      // Dispatch discipline — the window and what missing it costs.
-      'dispatchWindowHours',
+      // Dispatch discipline — the promise, when the penalty falls due, and what it costs.
+      'dispatchSlaHours',
+      'lateDispatchPenaltyAfterHours',
       'lateDispatchPenaltyPaise',
       'penaltyEnabled',
       // Listing economics — the pricing calculator's fixed fees and GST rate.

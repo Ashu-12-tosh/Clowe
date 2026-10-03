@@ -25,6 +25,7 @@ import { api, ApiRequestError, uploadImages } from '@/lib/api';
 import StorePreview from '@/components/seller/store/StorePreview';
 import KycVerificationCard from '@/components/seller/KycVerificationCard';
 import { ExternalLink } from '@/components/ExternalLink';
+import { DispatchRulesNote } from '@/components/seller/DispatchRulesNote';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -186,7 +187,6 @@ export default function SellerStoreSettingsPage() {
           pickupCity: form.pickupCity ?? '',
           pickupState: form.pickupState ?? '',
           pickupPincode: form.pickupPincode ?? '',
-          dispatchDays: form.dispatchDays,
           codEnabled: form.codEnabled,
         },
       },
@@ -783,18 +783,10 @@ export default function SellerStoreSettingsPage() {
 
               <Section title="Fulfilment preferences">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Field
-                    label="Dispatch promise (working days)"
-                    hint="Shipping later than this counts against your account health"
-                  >
-                    <input
-                      type="number"
-                      min={1}
-                      max={10}
-                      value={form.dispatchDays}
-                      onChange={(e) => patch({ dispatchDays: Number(e.target.value) || 1 })}
-                      className={field}
-                    />
+                  {/* The dispatch promise is a platform setting now; a store's own
+                      dispatch-days figure is kept but no longer edited or used. */}
+                  <Field label="Dispatch promise">
+                    <DispatchRulesNote className="mt-1" />
                   </Field>
                   <div className="flex items-end">
                     <label className="flex items-start gap-2 text-sm">

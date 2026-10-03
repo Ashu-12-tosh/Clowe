@@ -13,8 +13,8 @@ import {
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import { getPublicSettings } from '@/lib/settings';
 import { useCouponsEnabled } from '@/lib/coupons';
-import { faqEntriesFor, fillReturnWindow } from '@clowe/shared';
-import { useReturnWindowDays } from '@/lib/returnWindow';
+import { faqEntriesFor, fillPolicyText } from '@clowe/shared';
+import { usePolicySettings } from '@/lib/returnWindow';
 import type { OrderListResponse } from '@clowe/shared';
 import {
   FAQ_CATEGORIES,
@@ -118,15 +118,15 @@ export default function HelpCenterPage() {
   // Help that tells people to tap "Add Coupon" is wrong while there is no
   // such button. The OFFERS card goes with it when nothing is left under it.
   const couponsEnabled = useCouponsEnabled();
-  // Answers quote the return window from settings, never a number of their own.
-  const windowDays = useReturnWindowDays();
+  // Answers quote the return window and dispatch time from settings, never a number of their own.
+  const policy = usePolicySettings();
   const entries = useMemo(
     () =>
       faqEntriesFor(FAQ_ENTRIES, couponsEnabled).map((e) => ({
         ...e,
-        answer: fillReturnWindow(e.answer, windowDays),
+        answer: fillPolicyText(e.answer, policy),
       })),
-    [couponsEnabled, windowDays],
+    [couponsEnabled, policy],
   );
 
   const results = useMemo(() => {

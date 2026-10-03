@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { assetRefSchema } from './assets';
+import type { SellerDispatchClock } from './dispatchWindow';
 
 // ---------------------------------------------------------------------------
 // Seller Order Management
@@ -131,6 +132,8 @@ export interface SellerOrderRow {
   mixedStatus: boolean;
   /** The seller's packing clip for this order; required before dispatch. */
   packingVideo: PackingVideoView | null;
+  /** The dispatch promise and penalty clocks while anything is left to dispatch. */
+  dispatch: SellerDispatchClock | null;
 }
 
 export interface SellerOrderPage {

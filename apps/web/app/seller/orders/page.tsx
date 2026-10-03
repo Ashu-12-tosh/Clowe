@@ -469,9 +469,7 @@ export default function SellerOrdersPage() {
                     </td>
                     <td className="px-3 py-2.5">
                       <StatusPill status={row.status} mixed={row.mixedStatus} />
-                      {row.lines.some((l) => l.canShip) && (
-                        <DispatchCountdown placedAt={row.placedAt} className="mt-1" />
-                      )}
+                      <DispatchCountdown clock={row.dispatch} className="mt-1" />
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-gray-500">
                       {fmtDate(row.placedAt)}

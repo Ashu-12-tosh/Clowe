@@ -96,7 +96,7 @@ The packing video is not optional. On the order's page, record or upload a short
 
 Shipping books a shipment with the courier and records an AWB and tracking link. You may pick the courier before shipping, or let Clowe assign one. Each line moves independently, so a multi-item order can be part shipped.
 
-Dispatch SLA: ship within 2 working days of the order. Late dispatch counts against your account health.
+Dispatch promise: ship within {{dispatchSla}} of the order being placed; each unshipped order counts it down. If your part of an order has still not left {{penaltyAfter}} after it was placed, a late-dispatch penalty of {{penaltyAmount}} comes off your settlement balance, once per order — charged when that time runs out, whether or not you ship later. Vacation mode stops the penalty clock. Shipping after the promise counts against your account health.
 
 Print labels from the row action or in bulk from the selection bar, and generate a GST invoice per order.`,
   },
@@ -223,7 +223,7 @@ Verified shops carry the verified badge on their storefront. If your documents a
     body: `Your account health is measured on four rates, all computed from your real orders:
 
 • Order defect rate — returns raised for damage, wrong item or quality, as a share of delivered units.
-• Late dispatch rate — orders shipped later than 2 working days after they were placed.
+• Late dispatch rate — shipments that left later than the {{dispatchSla}} dispatch promise.
 • Cancellation rate — units cancelled after the order was paid.
 • Return rate — units returned as a share of delivered units.
 
@@ -277,7 +277,7 @@ export const SELLER_POLICIES = [
     id: 'shipping-policy',
     title: 'Shipping policy',
     summary:
-      'Dispatch within 2 working days, pack to the stated standard, use the Clowe label, and keep tracking accurate.',
+      'Dispatch within {{dispatchSla}} of the order, pack to the stated standard, use the Clowe label, and keep tracking accurate. An order not dispatched within {{penaltyAfter}} is charged {{penaltyAmount}}, once.',
   },
   {
     id: 'ip-policy',

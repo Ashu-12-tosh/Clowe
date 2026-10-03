@@ -3,7 +3,7 @@ import {
   aiDescriptionSchema,
   searchIntentSchema,
   supportChatSchema,
-  fillReturnWindow,
+  fillPolicyText,
   findHelpArticles,
   sellerAssistantSchema,
   type ReviewSummaryView,
@@ -223,7 +223,7 @@ aiRouter.post('/seller-assistant', requireAuth, async (req, res, next) => {
 
     // Ground the answer in the handbook so it can't contradict the docs.
     const articles = findHelpArticles(input.question, 3);
-    const windowDays = (await getSettings()).returnWindowDays;
+    const settings = await getSettings();
 
     const answer = await aiProvider.complete({
       task: 'seller-assistant',
@@ -236,7 +236,7 @@ aiRouter.post('/seller-assistant', requireAuth, async (req, res, next) => {
       user: JSON.stringify({
         question: input.question,
         history: input.history.slice(-6),
-        articles: articles.map((a) => ({ id: a.id, title: a.title, body: fillReturnWindow(a.body, windowDays) })),
+        articles: articles.map((a) => ({ id: a.id, title: a.title, body: fillPolicyText(a.body, settings) })),
       }),
       maxTokens: 1024,
     });

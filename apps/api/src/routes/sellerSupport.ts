@@ -18,6 +18,7 @@ import {
   type TicketStatusValue,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { getSettings } from '../services/settingsService';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { requireSeller } from './seller';
@@ -25,8 +26,6 @@ import { requireSeller } from './seller';
 export const sellerSupportRouter = Router();
 sellerSupportRouter.use(requireAuth, requireSeller);
 
-/** Orders must be dispatched inside this many days to count as on time. */
-const DISPATCH_SLA_DAYS = 2;
 /** Health rates are measured over this window. */
 const HEALTH_WINDOW_DAYS = 90;
 
@@ -106,12 +105,8 @@ function ratingFor(value: number, target: number): AccountHealthMetric['rating']
 
 export async function accountHealth(sellerId: string): Promise<SellerSupportSummary['health']> {
   const since = new Date(Date.now() - HEALTH_WINDOW_DAYS * 86400000);
-  // The seller sets their own dispatch promise in Store Settings.
-  const seller = await prisma.sellerProfile.findUnique({
-    where: { id: sellerId },
-    select: { dispatchDays: true },
-  });
-  const dispatchDays = seller?.dispatchDays ?? DISPATCH_SLA_DAYS;
+  // On time means inside the platform's dispatch promise (a setting).
+  const { dispatchSlaHours } = await getSettings();
   const items = await prisma.orderItem.findMany({
     where: { sellerId, order: { status: { not: 'PLACED' }, createdAt: { gte: since } } },
     select: {
@@ -145,7 +140,7 @@ export async function accountHealth(sellerId: string): Promise<SellerSupportSumm
   const shipped = items.filter((i) => i.shippedAt);
   const lateShipped = shipped.filter(
     (i) =>
-      i.shippedAt!.getTime() - i.order.createdAt.getTime() > dispatchDays * 86400000,
+      i.shippedAt!.getTime() - i.order.createdAt.getTime() > dispatchSlaHours * 3_600_000,
   );
 
   const metrics: AccountHealthMetric[] = [
@@ -163,7 +158,7 @@ export async function accountHealth(sellerId: string): Promise<SellerSupportSumm
       value: rate(lateShipped.length, shipped.length),
       target: 5,
       rating: ratingFor(rate(lateShipped.length, shipped.length), 5),
-      detail: `${lateShipped.length} of ${shipped.length} shipments left later than your ${dispatchDays}-day promise`,
+      detail: `${lateShipped.length} of ${shipped.length} shipments left later than the ${dispatchSlaHours}-hour dispatch promise`,
     },
     {
       key: 'cancel',

@@ -33,7 +33,7 @@ export default function AdminSettingsPage() {
     holdDays: '',
   });
   const [couponsEnabled, setCouponsEnabled] = useState(false);
-  const [dispatch, setDispatch] = useState({ windowHours: '', penaltyRupees: '', enabled: true });
+  const [dispatch, setDispatch] = useState({ slaHours: '', afterHours: '', penaltyRupees: '', enabled: true });
   const [economics, setEconomics] = useState({
     gstMerit: '',
     gstStandard: '',
@@ -70,7 +70,8 @@ export default function AdminSettingsPage() {
           closingRupees: toRupees(s.closingFeePaise),
         });
         setDispatch({
-          windowHours: String(s.dispatchWindowHours),
+          slaHours: String(s.dispatchSlaHours),
+          afterHours: String(s.lateDispatchPenaltyAfterHours),
           penaltyRupees: toRupees(s.lateDispatchPenaltyPaise),
           enabled: s.penaltyEnabled,
         });
@@ -115,7 +116,8 @@ export default function AdminSettingsPage() {
           payoutHoldDays: Math.max(0, Math.round(Number(payout.holdDays) || 0)),
           kycNameMatchMinScore: Math.min(100, Math.max(0, Math.round(Number(kycMinScore) || 0))),
           couponsEnabled,
-          dispatchWindowHours: Math.max(1, Math.round(Number(dispatch.windowHours) || 0)),
+          dispatchSlaHours: Math.max(1, Math.round(Number(dispatch.slaHours) || 0)),
+          lateDispatchPenaltyAfterHours: Math.max(1, Math.round(Number(dispatch.afterHours) || 0)),
           lateDispatchPenaltyPaise: toPaise(dispatch.penaltyRupees),
           penaltyEnabled: dispatch.enabled,
           gstMeritPercent: Number(economics.gstMerit) || 0,
@@ -273,28 +275,40 @@ export default function AdminSettingsPage() {
 
       {/* Dispatch window & late penalty */}
       <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
-        <h2 className="text-sm font-bold">⏱ Dispatch window &amp; late penalty</h2>
+        <h2 className="text-sm font-bold">⏱ Dispatch promise &amp; late penalty</h2>
         <p className="mt-1 text-xs text-gray-400">
-          Sellers see a countdown on every unshipped line. A line marked shipped after the window
-          posts one penalty to that seller&rsquo;s ledger, once, however the line was shipped. The
-          clock is wall-clock: night orders still count against the window &mdash; an order placed
-          at 11pm on a 12-hour window is due at 11am. Waiving a penalty from the seller&rsquo;s
-          ledger exists for exactly that case.
+          Sellers see both on every order still to dispatch. The promise is what they are asked to
+          meet, and what seller policies, help and account health quote. An order whose seller has
+          not dispatched it by the penalty time is charged once, when that time runs out &mdash;
+          whether it ships later or never. Both clocks are wall-clock (night orders count), and a
+          seller&rsquo;s vacation mode pauses the penalty one. Waiving a penalty from the
+          seller&rsquo;s ledger exists for the unfair cases.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div>
-            <label className="text-xs text-gray-500">Dispatch window (hours)</label>
+            <label className="text-xs text-gray-500">Dispatch promise (hours)</label>
             <input
               type="number"
               min={1}
               max={336}
-              value={dispatch.windowHours}
-              onChange={(e) => setDispatch((d) => ({ ...d, windowHours: e.target.value }))}
+              value={dispatch.slaHours}
+              onChange={(e) => setDispatch((d) => ({ ...d, slaHours: e.target.value }))}
               className={field}
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500">Late-dispatch penalty (₹)</label>
+            <label className="text-xs text-gray-500">Penalty after (hours)</label>
+            <input
+              type="number"
+              min={1}
+              max={336}
+              value={dispatch.afterHours}
+              onChange={(e) => setDispatch((d) => ({ ...d, afterHours: e.target.value }))}
+              className={field}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Penalty per order (₹)</label>
             <input
               type="number"
               min={0}

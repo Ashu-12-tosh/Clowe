@@ -40,7 +40,8 @@ import {
   settleCodIfDelivered,
   syncOrderStatus,
 } from '../services/orderStatusService';
-import { postDeliveryEntries, postLateDispatchPenalty } from '../services/sellerLedgerService';
+import { postDeliveryEntries } from '../services/sellerLedgerService';
+import { chargeLateDispatchIfDue } from '../services/lateDispatch';
 import { createManualOrder } from '../services/manualOrderService';
 import { returnStock } from '../services/stockService';
 
@@ -615,7 +616,9 @@ adminOrdersRouter.patch('/:id/status', async (req, res, next) => {
     await settleCodIfDelivered(order.id);
     if (input.status === 'SHIPPED') {
       // Marking it shipped from the desk is still the seller's dispatch.
-      for (const item of targets) await postLateDispatchPenalty(item.id);
+      for (const sellerId of new Set(targets.map((t) => t.sellerId))) {
+        await chargeLateDispatchIfDue(order.id, sellerId);
+      }
     }
     if (input.status === 'DELIVERED') {
       // Same ledger event as a seller marking the line delivered.

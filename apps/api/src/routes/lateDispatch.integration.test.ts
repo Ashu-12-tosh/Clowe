@@ -1,21 +1,23 @@
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
+import { PrismaClient, ProductStatus, Role, SellerStatus, type OrderStatus } from '@prisma/client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
 import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
-import { balance, postLateDispatchPenalty } from '../services/sellerLedgerService';
+import { balance } from '../services/sellerLedgerService';
+import { chargeLateDispatchIfDue, sweepLateDispatch } from '../services/lateDispatch';
 import { signAccessToken } from '../utils/jwt';
 
 /**
- * The late-dispatch penalty.
+ * The dispatch rules, all from settings.
  *
- * A line shipped after placedAt + dispatchWindowHours costs the seller one
- * LATE_DISPATCH_PENALTY on their settlement ledger — one, whatever path
- * shipped it and however often it is replayed, because the ledger's
- * (orderItemId, type) pair refuses a second. An admin can forgive it once,
- * for the same structural reason. With the switch off, nothing is posted.
+ * Sellers are promised dispatchSlaHours (18) to ship. The penalty falls due
+ * later, lateDispatchPenaltyAfterHours (24) after placement: a seller whose
+ * part of an order has not left by then is charged lateDispatchPenaltyPaise
+ * once for that order, when the time runs out, whether it ships later or
+ * never. The ledger's idempotency key is what makes it once. Lines cancelled
+ * in time, lines awaiting payment and sellers on vacation are not charged.
  */
 
 const prisma = new PrismaClient();
@@ -38,7 +40,8 @@ beforeAll(async () => {
 
 afterEach(async () => {
   await setSetting('penaltyEnabled', DEFAULT_SETTINGS.penaltyEnabled);
-  await setSetting('dispatchWindowHours', DEFAULT_SETTINGS.dispatchWindowHours);
+  await setSetting('dispatchSlaHours', DEFAULT_SETTINGS.dispatchSlaHours);
+  await setSetting('lateDispatchPenaltyAfterHours', DEFAULT_SETTINGS.lateDispatchPenaltyAfterHours);
   await setSetting('lateDispatchPenaltyPaise', DEFAULT_SETTINGS.lateDispatchPenaltyPaise);
 });
 
@@ -83,13 +86,26 @@ async function makeSeller() {
   const shopper = await prisma.user.create({
     data: { phone: `97100${String(seq).padStart(5, '0')}`, name: `Late Shopper ${seq}`, referralCode: `LATE-U-${seq}` },
   });
-  return { sellerId: seller.id, token: signAccessToken({ sub: user.id, role: 'SELLER' }), product, variant, shopperId: shopper.id };
+  return {
+    sellerId: seller.id,
+    userId: user.id,
+    token: signAccessToken({ sub: user.id, role: 'SELLER' }),
+    product,
+    variant,
+    shopperId: shopper.id,
+  };
 }
 
-/** A confirmed, unshipped line placed `hoursAgo` hours ago, its packing video recorded. */
-async function makeLine(s: Awaited<ReturnType<typeof makeSeller>>, hoursAgo: number) {
+type Seller = Awaited<ReturnType<typeof makeSeller>>;
+
+/**
+ * An order placed `hoursAgo` hours ago with `lines` lines of this seller's,
+ * all in `status`, its packing video recorded (these tests are about the
+ * clock, not the clip).
+ */
+async function makeOrder(s: Seller, hoursAgo: number, opts: { lines?: number; status?: OrderStatus } = {}) {
   seq += 1;
-  const placedAt = new Date(Date.now() - hoursAgo * HOUR);
+  const status = opts.status ?? 'CONFIRMED';
   const order = await prisma.order.create({
     data: {
       orderNumber: `CLW-LATE-${String(seq).padStart(6, '0')}`,
@@ -100,30 +116,35 @@ async function makeLine(s: Awaited<ReturnType<typeof makeSeller>>, hoursAgo: num
       shipCity: 'Mumbai',
       shipState: 'Maharashtra',
       shipPincode: '400001',
-      status: 'CONFIRMED',
+      status,
       subtotalPaise: 100_000,
       totalPaise: 100_000,
       paymentMethod: 'UPI',
-      createdAt: placedAt,
-      payment: { create: { provider: 'mock', amountPaise: 100_000, status: 'PAID' } },
+      createdAt: new Date(Date.now() - hoursAgo * HOUR),
+      payment: { create: { provider: 'mock', amountPaise: 100_000, status: status === 'PLACED' ? 'CREATED' : 'PAID' } },
     },
   });
-  // Dispatch needs the clip; these tests are about the clock, not the clip.
   await prisma.orderPackingVideo.create({ data: { orderId: order.id, sellerId: s.sellerId, fileRef: `asset:late-${seq}` } });
-  return prisma.orderItem.create({
-    data: {
-      orderId: order.id,
-      productId: s.product.id,
-      variantId: s.variant.id,
-      sellerId: s.sellerId,
-      title: s.product.title,
-      size: 'M',
-      color: '',
-      pricePaise: 100_000,
-      quantity: 1,
-      status: 'CONFIRMED',
-    },
-  });
+  const items = [];
+  for (let i = 0; i < (opts.lines ?? 1); i += 1) {
+    items.push(
+      await prisma.orderItem.create({
+        data: {
+          orderId: order.id,
+          productId: s.product.id,
+          variantId: s.variant.id,
+          sellerId: s.sellerId,
+          title: s.product.title,
+          size: 'M',
+          color: '',
+          pricePaise: 100_000,
+          quantity: 1,
+          status,
+        },
+      }),
+    );
+  }
+  return { order, items };
 }
 
 async function makeAdmin() {
@@ -134,10 +155,10 @@ async function makeAdmin() {
   return { id: admin.id, token: signAccessToken({ sub: admin.id, role: 'ADMIN' }) };
 }
 
-async function call(method: string, path: string, token: string, body?: unknown) {
+async function call(method: string, path: string, token: string | null, body?: unknown) {
   const res = await fetch(`${base}${path}`, {
     method,
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const json = (await res.json().catch(() => ({}))) as { success?: boolean; data?: never; error?: { code: string; message: string } };
@@ -147,238 +168,285 @@ async function call(method: string, path: string, token: string, body?: unknown)
 const ship = (s: { token: string }, itemId: string) =>
   call('PATCH', `/api/seller/orders/${itemId}/status`, s.token, { action: 'ship' });
 
-async function penalties(orderItemId: string) {
-  return prisma.sellerLedgerEntry.findMany({ where: { orderItemId, type: 'LATE_DISPATCH_PENALTY' } });
-}
+const penaltiesOf = (orderId: string) =>
+  prisma.sellerLedgerEntry.findMany({ where: { orderId, type: 'LATE_DISPATCH_PENALTY' } });
+
+const hoursFromNow = (n: number) => new Date(Date.now() + n * HOUR);
 
 // ---------------------------------------------------------------------------
 
-describe('shipping inside the window', () => {
-  it('posts nothing', async () => {
-    const s = await makeSeller();
-    const line = await makeLine(s, 3);
-    expect((await ship(s, line.id)).status).toBe(200);
-    expect(await penalties(line.id)).toHaveLength(0);
-    expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(0);
+describe('the rules', () => {
+  it('come from settings and are published: an 18h promise, a 24h penalty, ₹80', async () => {
+    const res = await call('GET', '/api/settings/public', null);
+    const data = res.json.data as unknown as Record<string, unknown>;
+    expect(data).toMatchObject({
+      dispatchSlaHours: 18,
+      lateDispatchPenaltyAfterHours: 24,
+      lateDispatchPenaltyPaise: 8000,
+      penaltyEnabled: true,
+    });
+    expect(data).not.toHaveProperty('dispatchWindowHours');
+  });
+
+  it('refuse a penalty that would fall due before the promise', async () => {
+    const admin = await makeAdmin();
+    const res = await call('PUT', '/api/admin/settings', admin.token, { lateDispatchPenaltyAfterHours: 10 });
+    expect(res.status).toBe(400);
+    expect(res.json.error?.code).toBe('PENALTY_BEFORE_PROMISE');
   });
 });
 
-describe('shipping late', () => {
-  it('posts one penalty with the arithmetic in its note', async () => {
+describe('shipping', () => {
+  it('after the promise but before the penalty time costs nothing', async () => {
     const s = await makeSeller();
-    const line = await makeLine(s, 14);
-    expect((await ship(s, line.id)).status).toBe(200);
-    const rows = await penalties(line.id);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].amountPaise).toBe(-PENALTY);
-    expect(rows[0].bucket).toBe('SETTLEMENT');
-    expect(rows[0].note).toBe('Dispatched 14h after placement; window 12h');
-    expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(-PENALTY);
-  });
-
-  it('is still one penalty after shipping again and replaying the poster', async () => {
-    const s = await makeSeller();
-    const line = await makeLine(s, 20);
-    await ship(s, line.id);
-    // The status machine refuses a second ship…
-    expect((await ship(s, line.id)).status).toBe(400);
-    // …and the poster itself, called straight, finds the pair already taken.
-    expect(await postLateDispatchPenalty(line.id)).toBe(false);
-    expect(await postLateDispatchPenalty(line.id)).toBe(false);
-    expect(await penalties(line.id)).toHaveLength(1);
-    expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(-PENALTY);
-  });
-
-  it('follows the window and amount settings, not compiled-in numbers', async () => {
-    await setSetting('dispatchWindowHours', 48);
-    await setSetting('lateDispatchPenaltyPaise', 12_345);
-    const s = await makeSeller();
-    const onTimeNow = await makeLine(s, 20);
-    await ship(s, onTimeNow.id);
-    expect(await penalties(onTimeNow.id)).toHaveLength(0);
-
-    const late = await makeLine(s, 50);
-    await ship(s, late.id);
-    const rows = await penalties(late.id);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].amountPaise).toBe(-12_345);
-    expect(rows[0].note).toBe('Dispatched 50h after placement; window 48h');
-  });
-
-  it('posts nothing while penalties are switched off', async () => {
-    await setSetting('penaltyEnabled', false);
-    const s = await makeSeller();
-    const line = await makeLine(s, 30);
-    expect((await ship(s, line.id)).status).toBe(200);
-    expect(await penalties(line.id)).toHaveLength(0);
+    const { order, items } = await makeOrder(s, 20);
+    expect((await ship(s, items[0].id)).status).toBe(200);
+    expect(await penaltiesOf(order.id)).toHaveLength(0);
     expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(0);
   });
 
-  it('leaves penalties already posted alone when switched off later', async () => {
+  it('after the penalty time charges one penalty, with the arithmetic in its note', async () => {
     const s = await makeSeller();
-    const line = await makeLine(s, 30);
-    await ship(s, line.id);
-    await setSetting('penaltyEnabled', false);
-    expect(await penalties(line.id)).toHaveLength(1);
+    const { order, items } = await makeOrder(s, 30);
+    expect((await ship(s, items[0].id)).status).toBe(200);
+    const rows = await penaltiesOf(order.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ amountPaise: -PENALTY, bucket: 'SETTLEMENT', orderItemId: null, sellerId: s.sellerId });
+    expect(rows[0].note).toBe('Dispatched 30h after placement; penalty after 24h');
+  });
+
+  it('charges once per order, not once per item', async () => {
+    const s = await makeSeller();
+    const { order, items } = await makeOrder(s, 30, { lines: 3 });
+    for (const item of items) expect((await ship(s, item.id)).status).toBe(200);
+    expect(await penaltiesOf(order.id)).toHaveLength(1);
     expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(-PENALTY);
+  });
+});
+
+describe('the sweep', () => {
+  it('charges an order never dispatched once the time runs out, and only once', async () => {
+    const s = await makeSeller();
+    const { order, items } = await makeOrder(s, 203, { lines: 2 });
+    await sweepLateDispatch();
+    const rows = await penaltiesOf(order.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].note).toBe('Not dispatched within 24h of placement');
+
+    // Running again, shipping later, and the ship-time check all find it charged.
+    await sweepLateDispatch();
+    expect((await ship(s, items[0].id)).status).toBe(200);
+    expect(await chargeLateDispatchIfDue(order.id, s.sellerId)).toBe(false);
+    expect(await penaltiesOf(order.id)).toHaveLength(1);
+    expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(-PENALTY);
+  });
+
+  it('leaves orders still inside the penalty time alone', async () => {
+    const s = await makeSeller();
+    const { order } = await makeOrder(s, 23);
+    await sweepLateDispatch();
+    expect(await penaltiesOf(order.id)).toHaveLength(0);
+    // The same order an hour and a bit later is due.
+    await sweepLateDispatch(hoursFromNow(1.1));
+    expect(await penaltiesOf(order.id)).toHaveLength(1);
+  });
+
+  it('charges a part-shipped order whose other line is still waiting', async () => {
+    const s = await makeSeller();
+    const { order, items } = await makeOrder(s, 30, { lines: 2 });
+    await prisma.orderItem.update({
+      where: { id: items[0].id },
+      data: { status: 'SHIPPED', shippedAt: new Date(order.createdAt.getTime() + 2 * HOUR) },
+    });
+    await sweepLateDispatch();
+    expect(await penaltiesOf(order.id)).toHaveLength(1);
+  });
+
+  it('does not charge orders cancelled before the time ran out, or still awaiting payment', async () => {
+    const s = await makeSeller();
+    const cancelled = await makeOrder(s, 40, { status: 'CANCELLED' });
+    const unpaid = await makeOrder(s, 40, { status: 'PLACED' });
+    await sweepLateDispatch();
+    expect(await penaltiesOf(cancelled.order.id)).toHaveLength(0);
+    expect(await penaltiesOf(unpaid.order.id)).toHaveLength(0);
+  });
+
+  it('follows the time and amount settings, and charges nothing while switched off', async () => {
+    await setSetting('lateDispatchPenaltyAfterHours', 48);
+    await setSetting('lateDispatchPenaltyPaise', 12_345);
+    const s = await makeSeller();
+    const inside = await makeOrder(s, 40);
+    const past = await makeOrder(s, 50);
+    await sweepLateDispatch();
+    expect(await penaltiesOf(inside.order.id)).toHaveLength(0);
+    const rows = await penaltiesOf(past.order.id);
+    expect(rows.map((r) => r.amountPaise)).toEqual([-12_345]);
+    expect(rows[0].note).toBe('Not dispatched within 48h of placement');
+
+    await setSetting('penaltyEnabled', false);
+    const off = await makeOrder(s, 60);
+    await sweepLateDispatch();
+    expect(await penaltiesOf(off.order.id)).toHaveLength(0);
+  });
+});
+
+describe('vacation', () => {
+  const hoursBody = (vacationMode: boolean) => ({
+    workingHours: Object.fromEntries(
+      ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [d, { open: '10:00', close: '19:00', closed: false }]),
+    ),
+    vacationMode,
+  });
+
+  it('records when it starts and ends, and pauses the penalty while on', async () => {
+    const s = await makeSeller();
+    const { order } = await makeOrder(s, 30);
+    expect((await call('PUT', '/api/seller/store/hours', s.token, hoursBody(true))).status).toBe(200);
+    const on = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: s.sellerId } });
+    expect(on.vacationStartedAt).not.toBeNull();
+    expect(on.vacationEndedAt).toBeNull();
+
+    // Started after this order came in but before its deadline: paused.
+    await prisma.sellerProfile.update({
+      where: { id: s.sellerId },
+      data: { vacationStartedAt: new Date(order.createdAt.getTime() + 10 * HOUR) },
+    });
+    await sweepLateDispatch(hoursFromNow(200));
+    expect(await penaltiesOf(order.id)).toHaveLength(0);
+
+    expect((await call('PUT', '/api/seller/store/hours', s.token, hoursBody(false))).status).toBe(200);
+    const off = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: s.sellerId } });
+    expect(off.vacationEndedAt).not.toBeNull();
+  });
+
+  it('moves the deadline by however long the clock was stopped', async () => {
+    const s = await makeSeller();
+    const { order } = await makeOrder(s, 30);
+    const placed = order.createdAt.getTime();
+    // Away from hour 10 to hour 20: the deadline moves from 24h to 34h, 4h from now.
+    await prisma.sellerProfile.update({
+      where: { id: s.sellerId },
+      data: { vacationStartedAt: new Date(placed + 10 * HOUR), vacationEndedAt: new Date(placed + 20 * HOUR) },
+    });
+    await sweepLateDispatch();
+    expect(await penaltiesOf(order.id)).toHaveLength(0);
+    await sweepLateDispatch(hoursFromNow(5));
+    const rows = await penaltiesOf(order.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].note).toBe('Not dispatched within 24h of placement, plus 10h paused for vacation');
   });
 });
 
 describe('waiving', () => {
-  it('brings the balance back, is audit-logged, and cannot happen twice', async () => {
+  it('forgives an order penalty once, audit-logged', async () => {
     const s = await makeSeller();
     const admin = await makeAdmin();
-    const line = await makeLine(s, 16);
-    await ship(s, line.id);
-    const [penalty] = await penalties(line.id);
+    const { order } = await makeOrder(s, 30);
+    await sweepLateDispatch();
+    const [penalty] = await penaltiesOf(order.id);
 
     const first = await call('POST', `/api/admin/sellers/${s.sellerId}/ledger/${penalty.id}/waive`, admin.token, {
       reason: 'Placed at 2am; shop opens at 10',
     });
     expect(first.status).toBe(200);
     expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(0);
+    const waiver = await prisma.sellerLedgerEntry.findFirst({ where: { orderId: order.id, type: 'PENALTY_WAIVER' } });
+    expect(waiver).toMatchObject({ amountPaise: PENALTY, createdById: admin.id, orderItemId: null });
 
-    const waiver = await prisma.sellerLedgerEntry.findFirst({ where: { orderItemId: line.id, type: 'PENALTY_WAIVER' } });
-    expect(waiver?.amountPaise).toBe(PENALTY);
-    expect(waiver?.createdById).toBe(admin.id);
-    expect(waiver?.note).toBe('Waived: Placed at 2am; shop opens at 10');
-
-    // Audit rows are written fire-and-forget; give the write a moment.
     await new Promise((r) => setTimeout(r, 200));
-    const audit = await prisma.auditLog.findFirst({
-      where: { action: 'Penalty waived', entityId: penalty.id, actorId: admin.id },
-      orderBy: { createdAt: 'desc' },
-    });
+    const audit = await prisma.auditLog.findFirst({ where: { action: 'Penalty waived', entityId: penalty.id } });
     expect(audit).not.toBeNull();
-    expect((audit?.metadata as { reason?: string })?.reason).toBe('Placed at 2am; shop opens at 10');
 
     const second = await call('POST', `/api/admin/sellers/${s.sellerId}/ledger/${penalty.id}/waive`, admin.token, {
       reason: 'Clicking again',
     });
     expect(second.status).toBe(409);
-    expect(second.json.error?.code).toBe('ALREADY_WAIVED');
     expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(0);
   });
 
-  it('refuses to waive anything that is not a penalty, or on the wrong seller', async () => {
+  it('refuses the wrong seller and non-admins', async () => {
     const s = await makeSeller();
     const other = await makeSeller();
     const admin = await makeAdmin();
-    const line = await makeLine(s, 16);
-    await ship(s, line.id);
-    const [penalty] = await penalties(line.id);
-
-    const wrongSeller = await call('POST', `/api/admin/sellers/${other.sellerId}/ledger/${penalty.id}/waive`, admin.token, {
+    const { order } = await makeOrder(s, 30);
+    await sweepLateDispatch();
+    const [penalty] = await penaltiesOf(order.id);
+    const wrong = await call('POST', `/api/admin/sellers/${other.sellerId}/ledger/${penalty.id}/waive`, admin.token, {
       reason: 'Wrong shop entirely',
     });
-    expect(wrongSeller.status).toBe(404);
-
+    expect(wrong.status).toBe(404);
     const notAdmin = await call('POST', `/api/admin/sellers/${s.sellerId}/ledger/${penalty.id}/waive`, s.token, {
       reason: 'Sellers cannot forgive themselves',
     });
     expect(notAdmin.status).toBe(403);
-    expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(-PENALTY);
   });
 });
 
-describe('what the seller is told', () => {
-  it('publishes the window and the switch in public settings', async () => {
-    const res = await fetch(`${base}/api/settings/public`);
-    const json = (await res.json()) as { data: { dispatchWindowHours: number; penaltyEnabled: boolean } };
-    expect(json.data.dispatchWindowHours).toBe(12);
-    expect(json.data.penaltyEnabled).toBe(true);
+describe('what the seller sees', () => {
+  type Clock = { dispatchBy: string; penaltyAt: string | null; penaltyPaused: boolean; penaltyCharged: boolean } | null;
+  const clockOf = async (s: Seller, orderId: string) =>
+    ((await call('GET', `/api/seller/orders/${orderId}`, s.token)).json.data as unknown as { dispatch: Clock }).dispatch;
+
+  it('gets both clocks on the order, and whether the penalty was charged', async () => {
+    const s = await makeSeller();
+    const { order, items } = await makeOrder(s, 2);
+    const placed = order.createdAt.getTime();
+    expect(await clockOf(s, order.id)).toMatchObject({
+      dispatchBy: new Date(placed + 18 * HOUR).toISOString(),
+      penaltyAt: new Date(placed + 24 * HOUR).toISOString(),
+      penaltyPaused: false,
+      penaltyCharged: false,
+    });
+
+    const late = await makeOrder(s, 203);
+    await sweepLateDispatch();
+    expect((await clockOf(s, late.order.id))?.penaltyCharged).toBe(true);
+
+    // Nothing left to dispatch, nothing to count down.
+    expect((await ship(s, items[0].id)).status).toBe(200);
+    expect(await clockOf(s, order.id)).toBeNull();
   });
 
-  it('shows the penalty and its reason on the seller ledger', async () => {
+  it('is told the penalty is paused while on vacation', async () => {
     const s = await makeSeller();
-    const line = await makeLine(s, 15);
-    await ship(s, line.id);
+    const { order } = await makeOrder(s, 2);
+    await prisma.sellerProfile.update({ where: { id: s.sellerId }, data: { vacationMode: true, vacationStartedAt: new Date() } });
+    expect(await clockOf(s, order.id)).toMatchObject({ penaltyAt: null, penaltyPaused: true });
+  });
+
+  it('sees the penalty, its order and its reason on the ledger and the payouts page', async () => {
+    const s = await makeSeller();
+    const { order } = await makeOrder(s, 30);
+    await sweepLateDispatch();
     const page = await call('GET', '/api/seller/ledger?bucket=SETTLEMENT', s.token);
-    const rows = (page.json.data as { rows: { type: string; note: string | null; amountPaise: number }[] }).rows;
+    const rows = (page.json.data as unknown as { rows: { type: string; note: string; reference: { orderNumber: string } }[] }).rows;
     expect(rows).toHaveLength(1);
-    expect(rows[0].type).toBe('LATE_DISPATCH_PENALTY');
-    expect(rows[0].note).toBe('Dispatched 15h after placement; window 12h');
-  });
-});
+    expect(rows[0]).toMatchObject({ type: 'LATE_DISPATCH_PENALTY', reference: { orderNumber: order.orderNumber } });
 
-type PenaltiesView = {
-  rule: { enabled: boolean; penaltyPaise: number; windowHours: number };
-  rows: {
-    entryId: string;
-    orderNumber: string | null;
-    itemTitle: string | null;
-    amountPaise: number;
-    reason: string | null;
-    waived: boolean;
-    waiverNote: string | null;
-  }[];
-  total: number;
-  chargedPaise: number;
-  waivedPaise: number;
-  netPaise: number;
-};
-
-const penaltiesView = async (token: string) =>
-  (await call('GET', '/api/seller/ledger/penalties', token)).json.data as unknown as PenaltiesView;
-
-describe('the payouts page penalties section', () => {
-  it('answers with the rule from settings and empty rows when there are none', async () => {
-    const s = await makeSeller();
-    const view = await penaltiesView(s.token);
-    expect(view.rule).toEqual({
-      enabled: DEFAULT_SETTINGS.penaltyEnabled,
-      penaltyPaise: DEFAULT_SETTINGS.lateDispatchPenaltyPaise,
-      windowHours: DEFAULT_SETTINGS.dispatchWindowHours,
-    });
-    expect(view.rows).toEqual([]);
-    expect([view.total, view.chargedPaise, view.waivedPaise, view.netPaise]).toEqual([0, 0, 0, 0]);
-
-    await setSetting('penaltyEnabled', false);
-    await setSetting('dispatchWindowHours', 48);
-    await setSetting('lateDispatchPenaltyPaise', 12_345);
-    expect((await penaltiesView(s.token)).rule).toEqual({ enabled: false, penaltyPaise: 12_345, windowHours: 48 });
-  });
-
-  it('lists each penalty with its order, reason and waived status, and totals them', async () => {
-    const s = await makeSeller();
-    const admin = await makeAdmin();
-    const kept = await makeLine(s, 14);
-    const forgiven = await makeLine(s, 18);
-    await ship(s, kept.id);
-    await ship(s, forgiven.id);
-    const [toWaive] = await penalties(forgiven.id);
-    const waive = await call('POST', `/api/admin/sellers/${s.sellerId}/ledger/${toWaive.id}/waive`, admin.token, {
-      reason: 'Courier missed the pickup',
-    });
-    expect(waive.status).toBe(200);
-
-    const view = await penaltiesView(s.token);
-    expect(view.total).toBe(2);
-    const byReason = new Map(view.rows.map((r) => [r.reason, r]));
-    const keptRow = byReason.get('Dispatched 14h after placement; window 12h');
-    const waivedRow = byReason.get('Dispatched 18h after placement; window 12h');
-    expect(keptRow).toMatchObject({ amountPaise: PENALTY, waived: false, waiverNote: null, itemTitle: s.product.title });
-    expect(keptRow?.orderNumber).toMatch(/^CLW-LATE-/);
-    expect(waivedRow).toMatchObject({
-      entryId: toWaive.id,
-      amountPaise: PENALTY,
-      waived: true,
-      waiverNote: 'Waived: Courier missed the pickup',
-    });
-    expect(view.chargedPaise).toBe(2 * PENALTY);
-    expect(view.waivedPaise).toBe(PENALTY);
-    expect(view.netPaise).toBe(PENALTY);
-    // The section and the ledger agree on what penalties cost.
-    expect(-(await balance(s.sellerId, 'SETTLEMENT'))).toBe(view.netPaise);
+    const view = (await call('GET', '/api/seller/ledger/penalties', s.token)).json.data as unknown as {
+      rule: Record<string, unknown>;
+      rows: { orderNumber: string; amountPaise: number; reason: string; waived: boolean }[];
+    };
+    expect(view.rule).toEqual({ enabled: true, penaltyPaise: PENALTY, afterHours: 24, slaHours: 18 });
+    expect(view.rows).toEqual([
+      expect.objectContaining({
+        orderNumber: order.orderNumber,
+        amountPaise: PENALTY,
+        reason: 'Not dispatched within 24h of placement',
+        waived: false,
+      }),
+    ]);
   });
 
   it("shows only the signed-in seller's penalties", async () => {
     const s = await makeSeller();
     const other = await makeSeller();
-    const line = await makeLine(s, 20);
-    await ship(s, line.id);
-    expect((await penaltiesView(s.token)).total).toBe(1);
-    expect((await penaltiesView(other.token)).total).toBe(0);
+    await makeOrder(s, 30);
+    await sweepLateDispatch();
+    const total = async (t: string) =>
+      ((await call('GET', '/api/seller/ledger/penalties', t)).json.data as unknown as { total: number }).total;
+    expect(await total(s.token)).toBe(1);
+    expect(await total(other.token)).toBe(0);
   });
 });
 

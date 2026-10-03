@@ -55,11 +55,17 @@ export interface PlatformSettings {
   /** Days after delivery before earnings clear (covers the return window). */
   payoutHoldDays: number;
   /**
-   * Hours from placement a seller has to mark a line shipped. Wall-clock:
-   * night orders count against it, which is what the admin's waiver is for.
+   * The dispatch promise: hours from placement a seller is asked to ship
+   * within. Shown on every unshipped order and in seller policies and help.
    */
-  dispatchWindowHours: number;
-  /** Posted to the seller's ledger, once per line, when the window is missed (paise). */
+  dispatchSlaHours: number;
+  /**
+   * Hours from placement after which a seller whose part of an order has not
+   * left is charged the penalty. Later than the promise; wall-clock, paused
+   * only by vacation mode.
+   */
+  lateDispatchPenaltyAfterHours: number;
+  /** Posted to the seller's ledger once per order when the penalty falls due (paise). */
   lateDispatchPenaltyPaise: number;
   /** Off = late lines post nothing; entries already posted are untouched. */
   penaltyEnabled: boolean;
@@ -130,8 +136,10 @@ export interface PlatformSettings {
 /** Subset that anonymous visitors may read. */
 export interface PublicSettings {
   tryonMinPricePaise: number;
-  /** Published so the seller's order pages can count down without a second endpoint. */
-  dispatchWindowHours: number;
+  /** Quoted in seller policies and help; the order pages get exact deadlines from the API. */
+  dispatchSlaHours: number;
+  lateDispatchPenaltyAfterHours: number;
+  lateDispatchPenaltyPaise: number;
   penaltyEnabled: boolean;
   socialLinks: PlatformSettings['socialLinks'];
   supportEmails: PlatformSettings['supportEmails'];
@@ -161,7 +169,8 @@ export const updateSettingsSchema = z.object({
   gstTcsPercent: z.number().min(0).max(5).optional(),
   payoutMinPaise: z.number().int().min(0).optional(),
   payoutHoldDays: z.number().int().min(0).max(90).optional(),
-  dispatchWindowHours: z.number().int().min(1).max(336).optional(),
+  dispatchSlaHours: z.number().int().min(1).max(336).optional(),
+  lateDispatchPenaltyAfterHours: z.number().int().min(1).max(336).optional(),
   gstMeritPercent: z.number().min(0).max(40).optional(),
   gstStandardPercent: z.number().min(0).max(40).optional(),
   gstValueSlabThresholdPaise: z.number().int().min(0).optional(),

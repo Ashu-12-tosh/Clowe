@@ -164,6 +164,8 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
             Placed {fmt(order.placedAt)} · {order.itemCount} item(s) · {order.unitCount} unit(s) ·
             your share <span className="font-semibold text-ink-900">{formatPaise(order.amountPaise)}</span>
           </p>
+          {/* The promise and the penalty, while anything is left to dispatch. */}
+          <DispatchCountdown clock={order.dispatch} className="mt-2" />
         </div>
         <div className="flex flex-wrap gap-2">
           <a
@@ -272,7 +274,6 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                       {line.title}
                     </Link>
                     <span className="flex shrink-0 items-center gap-1.5">
-                      {line.canShip && <DispatchCountdown placedAt={order.placedAt} />}
                       <StatusPill status={line.status} />
                     </span>
                   </div>

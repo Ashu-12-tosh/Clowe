@@ -96,7 +96,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     label: 'Shipping & delivery times',
     keywords: ['shipping', 'delivery', 'kitne din', 'deliver', 'courier', 'kab aayega', 'time'],
     answer:
-      'Shipping on Clowe:\n\n• FREE shipping on orders of ₹999 or more; ₹49 below that /* TODO: confirm threshold */\n• Sellers usually ship within 1–2 days /* TODO: confirm */\n• Delivery takes 3–7 days depending on your pincode /* TODO: confirm */\n\nOnce shipped, you get the courier name + AWB number and can track without login on the Track page.',
+      'Shipping on Clowe:\n\n• FREE shipping on orders of ₹999 or more; ₹49 below that /* TODO: confirm threshold */\n• Sellers are asked to dispatch within {{dispatchSla}} of your order\n• Delivery takes 3–7 days depending on your pincode /* TODO: confirm */\n\nOnce shipped, you get the courier name + AWB number and can track without login on the Track page.',
     links: [{ label: 'Track my order', href: '/track' }],
     followUps: ['order-status', 'helped', 'menu'],
   },

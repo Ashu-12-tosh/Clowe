@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   SELLER_LEDGER_TYPE_LABELS,
   type SellerLedgerBucketValue,
+  type SellerLedgerEntryRow,
   type SellerLedgerPage,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
@@ -44,10 +45,11 @@ export default function SellerLedgerTab({ sellerId }: { sellerId: string }) {
     void load();
   }, [load]);
 
-  // Which lines already carry a waiver, so the button is not offered twice.
-  const waivedItems = new Set(
-    data?.rows.filter((r) => r.type === 'PENALTY_WAIVER').map((r) => r.reference.orderItemId) ?? [],
-  );
+  // Which penalties already carry a waiver, so the button is not offered twice.
+  // A penalty is per order; one charged before that is per line.
+  const penaltyKey = (r: SellerLedgerEntryRow) =>
+    r.reference.orderItemId ? `item:${r.reference.orderItemId}` : `order:${r.reference.orderId}`;
+  const waived = new Set(data?.rows.filter((r) => r.type === 'PENALTY_WAIVER').map(penaltyKey) ?? []);
 
   async function waive(entryId: string) {
     const reason = prompt('Why is this penalty being waived? (shown on the audit log)');
@@ -119,8 +121,8 @@ export default function SellerLedgerTab({ sellerId }: { sellerId: string }) {
                 {row.note ? ` · ${row.note}` : ''}
               </p>
               {row.type === 'LATE_DISPATCH_PENALTY' &&
-                row.reference.orderItemId &&
-                !waivedItems.has(row.reference.orderItemId) && (
+                (row.reference.orderItemId || row.reference.orderId) &&
+                !waived.has(penaltyKey(row)) && (
                   <button
                     disabled={busy !== null}
                     onClick={() => void waive(row.id)}
