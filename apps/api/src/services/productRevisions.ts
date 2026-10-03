@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 import { categoryRulesFor } from './categoryRules';
+import { ensureSellerPrices, repriceProducts } from './sellerPricing';
 import { isSensitiveForTryOn } from './tryon/sensitiveGarment';
 
 // ---------------------------------------------------------------------------
@@ -37,8 +38,12 @@ export interface VariantContentEdit extends VariantOptions {
 /** A variant the edit adds. */
 export interface NewVariantContent extends VariantOptions {
   sku: string | null;
+  /** Buyer price and MRP, GST included, on the live category when saved. */
   pricePaise: number;
   mrpPaise: number | null;
+  /** The seller's, before GST; absent on edits saved before sellers entered ex-GST. */
+  sellerPricePaise?: number | null;
+  sellerMrpPaise?: number | null;
   stock: number;
   imageUrls: string[];
 }
@@ -137,6 +142,10 @@ export async function applyRevision(productId: string): Promise<void> {
   const content = product.revision.content as unknown as ListingContent;
   const rules = await categoryRulesFor(content.categoryId);
   const imagesChanged = !sameList(content.imageUrls, product.images.map((i) => i.url));
+  // A new category can mean a new GST rate: keep the seller prices (before
+  // GST) and reprice for buyers once the edit is live.
+  const categoryChanging = content.categoryId !== product.categoryId;
+  if (categoryChanging) await ensureSellerPrices({ id: product.id }, true);
 
   await prisma.$transaction([
     prisma.product.update({
@@ -196,6 +205,8 @@ export async function applyRevision(productId: string): Promise<void> {
           sku: v.sku || newSku(),
           pricePaise: v.pricePaise,
           mrpPaise: v.mrpPaise,
+          sellerPricePaise: v.sellerPricePaise ?? null,
+          sellerMrpPaise: v.sellerMrpPaise ?? null,
           stock: v.stock,
           ...(v.imageUrls.length
             ? { images: { create: v.imageUrls.map((url, i) => ({ url, altText: content.title, sortOrder: i })) } }
@@ -205,4 +216,5 @@ export async function applyRevision(productId: string): Promise<void> {
     ),
     prisma.productRevision.delete({ where: { productId: product.id } }),
   ]);
+  if (categoryChanging) await repriceProducts({ id: product.id });
 }

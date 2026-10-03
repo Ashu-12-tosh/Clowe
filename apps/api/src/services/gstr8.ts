@@ -83,7 +83,7 @@ export async function gstr8Rows(month: string): Promise<Gstr8Row[]> {
     if (e.taxablePaise !== null) return e.taxablePaise;
     if (!e.orderItem) return 0;
     return computeListingEconomics({
-      sellerPricePaise: e.orderItem.pricePaise,
+      buyerPricePaise: e.orderItem.pricePaise,
       quantity: e.orderItem.quantity,
       rates,
       taxRules: rules.get(e.orderItem.product.categoryId),

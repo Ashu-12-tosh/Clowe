@@ -144,7 +144,7 @@ describe('brands', () => {
         brand: 'livewear',
         description: 'A listing whose brand was typed in lower case.',
         imageUrls: ['/uploads/demo/a.jpg'],
-        variants: [{ optionValues: {}, pricePaise: 50_000, stock: 2 }],
+        variants: [{ optionValues: {}, sellerPricePaise: 50_000, stock: 2 }],
         mode: 'DRAFT',
       },
     });

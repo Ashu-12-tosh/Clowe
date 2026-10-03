@@ -73,7 +73,7 @@ describe('colour family on variant write', () => {
       variants: [
         {
           optionValues: { color: 'Powder Blue', storage: '128GB' },
-          pricePaise: 1_000_000,
+          sellerPricePaise: 1_000_000,
           stock: 5,
           imageUrls: ['https://example.com/phone-blue.jpg'],
         },

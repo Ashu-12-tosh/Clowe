@@ -1,69 +1,87 @@
 import { describe, expect, it } from 'vitest';
-import { describeTaxDefault, gstRateFor, type GstSettings } from './categoryRules';
+import {
+  buyerPriceFor,
+  describeTaxDefault,
+  gstRateForExGst,
+  gstRateForInclusive,
+  sellerPriceFromBuyer,
+  type GstSettings,
+} from './categoryRules';
 
 /** GST 2.0 defaults: 5% merit, 18% standard, ₹2,500 per piece ex-GST. */
 const GST: GstSettings = { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 250_000 };
 const SLAB = { taxRule: 'VALUE_SLAB' as const, defaultTaxRatePercent: null };
 const flat = (rate: number) => ({ taxRule: null, defaultTaxRatePercent: rate });
 
-describe('gstRateFor — the value slab (apparel per piece, footwear per pair)', () => {
-  it('is 5% at ₹2,625 inclusive, exactly ₹2,500 ex-GST', () => {
-    const r = gstRateFor(262_500, SLAB, GST);
-    expect(r.ratePercent).toBe(5);
-    expect(r.exGstUnitPaise).toBe(250_000);
-    expect(r.slabBand).toBeNull();
+describe('the seller price, before GST — the value slab', () => {
+  it('is 5% up to ₹2,500 and 18% from a paisa more, judged on the seller price itself', () => {
+    expect(gstRateForExGst(250_000, SLAB, GST).ratePercent).toBe(5);
+    expect(gstRateForExGst(250_001, SLAB, GST).ratePercent).toBe(18);
   });
 
-  it('is 18% one paisa above, where ex-GST at 5% passes ₹2,500', () => {
-    expect(gstRateFor(262_501, SLAB, GST).ratePercent).toBe(18);
-  });
-
-  it('is 18% at ₹2,990, and that is outside the ambiguous band', () => {
-    const r = gstRateFor(299_000, SLAB, GST);
-    expect(r.ratePercent).toBe(18);
-    expect(r.exGstUnitPaise).toBe(253_390);
-    expect(r.slabBand).toBeNull();
-  });
-
-  it('reports the band where neither slab is self-consistent, ₹2,625.01 to ₹2,950', () => {
-    // At 18% a ₹2,800 piece is ₹2,372.88 ex-GST — under ₹2,500 — yet at 5% it
-    // is ₹2,666.67, over. Taxed at 18%, never under-collected, and the seller
-    // is told a price of ₹2,625 or less would be 5%.
-    for (const price of [262_501, 280_000, 295_000]) {
-      const r = gstRateFor(price, SLAB, GST);
-      expect(r.ratePercent, String(price)).toBe(18);
-      expect(r.slabBand, String(price)).toEqual({ fromPaise: 262_501, toPaise: 295_000, meritUpToPaise: 262_500 });
+  it('has no ambiguous band: every seller price gets one rate', () => {
+    for (let ex = 230_000; ex <= 260_000; ex += 137) {
+      const { ratePercent } = gstRateForExGst(ex, SLAB, GST);
+      expect(ratePercent, String(ex)).toBe(ex <= 250_000 ? 5 : 18);
     }
-    expect(gstRateFor(295_001, SLAB, GST).slabBand).toBeNull();
-  });
-
-  it('judges the price after discount: a ₹2,800 piece discounted to ₹2,600 is 5%', () => {
-    expect(gstRateFor(280_000, SLAB, GST).ratePercent).toBe(18);
-    expect(gstRateFor(260_000, SLAB, GST).ratePercent).toBe(5);
   });
 
   it('follows the settings, not compiled-in numbers', () => {
-    const r = gstRateFor(262_500, SLAB, { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 100_000 });
-    expect(r.ratePercent).toBe(18);
+    expect(gstRateForExGst(150_000, SLAB, { ...GST, valueSlabThresholdPaise: 100_000 }).ratePercent).toBe(18);
   });
 });
 
-describe('gstRateFor — flat categories', () => {
-  it('ignores price entirely', () => {
-    expect(gstRateFor(100, flat(18), GST).ratePercent).toBe(18);
-    expect(gstRateFor(99_999_900, flat(18), GST).ratePercent).toBe(18);
+describe('buyerPriceFor', () => {
+  it('adds GST on top: ₹100 at 18% is ₹118', () => {
+    expect(buyerPriceFor(10_000, flat(18), GST)).toEqual({ exGstPaise: 10_000, gstPaise: 1_800, buyerPaise: 11_800, ratePercent: 18 });
   });
 
-  it('gives jewellery 3% and printed books nil', () => {
-    expect(gstRateFor(500_000, flat(3), GST).ratePercent).toBe(3);
-    const book = gstRateFor(49_900, flat(0), GST);
-    expect(book.ratePercent).toBe(0);
-    expect(book.exGstUnitPaise).toBe(49_900);
+  it('prices apparel on its slab and books at nil', () => {
+    expect(buyerPriceFor(250_000, SLAB, GST).buyerPaise).toBe(262_500);
+    expect(buyerPriceFor(300_000, SLAB, GST).buyerPaise).toBe(354_000);
+    expect(buyerPriceFor(49_900, flat(0), GST).buyerPaise).toBe(49_900);
   });
 
-  it('falls back to the standard rate when a category has none, or none is chosen yet', () => {
-    expect(gstRateFor(100_000, { taxRule: null, defaultTaxRatePercent: null }, GST).ratePercent).toBe(18);
-    expect(gstRateFor(100_000, null, GST).ratePercent).toBe(18);
+  it('uses the standard rate before a category is chosen', () => {
+    expect(buyerPriceFor(10_000, null, GST).ratePercent).toBe(18);
+  });
+});
+
+describe('an order line — GST inside a GST-inclusive price', () => {
+  it('is 5% at ₹2,625 inclusive (₹2,500 ex-GST) and 18% a paisa above', () => {
+    expect(gstRateForInclusive(262_500, SLAB, GST)).toEqual({ ratePercent: 5, exGstUnitPaise: 250_000 });
+    expect(gstRateForInclusive(262_501, SLAB, GST).ratePercent).toBe(18);
+  });
+
+  it('judges the price after discount: a ₹2,800 piece discounted to ₹2,600 is 5%', () => {
+    expect(gstRateForInclusive(280_000, SLAB, GST).ratePercent).toBe(18);
+    expect(gstRateForInclusive(260_000, SLAB, GST).ratePercent).toBe(5);
+  });
+
+  it('gives flat categories their rate whatever the price', () => {
+    expect(gstRateForInclusive(100, flat(18), GST).ratePercent).toBe(18);
+    expect(gstRateForInclusive(500_000, flat(3), GST).ratePercent).toBe(3);
+    expect(gstRateForInclusive(49_900, flat(0), GST)).toEqual({ ratePercent: 0, exGstUnitPaise: 49_900 });
+    expect(gstRateForInclusive(100_000, null, GST).ratePercent).toBe(18);
+  });
+});
+
+describe('sellerPriceFromBuyer', () => {
+  it('gives back exactly the seller price a buyer price was built from', () => {
+    for (const rules of [SLAB, flat(18), flat(5), flat(3), flat(0), null]) {
+      for (let ex = 100; ex < 600_000; ex += 997) {
+        const { buyerPaise, ratePercent } = buyerPriceFor(ex, rules, GST);
+        const back = sellerPriceFromBuyer(buyerPaise, rules, GST);
+        expect([back.exGstPaise, back.ratePercent, back.ambiguous], `${JSON.stringify(rules)} ${ex}`).toEqual([ex, ratePercent, false]);
+      }
+    }
+  });
+
+  it('flags an old inclusive price in the value-slab band, where no seller price keeps it', () => {
+    // ₹2,800 at 18% is ₹2,372.88 before GST — which on its own is a 5% price.
+    expect(sellerPriceFromBuyer(280_000, SLAB, GST)).toEqual({ exGstPaise: 237_288, ratePercent: 18, ambiguous: true });
+    expect(sellerPriceFromBuyer(299_000, SLAB, GST).ambiguous).toBe(false);
+    expect(sellerPriceFromBuyer(262_500, SLAB, GST).ambiguous).toBe(false);
   });
 });
 

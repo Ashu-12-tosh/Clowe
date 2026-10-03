@@ -934,6 +934,14 @@ dc exec api npx tsx prisma/backfillBrandIds.ts
 # those with no rows; a seller's own listing is never touched.
 dc exec api npx tsx prisma/backfillDemoAttributes.ts
 
+# Sellers now enter prices BEFORE GST. Every variant priced before that gets its
+# seller price (buyer price / (1 + GST rate)); buyer prices are not written, so
+# nothing a shopper sees changes. Dry run first: it lists every product's
+# before/after and flags old apparel prices in the ₹2,625-₹2,950 band. Until it
+# runs, the app derives the same numbers on the fly.
+dc exec api npx tsx prisma/backfillSellerPrices.ts
+dc exec api npx tsx prisma/backfillSellerPrices.ts --apply
+
 # Every category gets its starting filter facets (the search filter rail).
 # Only categories with no facets of their own are written, so an admin's edits
 # stay. Dry run first: it prints each category's resolved facets and any seed

@@ -188,8 +188,8 @@ function InvoiceView() {
 
           <footer className="mt-6 border-t border-gray-200 pt-3 text-[11px] leading-relaxed text-gray-500">
             <p>
-              Prices are inclusive of GST. Apparel slab applied per line: 5% up to ₹1,000, 12%
-              above. Verify against your own tax advice before filing.
+              Prices are inclusive of GST, at each line&rsquo;s rate shown above (from the product&rsquo;s
+              category). Verify against your own tax advice before filing.
             </p>
             <p className="mt-1">
               This is a computer-generated invoice for the items sold by{' '}

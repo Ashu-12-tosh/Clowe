@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import {
-  gstRateFor,
+  gstRateForInclusive,
   packingVideoAttachSchema,
   PACKING_VIDEO_REQUIRED_MESSAGE,
   SELLER_ORDER_TABS,
@@ -710,14 +710,14 @@ sellerOrdersRouter.get('/:orderId/invoice', async (req, res, next) => {
     });
     if (!order || order.items.length === 0) throw ApiError.notFound('Order not found');
     if (order.status === 'PLACED') throw ApiError.badRequest('This order is not paid yet');
-    // GST: gstRateFor, the one rate function — the category's rule (value
+    // GST: gstRateForInclusive, the one rate function for an order line — the category's rule (value
     // slab per piece, or a flat rate) with the admin's GST settings.
     const taxRules = await categoryRulesMap(order.items.map((i) => i.product.categoryId));
     const gst = gstSettings(await getSettings());
 
     const lines = order.items.map((i) => {
       const gross = i.pricePaise * i.quantity;
-      const rate = gstRateFor(i.pricePaise, taxRules.get(i.product.categoryId), gst).ratePercent;
+      const rate = gstRateForInclusive(i.pricePaise, taxRules.get(i.product.categoryId), gst).ratePercent;
       const taxable = Math.round(gross / (1 + rate / 100));
       return {
         title: i.title,

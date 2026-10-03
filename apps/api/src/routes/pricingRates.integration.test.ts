@@ -76,8 +76,8 @@ describe('GET /api/seller/pricing-rates', () => {
   });
 
   it('follows the settings, so the form and the ledger move together', async () => {
-    // Lower the value-slab threshold to ₹1,000: a ₹1,050 apparel piece is then
-    // ₹1,000 ex-GST at 5%, and ₹1,100 is over it.
+    // Lower the value-slab threshold to ₹1,000: an apparel piece the seller
+    // prices at ₹1,000 (before GST) is 5%, and a paisa more is 18%.
     await setSetting('gstValueSlabThresholdPaise', 100_000);
     await setSetting('closingFeePaise', 0);
     const { json } = await rates(await sellerToken());
@@ -85,8 +85,8 @@ describe('GET /api/seller/pricing-rates', () => {
     expect(json.data?.closingFeePaise).toBe(0);
     // And the breakdown the form would show from these rates:
     const slab = { taxRule: 'VALUE_SLAB' as const, defaultTaxRatePercent: null };
-    expect(computeListingEconomics({ sellerPricePaise: 105_000, rates: json.data!, taxRules: slab }).gstRatePercent).toBe(5);
-    const e = computeListingEconomics({ sellerPricePaise: 110_000, rates: json.data!, taxRules: slab });
+    expect(computeListingEconomics({ sellerPricePaise: 100_000, rates: json.data!, taxRules: slab }).gstRatePercent).toBe(5);
+    const e = computeListingEconomics({ sellerPricePaise: 100_001, rates: json.data!, taxRules: slab });
     expect(e.gstRatePercent).toBe(18);
     expect(e.closingFeePaise).toBe(0);
   });

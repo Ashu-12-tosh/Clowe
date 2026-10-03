@@ -12,6 +12,7 @@ import {
   parcelProblems,
   volumetricWeightGrams,
   describeTaxDefault,
+  buyerPriceFor,
   optionsKeyOf,
   sellerProductUpsertSchema,
   type CategoryNode,
@@ -186,8 +187,9 @@ export default function ProductForm({ initial }: Props) {
       id: v.id,
       options: { ...v.optionValues },
       sku: v.sku,
-      price: String(v.pricePaise / 100),
-      mrp: v.mrpPaise != null ? String(v.mrpPaise / 100) : '',
+      // The seller's own numbers, before GST.
+      price: String(v.sellerPricePaise / 100),
+      mrp: v.sellerMrpPaise != null ? String(v.sellerMrpPaise / 100) : '',
       stock: String(v.stock),
       imageUrls: [...v.imageUrls],
     })) ?? [{ ...emptyRow }],
@@ -399,8 +401,8 @@ export default function ProductForm({ initial }: Props) {
               .filter(([, value]) => value),
           ),
           sku: r.sku.trim() || undefined,
-          pricePaise: Math.round(Number(r.price) * 100),
-          mrpPaise: r.mrp.trim() ? Math.round(Number(r.mrp) * 100) : null,
+          sellerPricePaise: Math.round(Number(r.price) * 100),
+          sellerMrpPaise: r.mrp.trim() ? Math.round(Number(r.mrp) * 100) : null,
           stock: Math.max(0, Math.round(Number(r.stock) || 0)),
           // Sent only when the seller edited this variant's pictures. Leaving
           // the key off entirely is meaningful: the API reads an absent
@@ -411,8 +413,22 @@ export default function ProductForm({ initial }: Props) {
     [rows, activeAxes],
   );
 
-  const cheapest = variantInputs.length
-    ? variantInputs.reduce((min, v) => (v.pricePaise < min.pricePaise ? v : min))
+  // Paise matter once GST is added on top: ₹475.24 + 5% is ₹499.00.
+  const exactRupees = (paise: number) =>
+    `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const cheapestVariant = variantInputs.length
+    ? variantInputs.reduce((min, v) => (v.sellerPricePaise < min.sellerPricePaise ? v : min))
+    : null;
+  // What shoppers will see for it: the seller's prices plus GST at the
+  // category's rate, worked out the way the API stores it.
+  const buyerOf = (sellerPaise: number) =>
+    gst ? buyerPriceFor(sellerPaise, selectedNode ? rules : null, gst).buyerPaise : null;
+  const cheapest = cheapestVariant
+    ? {
+        sellerPricePaise: cheapestVariant.sellerPricePaise,
+        pricePaise: buyerOf(cheapestVariant.sellerPricePaise),
+        mrpPaise: cheapestVariant.sellerMrpPaise ? buyerOf(cheapestVariant.sellerMrpPaise) : null,
+      }
     : null;
   const totalStock = variantInputs.reduce((sum, v) => sum + v.stock, 0);
 
@@ -1153,8 +1169,8 @@ export default function ProductForm({ initial }: Props) {
                       </th>
                     ))}
                     <th className="w-[80px] pb-2 pr-2">SKU</th>
-                    <th className="w-[92px] pb-2 pr-2">Price (₹) *</th>
-                    <th className="w-[88px] pb-2 pr-2">MRP (₹)</th>
+                    <th className="w-[92px] pb-2 pr-2">Price before GST (₹) *</th>
+                    <th className="w-[88px] pb-2 pr-2">MRP before GST (₹)</th>
                     <th className="w-[64px] pb-2 pr-2">Stock</th>
                     <th className="w-[56px] pb-2 pr-2">Images</th>
                     <th className="w-[24px] pb-2" />
@@ -1456,9 +1472,10 @@ export default function ProductForm({ initial }: Props) {
             <div className="mt-4 rounded-xl bg-cream-50 p-3 text-xs">
               <p className="font-semibold text-ink-900">Pricing summary</p>
               <p className="mt-1 text-gray-600">
-                {cheapest ? (
+                {cheapest && cheapest.pricePaise !== null ? (
                   <>
-                    Listing price {formatPaise(cheapest.pricePaise)}
+                    Your price {exactRupees(cheapest.sellerPricePaise)} before GST · shoppers pay{' '}
+                    {exactRupees(cheapest.pricePaise)} incl. GST
                     {cheapest.mrpPaise ? (
                       <>
                         {' '}
@@ -1477,7 +1494,7 @@ export default function ProductForm({ initial }: Props) {
               </p>
             </div>
 
-            <PricingBreakdown listingPricePaise={cheapest ? cheapest.pricePaise : null} taxRules={selectedNode ? rules : null} />
+            <PricingBreakdown listingPricePaise={cheapest ? cheapest.sellerPricePaise : null} taxRules={selectedNode ? rules : null} />
           </section>
         )}
 
@@ -1778,9 +1795,9 @@ export default function ProductForm({ initial }: Props) {
               )}
               <p className="mt-1.5">
                 <span className="font-display text-lg font-bold text-ink-900">
-                  {cheapest ? formatPaise(cheapest.pricePaise) : '₹—'}
+                  {cheapest?.pricePaise != null ? formatPaise(cheapest.pricePaise) : '₹—'}
                 </span>
-                {cheapest?.mrpPaise ? (
+                {cheapest?.mrpPaise && cheapest.pricePaise !== null ? (
                   <>
                     <span className="ml-1.5 text-xs text-gray-400 line-through">
                       {formatPaise(cheapest.mrpPaise)}

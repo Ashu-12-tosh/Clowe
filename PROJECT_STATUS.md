@@ -189,14 +189,17 @@ the main reason pages feel slow. The demo images were meant to be downloaded
 locally first; `dc exec api npx tsx prisma/localizeImages.ts` does exactly that
 on the server and has not been run against production.
 
-**Apparel and footwear priced ₹2,625.01–₹2,950 have no consistent GST rate —
-needs a CA's confirmation before launch.** The 5% / 18% line is ₹2,500 per piece
-*before* GST, but prices are entered GST-inclusive, and in this band the answer
-is circular: at 18% the ex-GST value is under ₹2,500 (so 5%), at 5% it is over
-(so 18%). The code charges 18%, never under-collects, and warns the seller that
-₹2,625 or less would be 5%. Options to put to the CA: refuse prices in that band
-for slab categories, or have sellers enter the ex-GST price for those categories
-so the rate follows from it.
+**Old apparel prices in the ₹2,625.01–₹2,950 band (resolved for new prices,
+2026-10-11).** Sellers now enter their price *before* GST and the 5% / 18% line
+(₹2,500 per piece) is judged on that number, so a new price always has exactly
+one rate and the old circular band cannot arise. What remains is the listings
+priced GST-inclusive before the change that sit in the band (23 variants on the
+dev catalog): `prisma/backfillSellerPrices.ts` keeps their buyer price and
+records the seller price at 18%, and its dry run flags each one, because that
+seller price on its own is a 5% price — re-saved, the buyer price drops to it.
+Their sellers should be told before the backfill, or the prices reviewed with
+the CA. A promotion can still discount an inclusive price into the band; an
+order line is then taxed at 18%, never under-collected.
 
 **TDS is withheld from the first rupee; the ₹5 lakh exemption is not applied.**
 Under s.194-O(4), an individual or HUF seller who has furnished a PAN or

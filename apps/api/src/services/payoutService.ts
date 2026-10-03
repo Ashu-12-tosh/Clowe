@@ -80,7 +80,7 @@ const EMPTY_FEES: FeeBreakdown = {
  */
 export function feesFor(line: FeeLine, settings: PlatformSettings, rules: TaxRulesByCategory): FeeBreakdown {
   const e = computeListingEconomics({
-    sellerPricePaise: line.pricePaise,
+    buyerPricePaise: line.pricePaise,
     quantity: line.quantity,
     rates: economicsRates(settings),
     taxRules: rules.get(line.product.categoryId),

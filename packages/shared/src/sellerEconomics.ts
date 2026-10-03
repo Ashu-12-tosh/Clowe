@@ -1,4 +1,4 @@
-import { gstRateFor, type CategoryRules, type GstSettings } from './categoryRules';
+import { buyerPriceFor, gstRateForInclusive, type CategoryRules, type GstSettings } from './categoryRules';
 import type { SellerLedgerTypeValue } from './sellerLedger';
 
 // ---------------------------------------------------------------------------
@@ -11,11 +11,12 @@ import type { SellerLedgerTypeValue } from './sellerLedger';
 // each other the seller would be right to distrust all three, so none of them
 // is allowed its own arithmetic.
 //
-// The price a seller lists is the price the buyer is charged for the item,
-// GST included — that is how the catalog, checkout and the tax invoice
-// already treat it. Shipping is charged per order at checkout and is not part
-// of a line. So buyerPays = price × quantity, and GST is shown as the part of
-// that price the seller remits, not as a Clowe deduction.
+// Sellers enter their price BEFORE GST; the buyer pays it plus GST at the
+// category's rate (buyerPriceFor), and the catalog, checkout and the tax
+// invoice show and charge that GST-inclusive price. The product form prices
+// from the seller's number; an order line, which records what the buyer was
+// charged, prices from that. Shipping is charged per order at checkout and
+// is not part of a line. GST is the seller's to remit, not a Clowe deduction.
 //
 // Money is in paise throughout and every component is rounded to a whole
 // paisa on its own, so the parts always add up to the whole exactly.
@@ -36,9 +37,9 @@ export interface SellerEconomicsRates {
   /** GST TCS collected under s.52 CGST Act, percent of the line's value ex-GST. */
   tcsPercent: number;
   /**
-   * GST settings. The rate itself is never a single platform number: it is
-   * gstRateFor(price, the product's category rules, these) — the same call
-   * the tax invoice makes.
+   * GST settings. The rate itself is never a single platform number: it
+   * comes from the product's category rules and these, through
+   * gstRateForExGst (a seller's price) or gstRateForInclusive (an order line).
    */
   gst: GstSettings;
   /** Fixed platform fee, per order line. */
@@ -50,8 +51,13 @@ export interface SellerEconomicsRates {
 }
 
 export interface SellerEconomicsInput {
-  /** The price the seller lists, per unit — what the buyer is charged for it. */
-  sellerPricePaise: number;
+  /** The seller's price per unit, BEFORE GST — what the product form takes. */
+  sellerPricePaise?: number;
+  /**
+   * Or what the buyer was charged per unit, GST included — what an order line
+   * records. Used when sellerPricePaise is not given.
+   */
+  buyerPricePaise?: number;
   /** Units on the line; defaults to one for the listing preview. */
   quantity?: number;
   rates: SellerEconomicsRates;
@@ -79,10 +85,8 @@ export interface SellerEconomics {
   grossPaise: number;
   /** GST inside the price, at the rate for this product and price; the seller's to remit. */
   gstPaise: number;
-  /** The rate that applied, from gstRateFor. */
+  /** The rate that applied. */
   gstRatePercent: number;
-  /** Set when the unit price is in the value-slab band where a lower price would be 5%. */
-  gstSlabBand: { fromPaise: number; toPaise: number; meritUpToPaise: number } | null;
   commissionPaise: number;
   gatewayFeePaise: number;
   platformFeePaise: number;
@@ -112,12 +116,25 @@ export function gstInclusiveShare(amountPaise: number, gstPercent: number): numb
 
 export function computeListingEconomics(input: SellerEconomicsInput): SellerEconomics {
   const quantity = Math.max(0, Math.floor(input.quantity ?? 1));
-  const price = Math.max(0, Math.round(input.sellerPricePaise));
-  const grossPaise = price * quantity;
   const { rates } = input;
+  const rules = input.taxRules ?? null;
 
-  const gst = gstRateFor(price, input.taxRules ?? null, rates.gst);
-  const gstPaise = gstInclusiveShare(grossPaise, gst.ratePercent);
+  // From the seller's price: GST per unit on top of it. From an order line:
+  // the GST inside what the buyer paid, on the line total as the invoice has it.
+  let grossPaise: number;
+  let gstPaise: number;
+  let gstRatePercent: number;
+  if (input.sellerPricePaise !== undefined) {
+    const unit = buyerPriceFor(Math.max(0, Math.round(input.sellerPricePaise)), rules, rates.gst);
+    grossPaise = unit.buyerPaise * quantity;
+    gstPaise = unit.gstPaise * quantity;
+    gstRatePercent = unit.ratePercent;
+  } else {
+    const unitPaise = Math.max(0, Math.round(input.buyerPricePaise ?? 0));
+    gstRatePercent = gstRateForInclusive(unitPaise, rules, rates.gst).ratePercent;
+    grossPaise = unitPaise * quantity;
+    gstPaise = gstInclusiveShare(grossPaise, gstRatePercent);
+  }
   const commissionPaise = percentOf(grossPaise, rates.commissionPercent);
   const gatewayFeePaise = percentOf(grossPaise, rates.gatewayPercent);
   // TDS and TCS are levied on the value net of GST, not on what the buyer paid.
@@ -167,8 +184,7 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
     buyerPaysPaise: grossPaise,
     grossPaise,
     gstPaise,
-    gstRatePercent: gst.ratePercent,
-    gstSlabBand: gst.slabBand,
+    gstRatePercent,
     commissionPaise,
     gatewayFeePaise,
     platformFeePaise,

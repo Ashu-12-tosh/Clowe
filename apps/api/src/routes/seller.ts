@@ -28,7 +28,9 @@ import {
   type SellerStats,
 } from '@clowe/shared';
 import { prisma } from '../db';
-import { categoryRulesFor } from '../services/categoryRules';
+import { categoryRulesFor, categoryRulesMap } from '../services/categoryRules';
+import { gstSettings } from '../services/economicsRates';
+import { priceInput, sellerPricesOf, type PricedUpsertInput } from '../services/sellerPricing';
 import { brandSuggestions, linkBrand } from '../services/brands';
 import { packingVideoView } from '../services/packingVideos';
 import { requireAuth } from '../middleware/auth';
@@ -319,6 +321,19 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
     const edit = p.revision ? (p.revision.content as unknown as ListingContent) : null;
     const variantEdits = new Map((edit?.variantEdits ?? []).map((e) => [e.id, e]));
     const rules = await categoryRulesFor(edit?.categoryId ?? p.categoryId);
+    // Prices are the live listing's, on its live category: the seller's
+    // (before GST, what the form edits) and the buyer's (GST included).
+    const priceRules = (await categoryRulesMap([p.categoryId])).get(p.categoryId);
+    const gst = gstSettings(await getSettings());
+    const prices = (v: { pricePaise: number; mrpPaise: number | null; sellerPricePaise?: number | null; sellerMrpPaise?: number | null }) => ({
+      ...sellerPricesOf(
+        { ...v, sellerPricePaise: v.sellerPricePaise ?? null, sellerMrpPaise: v.sellerMrpPaise ?? null },
+        priceRules,
+        gst,
+      ),
+      buyerPricePaise: v.pricePaise,
+      buyerMrpPaise: v.mrpPaise,
+    });
     const body: SellerProductDetail = {
       id: p.id,
       title: edit ? edit.title : p.title,
@@ -356,8 +371,7 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
             optionValues: changed ? changed.optionValues : optionValuesFromJson(v.optionValues),
             label: changed ? changed.label : v.label,
             sku: v.sku,
-            pricePaise: v.pricePaise,
-            mrpPaise: v.mrpPaise,
+            ...prices(v),
             stock: v.stock,
             imageUrls: changed?.imageUrls ?? v.images.map((i) => i.url),
           };
@@ -370,8 +384,7 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
           optionValues: n.optionValues,
           label: n.label,
           sku: n.sku ?? '',
-          pricePaise: n.pricePaise,
-          mrpPaise: n.mrpPaise,
+          ...prices(n),
           stock: n.stock,
           imageUrls: n.imageUrls,
         })),
@@ -443,15 +456,15 @@ function productDataFrom(input: SellerProductUpsertInput, rules: CategoryRules) 
  * Base price drives listing cards and the try-on threshold. A draft may have
  * no variants yet, so it falls back to 0 until one is added.
  */
-function basePriceOf(input: SellerProductUpsertInput): number {
+function basePriceOf(input: PricedUpsertInput): number {
   const prices = input.variants.map((v) => v.pricePaise);
   return prices.length > 0 ? Math.min(...prices) : 0;
 }
 
 /** Variant rows with their derived columns; rejects mixed axes and duplicates. */
-function variantRowsFrom(input: SellerProductUpsertInput) {
+function variantRowsFrom<I extends SellerProductUpsertInput | PricedUpsertInput>(input: I) {
   const rows = input.variants.map((v) => ({
-    input: v,
+    input: v as I['variants'][number],
     fields: variantOptionFields(v.optionValues, [], { size: v.size, color: v.color }),
   }));
   const axisSets = new Set(rows.map((r) => optionAxisKeys(r.fields.optionValues).sort().join('|')));
@@ -546,7 +559,9 @@ function assertRequiredAttributes(input: SellerProductUpsertInput, rules: Catego
 sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req, res, next) => {
   try {
     // A typed name that matches a brand is linked to it, in the brand's own spelling.
-    const input = await linkBrand(sellerProductUpsertSchema.parse(req.body));
+    const parsed = await linkBrand(sellerProductUpsertSchema.parse(req.body));
+    // The seller's prices are before GST; the buyer's are worked out here, once.
+    const input = await priceInput(parsed, parsed.categoryId);
     const category = await prisma.category.findUnique({ where: { id: input.categoryId } });
     if (!category) throw ApiError.badRequest('Category not found', 'CATEGORY_NOT_FOUND');
     const rules = await categoryRulesFor(category.id);
@@ -573,6 +588,8 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
             sku: v.sku?.trim() || newSku(),
             pricePaise: v.pricePaise,
             mrpPaise: v.mrpPaise ?? null,
+            sellerPricePaise: v.sellerPricePaise,
+            sellerMrpPaise: v.sellerMrpPaise ?? null,
             stock: v.stock,
             ...(v.imageUrls?.length
               ? {
@@ -605,10 +622,10 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
  * Returns where the revision now stands, or null when there is none.
  */
 async function saveLiveEdit(
-  input: SellerProductUpsertInput,
+  input: PricedUpsertInput,
   product: Awaited<ReturnType<typeof ownProduct>>,
   rules: CategoryRules,
-  variantRows: ReturnType<typeof variantRowsFrom>,
+  variantRows: ReturnType<typeof variantRowsFrom<PricedUpsertInput>>,
   keptIds: string[],
 ): Promise<ProductRevisionStatus | null> {
   // Removing every live variant would take the listing down while the new
@@ -651,6 +668,8 @@ async function saveLiveEdit(
         sku: v.sku?.trim() || null,
         pricePaise: v.pricePaise,
         mrpPaise: v.mrpPaise ?? null,
+        sellerPricePaise: v.sellerPricePaise,
+        sellerMrpPaise: v.sellerMrpPaise ?? null,
         stock: v.stock,
         imageUrls: v.imageUrls ?? [],
       })),
@@ -692,6 +711,8 @@ async function saveLiveEdit(
           ...(v.sku?.trim() ? { sku: v.sku.trim() } : {}),
           pricePaise: v.pricePaise,
           mrpPaise: v.mrpPaise ?? null,
+          sellerPricePaise: v.sellerPricePaise,
+          sellerMrpPaise: v.sellerMrpPaise ?? null,
           stock: v.stock,
         },
       }),
@@ -720,8 +741,15 @@ async function saveLiveEdit(
 sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (req, res, next) => {
   try {
     // A typed name that matches a brand is linked to it, in the brand's own spelling.
-    const input = await linkBrand(sellerProductUpsertSchema.parse(req.body));
+    const parsed = await linkBrand(sellerProductUpsertSchema.parse(req.body));
     const product = await ownProduct(req, req.params.id);
+    // Priced on the live category for a live listing (a category change
+    // waits for review, and the approval reprices), else on the one sent.
+    const input = await priceInput(
+      parsed,
+      product.status === 'APPROVED' ? product.categoryId : parsed.categoryId,
+      new Map(product.variants.map((v) => [v.id, v])),
+    );
     const rules = await categoryRulesFor(input.categoryId);
     assertRequiredAttributes(input, rules);
     assertVariantImages(
@@ -801,6 +829,8 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
               ...(v.sku?.trim() ? { sku: v.sku.trim() } : {}),
               pricePaise: v.pricePaise,
               mrpPaise: v.mrpPaise ?? null,
+              sellerPricePaise: v.sellerPricePaise,
+              sellerMrpPaise: v.sellerMrpPaise ?? null,
               stock: v.stock,
             },
           }),
@@ -845,6 +875,8 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
               sku: v.sku?.trim() || newSku(),
               pricePaise: v.pricePaise,
               mrpPaise: v.mrpPaise ?? null,
+              sellerPricePaise: v.sellerPricePaise,
+              sellerMrpPaise: v.sellerMrpPaise ?? null,
               stock: v.stock,
               ...(v.imageUrls?.length
                 ? {

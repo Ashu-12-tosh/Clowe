@@ -942,8 +942,15 @@ model ProductVariant {
   size         String   @default("")
   color        String   @default("")
   sku          String   @unique
+  // What the buyer pays, GST included: what every shopper-facing screen, the
+  // cart and checkout read. Written from the seller's price (below) plus GST.
   pricePaise   Int
-  mrpPaise     Int? // strike-through price
+  mrpPaise     Int? // strike-through price, GST included
+  // What the seller entered, BEFORE GST. Null on rows priced before sellers
+  // entered ex-GST and not yet backfilled (prisma/backfillSellerPrices.ts):
+  // those are read through sellerPriceFromBuyer.
+  sellerPricePaise Int?
+  sellerMrpPaise   Int?
   stock        Int      @default(0)
   createdAt    DateTime @default(now())
 

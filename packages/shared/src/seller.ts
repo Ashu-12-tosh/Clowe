@@ -75,8 +75,10 @@ export const sellerVariantInputSchema = z.object({
   /** Legacy clients only - folded into optionValues when that is empty. */
   size: z.string().trim().max(60).optional(),
   color: z.string().trim().max(60).optional(),
-  pricePaise: z.number().int().min(100, 'Price must be at least ₹1'),
-  mrpPaise: z.number().int().min(100).nullable().optional(),
+  /** The seller's price per unit BEFORE GST; the buyer pays it plus GST at the category's rate. */
+  sellerPricePaise: z.number().int().min(100, 'Price must be at least ₹1'),
+  /** MRP before GST; shoppers see it with GST added, like the price. */
+  sellerMrpPaise: z.number().int().min(100).nullable().optional(),
   stock: z.number().int().min(0),
   /** Seller's own code; generated when left blank. */
   sku: z
@@ -222,8 +224,12 @@ export interface SellerProductDetail {
     size: string;
     color: string;
     sku: string;
-    pricePaise: number;
-    mrpPaise: number | null;
+    /** The seller's price and MRP, BEFORE GST: what the form edits. */
+    sellerPricePaise: number;
+    sellerMrpPaise: number | null;
+    /** What the buyer pays and the MRP they see, GST included. */
+    buyerPricePaise: number;
+    buyerMrpPaise: number | null;
     stock: number;
     /** This variant's own pictures; empty means it shows the product's. */
     imageUrls: string[];

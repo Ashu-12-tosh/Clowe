@@ -91,7 +91,7 @@ function listing(s: { packingVideoRef: string }, overrides: Record<string, unkno
     lengthMm: 300,
     widthMm: 200,
     heightMm: 50,
-    variants: [{ optionValues: {}, pricePaise: 1_000_000, stock: 5 }],
+    variants: [{ optionValues: {}, sellerPricePaise: 1_000_000, stock: 5 }],
     ...overrides,
   };
 }

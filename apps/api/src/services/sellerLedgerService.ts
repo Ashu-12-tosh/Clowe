@@ -134,7 +134,7 @@ export async function postDeliveryEntries(orderItemId: string, db: Db = prisma):
   const settings = await getSettings();
   const taxRules = (await categoryRulesMap([item.product.categoryId])).get(item.product.categoryId);
   const economics = computeListingEconomics({
-    sellerPricePaise: item.pricePaise,
+    buyerPricePaise: item.pricePaise,
     quantity: item.quantity,
     rates: economicsRates(settings),
     taxRules,

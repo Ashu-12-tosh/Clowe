@@ -83,7 +83,7 @@ function body(l: Listing, changes: Record<string, unknown> = {}) {
     categoryId,
     description: 'The approved description.',
     imageUrls: ['/uploads/demo/a.jpg', '/uploads/demo/b.jpg'],
-    variants: [{ id: l.variant.id, optionValues: { size: 'M' }, pricePaise: 50_000, stock: 10 }],
+    variants: [{ id: l.variant.id, optionValues: { size: 'M' }, sellerPricePaise: 50_000, stock: 10 }],
     weightGrams: 350,
     lengthMm: 300,
     widthMm: 200,
@@ -112,11 +112,12 @@ describe('a live listing', () => {
   it('saves price and stock straight away, stays live, and leaves its pictures alone', async () => {
     const l = await listing();
     const before = await imageIds(l.product.id);
-    const res = await save(l, { variants: [{ id: l.variant.id, optionValues: { size: 'M' }, pricePaise: 45_000, stock: 3 }] });
+    const res = await save(l, { variants: [{ id: l.variant.id, optionValues: { size: 'M' }, sellerPricePaise: 45_000, stock: 3 }] });
     expect(res.status).toBe(200);
     expect(res.json.data).toMatchObject({ status: 'APPROVED', revisionStatus: null });
     const variant = await prisma.productVariant.findUniqueOrThrow({ where: { id: l.variant.id } });
-    expect([variant.pricePaise, variant.stock]).toEqual([45_000, 3]);
+    // The seller's price is before GST; buyers pay it plus 18% (no category rule).
+    expect([variant.sellerPricePaise, variant.pricePaise, variant.stock]).toEqual([45_000, 53_100, 3]);
     expect((await prisma.product.findUniqueOrThrow({ where: { id: l.product.id } })).status).toBe('APPROVED');
     expect(await prisma.productRevision.count({ where: { productId: l.product.id } })).toBe(0);
     expect(await imageIds(l.product.id)).toEqual(before);
@@ -127,13 +128,13 @@ describe('a live listing', () => {
     const shopper = await prisma.user.create({ data: { phone: `9120000${seq}`.slice(0, 10), name: 'Cart Shopper', referralCode: `REV-C-${seq}` } });
     await prisma.cart.create({ data: { userId: shopper.id, items: { create: { variantId: l.variant.id, quantity: 1 } } } });
 
-    const res = await save(l, { title: 'A Better Title', variants: [{ id: l.variant.id, optionValues: { size: 'M' }, pricePaise: 48_000, stock: 10 }] });
+    const res = await save(l, { title: 'A Better Title', variants: [{ id: l.variant.id, optionValues: { size: 'M' }, sellerPricePaise: 48_000, stock: 10 }] });
     expect(res.json.data).toMatchObject({ status: 'APPROVED', revisionStatus: 'PENDING' });
 
     const product = await prisma.product.findUniqueOrThrow({ where: { id: l.product.id } });
     expect(product).toMatchObject({ status: 'APPROVED', title: 'Original Title' });
     // The price in the same save went live anyway.
-    expect((await prisma.productVariant.findUniqueOrThrow({ where: { id: l.variant.id } })).pricePaise).toBe(48_000);
+    expect((await prisma.productVariant.findUniqueOrThrow({ where: { id: l.variant.id } })).sellerPricePaise).toBe(48_000);
     const storefront = await fetch(`${base}/api/products/${l.product.slug}`);
     expect(storefront.status).toBe(200);
     expect(((await storefront.json()) as { data: { title: string } }).data.title).toBe('Original Title');
@@ -164,7 +165,7 @@ describe('a live listing', () => {
 
   it('refuses to drop every live variant while new ones would wait for review', async () => {
     const l = await listing();
-    const res = await save(l, { variants: [{ optionValues: { size: 'L' }, pricePaise: 50_000, stock: 1 }] });
+    const res = await save(l, { variants: [{ optionValues: { size: 'L' }, sellerPricePaise: 50_000, stock: 1 }] });
     expect(res.status).toBe(400);
     expect(res.json.error?.code).toBe('LIVE_VARIANT_REQUIRED');
   });
@@ -177,8 +178,8 @@ describe('reviewing an edit', () => {
     await save(l, {
       title: 'Approved Title',
       variants: [
-        { id: l.variant.id, optionValues: { size: 'M' }, pricePaise: 50_000, stock: 10 },
-        { optionValues: { size: 'L' }, pricePaise: 52_000, stock: 4 },
+        { id: l.variant.id, optionValues: { size: 'M' }, sellerPricePaise: 50_000, stock: 10 },
+        { optionValues: { size: 'L' }, sellerPricePaise: 52_000, stock: 4 },
       ],
     });
     const queue = (await call('GET', '/api/admin/products?status=REVISION', adminToken)).json.data as AdminProductRow[];
@@ -228,7 +229,7 @@ describe('the parcel (weight and size)', () => {
 
   it('is not needed for a price change on a live listing, only for an edit sent to review', async () => {
     const l = await listing();
-    const price = await save(l, { ...noParcel, variants: [{ id: l.variant.id, optionValues: { size: 'M' }, pricePaise: 41_000, stock: 10 }] });
+    const price = await save(l, { ...noParcel, variants: [{ id: l.variant.id, optionValues: { size: 'M' }, sellerPricePaise: 41_000, stock: 10 }] });
     expect(price.status).toBe(200);
     const edit = await save(l, { ...noParcel, title: 'Needs A Parcel' });
     expect(edit.json.error?.code).toBe('SHIPPING_DETAILS_REQUIRED');

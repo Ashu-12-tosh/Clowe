@@ -26,10 +26,12 @@ import {
   categoryRulesFor,
   chainOf,
   invalidateCategoryRules,
+  descendantIds,
   ownRuleFields,
   rulesFromChain,
 } from '../services/categoryRules';
 import { applyRevision, changedFields, type ListingContent } from '../services/productRevisions';
+import { ensureSellerPrices, repriceProducts } from '../services/sellerPricing';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { sendToUserSafe } from '../services/messaging';
@@ -473,6 +475,14 @@ adminRouter.patch('/categories/:id', async (req, res, next) => {
     const category = await prisma.category.findUnique({ where: { id: req.params.id } });
     if (!category) throw ApiError.notFound('Category not found');
 
+    // A GST rule change moves buyer prices in this category and below: the
+    // sellers' prices (before GST) stay, the GST on top of them changes.
+    const taxChanging =
+      (input.taxRule !== undefined && input.taxRule !== category.taxRule) ||
+      (input.defaultTaxRatePercent !== undefined && input.defaultTaxRatePercent !== category.defaultTaxRatePercent);
+    const affected = taxChanging ? { categoryId: { in: await descendantIds(category.id) } } : null;
+    if (affected) await ensureSellerPrices(affected, true);
+
     await prisma.category.update({
       where: { id: category.id },
       data: {
@@ -485,6 +495,7 @@ adminRouter.patch('/categories/:id', async (req, res, next) => {
       },
     });
     invalidateCategoryRules();
+    if (affected) await repriceProducts(affected);
     res.json({ success: true, data: { id: category.id } });
   } catch (err) {
     next(err);
@@ -728,6 +739,14 @@ adminRouter.put('/settings', async (req, res, next) => {
     if (input.supportEmails !== undefined) await setSetting('supportEmails', input.supportEmails);
     if (input.codMaxOrderPaise !== undefined) await setSetting('codMaxOrderPaise', input.codMaxOrderPaise);
     if (input.adPricing !== undefined) await setSetting('adPricing', input.adPricing);
+    // A GST rate change moves every buyer price: sellers' prices (before GST)
+    // stay, the GST on top changes. Any variant without a seller price gets
+    // one first, under the rates it was priced at.
+    const before = await getSettings();
+    const gstChanging = (['gstMeritPercent', 'gstStandardPercent', 'gstValueSlabThresholdPaise'] as const).some(
+      (key) => input[key] !== undefined && input[key] !== before[key],
+    );
+    if (gstChanging) await ensureSellerPrices({}, true);
     // Seller payout economics — every rate the payout page explains.
     for (const key of [
       'payoutCommissionPercent',
@@ -754,6 +773,7 @@ adminRouter.put('/settings', async (req, res, next) => {
     ] as const) {
       if (input[key] !== undefined) await setSetting(key, input[key]);
     }
+    if (gstChanging) await repriceProducts({});
     res.json({ success: true, data: await getSettings() });
   } catch (err) {
     next(err);

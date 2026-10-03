@@ -23,6 +23,7 @@
     "db:seed-facets": "tsx prisma/seedFacets.ts",
     "db:backfill-demo-facets": "tsx prisma/backfillDemoFacets.ts",
     "db:backfill-private-files": "tsx prisma/backfillPrivateFiles.ts",
+    "db:backfill-seller-prices": "tsx prisma/backfillSellerPrices.ts",
     "seed:tryon-demo": "tsx scripts/seedTryOnDemoProduct.ts",
     "tryon:check": "tsx scripts/tryonCheck.ts",
     "tryon:e2e": "node scripts/tryonE2E.mjs"

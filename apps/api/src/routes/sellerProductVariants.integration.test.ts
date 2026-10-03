@@ -134,7 +134,7 @@ describe('PUT /api/seller/products/:id — variant ownership', () => {
         // The rival's variant id, as read from the public product endpoint.
         id: victim.variant.id,
         optionValues: { size: 'M' },
-        pricePaise: 100, // ₹1 — the price-sabotage payload
+        sellerPricePaise: 100, // ₹1 — the price-sabotage payload
         stock: 0,
         sku: 'PWNED',
       },
@@ -164,7 +164,7 @@ describe('PUT /api/seller/products/:id — variant ownership', () => {
     });
 
     const { status, json } = await putProduct(seller.token, seller.product.id, [
-      { id: other.variant.id, optionValues: { size: 'M' }, pricePaise: 100, stock: 0 },
+      { id: other.variant.id, optionValues: { size: 'M' }, sellerPricePaise: 100, stock: 0 },
     ]);
 
     expect(status).toBe(404);
@@ -189,7 +189,7 @@ describe('PUT /api/seller/products/:id — variant ownership', () => {
       {
         id: victim.variant.id,
         optionValues: { size: 'M' },
-        pricePaise: 100,
+        sellerPricePaise: 100,
         stock: 0,
         imageUrls: ['/uploads/attacker-replacement.jpg'],
       },
@@ -214,7 +214,7 @@ describe('PUT /api/seller/products/:id — variant ownership', () => {
       {
         id: seller.variant.id,
         optionValues: { size: 'M' },
-        pricePaise: 55_500,
+        sellerPricePaise: 55_500,
         stock: 7,
         sku: 'SKU-EDITED',
       },
@@ -223,7 +223,8 @@ describe('PUT /api/seller/products/:id — variant ownership', () => {
     expect(status).toBe(200);
 
     const after = await prisma.productVariant.findUnique({ where: { id: seller.variant.id } });
-    expect(after!.pricePaise).toBe(55_500);
+    // Before GST as sent; buyers pay it plus 18% (no category rule).
+    expect([after!.sellerPricePaise, after!.pricePaise]).toEqual([55_500, 65_490]);
     expect(after!.stock).toBe(7);
     expect(after!.sku).toBe('SKU-EDITED');
   });

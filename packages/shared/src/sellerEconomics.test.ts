@@ -16,7 +16,7 @@ const RATES = {
 
 describe('computeListingEconomics', () => {
   it('splits a plain price into each component', () => {
-    const e = computeListingEconomics({ sellerPricePaise: 100_000, rates: RATES });
+    const e = computeListingEconomics({ buyerPricePaise: 100_000, rates: RATES });
     expect(e.buyerPaysPaise).toBe(100_000);
     expect(e.commissionPaise).toBe(10_000);
     expect(e.gatewayFeePaise).toBe(2_000);
@@ -31,14 +31,14 @@ describe('computeListingEconomics', () => {
 
   it('shows the GST inside the price without deducting it', () => {
     // ₹1,000 inclusive of 18% is ₹847.46 + ₹152.54.
-    const e = computeListingEconomics({ sellerPricePaise: 100_000, rates: RATES });
+    const e = computeListingEconomics({ buyerPricePaise: 100_000, rates: RATES });
     expect(e.gstPaise).toBe(15_254);
     expect(e.lines.find((l) => l.ledgerType === null)).toBeUndefined();
     expect(e.sellerKeepsAfterGstPaise).toBe(e.sellerReceivesPaise - 15_254);
   });
 
   it('is zero all the way down for a zero price, fixed fees included', () => {
-    const e = computeListingEconomics({ sellerPricePaise: 0, rates: RATES });
+    const e = computeListingEconomics({ buyerPricePaise: 0, rates: RATES });
     expect(e.buyerPaysPaise).toBe(0);
     expect(e.platformFeePaise).toBe(0);
     expect(e.deliveryFeePaise).toBe(0);
@@ -49,7 +49,7 @@ describe('computeListingEconomics', () => {
 
   it('rounds every component to a whole paisa, and the lines still add up', () => {
     // ₹333.33 at 10% is 3,333.3 paise: rounded per component, never carried.
-    const e = computeListingEconomics({ sellerPricePaise: 33_333, rates: RATES });
+    const e = computeListingEconomics({ buyerPricePaise: 33_333, rates: RATES });
     expect(e.commissionPaise).toBe(3_333);
     expect(e.gatewayFeePaise).toBe(667);
     // 33,333 / 1.18 = 28,248.3 → 28,248 taxable, 5,085 GST; TDS and TCS on 28,248.
@@ -63,8 +63,8 @@ describe('computeListingEconomics', () => {
   });
 
   it('takes percentages on the line total, fixed fees per line, closing per unit', () => {
-    const one = computeListingEconomics({ sellerPricePaise: 33_333, rates: RATES });
-    const three = computeListingEconomics({ sellerPricePaise: 33_333, quantity: 3, rates: RATES });
+    const one = computeListingEconomics({ buyerPricePaise: 33_333, rates: RATES });
+    const three = computeListingEconomics({ buyerPricePaise: 33_333, quantity: 3, rates: RATES });
     expect(three.grossPaise).toBe(99_999);
     // Rounding once on 99,999 (10,000) is not three roundings of 33,333 (9,999).
     expect(three.commissionPaise).toBe(10_000);
@@ -75,7 +75,7 @@ describe('computeListingEconomics', () => {
   });
 
   it('maps every deduction to the ledger type it is posted as', () => {
-    const e = computeListingEconomics({ sellerPricePaise: 50_000, rates: RATES });
+    const e = computeListingEconomics({ buyerPricePaise: 50_000, rates: RATES });
     expect(e.lines.map((l) => [l.ledgerType, l.amountPaise])).toEqual([
       ['SALE_EARNING', 50_000],
       ['COMMISSION', -5_000],
@@ -91,7 +91,7 @@ describe('computeListingEconomics', () => {
 
   it('follows the rates it is given, not a compiled-in number', () => {
     const e = computeListingEconomics({
-      sellerPricePaise: 100_000,
+      buyerPricePaise: 100_000,
       rates: {
         commissionPercent: 15,
         gatewayPercent: 0,
@@ -113,6 +113,42 @@ describe('computeListingEconomics', () => {
   });
 });
 
+describe('computeListingEconomics — the seller prices before GST', () => {
+  const SLAB = { taxRule: 'VALUE_SLAB' as const, defaultTaxRatePercent: null };
+
+  it('adds GST on top: seller ₹100 at 18% means the buyer pays ₹118', () => {
+    const e = computeListingEconomics({ sellerPricePaise: 10_000, rates: RATES });
+    expect(e.gstRatePercent).toBe(18);
+    expect(e.gstPaise).toBe(1_800);
+    expect(e.buyerPaysPaise).toBe(11_800);
+    expect(e.exGstPaise).toBe(10_000);
+  });
+
+  it('decides the apparel slab on the seller price itself: ₹2,500 is 5%, a paisa more is 18%', () => {
+    const at = computeListingEconomics({ sellerPricePaise: 250_000, rates: RATES, taxRules: SLAB });
+    expect([at.gstRatePercent, at.buyerPaysPaise]).toEqual([5, 262_500]);
+    const over = computeListingEconomics({ sellerPricePaise: 250_001, rates: RATES, taxRules: SLAB });
+    expect([over.gstRatePercent, over.buyerPaysPaise]).toEqual([18, 295_001]);
+  });
+
+  it('charges books nil', () => {
+    const e = computeListingEconomics({ sellerPricePaise: 49_900, rates: RATES, taxRules: { taxRule: null, defaultTaxRatePercent: 0 } });
+    expect([e.gstPaise, e.buyerPaysPaise]).toEqual([0, 49_900]);
+  });
+
+  it('agrees with the order line the sale becomes', () => {
+    for (const ex of [10_000, 33_333, 250_000, 250_001, 499_999]) {
+      const listed = computeListingEconomics({ sellerPricePaise: ex, rates: RATES, taxRules: SLAB });
+      const sold = computeListingEconomics({ buyerPricePaise: listed.buyerPaysPaise, rates: RATES, taxRules: SLAB });
+      expect([sold.gstRatePercent, sold.gstPaise, sold.exGstPaise], String(ex)).toEqual([
+        listed.gstRatePercent,
+        listed.gstPaise,
+        listed.exGstPaise,
+      ]);
+    }
+  });
+});
+
 describe('percentOf', () => {
   it('rounds half up in paise', () => {
     expect(percentOf(25, 2)).toBe(1); // 0.5 → 1
@@ -127,25 +163,20 @@ describe('gstInclusiveShare', () => {
   });
 });
 
-describe('computeListingEconomics — GST comes from the category, via gstRateFor', () => {
+describe('computeListingEconomics — an order line: GST inside what the buyer paid', () => {
   const SLAB = { taxRule: 'VALUE_SLAB' as const, defaultTaxRatePercent: null };
 
   it('takes 5% out of a ₹2,625 shirt and 18% out of a ₹2,990 one', () => {
-    const cheap = computeListingEconomics({ sellerPricePaise: 262_500, rates: RATES, taxRules: SLAB });
+    const cheap = computeListingEconomics({ buyerPricePaise: 262_500, rates: RATES, taxRules: SLAB });
     expect(cheap.gstRatePercent).toBe(5);
     expect(cheap.gstPaise).toBe(12_500);
-    const dear = computeListingEconomics({ sellerPricePaise: 299_000, rates: RATES, taxRules: SLAB });
+    const dear = computeListingEconomics({ buyerPricePaise: 299_000, rates: RATES, taxRules: SLAB });
     expect(dear.gstRatePercent).toBe(18);
     expect(dear.gstPaise).toBe(45_610);
   });
 
-  it('flags the ambiguous band for the seller', () => {
-    expect(computeListingEconomics({ sellerPricePaise: 280_000, rates: RATES, taxRules: SLAB }).gstSlabBand).not.toBeNull();
-    expect(computeListingEconomics({ sellerPricePaise: 299_000, rates: RATES, taxRules: SLAB }).gstSlabBand).toBeNull();
-  });
-
   it('uses the standard rate before a category is chosen', () => {
-    expect(computeListingEconomics({ sellerPricePaise: 100_000, rates: RATES }).gstRatePercent).toBe(18);
+    expect(computeListingEconomics({ buyerPricePaise: 100_000, rates: RATES }).gstRatePercent).toBe(18);
   });
 });
 
@@ -153,7 +184,7 @@ describe('computeListingEconomics — TDS and TCS on the value ex-GST', () => {
   it('takes them off what the seller sold, not what the buyer paid in tax', () => {
     // A ₹2,625 shirt is ₹2,500 ex-GST at 5%: TDS 0.1% = ₹2.50, TCS 0.5% = ₹12.50.
     const e = computeListingEconomics({
-      sellerPricePaise: 262_500,
+      buyerPricePaise: 262_500,
       rates: RATES,
       taxRules: { taxRule: 'VALUE_SLAB', defaultTaxRatePercent: null },
     });
@@ -163,14 +194,14 @@ describe('computeListingEconomics — TDS and TCS on the value ex-GST', () => {
   });
 
   it('posts TCS as its own ledger line', () => {
-    const e = computeListingEconomics({ sellerPricePaise: 100_000, rates: RATES });
+    const e = computeListingEconomics({ buyerPricePaise: 100_000, rates: RATES });
     expect(e.lines.find((l) => l.key === 'tcs')).toMatchObject({ ledgerType: 'GST_TCS', amountPaise: -424 });
   });
 });
 
 describe('breakdownRows', () => {
   const rows = (price: number, taxRules?: { taxRule: 'VALUE_SLAB'; defaultTaxRatePercent: null }) =>
-    breakdownRows(computeListingEconomics({ sellerPricePaise: price, rates: RATES, taxRules }));
+    breakdownRows(computeListingEconomics({ buyerPricePaise: price, rates: RATES, taxRules }));
 
   it('reads top to bottom in the order the seller follows the money', () => {
     expect(rows(100_000).map((r) => [r.kind, r.label])).toEqual([

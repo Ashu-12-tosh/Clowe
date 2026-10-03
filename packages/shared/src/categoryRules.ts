@@ -74,12 +74,6 @@ export interface GstRate {
   ratePercent: number;
   /** The unit's value net of GST at that rate. */
   exGstUnitPaise: number;
-  /**
-   * Set when a GST-inclusive unit price sits in the band where neither slab is
-   * self-consistent (see gstRateFor) — the seller should know a price at or
-   * below `meritUpToPaise` would be taxed at the merit rate.
-   */
-  slabBand: { fromPaise: number; toPaise: number; meritUpToPaise: number } | null;
 }
 
 /** Rule fields as stored on one category; null / empty = inherit from the parent. */
@@ -198,47 +192,84 @@ export function categoryRuleFieldsFromRow(row: {
 }
 
 /**
- * THE GST rate for one unit. Every place that needs a rate — the seller's
- * pricing breakdown, the ledger, the tax invoice, the admin order view — asks
- * this, with the category's rules and the admin's GST settings; nothing picks
- * a rate of its own, and sellers do not choose one.
+ * THE GST rate for one unit, from the seller's price BEFORE GST. Sellers
+ * enter that price; the buyer pays it plus this GST (buyerPriceFor). Every
+ * place that prices a listing asks this, with the category's rules and the
+ * admin's GST settings; nothing picks a rate of its own.
  *
- * `unitPricePaise` is what the buyer pays for one piece or pair, GST included
- * and after any discount on it (s.15(3)(a) CGST Act: an invoiced discount
- * reduces the value). Clowe prices are GST-inclusive.
- *
- * The value slab is judged on the unit's value EX-GST (s.15: transaction value
- * excludes GST), which makes an inclusive price circular: between threshold ×
- * (1 + merit) and threshold × (1 + standard) — ₹2,625 to ₹2,950 at 5/18% on
- * ₹2,500 — neither rate is self-consistent, and no CBIC guidance covers it.
- * The rule here tests the value at the merit rate: at or under the threshold
- * it is the merit rate, otherwise the standard rate. That never under-collects
- * tax; the price band is reported so the seller can be told.
+ * The value slab is judged on the ex-GST value (s.15 CGST Act: transaction
+ * value excludes GST), which is now exactly the number entered: at or under
+ * the threshold it is the merit rate, above it the standard rate.
  */
-export function gstRateFor(
+export function gstRateForExGst(
+  exGstUnitPaise: number,
+  rules: Pick<CategoryRules, 'taxRule' | 'defaultTaxRatePercent'> | null | undefined,
+  gst: GstSettings,
+): GstRate {
+  const ex = Math.max(0, Math.round(exGstUnitPaise));
+  if (rules?.taxRule === 'VALUE_SLAB') {
+    return { ratePercent: ex <= gst.valueSlabThresholdPaise ? gst.meritPercent : gst.standardPercent, exGstUnitPaise: ex };
+  }
+  return { ratePercent: rules?.defaultTaxRatePercent ?? gst.standardPercent, exGstUnitPaise: ex };
+}
+
+/** What the buyer pays for one unit: the seller's price plus GST on it. */
+export function buyerPriceFor(
+  exGstUnitPaise: number,
+  rules: Pick<CategoryRules, 'taxRule' | 'defaultTaxRatePercent'> | null | undefined,
+  gst: GstSettings,
+): { exGstPaise: number; gstPaise: number; buyerPaise: number; ratePercent: number } {
+  const { ratePercent, exGstUnitPaise: ex } = gstRateForExGst(exGstUnitPaise, rules, gst);
+  const gstPaise = Math.round((ex * ratePercent) / 100);
+  return { exGstPaise: ex, gstPaise, buyerPaise: ex + gstPaise, ratePercent };
+}
+
+/**
+ * The rate for a unit known only by what the buyer paid, GST included: an
+ * order line, an invoice, a listing priced before sellers entered ex-GST.
+ *
+ * Inverting an inclusive price through the value slab is circular: between
+ * threshold × (1 + merit) and threshold × (1 + standard) — ₹2,625 to ₹2,950
+ * at 5/18% on ₹2,500 — neither rate is self-consistent. The rule tests the
+ * value at the merit rate: at or under the threshold it is the merit rate,
+ * otherwise the standard rate, which never under-collects. A price that came
+ * from buyerPriceFor is never in that band, so for it this returns exactly
+ * the rate and ex-GST value it was built from.
+ */
+export function gstRateForInclusive(
   unitPricePaise: number,
   rules: Pick<CategoryRules, 'taxRule' | 'defaultTaxRatePercent'> | null | undefined,
   gst: GstSettings,
 ): GstRate {
   const price = Math.max(0, Math.round(unitPricePaise));
   const exAt = (rate: number) => Math.round((price * 100) / (100 + rate));
-
   if (rules?.taxRule === 'VALUE_SLAB') {
-    const threshold = gst.valueSlabThresholdPaise;
     // Integer comparison: price/(1+m) <= threshold  ⇔  price*100 <= threshold*(100+m).
-    if (price * 100 <= threshold * (100 + gst.meritPercent)) {
-      return { ratePercent: gst.meritPercent, exGstUnitPaise: exAt(gst.meritPercent), slabBand: null };
-    }
-    const meritUpTo = Math.floor((threshold * (100 + gst.meritPercent)) / 100);
-    const bandTop = Math.floor((threshold * (100 + gst.standardPercent)) / 100);
-    return {
-      ratePercent: gst.standardPercent,
-      exGstUnitPaise: exAt(gst.standardPercent),
-      slabBand: price <= bandTop ? { fromPaise: meritUpTo + 1, toPaise: bandTop, meritUpToPaise: meritUpTo } : null,
-    };
+    const rate = price * 100 <= gst.valueSlabThresholdPaise * (100 + gst.meritPercent) ? gst.meritPercent : gst.standardPercent;
+    return { ratePercent: rate, exGstUnitPaise: exAt(rate) };
   }
   const rate = rules?.defaultTaxRatePercent ?? gst.standardPercent;
-  return { ratePercent: rate, exGstUnitPaise: exAt(rate), slabBand: null };
+  return { ratePercent: rate, exGstUnitPaise: exAt(rate) };
+}
+
+/**
+ * The seller's price before GST behind a GST-inclusive buyer price, for a
+ * listing priced before sellers entered ex-GST. `ambiguous` marks a price in
+ * the value-slab band (see gstRateForInclusive): the ex-GST value found is
+ * taxed at the standard rate although on its own it would be at the merit
+ * rate, so re-saving it at that ex-GST price would lower the buyer price.
+ */
+export function sellerPriceFromBuyer(
+  buyerPaise: number,
+  rules: Pick<CategoryRules, 'taxRule' | 'defaultTaxRatePercent'> | null | undefined,
+  gst: GstSettings,
+): { exGstPaise: number; ratePercent: number; ambiguous: boolean } {
+  const { ratePercent, exGstUnitPaise } = gstRateForInclusive(buyerPaise, rules, gst);
+  const ambiguous =
+    rules?.taxRule === 'VALUE_SLAB' &&
+    ratePercent === gst.standardPercent &&
+    exGstUnitPaise <= gst.valueSlabThresholdPaise;
+  return { exGstPaise: exGstUnitPaise, ratePercent, ambiguous };
 }
 
 /** How a category's GST reads in a form, e.g. "5% up to ₹2,500, 18% above" or "18%". */

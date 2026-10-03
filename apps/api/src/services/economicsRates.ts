@@ -1,6 +1,6 @@
 import type { GstSettings, PlatformSettings, SellerEconomicsRates } from '@clowe/shared';
 
-/** The GST settings gstRateFor needs, from platform settings. */
+/** The GST settings the rate functions need, from platform settings. */
 export function gstSettings(settings: PlatformSettings): GstSettings {
   return {
     meritPercent: settings.gstMeritPercent,

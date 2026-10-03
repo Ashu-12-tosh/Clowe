@@ -52,8 +52,9 @@ const ROW: Record<BreakdownRowKind, { cell: string; label: string; amount: strin
 /**
  * What a price pays the seller, live. Runs the same shared calculator the
  * ledger posts from, with the rates fetched once, so what the form promises
- * is exactly what delivery will post. `listingPricePaise` follows the
- * cheapest variant; the seller can also type any price to try it.
+ * is exactly what delivery will post. Prices here are the seller's, before
+ * GST: `listingPricePaise` follows the cheapest variant, and the seller can
+ * also type any price to try it.
  */
 export function PricingBreakdown({
   listingPricePaise,
@@ -89,7 +90,7 @@ export function PricingBreakdown({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-semibold text-ink-900">What this price pays you</p>
         <label className="flex items-center gap-1.5 text-gray-500">
-          Try a price ₹
+          Try a price before GST ₹
           <input
             type="number"
             min={0}
@@ -127,16 +128,6 @@ export function PricingBreakdown({
             );
           })}
         </dl>
-      )}
-
-      {economics?.gstSlabBand && (
-        // The value-slab band where neither GST rate is self-consistent: say
-        // what the seller can do about it, in their own numbers.
-        <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] text-amber-800">
-          Priced between {money(economics.gstSlabBand.fromPaise)} and {money(economics.gstSlabBand.toPaise)}, this
-          item is taxed at {economics.gstRatePercent}%. At {money(economics.gstSlabBand.meritUpToPaise)} or less it
-          would be {rates!.gst.meritPercent}%.
-        </p>
       )}
 
       <p className="mt-2 text-[11px] text-gray-400">
