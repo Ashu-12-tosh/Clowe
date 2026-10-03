@@ -883,7 +883,7 @@ function OrderDrawer({
     void load();
   }, [load]);
 
-  async function advance(status: AdminOrderStatus) {
+  async function advance(status: AdminOrderStatus, noClipReason?: string) {
     setBusy(true);
     try {
       await api(`/api/admin/orders/${orderId}/status`, {
@@ -892,6 +892,7 @@ function OrderDrawer({
         body: {
           status,
           ...(status === 'SHIPPED' ? { trackingNumber: awb, courier } : {}),
+          ...(noClipReason ? { noClipReason } : {}),
         },
       });
       flash(`Order moved to ${ADMIN_ORDER_STATUS_LABELS[status]}.`);
@@ -901,6 +902,18 @@ function OrderDrawer({
       await load();
       await onChanged();
     } catch (err) {
+      // No packing video: the desk may go ahead, but only with a reason on record.
+      if (err instanceof ApiRequestError && err.code === 'PACKING_VIDEO_REQUIRED' && !noClipReason) {
+        const reason = window.prompt(`${err.message}\n\nReason:`);
+        setBusy(false);
+        if (reason === null) return;
+        if (reason.trim().length < 5) {
+          flash('Give a reason of at least 5 characters.');
+          return;
+        }
+        await advance(status, reason.trim());
+        return;
+      }
       flash(err instanceof ApiRequestError ? err.message : 'Could not update that order.');
     } finally {
       setBusy(false);

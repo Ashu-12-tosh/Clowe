@@ -143,6 +143,40 @@ describe('dispatch', () => {
     expect((await prisma.orderItem.findUniqueOrThrow({ where: { id: itemId } })).status).toBe('PACKED');
   });
 
+  it('lets an admin mark packed or shipped without the clip only with a reason, on the audit log', async () => {
+    const s = await seller();
+    const buyer = await shopper();
+    const { orderId, itemId } = await order(s, buyer.id);
+    const move = (body: Record<string, unknown>) => call('PATCH', `/api/admin/orders/${orderId}/status`, adminToken, body);
+    const { shopName } = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: s.sellerId } });
+
+    for (const status of ['PACKED', 'SHIPPED', 'DELIVERED']) {
+      const refused = await move({ status });
+      expect(refused.status).toBe(400);
+      expect(refused.json.error?.code).toBe('PACKING_VIDEO_REQUIRED');
+      expect(refused.json.error?.message).toContain(shopName);
+    }
+    expect((await move({ status: 'PACKED', noClipReason: 'abc' })).status).toBe(400); // too short to explain anything
+    expect((await prisma.orderItem.findUniqueOrThrow({ where: { id: itemId } })).status).toBe('CONFIRMED');
+
+    const reason = 'Seller packed on a video call with support';
+    expect((await move({ status: 'PACKED', noClipReason: reason })).status).toBe(200);
+    expect((await prisma.orderItem.findUniqueOrThrow({ where: { id: itemId } })).status).toBe('PACKED');
+    await new Promise((r) => setTimeout(r, 200));
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: 'Packing video overridden', entityId: orderId },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(audit).toMatchObject({ module: 'ORDERS', severity: 'HIGH' });
+    expect(audit?.metadata).toMatchObject({ status: 'PACKED', reason, sellerIds: [s.sellerId], itemIds: [itemId] });
+
+    // With the clip recorded, no reason is asked for and nothing is overridden.
+    const ref = await uploadClip(s.token);
+    expect((await call('POST', `/api/seller/orders/${orderId}/packing-video`, s.token, { ref })).status).toBe(200);
+    expect((await move({ status: 'SHIPPED' })).status).toBe(200);
+    expect(await prisma.auditLog.count({ where: { action: 'Packing video overridden', entityId: orderId } })).toBe(1);
+  });
+
   it("takes only the seller's own upload, and no swap once something has shipped", async () => {
     const s = await seller();
     const other = await seller();

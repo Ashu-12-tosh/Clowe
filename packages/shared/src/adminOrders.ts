@@ -285,6 +285,11 @@ export const adminOrderStatusSchema = z.object({
   trackingNumber: z.string().trim().max(60).optional().or(z.literal('')),
   courier: z.string().trim().max(60).optional().or(z.literal('')),
   note: z.string().trim().max(300).optional().or(z.literal('')),
+  /**
+   * Packing or shipping a line whose seller has not recorded the packing
+   * video is allowed from the desk only with this, and it goes on the audit log.
+   */
+  noClipReason: z.string().trim().min(5, 'Give a reason (min 5 chars)').max(300).optional(),
 });
 export type AdminOrderStatusInput = z.infer<typeof adminOrderStatusSchema>;
 

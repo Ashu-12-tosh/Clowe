@@ -42,6 +42,8 @@ import {
 } from '../services/orderStatusService';
 import { postDeliveryEntries } from '../services/sellerLedgerService';
 import { chargeLateDispatchIfDue } from '../services/lateDispatch';
+import { hasPackingVideo } from '../services/packingVideos';
+import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
 import { createManualOrder } from '../services/manualOrderService';
 import { returnStock } from '../services/stockService';
 
@@ -595,6 +597,29 @@ adminOrdersRouter.patch('/:id/status', async (req, res, next) => {
       }
     }
 
+    // Packing or shipping from the desk is still the seller's packing and
+    // dispatch, which need the order's packing video. Without it, only with a
+    // reason, and the reason goes on the audit log.
+    const packingNow = targets.filter(
+      (t) => FORWARD[t.status]! < FORWARD.SHIPPED! && FORWARD[input.status]! >= FORWARD.PACKED!,
+    );
+    const sellersWithoutClip: string[] = [];
+    for (const sellerId of new Set(packingNow.map((t) => t.sellerId))) {
+      if (!(await hasPackingVideo(order.id, sellerId))) sellersWithoutClip.push(sellerId);
+    }
+    const label = ADMIN_ORDER_STATUS_LABELS[input.status].toLowerCase();
+    if (sellersWithoutClip.length > 0 && !input.noClipReason) {
+      const shops = await prisma.sellerProfile.findMany({
+        where: { id: { in: sellersWithoutClip } },
+        select: { shopName: true },
+      });
+      throw new ApiError(
+        400,
+        'PACKING_VIDEO_REQUIRED',
+        `${shops.map((s) => s.shopName).join(', ')} has not recorded the packing video for this order. Give a reason to mark it ${label} without it; the reason goes on the audit log.`,
+      );
+    }
+
     await prisma.orderItem.updateMany({
       where: { id: { in: targets.map((t) => t.id) } },
       data: {
@@ -609,6 +634,24 @@ adminOrdersRouter.patch('/:id/status', async (req, res, next) => {
       await prisma.order.update({
         where: { id: order.id },
         data: { adminNote: input.note },
+      });
+    }
+
+    if (sellersWithoutClip.length > 0) {
+      const itemIds = packingNow.filter((t) => sellersWithoutClip.includes(t.sellerId)).map((t) => t.id);
+      auditSafe({
+        actorId: req.auth!.userId,
+        actorRole: 'ADMIN',
+        module: 'ORDERS',
+        action: 'Packing video overridden',
+        entityType: 'Order',
+        entityId: order.id,
+        summary: `Marked ${order.orderNumber} ${label} without the seller's packing video: ${input.noClipReason}`,
+        metadata: { status: input.status, sellerIds: sellersWithoutClip, itemIds, reason: input.noClipReason },
+        severity: 'HIGH',
+        ipAddress: ipFrom(req),
+        userAgent: req.get('user-agent') ?? null,
+        deviceType: deviceFromUserAgent(req.get('user-agent')),
       });
     }
 
