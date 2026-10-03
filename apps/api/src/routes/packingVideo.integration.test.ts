@@ -124,6 +124,25 @@ describe('dispatch', () => {
     expect((await prisma.orderItem.findUniqueOrThrow({ where: { id: itemId } })).status).toBe('SHIPPED');
   });
 
+  it('gates "Mark packed" and "Mark all packed" the same way', async () => {
+    const s = await seller();
+    const buyer = await shopper();
+    const { orderId, itemId } = await order(s, buyer.id);
+
+    const refused = await call('PATCH', `/api/seller/orders/${itemId}/status`, s.token, { action: 'pack' });
+    expect(refused.status).toBe(400);
+    expect(refused.json.error).toEqual({ code: 'PACKING_VIDEO_REQUIRED', message: PACKING_VIDEO_REQUIRED_MESSAGE });
+    const bulk = await call('POST', '/api/seller/orders/bulk', s.token, { itemIds: [itemId], action: 'pack' });
+    expect(bulk.json.data).toEqual({ updated: 0, skipped: [{ itemId, reason: PACKING_VIDEO_REQUIRED_MESSAGE }] });
+    expect((await prisma.orderItem.findUniqueOrThrow({ where: { id: itemId } })).status).toBe('CONFIRMED');
+
+    const ref = await uploadClip(s.token);
+    expect((await call('POST', `/api/seller/orders/${orderId}/packing-video`, s.token, { ref })).status).toBe(200);
+    const packed = await call('POST', '/api/seller/orders/bulk', s.token, { itemIds: [itemId], action: 'pack' });
+    expect(packed.json.data).toEqual({ updated: 1, skipped: [] });
+    expect((await prisma.orderItem.findUniqueOrThrow({ where: { id: itemId } })).status).toBe('PACKED');
+  });
+
   it("takes only the seller's own upload, and no swap once something has shipped", async () => {
     const s = await seller();
     const other = await seller();

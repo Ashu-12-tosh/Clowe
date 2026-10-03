@@ -53,7 +53,7 @@ export function PackingVideoPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-bold text-ink-900">
-            🎥 Packing video {present ? '' : '— needed before you ship'}
+            🎥 Packing video {present ? '' : '— needed before you pack or ship'}
           </p>
           <p className="mt-0.5 text-xs text-gray-600">
             {present

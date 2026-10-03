@@ -207,7 +207,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
             locked={dispatched && hasClip}
             onChange={(packingVideo) => setOrder((o) => (o ? { ...o, packingVideo } : o))}
           />
-          {shippable > 0 && !hasClip && (
+          {(packable > 0 || shippable > 0) && !hasClip && (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800" data-ship-blocked>
               {PACKING_VIDEO_REQUIRED_MESSAGE}
             </p>
@@ -219,7 +219,8 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
               </p>
               {packable > 0 && (
                 <button
-                  disabled={busy !== null}
+                  disabled={busy !== null || !hasClip}
+                  title={hasClip ? undefined : PACKING_VIDEO_REQUIRED_MESSAGE}
                   onClick={() => void actAll('pack')}
                   className="rounded-lg border border-ink-900 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide hover:bg-cream-100 disabled:opacity-50"
                 >
@@ -322,7 +323,8 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
               <div className="mt-3 flex flex-wrap gap-2">
                 {line.canPack && (
                   <button
-                    disabled={busy !== null}
+                    disabled={busy !== null || !hasClip}
+                    title={hasClip ? undefined : PACKING_VIDEO_REQUIRED_MESSAGE}
                     onClick={() => void act(line.id, 'pack')}
                     className="rounded-lg border border-ink-900 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide hover:bg-cream-100 disabled:opacity-50"
                   >

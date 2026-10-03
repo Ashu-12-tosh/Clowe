@@ -299,4 +299,4 @@ export type PackingVideoAttachInput = z.infer<typeof packingVideoAttachSchema>;
 
 /** Why "Mark shipped" is refused, in the seller's terms. */
 export const PACKING_VIDEO_REQUIRED_MESSAGE =
-  'Record the packing video for this order before you ship it: it shows what went into the box if a return is disputed.';
+  'Record the packing video for this order before you pack or ship it: it shows what went into the box if a return is disputed.';

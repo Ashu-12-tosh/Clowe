@@ -478,6 +478,8 @@ async function applyAction(
 
   if (action === 'pack') {
     if (item.status !== 'CONFIRMED') return `Cannot pack an item in status ${item.status}`;
+    // Packed means it went into the box, which is what the clip shows.
+    if (!(await hasPackingVideo(item.orderId, item.sellerId))) return PACKING_VIDEO_REQUIRED_MESSAGE;
     await prisma.$transaction([
       prisma.orderItem.update({
         where: { id: item.id },
