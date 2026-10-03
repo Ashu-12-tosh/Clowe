@@ -844,6 +844,10 @@ model Product {
   /// treating it as drift — without this line every future `migrate dev`
   /// generates a DROP for it and silently removes full-text search.
   searchVector    Unsupported("tsvector")?
+  /// Every colour the variants come in, names and families ("Navy Blue"),
+  /// for the search vector. Kept in step by a trigger on product_variants
+  /// (the search_colors migration); never written by the app.
+  searchColors    String        @default("")
   // Seller's own switch — hides an approved listing without archiving it.
   isVisible       Boolean       @default(true)
   // Seller opt-in for AI Try-On; only honoured in try-on eligible categories.
