@@ -34,6 +34,8 @@ export default function AdminSettingsPage() {
   });
   const [couponsEnabled, setCouponsEnabled] = useState(false);
   const [dispatch, setDispatch] = useState({ slaHours: '', afterHours: '', penaltyRupees: '', enabled: true });
+  // Read-only: set by the migration that introduced the per-order penalty.
+  const [penaltyFrom, setPenaltyFrom] = useState<string | null>(null);
   const [economics, setEconomics] = useState({
     gstMerit: '',
     gstStandard: '',
@@ -75,6 +77,7 @@ export default function AdminSettingsPage() {
           penaltyRupees: toRupees(s.lateDispatchPenaltyPaise),
           enabled: s.penaltyEnabled,
         });
+        setPenaltyFrom(s.lateDispatchPenaltyEffectiveFrom);
         setPayout({
           commission: String(s.payoutCommissionPercent),
           gateway: String(s.payoutGatewayPercent),
@@ -328,6 +331,15 @@ export default function AdminSettingsPage() {
         </div>
         <p className="mt-2 text-xs text-gray-400">
           Switching it off stops new penalties; entries already on a ledger stay as they are.
+        </p>
+        <p className="mt-1 text-xs text-gray-600" data-penalty-effective-from>
+          {penaltyFrom
+            ? `Applies to orders placed on or after ${new Date(penaltyFrom).toLocaleString('en-IN', {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+                timeZone: 'Asia/Kolkata',
+              })} IST, when the per-order rule went live. Older orders are never charged.`
+            : 'Applies to every order.'}
         </p>
       </div>
 

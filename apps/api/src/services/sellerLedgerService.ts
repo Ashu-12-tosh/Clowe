@@ -316,6 +316,7 @@ export async function penaltiesView(
       penaltyPaise: settings.lateDispatchPenaltyPaise,
       afterHours: settings.lateDispatchPenaltyAfterHours,
       slaHours: settings.dispatchSlaHours,
+      effectiveFrom: settings.lateDispatchPenaltyEffectiveFrom,
     },
     rows: shown.map((p) => {
       const item = p.orderItemId ? itemById.get(p.orderItemId) : undefined;

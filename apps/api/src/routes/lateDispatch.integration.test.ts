@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus, type OrderStatus } from '@prisma/client';
@@ -29,11 +31,20 @@ let seq = 0;
 const HOUR = 3_600_000;
 const PENALTY = DEFAULT_SETTINGS.lateDispatchPenaltyPaise;
 
+/**
+ * The migrated test database carries lateDispatchPenaltyEffectiveFrom = the
+ * moment it was migrated, and these tests place orders in the past. Every
+ * test but the effective-time ones runs with it cleared (every order counts).
+ */
+const clearEffectiveFrom = () =>
+  prisma.platformSetting.deleteMany({ where: { key: 'lateDispatchPenaltyEffectiveFrom' } });
+
 beforeAll(async () => {
   await seedFixture(prisma);
   const category = await prisma.category.findFirst({ where: { isActive: true } });
   if (!category) throw new Error('fixture produced no active category');
   categoryId = category.id;
+  await clearEffectiveFrom();
   server = createApp().listen(0);
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -43,6 +54,7 @@ afterEach(async () => {
   await setSetting('dispatchSlaHours', DEFAULT_SETTINGS.dispatchSlaHours);
   await setSetting('lateDispatchPenaltyAfterHours', DEFAULT_SETTINGS.lateDispatchPenaltyAfterHours);
   await setSetting('lateDispatchPenaltyPaise', DEFAULT_SETTINGS.lateDispatchPenaltyPaise);
+  await clearEffectiveFrom();
 });
 
 afterAll(async () => {
@@ -422,7 +434,7 @@ describe('what the seller sees', () => {
       rule: Record<string, unknown>;
       rows: { orderNumber: string; amountPaise: number; reason: string; waived: boolean }[];
     };
-    expect(view.rule).toEqual({ enabled: true, penaltyPaise: PENALTY, afterHours: 24, slaHours: 18 });
+    expect(view.rule).toEqual({ enabled: true, penaltyPaise: PENALTY, afterHours: 24, slaHours: 18, effectiveFrom: null });
     expect(view.rows).toEqual([
       expect.objectContaining({
         orderNumber: order.orderNumber,
@@ -442,6 +454,54 @@ describe('what the seller sees', () => {
       ((await call('GET', '/api/seller/ledger/penalties', t)).json.data as unknown as { total: number }).total;
     expect(await total(s.token)).toBe(1);
     expect(await total(other.token)).toBe(0);
+  });
+});
+
+describe('the effective time', () => {
+  const migration = fs.readFileSync(
+    path.resolve(__dirname, '../../prisma/migrations/20261010120000_late_dispatch_effective_from/migration.sql'),
+    'utf8',
+  );
+
+  it('is set by the migration to the moment it runs, and shown to admins', async () => {
+    const before = Date.now();
+    await prisma.$executeRawUnsafe(migration.replace(/^--.*$/gm, ''));
+    const row = await prisma.platformSetting.findUniqueOrThrow({ where: { key: 'lateDispatchPenaltyEffectiveFrom' } });
+    const at = new Date(row.value as string).getTime();
+    expect(at).toBeGreaterThanOrEqual(before - 5_000);
+    expect(at).toBeLessThanOrEqual(Date.now() + 5_000);
+
+    const admin = await makeAdmin();
+    const settings = (await call('GET', '/api/admin/settings', admin.token)).json.data as unknown as Record<string, unknown>;
+    expect(settings.lateDispatchPenaltyEffectiveFrom).toBe(row.value);
+  });
+
+  it('never charges an order placed before it, late by 200h; charges one placed after it', async () => {
+    const from = new Date(Date.now() - 100 * HOUR).toISOString();
+    await setSetting('lateDispatchPenaltyEffectiveFrom', from);
+    const s = await makeSeller();
+    const old = await makeOrder(s, 224, { lines: 2 }); // placed before; 200h past its deadline
+    const recent = await makeOrder(s, 50); // placed after; 26h past its deadline
+
+    await sweepLateDispatch();
+    await sweepLateDispatch(hoursFromNow(500));
+    expect(await penaltiesOf(old.order.id)).toHaveLength(0);
+    expect(await penaltiesOf(recent.order.id)).toHaveLength(1);
+
+    // Not at ship time either, and the seller is shown no penalty clock for it.
+    const clock = ((await call('GET', `/api/seller/orders/${old.order.id}`, s.token)).json.data as unknown as {
+      dispatch: { penaltyEnabled: boolean; penaltyAt: string | null };
+    }).dispatch;
+    expect(clock).toMatchObject({ penaltyEnabled: false, penaltyAt: null });
+    expect((await ship(s, old.items[0].id)).status).toBe(200);
+    expect(await chargeLateDispatchIfDue(old.order.id, s.sellerId)).toBe(false);
+    expect(await penaltiesOf(old.order.id)).toHaveLength(0);
+    expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(-PENALTY);
+
+    const view = (await call('GET', '/api/seller/ledger/penalties', s.token)).json.data as unknown as {
+      rule: { effectiveFrom: string | null };
+    };
+    expect(view.rule.effectiveFrom).toBe(from);
   });
 });
 

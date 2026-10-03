@@ -88,6 +88,8 @@ export interface LateDispatchRule {
   afterHours: number;
   /** The dispatch promise, earlier than the penalty. */
   slaHours: number;
+  /** Orders placed before this (ISO) are never charged; null when every order is. */
+  effectiveFrom: string | null;
 }
 
 /** One late-dispatch penalty and whether it was forgiven. */

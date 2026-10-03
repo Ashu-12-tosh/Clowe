@@ -49,7 +49,16 @@ export function PenaltiesPanel({ refreshKey = 0 }: { refreshKey?: number }) {
             {!rule
               ? 'Late-dispatch penalties and why they were charged.'
               : rule.enabled
-                ? `${formatPaise(rule.penaltyPaise)} per order not dispatched within ${rule.afterHours} hours of being placed (the dispatch promise is ${rule.slaHours} hours). It is charged when the ${rule.afterHours} hours run out, shipped or not, comes off your settlement balance, and is paused while your store is on vacation. Support can waive it if the delay was not yours.`
+                ? `${formatPaise(rule.penaltyPaise)} per order not dispatched within ${rule.afterHours} hours of being placed (the dispatch promise is ${rule.slaHours} hours). It is charged when the ${rule.afterHours} hours run out, shipped or not, comes off your settlement balance, and is paused while your store is on vacation. Support can waive it if the delay was not yours.${
+                    rule.effectiveFrom
+                      ? ` It applies to orders placed from ${new Date(rule.effectiveFrom).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          timeZone: 'Asia/Kolkata',
+                        })}.`
+                      : ''
+                  }`
                 : `Late-dispatch penalties are switched off right now. When on, each order not dispatched within ${rule.afterHours} hours of being placed costs ${formatPaise(rule.penaltyPaise)}.`}
           </p>
         </div>

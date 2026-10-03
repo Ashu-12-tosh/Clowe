@@ -26,6 +26,15 @@ import { latePenaltyKey, postEntry } from './sellerLedgerService';
 const HOUR_MS = 3_600_000;
 const AWAITING_DISPATCH = new Set(['CONFIRMED', 'PACKED']);
 
+/**
+ * Orders placed before lateDispatchPenaltyEffectiveFrom are never charged:
+ * the rule applies from the moment it was introduced, not retroactively.
+ */
+function penaltyApplies(placedAt: Date, settings: Pick<PlatformSettings, 'lateDispatchPenaltyEffectiveFrom'>): boolean {
+  const from = settings.lateDispatchPenaltyEffectiveFrom;
+  return !from || placedAt.getTime() >= new Date(from).getTime();
+}
+
 /** How often the sweep looks for orders whose deadline has passed. */
 export const LATE_DISPATCH_SWEEP_MS = 5 * 60_000;
 
@@ -63,6 +72,7 @@ export async function chargeLateDispatchIfDue(orderId: string, sellerId: string,
     prisma.sellerLedgerEntry.count({ where: { sellerId, orderId, type: 'LATE_DISPATCH_PENALTY' } }),
   ]);
   if (!order || !seller || already > 0 || order.items.length === 0) return false;
+  if (!penaltyApplies(order.createdAt, settings)) return false;
 
   const afterHours = settings.lateDispatchPenaltyAfterHours;
   const deadline = penaltyDeadline(order.createdAt, afterHours, vacationSpan(seller));
@@ -94,8 +104,12 @@ export async function sweepLateDispatch(now = new Date()): Promise<number> {
   const settings = await getSettings();
   if (!settings.penaltyEnabled || settings.lateDispatchPenaltyPaise <= 0) return 0;
   const cutoff = new Date(now.getTime() - settings.lateDispatchPenaltyAfterHours * HOUR_MS);
+  const from = settings.lateDispatchPenaltyEffectiveFrom;
   const pairs = await prisma.orderItem.findMany({
-    where: { status: { in: ['CONFIRMED', 'PACKED'] }, order: { createdAt: { lt: cutoff } } },
+    where: {
+      status: { in: ['CONFIRMED', 'PACKED'] },
+      order: { createdAt: { lt: cutoff, ...(from ? { gte: new Date(from) } : {}) } },
+    },
     select: { orderId: true, sellerId: true },
     distinct: ['orderId', 'sellerId'],
   });
@@ -129,19 +143,21 @@ export function dispatchClock(input: {
   lines: DispatchLine[];
   settings: Pick<
     PlatformSettings,
-    'dispatchSlaHours' | 'lateDispatchPenaltyAfterHours' | 'penaltyEnabled'
+    'dispatchSlaHours' | 'lateDispatchPenaltyAfterHours' | 'penaltyEnabled' | 'lateDispatchPenaltyEffectiveFrom'
   >;
   vacation: VacationSpan | null;
   penaltyCharged: boolean;
 }): SellerDispatchClock | null {
   if (!input.lines.some((l) => AWAITING_DISPATCH.has(l.status))) return null;
   const { settings } = input;
+  // An order from before the rule took effect has no penalty to count down to.
+  const enabled = settings.penaltyEnabled && penaltyApplies(input.placedAt, settings);
   const deadline = penaltyDeadline(input.placedAt, settings.lateDispatchPenaltyAfterHours, input.vacation);
   return {
     dispatchBy: dispatchSlaDeadline(input.placedAt, settings.dispatchSlaHours).toISOString(),
-    penaltyAt: settings.penaltyEnabled && deadline ? deadline.toISOString() : null,
-    penaltyEnabled: settings.penaltyEnabled,
-    penaltyPaused: settings.penaltyEnabled && deadline === null,
+    penaltyAt: enabled && deadline ? deadline.toISOString() : null,
+    penaltyEnabled: enabled,
+    penaltyPaused: enabled && deadline === null,
     penaltyCharged: input.penaltyCharged,
   };
 }

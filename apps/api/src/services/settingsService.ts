@@ -30,6 +30,8 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   dispatchSlaHours: 18,
   lateDispatchPenaltyAfterHours: 24,
   lateDispatchPenaltyPaise: 8000, // ₹80 per order
+  // Set to the moment it ran by migration 20261010120000; null = every order.
+  lateDispatchPenaltyEffectiveFrom: null,
   penaltyEnabled: true,
   // GST 2.0, Notification 9/2025-Central Tax (Rate), in force 22.09.2025.
   gstMeritPercent: 5,
@@ -115,6 +117,9 @@ export async function getSettings(): Promise<PlatformSettings> {
     lateDispatchPenaltyAfterHours:
       (byKey.get('lateDispatchPenaltyAfterHours') as number | undefined) ??
       DEFAULT_SETTINGS.lateDispatchPenaltyAfterHours,
+    lateDispatchPenaltyEffectiveFrom:
+      (byKey.get('lateDispatchPenaltyEffectiveFrom') as string | null | undefined) ??
+      DEFAULT_SETTINGS.lateDispatchPenaltyEffectiveFrom,
     lateDispatchPenaltyPaise:
       (byKey.get('lateDispatchPenaltyPaise') as number | undefined) ??
       DEFAULT_SETTINGS.lateDispatchPenaltyPaise,

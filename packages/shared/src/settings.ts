@@ -67,6 +67,12 @@ export interface PlatformSettings {
   lateDispatchPenaltyAfterHours: number;
   /** Posted to the seller's ledger once per order when the penalty falls due (paise). */
   lateDispatchPenaltyPaise: number;
+  /**
+   * ISO time from which the penalty applies: orders placed before it are
+   * never charged. Set by the migration that introduced the per-order rule,
+   * so switching it on charged nothing retroactively. Null: every order.
+   */
+  lateDispatchPenaltyEffectiveFrom: string | null;
   /** Off = late lines post nothing; entries already posted are untouched. */
   penaltyEnabled: boolean;
   /**
