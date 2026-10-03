@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { phoneSchema } from './auth';
+import { ORDER_NUMBER_PATTERN } from './orderNumber';
 
 // ---------------------------------------------------------------------------
 // Referral program
@@ -106,7 +107,7 @@ export const trackOrderSchema = z.object({
   orderNumber: z
     .string()
     .trim()
-    .regex(/^CLW-\d{4}-\d{6}$/i, 'Order number looks like CLW-2026-123456'),
+    .regex(ORDER_NUMBER_PATTERN, 'Check the order number: it is on your order confirmation, e.g. CLW-7KQ3MX9P2T'),
   phone: phoneSchema,
 });
 export type TrackOrderInput = z.infer<typeof trackOrderSchema>;

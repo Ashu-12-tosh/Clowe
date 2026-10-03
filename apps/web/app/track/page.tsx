@@ -46,7 +46,7 @@ function TrackPageInner() {
         <input
           value={orderNumber}
           onChange={(e) => setOrderNumber(e.target.value.toUpperCase())}
-          placeholder="Order number (CLW-2026-123456)"
+          placeholder="Order number (e.g. CLW-7KQ3MX9P2T)"
           className="flex-1 rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-brand-600"
         />
         <input

@@ -365,7 +365,7 @@ export default function SellerSupportPage() {
               <input
                 value={form.orderNumber}
                 onChange={(e) => setForm((f) => ({ ...f, orderNumber: e.target.value }))}
-                placeholder="CLW-2026-000123"
+                placeholder="CLW-7KQ3MX9P2T"
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600"
               />
             </div>

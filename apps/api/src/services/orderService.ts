@@ -1,16 +1,14 @@
 import { randomInt } from 'node:crypto';
-import { creditsEarnedFor, creditsToPaise, istDate, REFERRAL_REWARD_CREDITS } from '@clowe/shared';
+import { creditsEarnedFor, creditsToPaise, newOrderNumber, REFERRAL_REWARD_CREDITS } from '@clowe/shared';
 import { prisma } from '../db';
 import { sendMessageSafe, sendToUserSafe } from './messaging';
 import { creditExpiryFrom } from '../routes/credits';
 import { returnStock } from './stockService';
 
-/** Human-friendly unique order number, e.g. CLW-2026-482913. */
+/** Unique order number for a new order, e.g. CLW-7KQ3MX9P2T (random, not in sequence). */
 export async function generateOrderNumber(): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt++) {
-    const candidate = `CLW-${istDate(new Date()).year}-${randomInt(0, 1_000_000)
-      .toString()
-      .padStart(6, '0')}`;
+    const candidate = newOrderNumber(randomInt);
     const exists = await prisma.order.findUnique({ where: { orderNumber: candidate } });
     if (!exists) return candidate;
   }
