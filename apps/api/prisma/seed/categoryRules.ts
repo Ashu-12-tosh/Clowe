@@ -50,7 +50,8 @@ export const ROOT_RULES: Record<string, RootRules> = {
     taxRule: null,
     defaultTaxRatePercent: 18,
     hsnCode: '8471',
-    returnWindowDays: 10,
+    // Follows the platform window since 2026-10-09; it used to set its own.
+    returnWindowDays: null,
   },
   mobiles: {
     variantAxes: [COLOR, { key: 'storage', label: 'Storage', values: ['64GB', '128GB', '256GB', '512GB'] }, { key: 'ram', label: 'RAM', values: ['4GB', '6GB', '8GB', '12GB'] }],

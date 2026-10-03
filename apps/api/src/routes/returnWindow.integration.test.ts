@@ -303,3 +303,31 @@ describe('the migration backfill', () => {
     expect(await windowOf(fromPlatform)).toBe(7);
   });
 });
+
+describe('category windows', () => {
+  const migration = fs.readFileSync(
+    path.resolve(__dirname, '../../prisma/migrations/20261009120000_electronics_return_window/migration.sql'),
+    'utf8',
+  );
+
+  it('electronics follows the platform setting and grocery keeps 2 days, in the seed', async () => {
+    const { ROOT_RULES } = await import('../../prisma/seed/categoryRules');
+    expect(ROOT_RULES.electronics.returnWindowDays).toBeNull();
+    expect(ROOT_RULES.grocery.returnWindowDays).toBe(2);
+  });
+
+  it('electronics follows the platform setting on a live catalog after the migration', async () => {
+    await prisma.category.update({ where: { slug: 'electronics' }, data: { returnWindowDays: 10 } });
+    await prisma.category.update({ where: { slug: 'books' }, data: { returnWindowDays: 2 } }); // stands in for grocery
+    await prisma.$executeRawUnsafe(migration.replace(/^--.*$/gm, ''));
+    invalidateCategoryRules();
+    expect((await prisma.category.findUniqueOrThrow({ where: { slug: 'electronics' } })).returnWindowDays).toBeNull();
+    expect((await prisma.category.findUniqueOrThrow({ where: { slug: 'books' } })).returnWindowDays).toBe(2);
+    const product = await call('GET', `/api/products/${FIXTURE.phoneCheapInElectronics}`, null);
+    expect(product.json.data?.returnWindowDays).toBe(5);
+  });
+
+  it('leaves the payout hold at 7 days', () => {
+    expect(DEFAULT_SETTINGS.payoutHoldDays).toBe(7);
+  });
+});
