@@ -123,7 +123,7 @@ function toSuggestion(row: SuggestRow): ProductSuggestion {
 /**
  * A substring filter the database can answer from the trigram index.
  *
- * Deliberately looser than the real rule: a whole-word term still comes back
+ * Deliberately looser than the real rule: every term still comes back
  * with its mid-word matches, and matchesAllTerms drops those afterwards.
  * Postgres can index "contains" here but not a word-boundary regex, so the
  * narrowing that needs a regex happens in memory over a few dozen rows.
@@ -147,18 +147,21 @@ function boundary(word: string): RegExp {
   return re;
 }
 
-/** The real rule: finished words must land on a word boundary, fragments need not. */
+/**
+ * The real rule: every word lands at the start of a word in the title, a
+ * fragment as much as a finished word. Never mid-word: "book" must not offer
+ * "AirBook" or "CoreBook", and "phone" must not offer "Headphones" — the
+ * phones a word stands for come through its synonyms ("smartphone"), not by
+ * cutting into other words.
+ */
 function matchesAllTerms(text: string, terms: SuggestTerms): boolean {
   const lower = text.toLowerCase();
-  return terms.every((term) =>
-    term.any.some((word) => (term.whole ? boundary(word).test(lower) : lower.includes(word))),
-  );
+  return terms.every((term) => term.any.some((word) => boundary(word).test(lower)));
 }
 
 /**
  * Lower is better: a title starting with what was typed beats one where the
- * match starts a later word, which beats a match buried mid-word. Typing "sma"
- * should offer "Smartphone" before "Aerisma".
+ * match starts a later word. (Mid-word matches are not offered at all.)
  */
 function rankPrefix(text: string, needle: string): number {
   const lower = text.toLowerCase();

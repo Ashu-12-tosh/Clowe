@@ -220,6 +220,11 @@ function sanitiseTerm(term: string): string {
  * "wireless phone" needs something phone-ish AND something wireless. The word
  * the shopper actually typed is repeated so ts_rank scores it above a synonym
  * match without needing a second query.
+ *
+ * Whole words only, no prefix match: a submitted search is made of finished
+ * words, and "book:*" also matched "Bookshelf". Stemming still joins "books"
+ * and "book"; a name written as one word ("AirBook") is its own token and is
+ * never split. Half-typed words are the type-ahead's business (search.ts).
  */
 export function buildTsQuery(keywords: string): string {
   const words = sanitiseTerm(keywords).split(/\s+/).filter(Boolean);
@@ -230,7 +235,7 @@ export function buildTsQuery(keywords: string): string {
       .filter(Boolean)
       .map((w) => w.split(/\s+/).join(' <-> ')); // multi-word aliases stay phrases
     const unique = [...new Set(forms)];
-    return `(${unique.map((w) => `${w}:*`).join(' | ')})`;
+    return `(${unique.join(' | ')})`;
   });
   return groups.join(' & ');
 }
@@ -514,21 +519,27 @@ async function resolveCategoryTopic(slug: string): Promise<CategoryTopic | null>
 }
 
 /**
- * Ordering for a category-name query, in four tiers, then by how well the words
+ * Ordering for a category-name query, in five tiers, then by how well the words
  * matched. An applied sort still leads, as everywhere else.
  *
- *   3  in the category, and the name matches its text — a laptop under Laptops.
- *   2  outside the category, but the name is in its title — a phone filed
- *      under Electronics for "mobiles", a headset under Gaming for "headphones".
- *   1  in the category, name nowhere in its text — "Aeris Halo Over-Ear" under
+ *   4  in the category, and the name matches its text — a laptop under Laptops.
+ *   3  outside the category, the name in its title, and its own category is
+ *      the same kind of thing — a phone filed under Electronics › Smartphones
+ *      for "mobiles".
+ *   2  in the category, name nowhere in its text — "Aeris Halo Over-Ear" under
  *      Headphones.
+ *   1  outside the category, the name in its title but its category something
+ *      else — the "Zenlite Book Go" laptop for "books", a headset under Gaming
+ *      for "headphones". A product name that happens to contain the word.
  *   0  outside the category, name only in a description or tag.
  *
  * Tier 0 is where word-search noise lives: the care label that made "washing
  * machine" match a T-shirt. Keeping it under every category member is the
- * point. Tier 2 sits above tier 1 because a title naming the thing is stronger
- * than bare membership — otherwise "mobiles" would list the Mobiles tree's
- * tablets and cases above the eight phones filed in the other tree.
+ * point. Tier 3 sits above tier 2 because a title naming the thing, filed
+ * under a category of the same name, is stronger than bare membership —
+ * otherwise "mobiles" would list the Mobiles tree's tablets and cases above
+ * the eight phones filed in the other tree. Tier 1 sits below every member:
+ * a laptop called "Book Go" is not a book however its title reads.
  */
 async function rankCategoryTopic(
   candidateIds: string[],
@@ -543,10 +554,15 @@ async function rankCategoryTopic(
   const inTitle = topic.tsQuery
     ? Prisma.sql`to_tsvector('english', p.title) @@ ${query}`
     : Prisma.sql`FALSE`;
+  // The product's own category answers to the same words: "Smartphones" for "mobiles".
+  const sameKind = topic.tsQuery
+    ? Prisma.sql`to_tsvector('english', c.name) @@ ${query}`
+    : Prisma.sql`FALSE`;
   const tier = Prisma.sql`CASE
-    WHEN ${inCategory} AND ${inWords} THEN 3
-    WHEN ${inTitle} THEN 2
-    WHEN ${inCategory} THEN 1
+    WHEN ${inCategory} AND ${inWords} THEN 4
+    WHEN ${inTitle} AND ${sameKind} THEN 3
+    WHEN ${inCategory} THEN 2
+    WHEN ${inTitle} THEN 1
     ELSE 0
   END`;
 
@@ -558,6 +574,7 @@ async function rankCategoryTopic(
   const rows = await prisma.$queryRaw<{ id: string; categoryId: string }[]>`
     SELECT p.id, p."categoryId"
     FROM products p
+    JOIN categories c ON c.id = p."categoryId"
     WHERE p.id = ANY(${candidateIds}::text[])
       AND (${inCategory} OR ${inWords})
     ORDER BY ${orderSql(relevance, applied, input, catalog)}
