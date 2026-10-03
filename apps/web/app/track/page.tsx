@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import type { TrackOrderView } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 
@@ -113,8 +114,10 @@ function TrackPageInner() {
                     </p>
                     {item.courierName && (
                       <p className="mt-0.5 text-xs text-gray-600">
-                        via <span className="font-medium">{item.courierName}</span> · AWB{' '}
-                        <span className="font-mono">{item.awbNumber}</span>
+                        via <span className="font-medium">{item.courierName}</span> ·{' '}
+                        <Link href="/orders" className="font-semibold text-brand-600 hover:underline">
+                          Sign in to see the courier tracking number
+                        </Link>
                       </p>
                     )}
                   </div>

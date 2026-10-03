@@ -62,7 +62,7 @@ import { sellerKycRouter } from './routes/sellerKyc';
 import { storesRouter } from './routes/stores';
 import { adminSupportRouter } from './routes/adminSupport';
 import { errorHandler } from './middleware/error';
-import { globalLimiter } from './middleware/rateLimits';
+import { globalLimiter, trackLimiter } from './middleware/rateLimits';
 import { auditLogger } from './middleware/audit';
 
 export function createApp() {
@@ -169,7 +169,7 @@ export function createApp() {
   app.use('/api/ai', aiRouter);
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/referrals', referralsRouter);
-  app.use('/api/track', trackRouter);
+  app.use('/api/track', trackLimiter, trackRouter);
   app.use('/api/complaints', complaintsRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/ads', adsRouter);

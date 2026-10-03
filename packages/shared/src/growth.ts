@@ -121,9 +121,11 @@ export interface TrackOrderItem {
   status: string;
   shippedAt: string | null;
   deliveredAt: string | null;
+  /**
+   * Which courier has it. The courier's own tracking number and link are not
+   * part of public tracking: they are on the buyer's order page, signed in.
+   */
   courierName: string | null;
-  awbNumber: string | null;
-  trackingUrl: string | null;
 }
 
 export interface TrackOrderView {

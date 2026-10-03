@@ -31,6 +31,14 @@ export const otpVerifyLimiter = rateLimit({
   message: limitError('Too many attempts. Please try again in 15 minutes.'),
 });
 
+/** Public order tracking: a shopper checks an order a few times, not hundreds. */
+export const trackLimiter = rateLimit({
+  ...common,
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  message: limitError('Too many tracking lookups. Please try again in 15 minutes.'),
+});
+
 /** Content-Security-Policy reports: one page load can send a few; a flood is not a browser. */
 export const cspReportLimiter = rateLimit({
   ...common,

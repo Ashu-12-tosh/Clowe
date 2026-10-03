@@ -4,6 +4,8 @@ import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 
 // Public order tracking: order number + the phone the order ships to.
+// Status, dates and the courier's name only. The courier's tracking number
+// and link stay on the signed-in buyer's order page (GET /api/orders/:id).
 export const trackRouter = Router();
 
 trackRouter.get('/', async (req, res, next) => {
@@ -51,8 +53,6 @@ trackRouter.get('/', async (req, res, next) => {
         shippedAt: i.shippedAt?.toISOString() ?? null,
         deliveredAt: i.deliveredAt?.toISOString() ?? null,
         courierName: i.courierName,
-        awbNumber: i.awbNumber,
-        trackingUrl: i.trackingUrl,
       })),
     };
     res.json({ success: true, data: body });
