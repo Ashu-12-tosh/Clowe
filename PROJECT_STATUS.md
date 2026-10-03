@@ -189,17 +189,22 @@ the main reason pages feel slow. The demo images were meant to be downloaded
 locally first; `dc exec api npx tsx prisma/localizeImages.ts` does exactly that
 on the server and has not been run against production.
 
-**Old apparel prices in the ₹2,625.01–₹2,950 band (resolved for new prices,
-2026-10-11).** Sellers now enter their price *before* GST and the 5% / 18% line
-(₹2,500 per piece) is judged on that number, so a new price always has exactly
-one rate and the old circular band cannot arise. What remains is the listings
-priced GST-inclusive before the change that sit in the band (23 variants on the
-dev catalog): `prisma/backfillSellerPrices.ts` keeps their buyer price and
-records the seller price at 18%, and its dry run flags each one, because that
-seller price on its own is a 5% price — re-saved, the buyer price drops to it.
-Their sellers should be told before the backfill, or the prices reviewed with
-the CA. A promotion can still discount an inclusive price into the band; an
-order line is then taxed at 18%, never under-collected.
+**GST is a flat 18% on every product, in every category — the owner's
+decision (2026-10-13).** One setting, `gstUniformPercent` = 18, overrides every
+category rate and the apparel/footwear value slab. Those rules stay in the
+database and the code, unused: clearing the flat rate in admin settings brings
+them back, and either change reprices every listing from its seller's price
+(before GST). Past sales are never re-taxed: each order line records the rate
+it was sold at (`order_items.gstRatePercent`, backfilled by migration), and
+invoices, the ledger, payouts and GSTR-8 read it. It is switched on by
+`prisma/applyFlatGst.ts` after its dry run (see the runbook). On the dev
+catalog the dry run moves 391 of 1,031 variants' buyer prices up and none
+down: +12.4% where the rate was 5% (most apparel, drones, groceries...),
++14.6% for jewellery (3%), +18% for books (nil). The old ₹2,625–₹2,950
+apparel band no longer arises. **Have a CA confirm before launch**: the
+statutory rates for books (nil), jewellery (3%) and apparel under ₹2,500 (5%)
+are lower, and GST collected above the rate that applies is still owed to the
+government (s.76 CGST Act); sellers file what is collected in their own returns.
 
 **TDS is withheld from the first rupee; the ₹5 lakh exemption is not applied.**
 Under s.194-O(4), an individual or HUF seller who has furnished a PAN or

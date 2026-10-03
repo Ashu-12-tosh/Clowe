@@ -125,6 +125,7 @@ export async function postDeliveryEntries(orderItemId: string, db: Db = prisma):
       orderId: true,
       sellerId: true,
       pricePaise: true,
+      gstRatePercent: true,
       quantity: true,
       status: true,
       product: { select: { categoryId: true } },
@@ -136,6 +137,7 @@ export async function postDeliveryEntries(orderItemId: string, db: Db = prisma):
   const taxRules = (await categoryRulesMap([item.product.categoryId])).get(item.product.categoryId);
   const economics = computeListingEconomics({
     buyerPricePaise: item.pricePaise,
+    gstRatePercent: item.gstRatePercent,
     quantity: item.quantity,
     rates: economicsRates(settings),
     taxRules,

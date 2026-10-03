@@ -40,6 +40,8 @@ export default function AdminSettingsPage() {
     gstMerit: '',
     gstStandard: '',
     gstThresholdRupees: '',
+    // Empty: the category rules (the value slab, books at nil...) apply.
+    gstUniform: '',
     platformRupees: '',
     deliveryRupees: '',
     closingRupees: '',
@@ -68,6 +70,7 @@ export default function AdminSettingsPage() {
           gstMerit: String(s.gstMeritPercent),
           gstStandard: String(s.gstStandardPercent),
           gstThresholdRupees: toRupees(s.gstValueSlabThresholdPaise),
+          gstUniform: s.gstUniformPercent === null ? '' : String(s.gstUniformPercent),
           platformRupees: toRupees(s.platformFeePaise),
           deliveryRupees: toRupees(s.deliveryFeePaise),
           closingRupees: toRupees(s.closingFeePaise),
@@ -128,6 +131,7 @@ export default function AdminSettingsPage() {
           gstMeritPercent: Number(economics.gstMerit) || 0,
           gstStandardPercent: Number(economics.gstStandard) || 0,
           gstValueSlabThresholdPaise: toPaise(economics.gstThresholdRupees),
+          gstUniformPercent: economics.gstUniform.trim() === '' ? null : Math.round(Number(economics.gstUniform)),
           platformFeePaise: toPaise(economics.platformRupees),
           deliveryFeePaise: toPaise(economics.deliveryRupees),
           closingFeePaise: toPaise(economics.closingRupees),
@@ -444,8 +448,28 @@ export default function AdminSettingsPage() {
           behind the entries posted to their ledger on delivery &mdash; one shared formula, with
           the commission, gateway and TDS rates below.
         </p>
+        <div className="mt-3 rounded-xl bg-cream-50 p-3">
+          <label className="text-xs font-semibold text-gray-700">Flat GST for every product (%)</label>
+          <input
+            type="number"
+            min={0}
+            max={40}
+            step="1"
+            value={economics.gstUniform}
+            onChange={(e) => setEconomics((v) => ({ ...v, gstUniform: e.target.value }))}
+            placeholder="Off: category rules"
+            className={`${field} mt-1 max-w-[200px]`}
+            data-gst-uniform
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            The owner&rsquo;s decision is 18% on every product, in every category. While set, the
+            category rates and the value slab below are kept but not applied; clear it to go back to
+            them. Saving a change reprices every listing from its seller&rsquo;s price before GST;
+            past orders keep the rate they were sold at.
+          </p>
+        </div>
         <p className="mt-2 text-xs text-gray-400">
-          GST is not one platform rate: each category carries its own (Categories page), and these
+          With the flat rate off, GST is not one platform rate: each category carries its own (Categories page), and these
           three settings drive the GST 2.0 value slab for apparel, made-up textiles and footwear
           &mdash; the merit rate when one piece or pair is worth at most the threshold ex-GST, the
           standard rate above it. The standard rate is also used for any category with no rate.

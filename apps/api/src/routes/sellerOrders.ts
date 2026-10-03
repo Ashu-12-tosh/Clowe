@@ -717,7 +717,8 @@ sellerOrdersRouter.get('/:orderId/invoice', async (req, res, next) => {
 
     const lines = order.items.map((i) => {
       const gross = i.pricePaise * i.quantity;
-      const rate = gstRateForInclusive(i.pricePaise, taxRules.get(i.product.categoryId), gst).ratePercent;
+      // The rate the line was sold at; worked out only for a line that recorded none.
+      const rate = i.gstRatePercent ?? gstRateForInclusive(i.pricePaise, taxRules.get(i.product.categoryId), gst).ratePercent;
       const taxable = Math.round(gross / (1 + rate / 100));
       return {
         title: i.title,

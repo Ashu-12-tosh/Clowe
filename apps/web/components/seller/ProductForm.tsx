@@ -1454,8 +1454,11 @@ export default function ProductForm({ initial }: Props) {
                 <p className="text-sm font-medium">GST</p>
                 <p className="mt-1 text-sm text-ink-900">{gst ? describeTaxDefault(rules, gst) : '…'}</p>
                 <p className="mt-1 text-xs text-gray-400">
-                  Set by the category under GST 2.0, not chosen per listing. Used on the tax invoice
-                  for each order{rules.hsnCode ? ` · HSN ${rules.hsnCode}` : ''}.
+                  {gst?.uniformPercent != null
+                    ? 'The same on every product, set by Clowe, not chosen per listing.'
+                    : 'Set by the category under GST 2.0, not chosen per listing.'}{' '}
+                  Added to your price for the buyer and shown on the tax invoice for each order
+                  {rules.hsnCode ? ` · HSN ${rules.hsnCode}` : ''}.
                 </p>
               </div>
               <label className="flex items-center gap-2 text-sm sm:col-span-2 min-w-0">

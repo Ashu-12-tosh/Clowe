@@ -49,6 +49,8 @@ export interface FeeBreakdown {
 export interface FeeLine {
   pricePaise: number;
   quantity: number;
+  /** The GST rate the line was sold at; null only on lines written outside checkout. */
+  gstRatePercent?: number | null;
   product: { categoryId: string };
 }
 
@@ -81,6 +83,7 @@ const EMPTY_FEES: FeeBreakdown = {
 export function feesFor(line: FeeLine, settings: PlatformSettings, rules: TaxRulesByCategory): FeeBreakdown {
   const e = computeListingEconomics({
     buyerPricePaise: line.pricePaise,
+    gstRatePercent: line.gstRatePercent,
     quantity: line.quantity,
     rates: economicsRates(settings),
     taxRules: rules.get(line.product.categoryId),
@@ -134,6 +137,7 @@ export async function eligibleItems(sellerId: string, holdDays: number) {
     select: {
       id: true,
       pricePaise: true,
+      gstRatePercent: true,
       quantity: true,
       deliveredAt: true,
       title: true,

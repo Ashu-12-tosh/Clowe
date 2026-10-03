@@ -22,6 +22,7 @@ function loadGst(): Promise<GstSettings> {
       meritPercent: s.gstMeritPercent,
       standardPercent: s.gstStandardPercent,
       valueSlabThresholdPaise: s.gstValueSlabThresholdPaise,
+      uniformPercent: s.gstUniformPercent,
     }))
     .catch((err) => {
       gstCache = null;
@@ -438,7 +439,8 @@ export default function AdminCategoriesPage() {
     const r = row.rules;
     const bits = [
       r.variantAxes.length ? r.variantAxes.map((a) => a.label).join(' × ') : 'single SKU',
-      `GST ${gst ? describeTaxDefault(r, gst) : '…'}`,
+      // Under the flat rate every category reads the same; its own rule is kept for when it is off.
+      `GST ${gst ? describeTaxDefault(r, gst) : '…'}${gst?.uniformPercent != null ? ' (flat)' : ''}`,
       r.returnWindowDays !== null ? `${r.returnWindowDays}d returns` : 'platform returns',
     ];
     if (r.tryOnEligible) bits.push('try-on');

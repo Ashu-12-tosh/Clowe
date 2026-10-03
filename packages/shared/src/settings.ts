@@ -88,6 +88,13 @@ export interface PlatformSettings {
   gstStandardPercent: number;
   /** Value-slab threshold per piece or pair, ex-GST, in paise (₹2,500). */
   gstValueSlabThresholdPaise: number;
+  /**
+   * One GST rate for every product, in every category: the owner's decision
+   * is 18%. Null applies the category rules (the value slab, books at nil...),
+   * which are kept for that. Applied by prisma/applyFlatGst.ts; switched from
+   * admin settings, which reprices every listing either way.
+   */
+  gstUniformPercent: number | null;
   /** Fixed platform fee charged to the seller per delivered order line (paise). */
   platformFeePaise: number;
   /** Fixed delivery fee charged to the seller per shipment (paise). */
@@ -182,6 +189,7 @@ export const updateSettingsSchema = z.object({
   gstMeritPercent: z.number().min(0).max(40).optional(),
   gstStandardPercent: z.number().min(0).max(40).optional(),
   gstValueSlabThresholdPaise: z.number().int().min(0).optional(),
+  gstUniformPercent: z.number().int().min(0).max(40).nullable().optional(),
   platformFeePaise: z.number().int().min(0).optional(),
   deliveryFeePaise: z.number().int().min(0).optional(),
   closingFeePaise: z.number().int().min(0).optional(),

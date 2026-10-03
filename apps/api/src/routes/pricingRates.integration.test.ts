@@ -68,6 +68,7 @@ describe('GET /api/seller/pricing-rates', () => {
         meritPercent: DEFAULT_SETTINGS.gstMeritPercent,
         standardPercent: DEFAULT_SETTINGS.gstStandardPercent,
         valueSlabThresholdPaise: DEFAULT_SETTINGS.gstValueSlabThresholdPaise,
+        uniformPercent: DEFAULT_SETTINGS.gstUniformPercent,
       },
       platformFeePaise: DEFAULT_SETTINGS.platformFeePaise,
       deliveryFeePaise: DEFAULT_SETTINGS.deliveryFeePaise,

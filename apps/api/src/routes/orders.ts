@@ -19,6 +19,7 @@ import { prisma } from '../db';
 import { getSettings } from '../services/settingsService';
 import { recordRedemptions } from '../services/promotionService';
 import { orderLineReturnWindowDays, saleReturnWindows } from '../services/categoryRules';
+import { saleGstRates } from '../services/sellerPricing';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { paymentProvider } from '../services/payments';
@@ -195,8 +196,11 @@ ordersRouter.post('/checkout', async (req, res, next) => {
       }
     }
 
-    // Each line keeps the return window it is sold with.
+    // Each line keeps the return window and the GST rate it is sold with.
     const windowByProduct = await saleReturnWindows(orderLines.map((l) => l.productId));
+    const gstRates = await saleGstRates(
+      orderLines.map((l) => ({ productId: l.productId, unitPaise: l.pricePaise - Math.floor(l.promoDiscountPaise / l.quantity) })),
+    );
 
     // Create the order and reserve stock atomically. Conditional decrements
     // guard against a concurrent checkout taking the last unit.
@@ -283,7 +287,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
             // pricePaise is what the shopper actually pays per unit — a seller
             // promotion is already taken off it, so payouts, invoices and
             // refunds all read the same number.
-            create: orderLines.map((line) => ({
+            create: orderLines.map((line, i) => ({
               productId: line.productId,
               variantId: line.variantId,
               sellerId: sellerByVariant.get(line.variantId)!,
@@ -298,6 +302,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
               promotionId: line.promotion?.id ?? null,
               promoDiscountPaise: line.promoDiscountPaise,
               returnWindowDays: windowByProduct.get(line.productId) ?? null,
+              gstRatePercent: gstRates[i],
             })),
           },
         },

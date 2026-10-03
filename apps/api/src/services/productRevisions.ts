@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 import { categoryRulesFor } from './categoryRules';
-import { ensureSellerPrices, repriceProducts } from './sellerPricing';
+import { ensureSellerPrices, recordOrderLineGstRates, repriceProducts } from './sellerPricing';
 import { isSensitiveForTryOn } from './tryon/sensitiveGarment';
 
 // ---------------------------------------------------------------------------
@@ -145,7 +145,10 @@ export async function applyRevision(productId: string): Promise<void> {
   // A new category can mean a new GST rate: keep the seller prices (before
   // GST) and reprice for buyers once the edit is live.
   const categoryChanging = content.categoryId !== product.categoryId;
-  if (categoryChanging) await ensureSellerPrices({ id: product.id }, true);
+  if (categoryChanging) {
+    await recordOrderLineGstRates();
+    await ensureSellerPrices({ id: product.id }, true);
+  }
 
   await prisma.$transaction([
     prisma.product.update({

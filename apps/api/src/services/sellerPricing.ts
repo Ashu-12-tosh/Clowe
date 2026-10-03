@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import {
   buyerPriceFor,
+  gstRateForInclusive,
   sellerPriceFromBuyer,
   type CategoryRules,
   type GstSettings,
@@ -85,10 +86,66 @@ export async function priceInput(
   };
 }
 
+/**
+ * The GST rate each line of a new order is sold at, from the unit price the
+ * buyer is charged (after any promotion) under today's rules. Checkout stores
+ * it on the line so a later GST change never rewrites the sale.
+ */
+export async function saleGstRates(lines: { productId: string; unitPaise: number }[]): Promise<number[]> {
+  const products = await prisma.product.findMany({
+    where: { id: { in: [...new Set(lines.map((l) => l.productId))] } },
+    select: { id: true, categoryId: true },
+  });
+  const categoryOf = new Map(products.map((p) => [p.id, p.categoryId]));
+  const [rules, settings] = await Promise.all([categoryRulesMap([...new Set(categoryOf.values())]), getSettings()]);
+  const gst = gstSettings(settings);
+  return lines.map((l) => gstRateForInclusive(l.unitPaise, rules.get(categoryOf.get(l.productId) ?? ''), gst).ratePercent);
+}
+
+/**
+ * Give every order line that recorded no GST rate (written outside checkout)
+ * the rate today's rules give it. Run before the rules change, so no past
+ * sale is ever re-taxed at the new rate.
+ */
+export async function recordOrderLineGstRates(): Promise<number> {
+  const lines = await prisma.orderItem.findMany({
+    where: { gstRatePercent: null },
+    select: { id: true, pricePaise: true, product: { select: { categoryId: true } } },
+  });
+  if (lines.length === 0) return 0;
+  const [rules, settings] = await Promise.all([
+    categoryRulesMap([...new Set(lines.map((l) => l.product.categoryId))]),
+    getSettings(),
+  ]);
+  const gst = gstSettings(settings);
+  for (const l of lines) {
+    const rate = gstRateForInclusive(l.pricePaise, rules.get(l.product.categoryId), gst).ratePercent;
+    await prisma.orderItem.update({ where: { id: l.id }, data: { gstRatePercent: rate } });
+  }
+  return lines.length;
+}
+
+/**
+ * Change GST rules safely: record the rate on any order line missing one and
+ * give every variant without one its seller price, both under the rules in
+ * force; then write the change (`write`); then reprice buyer prices from the
+ * sellers' under the new rules. `where` narrows the reprice (a category).
+ */
+export async function changeGstRules(
+  write: () => Promise<void>,
+  where: Prisma.ProductWhereInput = {},
+): Promise<PriceChange[]> {
+  await recordOrderLineGstRates();
+  await ensureSellerPrices(where, true);
+  await write();
+  return repriceProducts(where);
+}
+
 /** One variant's prices before and after a backfill or reprice, for the report. */
 export interface PriceChange {
   productId: string;
   title: string;
+  categoryId: string;
   variantId: string;
   label: string;
   buyerBefore: number;
@@ -137,6 +194,7 @@ export async function ensureSellerPrices(where: Prisma.ProductWhereInput, apply:
       changes.push({
         productId: p.id,
         title: p.title,
+        categoryId: p.categoryId,
         variantId: v.id,
         label: v.label,
         buyerBefore: v.pricePaise,
@@ -163,24 +221,39 @@ export async function ensureSellerPrices(where: Prisma.ProductWhereInput, apply:
  * had none keeps the seller price it was sold at. Returns the variants whose
  * buyer price moved.
  */
-export async function repriceProducts(where: Prisma.ProductWhereInput): Promise<PriceChange[]> {
+export async function repriceProducts(
+  where: Prisma.ProductWhereInput,
+  opts: {
+    /** Price under these GST settings instead of today's: a dry run of a change. */
+    priceGst?: GstSettings;
+    /** False: report only, write nothing. */
+    apply?: boolean;
+  } = {},
+): Promise<PriceChange[]> {
   const { products, rules } = await variantsWithRules(where);
-  const gst = gstSettings(await getSettings());
+  // A variant without a seller price is read under today's rules — the ones
+  // its buyer price was set under — whatever it is about to be priced at.
+  const current = gstSettings(await getSettings());
+  const gst = opts.priceGst ?? current;
+  const apply = opts.apply ?? true;
   const changes: PriceChange[] = [];
   for (const p of products) {
     const r = rules.get(p.categoryId);
     let minBuyer: number | null = null;
     let moved = false;
     for (const v of p.variants) {
-      const { sellerPricePaise, sellerMrpPaise } = sellerPricesOf(v, r, gst);
-      const price = buyerPriceFor(sellerPricePaise, r, gst);
-      const mrp = sellerMrpPaise === null ? null : buyerPriceFor(sellerMrpPaise, r, gst).buyerPaise;
+      const { sellerPricePaise, sellerMrpPaise } = sellerPricesOf(v, r, current);
+      // Where the rate does not change, the buyer price stays to the paisa
+      // (buyerFor), rather than moving by a rounding step.
+      const price = { ...buyerPriceFor(sellerPricePaise, r, gst), buyerPaise: buyerFor(sellerPricePaise, v.pricePaise, r, gst) };
+      const mrp = sellerMrpPaise === null ? null : buyerFor(sellerMrpPaise, v.mrpPaise, r, gst);
       minBuyer = minBuyer === null ? price.buyerPaise : Math.min(minBuyer, price.buyerPaise);
       if (price.buyerPaise === v.pricePaise && mrp === v.mrpPaise) continue;
       moved = true;
       changes.push({
         productId: p.id,
         title: p.title,
+        categoryId: p.categoryId,
         variantId: v.id,
         label: v.label,
         buyerBefore: v.pricePaise,
@@ -192,12 +265,13 @@ export async function repriceProducts(where: Prisma.ProductWhereInput): Promise<
         ratePercent: price.ratePercent,
         ambiguous: false,
       });
+      if (!apply) continue;
       await prisma.productVariant.update({
         where: { id: v.id },
         data: { pricePaise: price.buyerPaise, mrpPaise: mrp, sellerPricePaise, sellerMrpPaise },
       });
     }
-    if (moved && minBuyer !== null) {
+    if (apply && moved && minBuyer !== null) {
       await prisma.product.update({ where: { id: p.id }, data: { basePricePaise: minBuyer } });
     }
   }

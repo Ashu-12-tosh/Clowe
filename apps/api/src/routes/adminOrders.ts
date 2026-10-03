@@ -453,7 +453,7 @@ adminOrdersRouter.get('/:id', async (req, res, next) => {
     const gst = gstSettings(await getSettings());
     const taxPaise = order.items.reduce((sum, i) => {
       const gross = i.pricePaise * i.quantity;
-      const rate = gstRateForInclusive(i.pricePaise, taxRules.get(i.product.categoryId), gst).ratePercent;
+      const rate = i.gstRatePercent ?? gstRateForInclusive(i.pricePaise, taxRules.get(i.product.categoryId), gst).ratePercent;
       return sum + (gross - Math.round(gross / (1 + rate / 100)));
     }, 0);
 

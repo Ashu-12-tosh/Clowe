@@ -50,6 +50,7 @@ export async function gstr8Rows(month: string): Promise<Gstr8Row[]> {
     orderItem: {
       select: {
         pricePaise: true,
+        gstRatePercent: true,
         quantity: true,
         product: { select: { categoryId: true } },
         order: { select: { shipState: true } },
@@ -84,6 +85,7 @@ export async function gstr8Rows(month: string): Promise<Gstr8Row[]> {
     if (!e.orderItem) return 0;
     return computeListingEconomics({
       buyerPricePaise: e.orderItem.pricePaise,
+      gstRatePercent: e.orderItem.gstRatePercent,
       quantity: e.orderItem.quantity,
       rates,
       taxRules: rules.get(e.orderItem.product.categoryId),

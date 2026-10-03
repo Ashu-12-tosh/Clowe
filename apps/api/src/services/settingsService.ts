@@ -37,6 +37,9 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   gstMeritPercent: 5,
   gstStandardPercent: 18,
   gstValueSlabThresholdPaise: 250000, // ₹2,500 per piece / pair, ex-GST
+  // Null: the category rules above apply. The owner's flat 18% is applied by
+  // prisma/applyFlatGst.ts (after its dry run), which stores it as a setting.
+  gstUniformPercent: null,
   platformFeePaise: 900, // ₹9 per line
   deliveryFeePaise: 6000, // ₹60 per shipment
   closingFeePaise: 2000, // ₹20 per unit — placeholder
@@ -133,6 +136,8 @@ export async function getSettings(): Promise<PlatformSettings> {
     gstValueSlabThresholdPaise:
       (byKey.get('gstValueSlabThresholdPaise') as number | undefined) ??
       DEFAULT_SETTINGS.gstValueSlabThresholdPaise,
+    gstUniformPercent:
+      (byKey.get('gstUniformPercent') as number | null | undefined) ?? DEFAULT_SETTINGS.gstUniformPercent,
     platformFeePaise:
       (byKey.get('platformFeePaise') as number | undefined) ?? DEFAULT_SETTINGS.platformFeePaise,
     deliveryFeePaise:

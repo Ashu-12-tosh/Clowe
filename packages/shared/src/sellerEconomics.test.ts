@@ -8,7 +8,7 @@ const RATES = {
   // CGST since 10.07.2024), both on the value ex-GST.
   tdsPercent: 0.1,
   tcsPercent: 0.5,
-  gst: { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 250_000 },
+  gst: { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 250_000, uniformPercent: null },
   platformFeePaise: 900,
   deliveryFeePaise: 6000,
   closingFeePaise: 2000,
@@ -105,7 +105,7 @@ describe('computeListingEconomics', () => {
         gatewayPercent: 0,
         tdsPercent: 0,
         tcsPercent: 0,
-        gst: { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 250_000 },
+        gst: { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 250_000, uniformPercent: null },
         platformFeePaise: 0,
         deliveryFeePaise: 4_500,
         closingFeePaise: 0,

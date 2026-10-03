@@ -6,6 +6,7 @@ export function gstSettings(settings: PlatformSettings): GstSettings {
     meritPercent: settings.gstMeritPercent,
     standardPercent: settings.gstStandardPercent,
     valueSlabThresholdPaise: settings.gstValueSlabThresholdPaise,
+    uniformPercent: settings.gstUniformPercent,
   };
 }
 

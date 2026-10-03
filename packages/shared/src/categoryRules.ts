@@ -67,6 +67,12 @@ export interface GstSettings {
   standardPercent: number;
   /** Value-slab threshold per piece or pair, ex-GST: ₹2,500 under GST 2.0. */
   valueSlabThresholdPaise: number;
+  /**
+   * One rate for every product when set (the owner's decision: 18%). The
+   * category rules and the value slab above are kept but not applied while
+   * it is; null goes back to them.
+   */
+  uniformPercent: number | null;
 }
 
 /** The rate for one unit, and how it was decided. */
@@ -207,6 +213,7 @@ export function gstRateForExGst(
   gst: GstSettings,
 ): GstRate {
   const ex = Math.max(0, Math.round(exGstUnitPaise));
+  if (gst.uniformPercent != null) return { ratePercent: gst.uniformPercent, exGstUnitPaise: ex };
   if (rules?.taxRule === 'VALUE_SLAB') {
     return { ratePercent: ex <= gst.valueSlabThresholdPaise ? gst.meritPercent : gst.standardPercent, exGstUnitPaise: ex };
   }
@@ -243,6 +250,7 @@ export function gstRateForInclusive(
 ): GstRate {
   const price = Math.max(0, Math.round(unitPricePaise));
   const exAt = (rate: number) => Math.round((price * 100) / (100 + rate));
+  if (gst.uniformPercent != null) return { ratePercent: gst.uniformPercent, exGstUnitPaise: exAt(gst.uniformPercent) };
   if (rules?.taxRule === 'VALUE_SLAB') {
     // Integer comparison: price/(1+m) <= threshold  ⇔  price*100 <= threshold*(100+m).
     const rate = price * 100 <= gst.valueSlabThresholdPaise * (100 + gst.meritPercent) ? gst.meritPercent : gst.standardPercent;
@@ -266,17 +274,19 @@ export function sellerPriceFromBuyer(
 ): { exGstPaise: number; ratePercent: number; ambiguous: boolean } {
   const { ratePercent, exGstUnitPaise } = gstRateForInclusive(buyerPaise, rules, gst);
   const ambiguous =
+    gst.uniformPercent == null &&
     rules?.taxRule === 'VALUE_SLAB' &&
     ratePercent === gst.standardPercent &&
     exGstUnitPaise <= gst.valueSlabThresholdPaise;
   return { exGstPaise: exGstUnitPaise, ratePercent, ambiguous };
 }
 
-/** How a category's GST reads in a form, e.g. "5% up to ₹2,500, 18% above" or "18%". */
+/** How a category's GST reads in a form, e.g. "18%" or, with the slab in force, "5% up to ₹2,500, 18% above". */
 export function describeTaxDefault(
   rules: Pick<CategoryRules, 'taxRule' | 'defaultTaxRatePercent'>,
   gst: GstSettings,
 ): string {
+  if (gst.uniformPercent != null) return `${gst.uniformPercent}%`;
   if (rules.taxRule === 'VALUE_SLAB') {
     const rupees = (gst.valueSlabThresholdPaise / 100).toLocaleString('en-IN');
     return `${gst.meritPercent}% up to ₹${rupees} per piece (ex-GST), ${gst.standardPercent}% above`;

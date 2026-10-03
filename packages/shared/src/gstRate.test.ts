@@ -9,7 +9,9 @@ import {
 } from './categoryRules';
 
 /** GST 2.0 defaults: 5% merit, 18% standard, ₹2,500 per piece ex-GST. */
-const GST: GstSettings = { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 250_000 };
+const GST: GstSettings = { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 250_000, uniformPercent: null };
+/** The owner's decision: 18% on everything, the rules kept but not applied. */
+const FLAT: GstSettings = { ...GST, uniformPercent: 18 };
 const SLAB = { taxRule: 'VALUE_SLAB' as const, defaultTaxRatePercent: null };
 const flat = (rate: number) => ({ taxRule: null, defaultTaxRatePercent: rate });
 
@@ -85,9 +87,35 @@ describe('sellerPriceFromBuyer', () => {
   });
 });
 
+describe('a flat rate for every product', () => {
+  it('overrides the slab and every category rate, for seller prices and order lines alike', () => {
+    for (const rules of [SLAB, flat(0), flat(3), flat(5), null]) {
+      expect(gstRateForExGst(100_000, rules, FLAT).ratePercent).toBe(18);
+      expect(gstRateForExGst(300_000, rules, FLAT).ratePercent).toBe(18);
+      expect(gstRateForInclusive(118_000, rules, FLAT)).toEqual({ ratePercent: 18, exGstUnitPaise: 100_000 });
+    }
+    expect(buyerPriceFor(250_000, SLAB, FLAT).buyerPaise).toBe(295_000);
+    expect(buyerPriceFor(49_900, flat(0), FLAT).buyerPaise).toBe(58_882);
+  });
+
+  it('has no ambiguous band', () => {
+    expect(sellerPriceFromBuyer(280_000, SLAB, FLAT)).toEqual({ exGstPaise: 237_288, ratePercent: 18, ambiguous: false });
+  });
+
+  it('leaves the rules intact: switched off, the slab and category rates are back', () => {
+    expect(gstRateForExGst(250_000, SLAB, { ...FLAT, uniformPercent: null }).ratePercent).toBe(5);
+    expect(gstRateForExGst(49_900, flat(0), { ...FLAT, uniformPercent: null }).ratePercent).toBe(0);
+  });
+});
+
 describe('describeTaxDefault', () => {
   it('states the slab in the settings’ own numbers', () => {
     expect(describeTaxDefault(SLAB, GST)).toBe('5% up to ₹2,500 per piece (ex-GST), 18% above');
     expect(describeTaxDefault(flat(3), GST)).toBe('3%');
+  });
+
+  it('says just the flat rate while it is in force: "GST 18%" on the form', () => {
+    expect(describeTaxDefault(SLAB, FLAT)).toBe('18%');
+    expect(describeTaxDefault(flat(0), FLAT)).toBe('18%');
   });
 });

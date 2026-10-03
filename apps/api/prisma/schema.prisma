@@ -1225,6 +1225,10 @@ model OrderItem {
   // change to the platform, category or seller window never moves it. Null
   // only on rows written without checkout (tests): those use today's rule.
   returnWindowDays Int?
+  // The GST rate this line was sold at, likewise fixed at checkout: invoices,
+  // the ledger, payouts and GSTR-8 read it, so a later GST change (the flat
+  // 18%) never rewrites a past sale. Null as above.
+  gstRatePercent Int?
 
   // Delivery partner details (filled when the seller ships via ShippingProvider).
   awbNumber   String?

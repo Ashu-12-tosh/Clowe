@@ -130,6 +130,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         where: { sellerId, status: { in: ['DELIVERED', 'RETURN_REQUESTED', 'RETURNED'] }, ...where },
         select: {
           pricePaise: true,
+          gstRatePercent: true,
           quantity: true,
           deliveredAt: true,
           status: true,
@@ -537,6 +538,7 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
         title: true,
         quantity: true,
         pricePaise: true,
+        gstRatePercent: true,
         deliveredAt: true,
         product: { select: { categoryId: true } },
         payout: { select: { reference: true, status: true } },
@@ -662,6 +664,7 @@ sellerPayoutsRouter.get('/:id', async (req, res, next) => {
             title: true,
             quantity: true,
             pricePaise: true,
+            gstRatePercent: true,
             deliveredAt: true,
             product: { select: { categoryId: true } },
             order: { select: { orderNumber: true } },

@@ -60,6 +60,8 @@ export interface SellerEconomicsInput {
    * records. Used when sellerPricePaise is not given.
    */
   buyerPricePaise?: number;
+  /** The GST rate the order line was sold at, when it recorded one; else worked out from the rules. */
+  gstRatePercent?: number | null;
   /** Units on the line; defaults to one for the listing preview. */
   quantity?: number;
   rates: SellerEconomicsRates;
@@ -134,7 +136,7 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
     gstRatePercent = unit.ratePercent;
   } else {
     const unitPaise = Math.max(0, Math.round(input.buyerPricePaise ?? 0));
-    gstRatePercent = gstRateForInclusive(unitPaise, rules, rates.gst).ratePercent;
+    gstRatePercent = input.gstRatePercent ?? gstRateForInclusive(unitPaise, rules, rates.gst).ratePercent;
     grossPaise = unitPaise * quantity;
     gstPaise = gstInclusiveShare(grossPaise, gstRatePercent);
   }

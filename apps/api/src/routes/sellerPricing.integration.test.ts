@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
@@ -5,9 +7,9 @@ import { buyerPriceFor, sellerPriceFromBuyer } from '@clowe/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
-import { DEFAULT_SETTINGS } from '../services/settingsService';
+import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
 import { invalidateCategoryRules } from '../services/categoryRules';
-import { ensureSellerPrices } from '../services/sellerPricing';
+import { changeGstRules, ensureSellerPrices, repriceProducts, saleGstRates } from '../services/sellerPricing';
 import { signAccessToken } from '../utils/jwt';
 
 /**
@@ -26,6 +28,7 @@ const GST = {
   meritPercent: DEFAULT_SETTINGS.gstMeritPercent,
   standardPercent: DEFAULT_SETTINGS.gstStandardPercent,
   valueSlabThresholdPaise: DEFAULT_SETTINGS.gstValueSlabThresholdPaise,
+  uniformPercent: null,
 };
 
 beforeAll(async () => {
@@ -241,5 +244,126 @@ describe('when GST rules change', () => {
     expect((await variantOf(id)).pricePaise).toBe(11_800); // still live in the 18% category
     expect((await call('PATCH', `/api/admin/products/${id}/revision`, adminToken, { action: 'approve' })).status).toBe(200);
     expect((await variantOf(id)).pricePaise).toBe(10_500);
+  });
+});
+
+describe('flat 18% on every product', () => {
+  const clearFlat = () => prisma.platformSetting.deleteMany({ where: { key: 'gstUniformPercent' } });
+
+  it('is previewed without writing, applied by the same steps, and switched back from admin', async () => {
+    const s = await seller();
+    const apparel = await category({ taxRule: 'VALUE_SLAB' });
+    const books = await category({ defaultTaxRatePercent: 0 });
+    const standard = await category({ defaultTaxRatePercent: 18 });
+    const make = async (cat: string, price: number) =>
+      ((await call('POST', '/api/seller/products', s.token, body(cat, [{ optionValues: {}, sellerPricePaise: price, stock: 1 }]))).json
+        .data as unknown as { id: string }).id;
+    const ids = { apparel: await make(apparel, 250_000), book: await make(books, 49_900), plain: await make(standard, 10_000) };
+    const where = { id: { in: Object.values(ids) } };
+    const buyer = async () => Promise.all(Object.values(ids).map(async (id) => (await variantOf(id)).pricePaise));
+    expect(await buyer()).toEqual([262_500, 49_900, 11_800]);
+
+    try {
+      // Dry run: the report, and nothing written.
+      const preview = await repriceProducts(where, { priceGst: { ...GST, uniformPercent: 18 }, apply: false });
+      expect(preview.map((c) => [c.buyerBefore, c.buyerAfter])).toEqual([
+        [262_500, 295_000],
+        [49_900, 58_882],
+      ]);
+      expect(await buyer()).toEqual([262_500, 49_900, 11_800]);
+
+      // Apply: buyer prices move, seller prices stay.
+      await changeGstRules(() => setSetting('gstUniformPercent', 18), where);
+      expect(await buyer()).toEqual([295_000, 58_882, 11_800]);
+      expect((await variantOf(ids.apparel)).sellerPricePaise).toBe(250_000);
+      const detail = (await call('GET', `/api/seller/products/${ids.book}`, s.token)).json.data as unknown as {
+        variants: { sellerPricePaise: number; buyerPricePaise: number }[];
+      };
+      expect(detail.variants[0]).toMatchObject({ sellerPricePaise: 49_900, buyerPricePaise: 58_882 });
+
+      // Admin clears it: back to the category rules, repriced.
+      expect((await call('PUT', '/api/admin/settings', adminToken, { gstUniformPercent: null })).status).toBe(200);
+      expect(await buyer()).toEqual([262_500, 49_900, 11_800]);
+      // And sets it from admin too.
+      expect((await call('PUT', '/api/admin/settings', adminToken, { gstUniformPercent: 18 })).status).toBe(200);
+      expect(await buyer()).toEqual([295_000, 58_882, 11_800]);
+    } finally {
+      await clearFlat();
+    }
+  });
+
+  it('leaves a listing already at 18% exactly where it is, with no rounding step', async () => {
+    const s = await seller();
+    const cat = await category({ defaultTaxRatePercent: 18 });
+    const r18 = { taxRule: null, defaultTaxRatePercent: 18 };
+    let buyer = 100_000;
+    while (buyerPriceFor(sellerPriceFromBuyer(buyer, r18, GST).exGstPaise, r18, GST).buyerPaise === buyer) buyer += 1;
+    const { product } = await legacyListing(s.sellerId, cat, buyer);
+    const preview = await repriceProducts({ id: product.id }, { priceGst: { ...GST, uniformPercent: 18 }, apply: false });
+    expect(preview).toEqual([]);
+  });
+
+  it('never re-taxes a past sale: its line keeps the rate it was sold at', async () => {
+    const s = await seller();
+    const apparel = await category({ taxRule: 'VALUE_SLAB' });
+    const created = await call('POST', '/api/seller/products', s.token, body(apparel, [{ optionValues: {}, sellerPricePaise: 250_000, stock: 5 }]));
+    const productId = (created.json.data as unknown as { id: string }).id;
+    const v = await variantOf(productId);
+    seq += 1;
+    const shopper = await prisma.user.create({ data: { phone: `91820${String(seq).padStart(5, '0')}`, name: 'Flat Buyer', referralCode: `FLAT-U-${seq}` } });
+    const order = await prisma.order.create({
+      data: {
+        orderNumber: `CLW-FLAT-${seq}`, userId: shopper.id, shipName: 'B', shipPhone: '9182000000', shipLine1: '1 Lane', shipCity: 'Pune',
+        shipState: 'Maharashtra', shipPincode: '411001', status: 'CONFIRMED', subtotalPaise: 262_500, totalPaise: 262_500, paymentMethod: 'UPI',
+        // Written outside checkout, so no recorded rate yet: the switch must record 5% first.
+        items: { create: { productId, variantId: v.id, sellerId: s.sellerId, title: 'Shirt', size: '', color: '', pricePaise: 262_500, quantity: 1, status: 'CONFIRMED' } },
+      },
+    });
+
+    try {
+      await changeGstRules(() => setSetting('gstUniformPercent', 18), { id: productId });
+      const line = await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id } });
+      expect(line.gstRatePercent).toBe(5);
+      const invoice = (await call('GET', `/api/seller/orders/${order.id}/invoice`, s.token)).json.data as unknown as {
+        lines: { gstRatePercent: number; taxablePaise: number; gstPaise: number }[];
+      };
+      expect(invoice.lines[0]).toMatchObject({ gstRatePercent: 5, taxablePaise: 250_000, gstPaise: 12_500 });
+
+      // A sale made now is at 18%.
+      expect(await saleGstRates([{ productId, unitPaise: 295_000 }])).toEqual([18]);
+    } finally {
+      await clearFlat();
+    }
+  });
+
+  it('backfills past order lines with the rate the rules gave them, in the migration', async () => {
+    const migration = fs.readFileSync(
+      path.resolve(__dirname, '../../prisma/migrations/20261013120000_order_line_gst_rate/migration.sql'),
+      'utf8',
+    );
+    const update = migration.slice(migration.indexOf('WITH RECURSIVE'));
+    const s = await seller();
+    const apparel = await category({ taxRule: 'VALUE_SLAB' });
+    const jewellery = await category({ defaultTaxRatePercent: 3 });
+    const plain = await category();
+    seq += 1;
+    const shopper = await prisma.user.create({ data: { phone: `91830${String(seq).padStart(5, '0')}`, name: 'Old Buyer', referralCode: `OLD-U-${seq}` } });
+    const lineIn = async (cat: string, price: number) => {
+      const { product, variant } = await legacyListing(s.sellerId, cat, price);
+      seq += 1;
+      const o = await prisma.order.create({
+        data: {
+          orderNumber: `CLW-OLD-${seq}`, userId: shopper.id, shipName: 'B', shipPhone: '9183000000', shipLine1: '1 Lane', shipCity: 'Pune',
+          shipState: 'Maharashtra', shipPincode: '411001', status: 'DELIVERED', subtotalPaise: price, totalPaise: price, paymentMethod: 'UPI',
+          items: { create: { productId: product.id, variantId: variant.id, sellerId: s.sellerId, title: 'Old', size: '', color: '', pricePaise: price, quantity: 1, status: 'DELIVERED' } },
+        },
+        include: { items: true },
+      });
+      return o.items[0].id;
+    };
+    const ids = [await lineIn(apparel, 262_500), await lineIn(apparel, 262_501), await lineIn(jewellery, 100_000), await lineIn(plain, 100_000)];
+    await prisma.$executeRawUnsafe(update);
+    const rates = await Promise.all(ids.map(async (id) => (await prisma.orderItem.findUniqueOrThrow({ where: { id } })).gstRatePercent));
+    expect(rates).toEqual([5, 18, 3, 18]);
   });
 });

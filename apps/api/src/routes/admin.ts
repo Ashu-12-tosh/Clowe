@@ -31,7 +31,7 @@ import {
   rulesFromChain,
 } from '../services/categoryRules';
 import { applyRevision, changedFields, type ListingContent } from '../services/productRevisions';
-import { ensureSellerPrices, repriceProducts } from '../services/sellerPricing';
+import { ensureSellerPrices, recordOrderLineGstRates, repriceProducts } from '../services/sellerPricing';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { sendToUserSafe } from '../services/messaging';
@@ -481,7 +481,11 @@ adminRouter.patch('/categories/:id', async (req, res, next) => {
       (input.taxRule !== undefined && input.taxRule !== category.taxRule) ||
       (input.defaultTaxRatePercent !== undefined && input.defaultTaxRatePercent !== category.defaultTaxRatePercent);
     const affected = taxChanging ? { categoryId: { in: await descendantIds(category.id) } } : null;
-    if (affected) await ensureSellerPrices(affected, true);
+    if (affected) {
+      // Past sales keep the rate they were sold at.
+      await recordOrderLineGstRates();
+      await ensureSellerPrices(affected, true);
+    }
 
     await prisma.category.update({
       where: { id: category.id },
@@ -740,13 +744,25 @@ adminRouter.put('/settings', async (req, res, next) => {
     if (input.codMaxOrderPaise !== undefined) await setSetting('codMaxOrderPaise', input.codMaxOrderPaise);
     if (input.adPricing !== undefined) await setSetting('adPricing', input.adPricing);
     // A GST rate change moves every buyer price: sellers' prices (before GST)
-    // stay, the GST on top changes. Any variant without a seller price gets
-    // one first, under the rates it was priced at.
+    // stay, the GST on top changes. First, under the rules in force, any order
+    // line without a recorded rate gets one (past sales are never re-taxed)
+    // and any variant without a seller price gets one.
     const before = await getSettings();
-    const gstChanging = (['gstMeritPercent', 'gstStandardPercent', 'gstValueSlabThresholdPaise'] as const).some(
-      (key) => input[key] !== undefined && input[key] !== before[key],
-    );
-    if (gstChanging) await ensureSellerPrices({}, true);
+    const gstChanging = (
+      ['gstMeritPercent', 'gstStandardPercent', 'gstValueSlabThresholdPaise', 'gstUniformPercent'] as const
+    ).some((key) => input[key] !== undefined && input[key] !== before[key]);
+    if (gstChanging) {
+      await recordOrderLineGstRates();
+      await ensureSellerPrices({}, true);
+    }
+    // The flat rate for every product; clearing it goes back to the category rules.
+    if (input.gstUniformPercent !== undefined) {
+      if (input.gstUniformPercent === null) {
+        await prisma.platformSetting.deleteMany({ where: { key: 'gstUniformPercent' } });
+      } else {
+        await setSetting('gstUniformPercent', input.gstUniformPercent);
+      }
+    }
     // Seller payout economics — every rate the payout page explains.
     for (const key of [
       'payoutCommissionPercent',

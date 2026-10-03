@@ -942,6 +942,15 @@ dc exec api npx tsx prisma/backfillDemoAttributes.ts
 dc exec api npx tsx prisma/backfillSellerPrices.ts
 dc exec api npx tsx prisma/backfillSellerPrices.ts --apply
 
+# The owner's decision: a flat 18% GST on every product. Dry run first: it
+# reports how many variants' buyer prices change, the biggest increases and the
+# totals per category, and writes nothing. --apply records the GST rate on any
+# past order line missing one, switches the platform to 18% (the category rules
+# and value slab are kept, unused) and reprices every listing from its seller's
+# price. Admin settings can switch it back. Run backfillSellerPrices.ts first.
+dc exec api npx tsx prisma/applyFlatGst.ts
+dc exec api npx tsx prisma/applyFlatGst.ts --apply
+
 # Every category gets its starting filter facets (the search filter rail).
 # Only categories with no facets of their own are written, so an admin's edits
 # stay. Dry run first: it prints each category's resolved facets and any seed
