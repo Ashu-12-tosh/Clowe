@@ -7,10 +7,8 @@ import {
   HIGHLIGHT_PRESETS,
   STORE_TABS,
   STORE_TAB_LABELS,
-  WEEKDAYS,
-  WEEKDAY_LABELS,
   storeBusinessSchema,
-  storeHoursSchema,
+  storeVacationSchema,
   storeProfileSchema,
   storeReturnsSchema,
   storeShippingSchema,
@@ -19,7 +17,6 @@ import {
   type SellerStoreSettings,
   type StoreHighlight,
   type StoreTab,
-  type Weekday,
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadImages } from '@/lib/api';
 import StorePreview from '@/components/seller/store/StorePreview';
@@ -36,7 +33,7 @@ const TAB_ICONS: Record<StoreTab, string> = {
   BANK: '🏦',
   SHIPPING: '🚚',
   RETURNS: '↩',
-  HOURS: '🕐',
+  VACATION: '🌴',
 };
 
 function Section({
@@ -202,11 +199,10 @@ export default function SellerStoreSettingsPage() {
           returnPincode: form.returnPincode ?? '',
         },
       },
-      HOURS: {
-        path: 'hours',
-        schema: storeHoursSchema,
+      VACATION: {
+        path: 'vacation',
+        schema: storeVacationSchema,
         payload: {
-          workingHours: form.workingHours,
           vacationMode: form.vacationMode,
           vacationUntil: form.vacationUntil ?? '',
           vacationMessage: form.vacationMessage ?? '',
@@ -890,67 +886,9 @@ export default function SellerStoreSettingsPage() {
             </Section>
           )}
 
-          {/* --- Hours --------------------------------------------------- */}
-          {tab === 'HOURS' && (
+          {/* --- Vacation ------------------------------------------------ */}
+          {tab === 'VACATION' && (
             <>
-              <Section title="Working hours" subtitle="Shown on your store page so shoppers know when you reply">
-                <div className="space-y-2">
-                  {WEEKDAYS.map((day) => {
-                    const h = form.workingHours[day];
-                    return (
-                      <div key={day} className="flex flex-wrap items-center gap-2 text-sm">
-                        <span className="w-24 text-gray-600">{WEEKDAY_LABELS[day]}</span>
-                        <input
-                          type="time"
-                          value={h.open}
-                          disabled={h.closed}
-                          onChange={(e) =>
-                            patch({
-                              workingHours: {
-                                ...form.workingHours,
-                                [day]: { ...h, open: e.target.value },
-                              } as Record<Weekday, typeof h>,
-                            })
-                          }
-                          className="rounded-lg border border-gray-300 px-2 py-1 text-xs outline-none disabled:bg-gray-50"
-                        />
-                        <span className="text-xs text-gray-400">to</span>
-                        <input
-                          type="time"
-                          value={h.close}
-                          disabled={h.closed}
-                          onChange={(e) =>
-                            patch({
-                              workingHours: {
-                                ...form.workingHours,
-                                [day]: { ...h, close: e.target.value },
-                              } as Record<Weekday, typeof h>,
-                            })
-                          }
-                          className="rounded-lg border border-gray-300 px-2 py-1 text-xs outline-none disabled:bg-gray-50"
-                        />
-                        <label className="flex items-center gap-1.5 text-xs text-gray-500">
-                          <input
-                            type="checkbox"
-                            checked={h.closed}
-                            onChange={(e) =>
-                              patch({
-                                workingHours: {
-                                  ...form.workingHours,
-                                  [day]: { ...h, closed: e.target.checked },
-                                } as Record<Weekday, typeof h>,
-                              })
-                            }
-                            className="h-3.5 w-3.5 accent-[#B8860B]"
-                          />
-                          Closed
-                        </label>
-                      </div>
-                    );
-                  })}
-                </div>
-              </Section>
-
               <Section
                 title="Vacation mode"
                 subtitle="Pause the shop without archiving anything"

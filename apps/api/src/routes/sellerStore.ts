@@ -2,9 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { SellerProfile } from '@prisma/client';
 import {
-  WEEKDAYS,
   storeBusinessSchema,
-  storeHoursSchema,
+  storeVacationSchema,
   storeProfileSchema,
   storeReturnsSchema,
   storeShippingSchema,
@@ -13,8 +12,6 @@ import {
   type SellerStoreSettings,
   type StoreHealthItem,
   type StoreHighlight,
-  type Weekday,
-  type WorkingHours,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { getSettings } from '../services/settingsService';
@@ -25,16 +22,6 @@ import { blockSuspendedWrites, requireSeller } from './seller';
 export const sellerStoreRouter = Router();
 sellerStoreRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 
-const DEFAULT_HOURS: Record<Weekday, WorkingHours> = {
-  mon: { open: '09:00', close: '21:00', closed: false },
-  tue: { open: '09:00', close: '21:00', closed: false },
-  wed: { open: '09:00', close: '21:00', closed: false },
-  thu: { open: '09:00', close: '21:00', closed: false },
-  fri: { open: '09:00', close: '21:00', closed: false },
-  sat: { open: '09:00', close: '21:00', closed: false },
-  sun: { open: '10:00', close: '18:00', closed: false },
-};
-
 const EMPTY_SOCIALS = { website: '', instagram: '', facebook: '', youtube: '' };
 
 function slugify(text: string): string {
@@ -42,14 +29,6 @@ function slugify(text: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
-}
-
-function parseHours(value: unknown): Record<Weekday, WorkingHours> {
-  if (!value || typeof value !== 'object') return DEFAULT_HOURS;
-  const raw = value as Partial<Record<Weekday, WorkingHours>>;
-  return Object.fromEntries(
-    WEEKDAYS.map((day) => [day, raw[day] ?? DEFAULT_HOURS[day]]),
-  ) as Record<Weekday, WorkingHours>;
 }
 
 function parseSocials(value: unknown): SellerStoreSettings['socialLinks'] {
@@ -138,7 +117,6 @@ async function toSettings(seller: SellerProfile): Promise<SellerStoreSettings> {
     returnState: seller.returnState,
     returnPincode: seller.returnPincode,
 
-    workingHours: parseHours(seller.workingHours),
     vacationMode: seller.vacationMode,
     vacationUntil: seller.vacationUntil?.toISOString() ?? null,
     vacationMessage: seller.vacationMessage,
@@ -441,13 +419,13 @@ sellerStoreRouter.put('/returns', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
-// PUT /hours — working hours and vacation mode
+// PUT /vacation — vacation mode (working hours stay stored, untouched)
 // ---------------------------------------------------------------------------
 
-sellerStoreRouter.put('/hours', async (req, res, next) => {
+sellerStoreRouter.put('/vacation', async (req, res, next) => {
   try {
     const seller = req.seller!;
-    const input = storeHoursSchema.parse(req.body);
+    const input = storeVacationSchema.parse(req.body);
     const until = input.vacationUntil ? new Date(input.vacationUntil) : null;
     // Vacation stops the late-dispatch penalty clock; record for how long.
     const now = new Date();
@@ -460,7 +438,6 @@ sellerStoreRouter.put('/hours', async (req, res, next) => {
     await prisma.sellerProfile.update({
       where: { id: seller.id },
       data: {
-        workingHours: input.workingHours as object,
         vacationMode: input.vacationMode,
         ...vacationStamps,
         vacationUntil: until && !Number.isNaN(until.getTime()) ? until : null,

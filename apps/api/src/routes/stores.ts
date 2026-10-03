@@ -1,15 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { WEEKDAYS, type PublicStore, type StoreHighlight, type Weekday, type WorkingHours } from '@clowe/shared';
+import { type PublicStore, type StoreHighlight } from '@clowe/shared';
 import { prisma } from '../db';
 import { getSettings } from '../services/settingsService';
 import { ApiError } from '../utils/ApiError';
 
 export const storesRouter = Router();
-
-const DEFAULT_HOURS: Record<Weekday, WorkingHours> = Object.fromEntries(
-  WEEKDAYS.map((d) => [d, { open: '09:00', close: '21:00', closed: false }]),
-) as Record<Weekday, WorkingHours>;
 
 /** Public store page: the shop's own storefront at /store/<slug>. */
 storesRouter.get('/:slug', async (req, res, next) => {
@@ -50,11 +46,7 @@ storesRouter.get('/:slug', async (req, res, next) => {
       state: seller.state,
       primaryCategoryName: category?.name ?? null,
       highlights: Array.isArray(seller.highlights) ? (seller.highlights as unknown as StoreHighlight[]) : [],
-      // Sellers' social links are kept in their profile but no longer shown.
-      workingHours: {
-        ...DEFAULT_HOURS,
-        ...((seller.workingHours as Partial<Record<Weekday, WorkingHours>> | null) ?? {}),
-      },
+      // Sellers' social links and working hours are kept in their profile but no longer shown.
       vacationMessage: seller.vacationMode
         ? (seller.vacationMessage ??
           'This shop is on a short break — orders resume when it reopens.')

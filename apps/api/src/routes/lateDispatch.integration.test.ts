@@ -291,17 +291,12 @@ describe('the sweep', () => {
 });
 
 describe('vacation', () => {
-  const hoursBody = (vacationMode: boolean) => ({
-    workingHours: Object.fromEntries(
-      ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [d, { open: '10:00', close: '19:00', closed: false }]),
-    ),
-    vacationMode,
-  });
+  const vacation = (vacationMode: boolean) => ({ vacationMode });
 
   it('records when it starts and ends, and pauses the penalty while on', async () => {
     const s = await makeSeller();
     const { order } = await makeOrder(s, 30);
-    expect((await call('PUT', '/api/seller/store/hours', s.token, hoursBody(true))).status).toBe(200);
+    expect((await call('PUT', '/api/seller/store/vacation', s.token, vacation(true))).status).toBe(200);
     const on = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: s.sellerId } });
     expect(on.vacationStartedAt).not.toBeNull();
     expect(on.vacationEndedAt).toBeNull();
@@ -314,7 +309,7 @@ describe('vacation', () => {
     await sweepLateDispatch(hoursFromNow(200));
     expect(await penaltiesOf(order.id)).toHaveLength(0);
 
-    expect((await call('PUT', '/api/seller/store/hours', s.token, hoursBody(false))).status).toBe(200);
+    expect((await call('PUT', '/api/seller/store/vacation', s.token, vacation(false))).status).toBe(200);
     const off = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: s.sellerId } });
     expect(off.vacationEndedAt).not.toBeNull();
   });

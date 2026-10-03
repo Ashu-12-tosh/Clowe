@@ -16,7 +16,7 @@ export const STORE_TABS = [
   'BANK',
   'SHIPPING',
   'RETURNS',
-  'HOURS',
+  'VACATION',
 ] as const;
 export type StoreTab = (typeof STORE_TABS)[number];
 
@@ -26,7 +26,7 @@ export const STORE_TAB_LABELS: Record<StoreTab, string> = {
   BANK: 'Bank & payouts',
   SHIPPING: 'Shipping & pickup',
   RETURNS: 'Return policy',
-  HOURS: 'Hours & vacation',
+  VACATION: 'Vacation',
 };
 
 export const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -123,8 +123,7 @@ export interface SellerStoreSettings {
   returnState: string | null;
   returnPincode: string | null;
 
-  /** Availability. */
-  workingHours: Record<Weekday, WorkingHours>;
+  /** Availability. (Working hours are still stored, but no longer edited or shown.) */
   vacationMode: boolean;
   vacationUntil: string | null;
   vacationMessage: string | null;
@@ -275,18 +274,13 @@ export const storeReturnsSchema = z.object({
 });
 export type StoreReturnsInput = z.infer<typeof storeReturnsSchema>;
 
-const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use 24-hour time, e.g. 09:30');
-
-export const storeHoursSchema = z.object({
-  workingHours: z.record(
-    z.enum(WEEKDAYS),
-    z.object({ open: hhmm, close: hhmm, closed: z.boolean() }),
-  ),
+/** Vacation mode. Working hours are no longer edited; what is stored stays. */
+export const storeVacationSchema = z.object({
   vacationMode: z.boolean(),
   vacationUntil: z.string().optional().or(z.literal('')),
   vacationMessage: z.string().trim().max(200).optional(),
 });
-export type StoreHoursInput = z.infer<typeof storeHoursSchema>;
+export type StoreVacationInput = z.infer<typeof storeVacationSchema>;
 
 // ---------------------------------------------------------------------------
 // Public storefront
@@ -304,7 +298,6 @@ export interface PublicStore {
   state: string | null;
   primaryCategoryName: string | null;
   highlights: StoreHighlight[];
-  workingHours: Record<Weekday, WorkingHours>;
   /** Set when the shop is on vacation — the storefront explains the pause. */
   vacationMessage: string | null;
   ratingAvg: number | null;

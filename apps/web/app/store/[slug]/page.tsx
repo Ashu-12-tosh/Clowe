@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { WEEKDAYS, WEEKDAY_LABELS, type PublicStore, type Weekday, safeHref } from '@clowe/shared';
+import { type PublicStore, safeHref } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { ExternalLink } from '@/components/ExternalLink';
@@ -257,23 +257,6 @@ export default function StorePage({ params: paramsPromise }: { params: Promise<{
                   <dd className="text-ink-900">{store.returnWindowDays} days</dd>
                 </div>
               </dl>
-            </section>
-
-            <section className="rounded-2xl border border-gray-100 bg-white p-4">
-              <h3 className="text-sm font-bold text-ink-900">Working hours</h3>
-              <ul className="mt-2 space-y-1 text-xs">
-                {WEEKDAYS.map((day: Weekday) => {
-                  const h = store.workingHours[day];
-                  return (
-                    <li key={day} className="flex justify-between">
-                      <span className="text-gray-500">{WEEKDAY_LABELS[day]}</span>
-                      <span className="text-ink-900">
-                        {h.closed ? 'Closed' : `${h.open} – ${h.close}`}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
             </section>
 
           </aside>
