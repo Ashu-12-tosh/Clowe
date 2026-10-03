@@ -281,6 +281,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         platformFeePaise: settings.platformFeePaise,
         deliveryFeePaise: settings.deliveryFeePaise,
         closingFeePaise: settings.closingFeePaise,
+        gtChargePaise: settings.gtChargePaise,
         minPayoutPaise: settings.payoutMinPaise,
         holdDays: settings.payoutHoldDays,
       },

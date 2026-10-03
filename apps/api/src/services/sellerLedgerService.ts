@@ -37,6 +37,7 @@ export const DELIVERY_ENTRY_TYPES: readonly SellerLedgerTypeValue[] = [
   'GATEWAY_FEE',
   'DELIVERY_FEE',
   'CLOSING_FEE',
+  'GT_CHARGE',
   'TDS',
   'GST_TCS',
 ];

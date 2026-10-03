@@ -85,7 +85,7 @@ export function feesFor(line: FeeLine, settings: PlatformSettings, rules: TaxRul
     rates: economicsRates(settings),
     taxRules: rules.get(line.product.categoryId),
   });
-  const fixedFeesPaise = e.platformFeePaise + e.deliveryFeePaise + e.closingFeePaise;
+  const fixedFeesPaise = e.platformFeePaise + e.deliveryFeePaise + e.closingFeePaise + e.gtChargePaise;
   return {
     grossPaise: e.grossPaise,
     commissionPaise: e.commissionPaise,

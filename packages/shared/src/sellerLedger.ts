@@ -24,6 +24,7 @@ export const SELLER_LEDGER_TYPES = [
   'DELIVERY_FEE',
   'CLOSING_FEE',
   'GST_TCS',
+  'GT_CHARGE',
 ] as const;
 export type SellerLedgerTypeValue = (typeof SELLER_LEDGER_TYPES)[number];
 
@@ -45,6 +46,7 @@ export const SELLER_LEDGER_TYPE_LABELS: Record<SellerLedgerTypeValue, string> = 
   ADJUSTMENT: 'Adjustment',
   DELIVERY_FEE: 'Delivery fee',
   CLOSING_FEE: 'Closing fee',
+  GT_CHARGE: 'GT charge',
   GST_TCS: 'GST TCS (s.52)',
 };
 

@@ -164,6 +164,7 @@ If all of that checks out, raise a ticket under Payouts & payments with the payo
 
 • Commission — the marketplace fee, a percentage of the line total.
 • Payment gateway / collection charge — a percentage covering online payment or COD collection.
+• Fixed fees — a platform fee per order line, a delivery fee per shipment, and a closing fee and a GT (goods transfer) charge per unit. The amounts in force are on your Payouts page and in the pricing calculator.
 • TDS under section 194-O — withheld against your PAN and deposited with the payout that carried it. Download the TDS report from the Payouts page for your accountant.
 
 You enter your price before GST. The customer pays it plus GST at the rate for the product's category (apparel and footwear: 5% up to ₹2,500 per piece of your price, 18% above), and that GST reaches your bank with the sale for you to file in your return. You issue the tax invoice for your own lines from the Orders page.`,

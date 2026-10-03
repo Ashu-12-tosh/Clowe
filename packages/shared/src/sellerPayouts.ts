@@ -95,6 +95,7 @@ export interface SellerPayoutOverview {
     platformFeePaise: number;
     deliveryFeePaise: number;
     closingFeePaise: number;
+    gtChargePaise: number;
     minPayoutPaise: number;
     holdDays: number;
   };

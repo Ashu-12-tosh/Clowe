@@ -43,6 +43,7 @@ export default function AdminSettingsPage() {
     platformRupees: '',
     deliveryRupees: '',
     closingRupees: '',
+    gtRupees: '',
   });
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
@@ -70,6 +71,7 @@ export default function AdminSettingsPage() {
           platformRupees: toRupees(s.platformFeePaise),
           deliveryRupees: toRupees(s.deliveryFeePaise),
           closingRupees: toRupees(s.closingFeePaise),
+          gtRupees: toRupees(s.gtChargePaise),
         });
         setDispatch({
           slaHours: String(s.dispatchSlaHours),
@@ -129,6 +131,7 @@ export default function AdminSettingsPage() {
           platformFeePaise: toPaise(economics.platformRupees),
           deliveryFeePaise: toPaise(economics.deliveryRupees),
           closingFeePaise: toPaise(economics.closingRupees),
+          gtChargePaise: toPaise(economics.gtRupees),
         },
         auth: true,
       });
@@ -512,6 +515,16 @@ export default function AdminSettingsPage() {
               min={0}
               value={economics.closingRupees}
               onChange={(e) => setEconomics((v) => ({ ...v, closingRupees: e.target.value }))}
+              className={field}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">GT charge (₹, per unit)</label>
+            <input
+              type="number"
+              min={0}
+              value={economics.gtRupees}
+              onChange={(e) => setEconomics((v) => ({ ...v, gtRupees: e.target.value }))}
               className={field}
             />
           </div>

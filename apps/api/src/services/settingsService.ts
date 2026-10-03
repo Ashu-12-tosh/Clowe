@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   platformFeePaise: 900, // ₹9 per line
   deliveryFeePaise: 6000, // ₹60 per shipment
   closingFeePaise: 2000, // ₹20 per unit — placeholder
+  gtChargePaise: 3000, // ₹30 per unit — goods transfer
   // The platform return window, in days from delivery. The one source every
   // page reads (product pages, help, policies, seller panels); a category or
   // a seller may set its own, and each order line keeps the window it was
@@ -138,6 +139,7 @@ export async function getSettings(): Promise<PlatformSettings> {
       (byKey.get('deliveryFeePaise') as number | undefined) ?? DEFAULT_SETTINGS.deliveryFeePaise,
     closingFeePaise:
       (byKey.get('closingFeePaise') as number | undefined) ?? DEFAULT_SETTINGS.closingFeePaise,
+    gtChargePaise: (byKey.get('gtChargePaise') as number | undefined) ?? DEFAULT_SETTINGS.gtChargePaise,
     returnWindowDays:
       (byKey.get('returnWindowDays') as number | undefined) ?? DEFAULT_SETTINGS.returnWindowDays,
     auditRetentionDays:

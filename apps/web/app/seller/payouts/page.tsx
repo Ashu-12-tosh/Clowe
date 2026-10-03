@@ -610,7 +610,7 @@ export default function SellerPayoutsPage() {
                     <dt className="text-gray-500">
                       Fixed fees (platform {money(overview.rates.platformFeePaise)} · delivery{' '}
                       {money(overview.rates.deliveryFeePaise)} · closing{' '}
-                      {money(overview.rates.closingFeePaise)}/unit)
+                      {money(overview.rates.closingFeePaise)}/unit · GT {money(overview.rates.gtChargePaise)}/unit)
                     </dt>
                     <dd className="font-semibold">{money(overview.fees.fixedFeesPaise)}</dd>
                   </div>

@@ -94,6 +94,8 @@ export interface PlatformSettings {
   deliveryFeePaise: number;
   /** Fixed closing fee per unit (paise). A placeholder until real logistics costs are known. */
   closingFeePaise: number;
+  /** Goods transfer (GT) charge per unit (paise). */
+  gtChargePaise: number;
   /** Platform-wide return window; a seller may set a longer one of their own. */
   returnWindowDays: number;
   /** How long audit entries are kept before they can be purged. */
@@ -183,6 +185,7 @@ export const updateSettingsSchema = z.object({
   platformFeePaise: z.number().int().min(0).optional(),
   deliveryFeePaise: z.number().int().min(0).optional(),
   closingFeePaise: z.number().int().min(0).optional(),
+  gtChargePaise: z.number().int().min(0).optional(),
   lateDispatchPenaltyPaise: z.number().int().min(0).optional(),
   penaltyEnabled: z.boolean().optional(),
   kycNameMatchMinScore: z.number().int().min(0).max(100).optional(),

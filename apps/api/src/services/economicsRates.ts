@@ -29,5 +29,6 @@ export function economicsRates(settings: PlatformSettings): SellerEconomicsRates
     platformFeePaise: settings.platformFeePaise,
     deliveryFeePaise: settings.deliveryFeePaise,
     closingFeePaise: settings.closingFeePaise,
+    gtChargePaise: settings.gtChargePaise,
   };
 }

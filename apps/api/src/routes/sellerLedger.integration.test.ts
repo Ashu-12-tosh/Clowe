@@ -42,10 +42,11 @@ const TCS = 1_271;
 const PLATFORM = DEFAULT_SETTINGS.platformFeePaise;
 const DELIVERY = DEFAULT_SETTINGS.deliveryFeePaise;
 const CLOSING = DEFAULT_SETTINGS.closingFeePaise;
-const FIXED = PLATFORM + DELIVERY + CLOSING;
+const GT = DEFAULT_SETTINGS.gtChargePaise;
+const FIXED = PLATFORM + DELIVERY + CLOSING + GT;
 const NET = PRICE - COMMISSION - GATEWAY - TDS - TCS - FIXED;
 /** Entries one delivered unit posts. */
-const ENTRIES_PER_DELIVERY = 8;
+const ENTRIES_PER_DELIVERY = 9;
 
 beforeAll(async () => {
   await seedFixture(prisma);
@@ -218,6 +219,7 @@ describe('delivery', () => {
       ['DELIVERY_FEE', -DELIVERY, 'SETTLEMENT'],
       ['CLOSING_FEE', -CLOSING, 'SETTLEMENT'],
       ['GST_TCS', -TCS, 'SETTLEMENT'],
+      ['GT_CHARGE', -GT, 'SETTLEMENT'],
     ]);
     expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(NET);
   });
@@ -247,8 +249,24 @@ describe('delivery', () => {
     const of = (type: string) => rows.find((r) => r.type === type)?.amountPaise;
     expect(of('SALE_EARNING')).toBe(PRICE * 3);
     expect(of('CLOSING_FEE')).toBe(-CLOSING * 3);
+    expect(of('GT_CHARGE')).toBe(-GT * 3);
     expect(of('PLATFORM_FEE')).toBe(-PLATFORM);
     expect(of('DELIVERY_FEE')).toBe(-DELIVERY);
+  });
+
+  it('posts the GT charge per unit at the setting, and the payouts page states it', async () => {
+    await setSetting('gtChargePaise', 4_500);
+    try {
+      const s = await makeSeller();
+      const line = await makeLine(s, 'SHIPPED', { quantity: 2 });
+      await call('PATCH', `/api/seller/orders/${line.id}/status`, s.token, { action: 'deliver' });
+      const rows = await entriesFor(line.id);
+      expect(rows.find((r) => r.type === 'GT_CHARGE')?.amountPaise).toBe(-9_000);
+      const overview = await call('GET', '/api/seller/payouts/overview', s.token);
+      expect((overview.json.data as { rates: { gtChargePaise: number } }).rates.gtChargePaise).toBe(4_500);
+    } finally {
+      await setSetting('gtChargePaise', DEFAULT_SETTINGS.gtChargePaise);
+    }
   });
 
   it('follows the fixed-fee settings, not compiled-in numbers', async () => {

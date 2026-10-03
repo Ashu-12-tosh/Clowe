@@ -48,6 +48,8 @@ export interface SellerEconomicsRates {
   deliveryFeePaise: number;
   /** Fixed closing fee, per unit. */
   closingFeePaise: number;
+  /** Goods transfer (GT) charge, per unit. */
+  gtChargePaise: number;
 }
 
 export interface SellerEconomicsInput {
@@ -92,6 +94,7 @@ export interface SellerEconomics {
   platformFeePaise: number;
   deliveryFeePaise: number;
   closingFeePaise: number;
+  gtChargePaise: number;
   tdsPaise: number;
   tcsPaise: number;
   /** The line's value net of GST: the base for TDS and TCS. */
@@ -147,6 +150,7 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
   const platformFeePaise = sold ? Math.max(0, Math.round(rates.platformFeePaise)) : 0;
   const deliveryFeePaise = sold ? Math.max(0, Math.round(rates.deliveryFeePaise)) : 0;
   const closingFeePaise = sold ? Math.max(0, Math.round(rates.closingFeePaise)) * quantity : 0;
+  const gtChargePaise = sold ? Math.max(0, Math.round(rates.gtChargePaise)) * quantity : 0;
 
   const lines: SellerEconomicsLine[] = [
     { key: 'sale', label: 'Sale', amountPaise: grossPaise, ledgerType: 'SALE_EARNING' },
@@ -170,6 +174,12 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
       amountPaise: -closingFeePaise,
       ledgerType: 'CLOSING_FEE',
     },
+    {
+      key: 'gt',
+      label: quantity > 1 ? `GT charge (${quantity} units)` : 'GT charge',
+      amountPaise: -gtChargePaise,
+      ledgerType: 'GT_CHARGE',
+    },
     { key: 'tds', label: `TDS (${rates.tdsPercent}%)`, amountPaise: -tdsPaise, ledgerType: 'TDS' },
     { key: 'tcs', label: `TCS (${rates.tcsPercent}%)`, amountPaise: -tcsPaise, ledgerType: 'GST_TCS' },
   ];
@@ -190,6 +200,7 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
     platformFeePaise,
     deliveryFeePaise,
     closingFeePaise,
+    gtChargePaise,
     tdsPaise,
     tcsPaise,
     exGstPaise,

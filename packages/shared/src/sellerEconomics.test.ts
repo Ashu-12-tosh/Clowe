@@ -12,6 +12,7 @@ const RATES = {
   platformFeePaise: 900,
   deliveryFeePaise: 6000,
   closingFeePaise: 2000,
+  gtChargePaise: 3000,
 };
 
 describe('computeListingEconomics', () => {
@@ -23,10 +24,11 @@ describe('computeListingEconomics', () => {
     expect(e.platformFeePaise).toBe(900);
     expect(e.deliveryFeePaise).toBe(6_000);
     expect(e.closingFeePaise).toBe(2_000);
+    expect(e.gtChargePaise).toBe(3_000);
     // ₹1,000 at 18% is ₹847.46 ex-GST: TDS 0.1% = ₹0.85, TCS 0.5% = ₹4.24.
     expect(e.tdsPaise).toBe(85);
     expect(e.tcsPaise).toBe(424);
-    expect(e.sellerReceivesPaise).toBe(100_000 - 10_000 - 2_000 - 900 - 6_000 - 2_000 - 85 - 424);
+    expect(e.sellerReceivesPaise).toBe(100_000 - 10_000 - 2_000 - 900 - 6_000 - 2_000 - 3_000 - 85 - 424);
   });
 
   it('shows the GST inside the price without deducting it', () => {
@@ -59,7 +61,7 @@ describe('computeListingEconomics', () => {
     for (const l of e.lines) expect(Number.isInteger(l.amountPaise)).toBe(true);
     const sum = e.lines.reduce((s, l) => s + l.amountPaise, 0);
     expect(sum).toBe(e.sellerReceivesPaise);
-    expect(e.sellerReceivesPaise).toBe(33_333 - 3_333 - 667 - 28 - 141 - 900 - 6_000 - 2_000);
+    expect(e.sellerReceivesPaise).toBe(33_333 - 3_333 - 667 - 28 - 141 - 900 - 6_000 - 2_000 - 3_000);
   });
 
   it('takes percentages on the line total, fixed fees per line, closing per unit', () => {
@@ -72,6 +74,7 @@ describe('computeListingEconomics', () => {
     expect(three.platformFeePaise).toBe(900);
     expect(three.deliveryFeePaise).toBe(6_000);
     expect(three.closingFeePaise).toBe(6_000);
+    expect(three.gtChargePaise).toBe(9_000);
   });
 
   it('maps every deduction to the ledger type it is posted as', () => {
@@ -83,6 +86,7 @@ describe('computeListingEconomics', () => {
       ['PLATFORM_FEE', -900],
       ['DELIVERY_FEE', -6_000],
       ['CLOSING_FEE', -2_000],
+      ['GT_CHARGE', -3_000],
       // ₹500 at 18% is ₹423.73 ex-GST.
       ['TDS', -42],
       ['GST_TCS', -212],
@@ -101,6 +105,7 @@ describe('computeListingEconomics', () => {
         platformFeePaise: 0,
         deliveryFeePaise: 4_500,
         closingFeePaise: 0,
+        gtChargePaise: 0,
       },
       // A flat 5% category: the rate comes from the category, not the rates.
       taxRules: { taxRule: null, defaultTaxRatePercent: 5 },
@@ -211,6 +216,7 @@ describe('breakdownRows', () => {
       ['deduction', 'Platform fee'],
       ['deduction', 'Delivery fee'],
       ['deduction', 'Closing fee'],
+      ['deduction', 'GT charge'],
       ['deduction', 'TDS (0.1%)'],
       ['deduction', 'TCS (0.5%)'],
       ['subtotal', 'Paid to your bank'],
