@@ -25,6 +25,7 @@
     "db:backfill-private-files": "tsx prisma/backfillPrivateFiles.ts",
     "db:backfill-seller-prices": "tsx prisma/backfillSellerPrices.ts",
     "db:apply-flat-gst": "tsx prisma/applyFlatGst.ts",
+    "db:spec-typos": "tsx prisma/specTypos.ts",
     "seed:tryon-demo": "tsx scripts/seedTryOnDemoProduct.ts",
     "tryon:check": "tsx scripts/tryonCheck.ts",
     "tryon:e2e": "node scripts/tryonE2E.mjs"

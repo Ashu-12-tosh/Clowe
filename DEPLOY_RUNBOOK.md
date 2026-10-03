@@ -951,6 +951,12 @@ dc exec api npx tsx prisma/backfillSellerPrices.ts --apply
 dc exec api npx tsx prisma/applyFlatGst.ts
 dc exec api npx tsx prisma/applyFlatGst.ts --apply
 
+# Spec values sellers typed off their facet's list ("hlaf", "plan"), each with
+# the known value it most likely meant ("Half sleeve", "Solid"). The report
+# writes nothing; apply only the rows an admin approved, by their [token].
+dc exec api npx tsx prisma/specTypos.ts
+dc exec api npx tsx prisma/specTypos.ts --apply --approve=sleeve:hlaf,pattern:plan
+
 # Every category gets its starting filter facets (the search filter rail).
 # Only categories with no facets of their own are written, so an admin's edits
 # stay. Dry run first: it prints each category's resolved facets and any seed

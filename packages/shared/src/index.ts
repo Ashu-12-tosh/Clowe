@@ -41,6 +41,7 @@ export * from './sellerDashboard';
 export * from './sellerHelp';
 export * from './returnWindow';
 export * from './policyText';
+export * from './specValueSuggest';
 export * from './sellerOrders';
 export * from './sellerPayouts';
 export * from './sellerLedger';
