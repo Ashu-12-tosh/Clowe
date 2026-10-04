@@ -142,14 +142,15 @@ month.
 These are the three things standing between the current site and real customers.
 All three are waiting on an external party, not on code.
 
-**1. OTP SMS — waiting on DLT registration.**
-Login codes are printed to the API logs rather than texted, so **nobody except
-the operator can sign in**. The provider interface exists at
-`apps/api/src/services/otp/`; what is missing is the implementation and, before
-that, DLT registration (the Indian regulatory step every transactional SMS
-sender must complete). This is the single hard blocker on a public launch.
+**1. OTP SMS — built; waiting on the panel keys in `.env.production`.**
+The provider is written: `OTP_PROVIDER=smspanel` sends login codes as
+transactional SMS through the DLT-registered panel
+(`apps/api/src/services/otp/SmsPanelOtpProvider.ts`). Until its settings are
+in `.env.production`, production stays on the mock: codes are printed to the
+API logs rather than texted, so **nobody except the operator can sign in**.
+Setup and failure meanings: DEPLOY_RUNBOOK.md, "Turning on real SMS OTP".
 
-To read a login code today:
+To read a login code while on the mock:
 ```sh
 docker compose -f docker-compose.prod.yml --env-file .env.production logs -f api | grep -A2 'MOCK OTP'
 ```
@@ -319,7 +320,7 @@ over HTTPS with a Let's Encrypt certificate and an HTTP→HTTPS redirect. The
 whole stack is one Docker Compose file — Postgres, the API, the Next.js web app
 and Nginx — defined in `docker-compose.prod.yml` and configured by
 `.env.production` on the server (never committed; `.env.production.example`
-lists all 23 variables it reads). Database migrations run automatically when the
+lists all 30 variables it reads). Database migrations run automatically when the
 API container starts. A nightly cron takes a Postgres dump plus the uploads
 volume into `backups/`, keeping 14 days. **To deploy a change: `git pull` then
 `docker compose -f docker-compose.prod.yml --env-file .env.production up -d
@@ -332,6 +333,16 @@ compiled into the web bundle, so changing it requires a rebuild rather than a
 restart; and `KYC_FINGERPRINT_SECRET` must be set once and never rotated,
 because a new key makes every verified document look changed and re-bills every
 verification.
+
+**Watch: the SMS panel's certificate expires on 22 Nov 2026.** OTP SMS goes to
+`https://alots.in` (`SMS_PANEL_BASE_URL`) with certificate verification on and
+no `http://` fallback, because the API key travels in the URL. If the provider
+has not renewed by then, every login SMS fails and the log says `certificate of
+alots.in failed verification`. Check in early November with
+`echo | openssl s_client -connect alots.in:443 -servername alots.in 2>/dev/null | openssl x509 -noout -enddate`.
+The certificate does not cover the panel's IP (123.108.46.13), which is why the
+hostname is used; the provider has been asked for the account's official
+domain, and `SMS_PANEL_BASE_URL` changes if they give a different one.
 
 Data one-offs (the seed, backfills, facet seeding) run on the server as
 `dc exec api npx tsx prisma/<file>.ts`. The `npm run db:...` scripts are for a

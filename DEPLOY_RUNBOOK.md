@@ -14,10 +14,11 @@ This file is the *what to type*, in order.
 
 Three things that will otherwise look like bugs:
 
-1. **OTP login will only work for you.** There is no real SMS provider wired
-   yet. Login codes are printed to the API log instead of being texted. You
-   can log in by reading the log; nobody else can log in at all. **This is
-   expected, not a broken deploy.** See [§8](#8-what-works-on-mocks-and-what-does-not).
+1. **OTP login will only work for you until SMS is switched on.** On the
+   default `OTP_PROVIDER=mock`, login codes are printed to the API log instead
+   of being texted. You can log in by reading the log; nobody else can log in
+   at all. **This is expected, not a broken deploy.** Real SMS goes through the
+   DLT-registered panel — see [Turning on real SMS OTP](#turning-on-real-sms-otp).
 2. **Nothing on the mock providers costs money or crashes the stack.** Every
    unset provider key falls back to a free, local, no-network mock. Confirmed
    per provider in [§8](#8-what-works-on-mocks-and-what-does-not).
@@ -244,6 +245,8 @@ as a malformed value — the stack starts normally either way.
 |---|---|---|
 | `POSTGRES_USER` / `POSTGRES_DB` | `clowe` / `clowe` | Fine as-is |
 | `OTP_PROVIDER` | `mock` | OTP printed to the API log |
+| `SMS_PANEL_BASE_URL` | `https://alots.in` | The panel host; must be `https://` and covered by its certificate |
+| `SMS_PANEL_USERNAME` / `_API_KEY` / `_SENDER_ID` / `_TEMPLATE_ID` / `_OTP_TEMPLATE` | — | Ignored while `OTP_PROVIDER=mock`. **With `smspanel` and any blank → mock, with an error line in the log naming what is missing** |
 | `PAYMENT_PROVIDER` | `mock` | Fake pay button; no real charge |
 | `RAZORPAY_KEY_ID` / `_KEY_SECRET` / `_WEBHOOK_SECRET` | — | Ignored while `PAYMENT_PROVIDER=mock` |
 | `KYC_PROVIDER` | `auto` | Mock, because no Cashfree keys are set |
@@ -807,23 +810,84 @@ Moving `uploads/` to S3-compatible storage is post-launch work — the interface
 point is `apps/api/src/routes/uploads.ts`. See
 [PROJECT_STATUS.md](PROJECT_STATUS.md) §"Known gaps".
 
-### ⚠️ OTP login: only you can log in
+### ⚠️ OTP login: only you can log in — until real SMS is on
 
-**Say it plainly: until an SMS provider is written, the site is live but nobody
-can sign up or log in except you, by reading the server log.**
+**On the mock, the site is live but nobody can sign up or log in except you,
+by reading the server log.** Everything else works: browsing, search, product
+pages, cart, checkout on the mock gateway, the seller dashboard and the admin
+area — for you, once you are logged in. Turning on real SMS below fixes this.
 
-This is not a broken deploy and there is no configuration that fixes it — the
-real provider does not exist in the code yet. `OTP_PROVIDER` only accepts
-`mock` today; `apps/api/src/services/otp/` has the interface ready and no
-MSG91/Twilio implementation behind it.
+### Turning on real SMS OTP
 
-Everything else on the site works: browsing, search, product pages, cart,
-checkout on the mock gateway, the seller dashboard and the admin area — all of
-it, for you, once you are logged in.
+Login codes go out as transactional SMS through the DLT-registered SMS panel
+(`apps/api/src/services/otp/SmsPanelOtpProvider.ts`). **Every SMS is billed**,
+so there is no test send at boot — the first real login is the test.
 
-**So treat this deploy as a staging environment on a real domain.** Do not
-advertise it until [PROJECT_STATUS.md](PROJECT_STATUS.md) §"Launch
-blockers" item 1 is done.
+**1. Add to `.env.production`** (edit it by hand; values come from the panel
+and the DLT portal):
+
+```sh
+OTP_PROVIDER=smspanel
+SMS_PANEL_BASE_URL=https://alots.in        # or blank for this default
+SMS_PANEL_USERNAME=<panel username>
+SMS_PANEL_API_KEY=<panel API key>
+SMS_PANEL_SENDER_ID=<6-character DLT header>
+SMS_PANEL_TEMPLATE_ID=<DLT template ID of the OTP template>
+SMS_PANEL_OTP_TEMPLATE='<approved template text, with {#var#} where the code goes>'
+```
+
+The template must be the approved DLT text **character for character** —
+spaces, punctuation and case — or operators drop the SMS. Paste it with its
+`{#var#}`, exactly once. Keep the single quotes: without them compose reads
+` #…` as a comment and cuts the text short. If the text contains an
+apostrophe, use double quotes instead and write any `$` as `$$`.
+
+The DLT entity ID is configured inside the panel, not here. The route is
+always `TRANS`.
+
+**2. Restart the API:** `dc up -d api`
+
+✅ **Correct result:** the boot log names the panel:
+
+```
+[clowe-api] OTP: SMS panel (alots.in, sender ABCDEF, template 1207…, route TRANS)
+```
+
+❌ **`OTP: OTP_PROVIDER=smspanel but SMS_PANEL_… not set — using the mock`:**
+one of the five settings is blank. The line names which. Codes are still only
+in the log.
+
+❌ **The API exits at boot with `SMS_PANEL_… must …`:** a setting is present
+but malformed (an `http://` URL, a sender that is not 6 characters, a template
+without exactly one `{#var#}`). The message names the setting.
+
+**3. Log in with your own number** and check the SMS arrives.
+
+**When a code cannot be sent** the user sees *"We couldn't send the code.
+Please try again."* — the same for every number, so it does not reveal which
+numbers have accounts. The reason is one line in the API log:
+
+```sh
+dc logs api | grep 'SMS OTP not sent'
+```
+
+| Log says | Fix |
+|---|---|
+| `out of SMS credit` | Top up the panel account |
+| `rejected the DLT template` | `SMS_PANEL_TEMPLATE_ID` wrong, or `SMS_PANEL_OTP_TEMPLATE` differs from the approved text |
+| `rejected the sender` | `SMS_PANEL_SENDER_ID` wrong or not linked to the template |
+| `rejected the username or API key` | Credentials wrong, or the key was regenerated in the panel |
+| `certificate of … failed verification` | The panel's certificate expired or does not cover `SMS_PANEL_BASE_URL`. **Do not switch to `http://`** — the API key is in the URL. Ask the provider to renew, or use a host the certificate covers |
+| `did not answer within 10s` / `could not reach` | Panel down or network trouble; retry later |
+
+The API key, the code and the phone number never appear in these lines —
+they are masked even if the panel echoes them back.
+
+⚠️ **The panel's certificate expires on 22 Nov 2026.** If the provider does
+not renew it in time, every send fails with the certificate line above. See
+[PROJECT_STATUS.md](PROJECT_STATUS.md) §"Production".
+
+To go back to the mock at any time: `OTP_PROVIDER=mock`, then `dc up -d api`.
 
 ---
 
@@ -835,7 +899,9 @@ alias dc='docker compose -f docker-compose.prod.yml --env-file .env.production'
 
 dc ps                      # what is up
 dc logs -f api             # follow API logs
-dc logs -f api | grep -A2 'MOCK OTP'   # catch a login code
+dc logs -f api | grep -A2 'MOCK OTP'   # catch a login code (mock only)
+dc logs api | grep 'OTP:'              # which OTP provider is live
+dc logs api | grep 'SMS OTP not sent'  # why a code was not sent
 dc up -d --build           # rebuild and restart everything
 dc up -d --build web       # rebuild web only (after changing SITE_URL)
 dc restart nginx           # after editing nginx.conf

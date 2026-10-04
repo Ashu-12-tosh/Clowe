@@ -60,7 +60,7 @@ nano .env.production
 
 Then edit `nginx/nginx.conf` and replace `yourdomain.com` with your domain (2 places in the HTTP block; the HTTPS block is used in step 6).
 
-> ⚠️ Until you configure a real OTP provider, login OTPs print in the API logs:
+> ⚠️ Until you turn on real SMS (`OTP_PROVIDER=smspanel`), login OTPs print in the API logs:
 > `docker compose -f docker-compose.prod.yml logs -f api | grep OTP`
 
 ## 5. First launch
@@ -135,7 +135,7 @@ Migrations run automatically when the API container starts. Zero data is lost �
 | Feature | Env change | Where to get it |
 |---|---|---|
 | Real payments | `PAYMENT_PROVIDER=razorpay` + `RAZORPAY_KEY_ID/KEY_SECRET` (live keys) + webhook secret; add webhook `https://yourdomain.com/api/payments/webhook` in the Razorpay dashboard (event: payment.captured/failed) | razorpay.com |
-| Real OTP SMS | Implement + set `OTP_PROVIDER` (MSG91/Twilio) — interface ready in `apps/api/src/services/otp/` | msg91.com |
+| Real OTP SMS | `OTP_PROVIDER=smspanel` + the five `SMS_PANEL_*` settings — see DEPLOY_RUNBOOK.md "Turning on real SMS OTP" | DLT-registered SMS panel |
 | Real AI try-on | `FASHN_API_KEY=...` (auto-enables) | fashn.ai |
 | Real AI features | `ANTHROPIC_API_KEY=...` (auto-enables) | platform.claude.com |
 | WhatsApp/SMS/email | Implement + set `MESSAGING_PROVIDER` — interface in `services/messaging/` | Gupshup / MSG91 |
