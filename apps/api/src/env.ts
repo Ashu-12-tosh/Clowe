@@ -36,9 +36,23 @@ const envSchema = z.object({
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().default(90), // sliding — renewed on every refresh
 
   // --- OTP ---
-  OTP_PROVIDER: z.enum(['mock']).default('mock'), // 'msg91' | 'twilio' added later
+  // 'mock' prints the code to the API log. 'smspanel' sends it by SMS through
+  // the DLT-registered panel below, and falls back to the mock (with a warning
+  // at boot) while any of its settings is missing.
+  OTP_PROVIDER: z.enum(['mock', 'smspanel']).default('mock'),
   OTP_TTL_MIN: z.coerce.number().default(5),
   OTP_MAX_ATTEMPTS: z.coerce.number().default(5),
+  // The SMS panel. Its certificate must verify for this host: https only.
+  SMS_PANEL_BASE_URL: blankAsUnset(z.string().default('https://alots.in')),
+  SMS_PANEL_USERNAME: optionalSecret,
+  SMS_PANEL_API_KEY: optionalSecret,
+  // The 6-character DLT header, e.g. CLOWEE.
+  SMS_PANEL_SENDER_ID: optionalSecret,
+  // The DLT template ID of the approved OTP template.
+  SMS_PANEL_TEMPLATE_ID: optionalSecret,
+  // The approved template text, character for character, with {#var#} where
+  // the code goes. Not trimmed: DLT matches the text exactly.
+  SMS_PANEL_OTP_TEMPLATE: blankAsUnset(z.string().optional()),
 
   // Phone number that gets the ADMIN role via the seed script.
   ADMIN_PHONE: blankAsUnset(z.string().regex(/^[6-9]\d{9}$/).optional()),

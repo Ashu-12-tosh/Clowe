@@ -6,6 +6,7 @@ import { startTryOnPhotoRetention } from './services/tryonPhotoRetention';
 import { logStorageStatus } from './services/storage';
 import { logTryOnProviderStatus } from './services/tryon';
 import { logKycProviderStatus } from './services/kyc';
+import { logOtpProviderStatus } from './services/otp';
 import { startSearchLogCleanup } from './services/searchAnalytics';
 import { startQuerySuggestionRefresh } from './services/querySuggestions';
 
@@ -16,6 +17,7 @@ app.listen(env.PORT, () => {
   console.log(`[clowe-api] health check: http://localhost:${env.PORT}/api/health`);
   // Reports the live try-on provider, and warns at boot if the key is bad.
   void logTryOnProviderStatus();
+  logOtpProviderStatus();
   logKycProviderStatus();
   void logStorageStatus();
 });
