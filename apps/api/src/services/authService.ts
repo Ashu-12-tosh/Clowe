@@ -11,12 +11,18 @@ import {
   sha256,
 } from '../utils/crypto';
 import { signAccessToken } from '../utils/jwt';
-import { otpProvider } from './otp';
+import { OtpSendError, otpProvider } from './otp';
 
 const OTP_RESEND_COOLDOWN_SEC = 45;
 const PIN_MAX_ATTEMPTS = 5;
 /** The one answer to a failed PIN login, whatever the reason. */
 const PIN_LOGIN_FAILED = "That number and PIN don't match. Use OTP if you've forgotten your PIN.";
+/**
+ * The one answer when the code could not be sent, whatever the reason. It
+ * depends only on the SMS provider, never on whether the number has an
+ * account; the reason itself is in the API log.
+ */
+const OTP_SEND_FAILED = "We couldn't send the code. Please try again.";
 /** Compared against when a number has no PIN, so the work is the same either way. */
 const NO_PIN_HASH = sha256('no-pin-set');
 
@@ -110,8 +116,9 @@ async function createUser(phone: string, name?: string, referredById?: string): 
 export const authService = {
   /**
    * Step 1: generate an OTP, store its hash, deliver via the configured provider.
-   * In non-production the OTP is also returned in the response (devOtp) so the
-   * login page can show it — no need to watch the API console.
+   * With the mock provider outside production, the OTP is also returned in the
+   * response (devOtp) so the login page can show it. Never once a real SMS
+   * provider is live: then the code exists only in the SMS.
    */
   async requestOtp(phone: string): Promise<{ resendAfterSec: number; devOtp?: string }> {
     const latest = await prisma.otpCode.findFirst({
@@ -129,17 +136,28 @@ export const authService = {
     }
 
     const code = generateOtpCode();
-    await prisma.otpCode.create({
+    const otp = await prisma.otpCode.create({
       data: {
         phone,
         codeHash: sha256(code),
         expiresAt: new Date(Date.now() + env.OTP_TTL_MIN * 60 * 1000),
       },
     });
-    await otpProvider.sendOtp(phone, code);
+    try {
+      await otpProvider.sendOtp(phone, code);
+    } catch (err) {
+      // The provider has logged why. Drop the unsent code so "try again" is not
+      // met by the resend cooldown, and so it cannot be used.
+      if (!(err instanceof OtpSendError)) {
+        console.error(`[clowe-api] SMS OTP not sent: unexpected ${err instanceof Error ? err.name : typeof err}`);
+      }
+      await prisma.otpCode.delete({ where: { id: otp.id } });
+      throw new ApiError(503, 'OTP_SEND_FAILED', OTP_SEND_FAILED);
+    }
+    const showCode = env.NODE_ENV !== 'production' && otpProvider.name === 'mock';
     return {
       resendAfterSec: OTP_RESEND_COOLDOWN_SEC,
-      ...(env.NODE_ENV !== 'production' ? { devOtp: code } : {}),
+      ...(showCode ? { devOtp: code } : {}),
     };
   },
 
