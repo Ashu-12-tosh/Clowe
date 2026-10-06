@@ -791,6 +791,8 @@ adminRouter.put('/settings', async (req, res, next) => {
       // KYC name matches are judged against this on every read, so moving it
       // re-grades sellers without re-verifying (and re-paying for) anyone.
       'kycNameMatchMinScore',
+      // Coupons on or off for shoppers (and seller promo codes with them).
+      'couponsEnabled',
     ] as const) {
       if (input[key] !== undefined) await setSetting(key, input[key]);
     }

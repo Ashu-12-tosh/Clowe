@@ -292,3 +292,25 @@ describe('with coupons switched back on', () => {
     expect(coded.status).toBe(200);
   });
 });
+
+describe('the admin settings checkbox', () => {
+  it('saves couponsEnabled, both ways, and shoppers see the change', async () => {
+    seq += 1;
+    const admin = await prisma.user.create({
+      data: { phone: `95100${String(seq).padStart(5, '0')}`, name: `Coupon Admin ${seq}`, role: Role.ADMIN, referralCode: `CPN-A-${seq}` },
+    });
+    const token = signAccessToken({ sub: admin.id, role: 'ADMIN' });
+    const shopper = await makeShopper();
+    const read = async () => ({
+      admin: ((await call('GET', '/api/admin/settings', token)).json.data as unknown as { couponsEnabled: boolean }).couponsEnabled,
+      public: ((await call('GET', '/api/settings/public', shopper.token)).json.data as unknown as { couponsEnabled: boolean }).couponsEnabled,
+    });
+
+    for (const value of [false, true, false]) {
+      const saved = await call('PUT', '/api/admin/settings', token, { couponsEnabled: value });
+      expect(saved.status).toBe(200);
+      expect((saved.json.data as unknown as { couponsEnabled: boolean }).couponsEnabled).toBe(value);
+      expect(await read()).toEqual({ admin: value, public: value });
+    }
+  });
+});
