@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Your privacy matters to us. This policy explains what Clowe collects and why.
+Your privacy matters to us. This policy explains what Clowe collects and why. **{{legal.name}}**, which owns and operates cloweshop.com, is responsible for the personal data described here.
 
 ## What we collect
 
@@ -17,3 +17,14 @@ Your privacy matters to us. This policy explains what Clowe collects and why.
 ## Your controls
 
 Manage notification preferences and personal details from **Account Settings**, or contact support to delete your account.
+
+## Who we are
+
+cloweshop.com is owned and operated by **{{legal.name}}**.
+
+- Registered address: {{legal.registeredAddress}}
+- LLPIN: {{legal.llpin}}
+- GSTIN: {{legal.gstin}}
+- Email: {{legal.supportEmail}}
+- Phone: {{legal.supportPhone}}
+- Every way to reach us: [Contact Us](/contact)

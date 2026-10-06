@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getPublicSettings } from '@/lib/settings';
 import { ExternalLink } from '@/components/ExternalLink';
-import { safeHref } from '@clowe/shared';
+import { DEFAULT_LEGAL_ENTITY, legalDisplayName, safeHref } from '@clowe/shared';
 
 const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -22,6 +22,7 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
     title: 'Customer Care',
     links: [
+      { label: 'Contact Us', href: '/contact' },
       { label: 'Help Center', href: '/pages/help' },
       { label: 'Track Order', href: '/track' },
       { label: 'Returns & Refunds', href: '/pages/returns-refunds' },
@@ -117,10 +118,15 @@ export default function Footer() {
     instagram: '',
     linkedin: '',
   });
+  // The registered name until settings arrive, so the line never flashes empty.
+  const [legalName, setLegalName] = useState(DEFAULT_LEGAL_ENTITY.name);
 
   useEffect(() => {
     getPublicSettings()
-      .then((s) => setSocial(s.socialLinks))
+      .then((s) => {
+        setSocial(s.socialLinks);
+        setLegalName(s.legalEntity.name);
+      })
       .catch(() => {});
   }, []);
 
@@ -200,7 +206,7 @@ export default function Footer() {
             <span className="ml-1 text-xs text-gray-500">🛡 100% Secure Payments</span>
           </div>
           <p className="t-copyright text-gray-400">
-            © {new Date().getFullYear()} CLOWE. All rights reserved.
+            © {new Date().getFullYear()} {legalDisplayName(legalName)}. All rights reserved.
           </p>
         </div>
       </div>

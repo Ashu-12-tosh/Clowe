@@ -5,6 +5,8 @@ import {
   AD_DURATIONS,
   AD_PLACEMENTS,
   AD_PLACEMENT_LABELS,
+  DEFAULT_LEGAL_ENTITY,
+  type LegalEntity,
   type PlatformSettings,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
@@ -22,6 +24,7 @@ export default function AdminSettingsPage() {
   const [kycMinScore, setKycMinScore] = useState('');
   const [social, setSocial] = useState({ facebook: '', twitter: '', instagram: '', linkedin: '' });
   const [supportEmails, setSupportEmails] = useState({ customer: '', vendor: '' });
+  const [legal, setLegal] = useState<LegalEntity>(DEFAULT_LEGAL_ENTITY);
   const [codMaxRupees, setCodMaxRupees] = useState('');
   const [adPrices, setAdPrices] = useState<Record<string, string>>({});
   const [payout, setPayout] = useState({
@@ -62,6 +65,7 @@ export default function AdminSettingsPage() {
         setFoodCategoriesEnabled(s.foodCategoriesEnabled);
         setSocial(s.socialLinks);
         setSupportEmails(s.supportEmails);
+        setLegal(s.legalEntity);
         setCodMaxRupees(toRupees(s.codMaxOrderPaise));
         const prices: Record<string, string> = {};
         for (const pl of AD_PLACEMENTS)
@@ -116,6 +120,7 @@ export default function AdminSettingsPage() {
           tryonMinPricePaise: toPaise(tryonMin),
           socialLinks: social,
           supportEmails,
+          legalEntity: legal,
           codMaxOrderPaise: toPaise(codMaxRupees),
           adPricing,
           payoutCommissionPercent: Number(payout.commission) || 0,
@@ -283,6 +288,47 @@ export default function AdminSettingsPage() {
               onChange={(e) => setSupportEmails((s) => ({ ...s, [key]: e.target.value }))}
               className={`mt-1 ${field}`}
             />
+          </div>
+        ))}
+      </div>
+
+      {/* Legal entity */}
+      <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
+        <h2 className="text-sm font-bold">🏛 Legal business details</h2>
+        <p className="mt-1 text-xs text-gray-400">
+          Shown in the footer, on Contact Us and About, and in the Terms, Privacy, Refund, Cancellation
+          and Shipping pages &mdash; what payment gateways check for. Leave a field empty to hide it
+          everywhere; only the legal name is required.
+        </p>
+        {(
+          [
+            ['name', 'Legal name (as registered)', 'CLOWE PARTNERS LLP'],
+            ['registeredAddress', 'Registered address', 'Unit, street, city, state, PIN'],
+            ['llpin', 'LLPIN', 'AAB-1234'],
+            ['gstin', 'GSTIN', '27ABCDE1234F1Z5'],
+            ['supportEmail', 'Support email', 'support@cloweshop.com'],
+            ['supportPhone', 'Support phone', '+91 98765 43210'],
+          ] as const
+        ).map(([key, label, placeholder]) => (
+          <div key={key} className="mt-3">
+            <label className="block text-sm font-medium">{label}</label>
+            {key === 'registeredAddress' ? (
+              <textarea
+                rows={2}
+                value={legal[key]}
+                placeholder={placeholder}
+                onChange={(e) => setLegal((l) => ({ ...l, [key]: e.target.value }))}
+                className={`mt-1 ${field}`}
+              />
+            ) : (
+              <input
+                type={key === 'supportEmail' ? 'email' : key === 'supportPhone' ? 'tel' : 'text'}
+                value={legal[key]}
+                placeholder={placeholder}
+                onChange={(e) => setLegal((l) => ({ ...l, [key]: e.target.value }))}
+                className={`mt-1 ${field}`}
+              />
+            )}
           </div>
         ))}
       </div>

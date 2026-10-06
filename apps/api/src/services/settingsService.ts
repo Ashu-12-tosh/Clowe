@@ -1,5 +1,6 @@
 import {
   DEFAULT_KYC_NAME_MATCH_MIN_SCORE,
+  DEFAULT_LEGAL_ENTITY,
   type PlatformSettings,
   type PublicSettings,
 } from '@clowe/shared';
@@ -58,6 +59,8 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   // Off until there is an FSSAI licence: Grocery and Supplements are hidden,
   // not deleted. See services/foodCategories.ts.
   foodCategoriesEnabled: false,
+  // The registered name is set; the rest is filled in from admin settings.
+  legalEntity: DEFAULT_LEGAL_ENTITY,
   socialLinks: {
     facebook: 'https://www.facebook.com/profile.php?id=61594554615215',
     twitter: '',
@@ -161,6 +164,11 @@ export async function getSettings(): Promise<PlatformSettings> {
     foodCategoriesEnabled:
       (byKey.get('foodCategoriesEnabled') as boolean | undefined) ??
       DEFAULT_SETTINGS.foodCategoriesEnabled,
+    // Merged like socialLinks, so a field added later comes back with its default.
+    legalEntity: {
+      ...DEFAULT_SETTINGS.legalEntity,
+      ...((byKey.get('legalEntity') as Partial<PlatformSettings['legalEntity']> | undefined) ?? {}),
+    },
     // Merged, not replaced: a value saved before a network was added to the
     // shape would otherwise come back without it.
     socialLinks: {
@@ -195,6 +203,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     codMaxOrderPaise: s.codMaxOrderPaise,
     pdpOffers: s.pdpOffers,
     couponsEnabled: s.couponsEnabled,
+    legalEntity: s.legalEntity,
     returnWindowDays: s.returnWindowDays,
   };
 }

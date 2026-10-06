@@ -747,6 +747,10 @@ adminRouter.put('/settings', async (req, res, next) => {
     if (input.supportEmails !== undefined) await setSetting('supportEmails', input.supportEmails);
     if (input.codMaxOrderPaise !== undefined) await setSetting('codMaxOrderPaise', input.codMaxOrderPaise);
     if (input.adPricing !== undefined) await setSetting('adPricing', input.adPricing);
+    // Partial: fields not sent keep their saved value.
+    if (input.legalEntity !== undefined) {
+      await setSetting('legalEntity', { ...(await getSettings()).legalEntity, ...input.legalEntity });
+    }
     // A GST rate change moves every buyer price: sellers' prices (before GST)
     // stay, the GST on top changes. First, under the rules in force, any order
     // line without a recorded rate gets one (past sales are never re-taxed)

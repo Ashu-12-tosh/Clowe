@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ProductListItem } from './catalog';
 import { httpUrlSchema } from './url';
+import type { LegalEntity } from './legal';
 
 // ---------------------------------------------------------------------------
 // Platform settings (admin-editable; defaults live in the API)
@@ -157,6 +158,13 @@ export interface PlatformSettings {
    * brings all of it back.
    */
   foodCategoriesEnabled: boolean;
+  /**
+   * The business behind the site: legal name, registered address, LLPIN,
+   * GSTIN, support email and phone. Shown in the footer, on Contact Us and
+   * About, and in every policy page; an empty field is hidden, not shown
+   * blank. Payment gateways check the site for these.
+   */
+  legalEntity: LegalEntity;
 }
 
 /** Subset that anonymous visitors may read. */
@@ -172,6 +180,8 @@ export interface PublicSettings {
   codMaxOrderPaise: number;
   pdpOffers: PdpOffer[];
   couponsEnabled: boolean;
+  /** Public by nature: every page that names the business reads it. */
+  legalEntity: LegalEntity;
   /**
    * The platform return window in days from delivery: what help, policy and
    * home pages quote. A category or seller may set its own; the product page
@@ -210,6 +220,35 @@ export const updateSettingsSchema = z.object({
   kycNameMatchMinScore: z.number().int().min(0).max(100).optional(),
   couponsEnabled: z.boolean().optional(),
   foodCategoriesEnabled: z.boolean().optional(),
+  // Each field optional: the admin form sends all six, but a partial update
+  // must not blank the others. Empty is allowed (and hidden on the site)
+  // for all but the name; anything typed must look like what it claims to be.
+  legalEntity: z
+    .object({
+      name: z.string().trim().min(1, 'The legal name cannot be empty').max(120),
+      registeredAddress: z.string().trim().max(300),
+      llpin: z
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^([A-Z]{3}-\d{4})?$/, 'LLPIN looks like AAB-1234'),
+      gstin: z
+        .string()
+        .trim()
+        .toUpperCase()
+        .regex(/^(\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z])?$/, 'GSTIN is 15 characters, like 27ABCDE1234F1Z5'),
+      supportEmail: z
+        .string()
+        .trim()
+        .max(120)
+        .refine((v) => v === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), 'Enter a valid email address'),
+      supportPhone: z
+        .string()
+        .trim()
+        .regex(/^(\+?\d[\d -]{7,18}\d)?$/, 'Enter a phone number, digits only (spaces, dashes and a leading + are fine)'),
+    })
+    .partial()
+    .optional(),
   socialLinks: z
     .object({
       facebook: httpUrlSchema().or(z.literal('')),
