@@ -11,14 +11,14 @@ import {
   type SearchRelaxation,
 } from '@clowe/shared';
 import { prisma } from '../db';
-import { hiddenCategoryIds, visibleCategoryWhere } from './foodCategories';
+import { hiddenCategoryIds, visibleProductWhere } from './shopperVisibility';
 
 /**
  * What the storefront treats as buyable: approved, switched on by its seller,
  * and the seller not away. The suggest endpoint and the phrase generator both
  * filter on this, so neither can offer something the listing would not show.
  * Must match LIVE in routes/products.ts. Storefront queries also spread
- * visibleCategoryWhere() beside it, which keeps closed food categories out.
+ * visibleProductWhere() beside it, which keeps closed food categories out.
  */
 export const LIVE_PRODUCT_WHERE = {
   status: 'APPROVED' as const,
@@ -105,7 +105,7 @@ export interface LiveBrands {
 }
 
 export async function liveBrands(): Promise<LiveBrands> {
-  const visible = await visibleCategoryWhere();
+  const visible = await visibleProductWhere();
   const [linked, named] = await Promise.all([
     prisma.product.groupBy({ by: ['brandId'], where: { ...LIVE_PRODUCT_WHERE, ...visible, brandId: { not: null } } }),
     prisma.product.groupBy({ by: ['brand'], where: { ...LIVE_PRODUCT_WHERE, ...visible, brand: { not: null } } }),

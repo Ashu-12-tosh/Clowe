@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { reviewCreateSchema, type ReviewItem } from '@clowe/shared';
 import { prisma } from '../db';
-import { isHiddenCategory } from '../services/foodCategories';
+import { isHiddenProduct } from '../services/shopperVisibility';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { verifyAccessToken } from '../utils/jwt';
@@ -48,7 +48,7 @@ reviewsRouter.post('/', requireAuth, async (req, res, next) => {
     const product = await prisma.product.findUnique({
       where: { id: productIdOf(req.params) },
     });
-    if (!product || product.status !== 'APPROVED' || (await isHiddenCategory(product.categoryId))) {
+    if (!product || product.status !== 'APPROVED' || (await isHiddenProduct(product))) {
       throw ApiError.notFound('Product not found');
     }
 

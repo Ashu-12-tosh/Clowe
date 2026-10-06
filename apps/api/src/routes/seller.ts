@@ -28,7 +28,7 @@ import {
   type SellerStats,
 } from '@clowe/shared';
 import { prisma } from '../db';
-import { isHiddenCategory } from '../services/foodCategories';
+import { isHiddenCategory } from '../services/shopperVisibility';
 import { categoryRulesFor, categoryRulesMap } from '../services/categoryRules';
 import { gstSettings } from '../services/economicsRates';
 import { priceInput, sellerPricesOf, type PricedUpsertInput } from '../services/sellerPricing';

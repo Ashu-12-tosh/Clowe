@@ -111,6 +111,8 @@ export interface CategoryDetail {
   name: string;
   slug: string;
   description: string | null;
+  /** The category's glyph — what its hero shows until a banner image is uploaded. */
+  icon: string | null;
   /** Subcategory tile shape on the rail. */
   tileShape: 'square' | 'circle';
   banners: CategoryBannerSlide[];
@@ -124,6 +126,8 @@ export interface CategoryDetail {
     name: string;
     slug: string;
     imageUrl: string | null;
+    /** Its own glyph, or its parent's: the tile face until an image is uploaded. */
+    icon: string | null;
     productCount: number;
   }[];
   /** Live products in this category and everything under it. */

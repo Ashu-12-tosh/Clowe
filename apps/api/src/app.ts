@@ -64,6 +64,7 @@ import { adminSupportRouter } from './routes/adminSupport';
 import { errorHandler } from './middleware/error';
 import { globalLimiter, trackLimiter } from './middleware/rateLimits';
 import { auditLogger } from './middleware/audit';
+import { stockPhotoGuard } from './middleware/stockPhotos';
 
 export function createApp() {
   const app = express();
@@ -91,6 +92,9 @@ export function createApp() {
   // Audit every state-changing API call, before the routes see it. Mounted at
   // the root so req.path keeps its /api prefix for the route rules.
   app.use(auditLogger);
+
+  // No stock photo reaches a shopper while the demo catalog is off.
+  app.use('/api', stockPhotoGuard);
 
   // Uploaded product images (local disk in dev).
   app.use('/uploads', express.static(uploadDir, { maxAge: '7d', immutable: true }));

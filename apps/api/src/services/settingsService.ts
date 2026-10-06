@@ -57,8 +57,11 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   // other change.
   couponsEnabled: false,
   // Off until there is an FSSAI licence: Grocery and Supplements are hidden,
-  // not deleted. See services/foodCategories.ts.
+  // not deleted. See services/shopperVisibility.ts.
   foodCategoriesEnabled: false,
+  // Off: the seeded demo store and its products (stock photos, not real
+  // goods) are hidden. See services/shopperVisibility.ts.
+  demoCatalogEnabled: false,
   // The registered name is set; the rest is filled in from admin settings.
   legalEntity: DEFAULT_LEGAL_ENTITY,
   socialLinks: {
@@ -164,6 +167,8 @@ export async function getSettings(): Promise<PlatformSettings> {
     foodCategoriesEnabled:
       (byKey.get('foodCategoriesEnabled') as boolean | undefined) ??
       DEFAULT_SETTINGS.foodCategoriesEnabled,
+    demoCatalogEnabled:
+      (byKey.get('demoCatalogEnabled') as boolean | undefined) ?? DEFAULT_SETTINGS.demoCatalogEnabled,
     // Merged like socialLinks, so a field added later comes back with its default.
     legalEntity: {
       ...DEFAULT_SETTINGS.legalEntity,

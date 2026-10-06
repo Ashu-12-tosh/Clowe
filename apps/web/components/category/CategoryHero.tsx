@@ -4,8 +4,11 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { CategoryCallout, CategoryBannerSlide } from '@clowe/shared';
 import { safeHref } from '@clowe/shared';
+import { ArtPanel } from '@/components/DesignedArt';
 
 interface Props {
+  /** The category's glyph, for the art panel a slide without an image shows. */
+  icon?: string | null;
   slides: CategoryBannerSlide[];
   /** Side-card bullets; the card is hidden when empty. */
   highlights: CategoryCallout[];
@@ -17,7 +20,7 @@ interface Props {
  * Category hero: an auto-advancing banner carousel with arrows and dots, plus
  * the optional highlights card docked on the right.
  */
-export default function CategoryHero({ slides, highlights, intervalMs = 6000 }: Props) {
+export default function CategoryHero({ icon, slides, highlights, intervalMs = 6000 }: Props) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
 
@@ -43,7 +46,7 @@ export default function CategoryHero({ slides, highlights, intervalMs = 6000 }: 
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      {slide.imageUrl && (
+      {slide.imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           key={slide.id}
@@ -51,6 +54,9 @@ export default function CategoryHero({ slides, highlights, intervalMs = 6000 }: 
           alt=""
           className="absolute inset-y-0 right-0 h-full w-3/4 object-cover"
         />
+      ) : (
+        // Until a banner image is uploaded in admin: designed, not blank.
+        <ArtPanel icon={icon ?? '🛍️'} className="absolute inset-y-3 right-3 hidden w-2/5 sm:flex" />
       )}
 
       <div className="relative flex min-h-[15rem] items-center gap-4 p-6 sm:min-h-[16rem] sm:p-8">

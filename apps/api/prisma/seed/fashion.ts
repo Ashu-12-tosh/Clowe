@@ -299,10 +299,12 @@ async function ensureDemoSeller(prisma: PrismaClient) {
   });
   return prisma.sellerProfile.upsert({
     where: { userId: user.id },
-    update: { status: SellerStatus.APPROVED },
+    update: { status: SellerStatus.APPROVED, isDemo: true },
     create: {
       userId: user.id,
       shopName: 'Clowe Demo Store',
+      // Hidden from shoppers while demoCatalogEnabled is off.
+      isDemo: true,
       description: 'Seeded demo store for development',
       city: 'Mumbai',
       state: 'Maharashtra',

@@ -20,6 +20,7 @@ import {
 import { api } from '@/lib/api';
 import { fetchWishlistIds } from '@/lib/wishlist';
 import CategoryHero from '@/components/category/CategoryHero';
+import { CategoryGlyph } from '@/components/DesignedArt';
 import CategoryProductCard from '@/components/category/CategoryProductCard';
 import FilterRail from '@/components/search/FilterRail';
 import AppliedFilters from '@/components/search/AppliedFilters';
@@ -119,7 +120,7 @@ function SubcategoryRail({
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <span className="text-2xl">🛍</span>
+                  <CategoryGlyph icon={child.icon} name={child.name} size="sm" />
                 )}
               </span>
               <span
@@ -341,6 +342,7 @@ function CategoryPageInner() {
 
         {category && (
           <CategoryHero
+            icon={category.icon}
             slides={category.banners}
             highlights={category.highlights}
             intervalMs={CAROUSEL_MS}

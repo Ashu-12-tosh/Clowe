@@ -7,7 +7,8 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { isLiveBrand, liveBrands } from '../services/productSearch';
-import { hiddenCategories, linksToHiddenCategory, visibleCategoryWhere } from '../services/foodCategories';
+import { categoryRows } from '../services/categoryRules';
+import { linkedCategorySlug, productTestFrom, shopperHidden, visibleProductWhere, whereFrom } from '../services/shopperVisibility';
 
 export const homeRouter = Router();
 
@@ -82,7 +83,7 @@ async function trendingCards(): Promise<HomeProductCard[]> {
 
   const rankedIds = [...score.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
 
-  const visible = await visibleCategoryWhere();
+  const visible = await visibleProductWhere();
   const products = await prisma.product.findMany({
     where: { id: { in: rankedIds.slice(0, 30) }, status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, ...visible },
     include: cardInclude,
@@ -107,12 +108,40 @@ async function trendingCards(): Promise<HomeProductCard[]> {
   return cards;
 }
 
+/**
+ * Slugs of the categories with something a shopper can buy, counting
+ * everything below them: "fashion" is stocked when a t-shirt is.
+ */
+async function stockedCategorySlugs(hidden: Awaited<ReturnType<typeof shopperHidden>>): Promise<Set<string>> {
+  const [groups, rows] = await Promise.all([
+    prisma.product.groupBy({
+      by: ['categoryId'],
+      where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, ...whereFrom(hidden) },
+    }),
+    categoryRows(),
+  ]);
+  const slugs = new Set<string>();
+  for (const { categoryId } of groups) {
+    for (let row = rows.get(categoryId); row; row = row.parentId ? rows.get(row.parentId) : undefined) {
+      slugs.add(row.slug);
+    }
+  }
+  return slugs;
+}
+
 async function buildHomePayload(): Promise<HomePayload> {
   const now = new Date();
-  // Closed food categories: their products, their tiles, and any banner or
-  // promo that links into them stay off the homepage.
-  const hidden = await hiddenCategories();
-  const opensHidden = (href: string | null | undefined) => linksToHiddenCategory(href, hidden.slugs);
+  // What shoppers cannot see (closed food categories, the demo catalog) stays
+  // off the homepage: its products, its category tiles, and any banner or
+  // promo that links into a category with nothing to show. A tile promising
+  // "Up to 60% off" on an empty department is worse than no tile.
+  const hidden = await shopperHidden();
+  const isHiddenProduct = productTestFrom(hidden);
+  const stocked = await stockedCategorySlugs(hidden);
+  const opensHidden = (href: string | null | undefined) => {
+    const slug = linkedCategorySlug(href);
+    return slug !== null && !stocked.has(slug);
+  };
 
   const [banners, promoTiles, deal, rootCategories, brands, trending] = await Promise.all([
     prisma.homeBanner.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
@@ -162,12 +191,12 @@ async function buildHomePayload(): Promise<HomePayload> {
           title: deal.title,
           endsAt: deal.endAt.toISOString(),
           products: deal.items
-            .filter((i) => i.product.status === 'APPROVED' && !hidden.ids.has(i.product.categoryId))
+            .filter((i) => i.product.status === 'APPROVED' && !isHiddenProduct(i.product))
             .map((i) => toCard(i.product)),
         }
       : null,
     categories: rootCategories
-      .filter((c) => !hidden.ids.has(c.id))
+      .filter((c) => !hidden.categoryIds.has(c.id))
       .map((c) => ({
       id: c.id,
       name: c.name,

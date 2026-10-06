@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AD_PLACEMENTS, type ActiveAd } from '@clowe/shared';
 import { prisma } from '../db';
-import { visibleCategoryWhere } from '../services/foodCategories';
+import { visibleProductWhere } from '../services/shopperVisibility';
 import { listingStockFields, pricesVary } from '../utils/productListing';
 
 export const adsRouter = Router();
@@ -44,7 +44,7 @@ adsRouter.get('/active', async (req, res, next) => {
       where: {
         status: 'ACTIVE',
         placement,
-        product: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, ...(await visibleCategoryWhere()) },
+        product: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, ...(await visibleProductWhere()) },
       },
       orderBy: { startAt: 'desc' },
       take: 10,

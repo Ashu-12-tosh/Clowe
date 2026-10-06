@@ -70,10 +70,12 @@ async function seedCatalog() {
   });
   const seller = await prisma.sellerProfile.upsert({
     where: { userId: sellerUser.id },
-    update: { status: SellerStatus.APPROVED },
+    update: { status: SellerStatus.APPROVED, isDemo: true },
     create: {
       userId: sellerUser.id,
       shopName: 'Clowe Demo Store',
+      // Hidden from shoppers while demoCatalogEnabled is off.
+      isDemo: true,
       description: 'Seeded demo store for development',
       city: 'Mumbai',
       state: 'Maharashtra',

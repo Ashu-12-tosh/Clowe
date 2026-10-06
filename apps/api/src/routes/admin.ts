@@ -801,19 +801,21 @@ adminRouter.put('/settings', async (req, res, next) => {
       if (input[key] !== undefined) await setSetting(key, input[key]);
     }
     if (gstChanging) await repriceProducts({});
-    // Food categories (FSSAI): hidden or shown everywhere at once. The home
-    // page, search and its suggestions hold the catalog in memory, so they are
-    // dropped and rebuilt rather than left to expire.
-    if (
-      input.foodCategoriesEnabled !== undefined &&
-      input.foodCategoriesEnabled !== before.foodCategoriesEnabled
-    ) {
-      await setSetting('foodCategoriesEnabled', input.foodCategoriesEnabled);
+    // Food categories (FSSAI) and the demo catalog: hidden or shown everywhere
+    // at once. The home page, search and its suggestions hold the catalog in
+    // memory, so they are dropped and rebuilt rather than left to expire.
+    const foodChanging =
+      input.foodCategoriesEnabled !== undefined && input.foodCategoriesEnabled !== before.foodCategoriesEnabled;
+    const demoChanging =
+      input.demoCatalogEnabled !== undefined && input.demoCatalogEnabled !== before.demoCatalogEnabled;
+    if (foodChanging) await setSetting('foodCategoriesEnabled', input.foodCategoriesEnabled);
+    if (demoChanging) await setSetting('demoCatalogEnabled', input.demoCatalogEnabled);
+    if (foodChanging || demoChanging) {
       bustHomeCache();
       invalidateSearchCatalog();
       clearSuggestCaches();
       refreshQuerySuggestions().catch((err) =>
-        console.error('[clowe-api] query suggestions: rebuild after food categories change failed', err),
+        console.error('[clowe-api] query suggestions: rebuild after a catalog visibility change failed', err),
       );
     }
     res.json({ success: true, data: await getSettings() });

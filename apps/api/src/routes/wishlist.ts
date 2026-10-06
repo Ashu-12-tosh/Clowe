@@ -3,7 +3,7 @@ import { Router } from 'express';
 import type { Prisma } from '@prisma/client';
 import type { CategoryRules, SharedWishlist, WishlistEntry, WishlistShare } from '@clowe/shared';
 import { prisma } from '../db';
-import { hiddenCategoryIds, isHiddenCategory, visibleCategoryWhere } from '../services/foodCategories';
+import { hiddenProductTest, isHiddenProduct, visibleProductWhere } from '../services/shopperVisibility';
 import { categoryRulesMap } from '../services/categoryRules';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -73,10 +73,10 @@ async function wishlistFor(userId: string): Promise<WishlistEntry[]> {
     orderBy: { createdAt: 'desc' },
     include: WISHLIST_INCLUDE,
   });
-  // Saved items in a closed food category stay saved, out of sight, and come
-  // back when it opens.
-  const hidden = await hiddenCategoryIds();
-  const live = rows.filter((row) => row.product.status === 'APPROVED' && !hidden.has(row.product.categoryId));
+  // Saved items shoppers cannot see (a closed food category, the demo
+  // catalog) stay saved, out of sight, and come back when it opens.
+  const isHidden = await hiddenProductTest();
+  const live = rows.filter((row) => row.product.status === 'APPROVED' && !isHidden(row.product));
   const rules = await categoryRulesMap(live.map((row) => row.product.categoryId));
   return live.map((row) => toEntry(row, rules));
 }
@@ -169,7 +169,7 @@ async function cartIdFor(userId: string): Promise<string> {
 async function moveToCart(userId: string, productIds: string[]) {
   const cartId = await cartIdFor(userId);
   const products = await prisma.product.findMany({
-    where: { id: { in: productIds }, status: 'APPROVED', ...(await visibleCategoryWhere()) },
+    where: { id: { in: productIds }, status: 'APPROVED', ...(await visibleProductWhere()) },
     include: { variants: { select: { id: true, pricePaise: true, stock: true } } },
   });
 
@@ -222,7 +222,7 @@ wishlistRouter.post('/:productId', async (req, res, next) => {
       where: { id: req.params.productId },
       include: { variants: { select: { id: true, pricePaise: true, stock: true } } },
     });
-    if (!product || product.status !== 'APPROVED' || (await isHiddenCategory(product.categoryId))) {
+    if (!product || product.status !== 'APPROVED' || (await isHiddenProduct(product))) {
       throw ApiError.notFound('Product not found');
     }
 

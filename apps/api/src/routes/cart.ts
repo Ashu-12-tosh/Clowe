@@ -11,7 +11,7 @@ import {
   type CouponOffer,
 } from '@clowe/shared';
 import { prisma } from '../db';
-import { hiddenCategoryIds, isHiddenCategory } from '../services/foodCategories';
+import { hiddenProductTest, isHiddenProduct } from '../services/shopperVisibility';
 import { categoryRulesMap } from '../services/categoryRules';
 import { getSettings } from '../services/settingsService';
 import { applyPromotions } from '../services/promotionService';
@@ -141,11 +141,10 @@ export async function buildCartView(userId: string): Promise<CartView> {
   });
 
   // Drop lines whose product is no longer live (rejected/archived after adding),
-  // or sits in a closed food category — kept in the cart, back when it opens.
-  const hidden = await hiddenCategoryIds();
-  const liveItems = items.filter(
-    (i) => i.variant.product.status === 'APPROVED' && !hidden.has(i.variant.product.categoryId),
-  );
+  // or is one shoppers cannot see (a closed food category, the demo catalog) —
+  // kept in the cart, back when it opens.
+  const isHidden = await hiddenProductTest();
+  const liveItems = items.filter((i) => i.variant.product.status === 'APPROVED' && !isHidden(i.variant.product));
   const rulesByCategory = await categoryRulesMap(liveItems.map((i) => i.variant.product.categoryId));
 
   // Seller promotions are resolved before the totals: they come off the line
@@ -292,9 +291,9 @@ cartRouter.post('/items', async (req, res, next) => {
     const { variantId, quantity } = cartItemAddSchema.parse(req.body);
     const variant = await prisma.productVariant.findUnique({
       where: { id: variantId },
-      include: { product: { select: { status: true, categoryId: true } } },
+      include: { product: { select: { status: true, categoryId: true, sellerId: true } } },
     });
-    if (!variant || variant.product.status !== 'APPROVED' || (await isHiddenCategory(variant.product.categoryId))) {
+    if (!variant || variant.product.status !== 'APPROVED' || (await isHiddenProduct(variant.product))) {
       throw ApiError.notFound('Product not available');
     }
     if (variant.stock < quantity) {

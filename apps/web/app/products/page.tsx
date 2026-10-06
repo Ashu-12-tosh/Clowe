@@ -41,6 +41,9 @@ function ProductsPageInner() {
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const q = searchParams.get('q') ?? '';
+  // Nothing narrowing the list but the department: an empty answer then means
+  // nothing is listed yet, not that a filter was too tight.
+  const unfiltered = [...searchParams.keys()].every((k) => ['category', 'sort', 'page'].includes(k));
   const category = searchParams.get('category') ?? '';
   // Only what the shopper picked. With nothing picked, a search is in whatever
   // order the server applied — the words' sort ("best" -> top rated), or
@@ -309,12 +312,18 @@ function ProductsPageInner() {
           {data && data.items.length === 0 && (
             <div className="mt-10 text-center">
               <p className="text-sm font-semibold text-ink-900">
-                {q ? `Nothing matches "${q}".` : 'No products match these filters.'}
+                {q
+                  ? `Nothing matches "${q}".`
+                  : unfiltered
+                    ? 'Nothing listed here yet.'
+                    : 'No products match these filters.'}
               </p>
               <p className="mt-1 text-sm text-gray-500">
                 {q
                   ? 'Try fewer words, check the spelling, or drop a filter.'
-                  : 'Try removing a filter to widen the search.'}
+                  : unfiltered
+                    ? 'Sellers are setting up shop — new listings appear here as they go live.'
+                    : 'Try removing a filter to widen the search.'}
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {/* A dead end is the one thing a zero-result page must not be. */}

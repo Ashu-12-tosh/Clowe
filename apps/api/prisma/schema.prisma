@@ -440,6 +440,9 @@ model SellerProfile {
   workingHours  Json?
   // Vacation mode hides the shop's listings without archiving anything.
   vacationMode  Boolean   @default(false)
+  // Seeded demo store (prisma/seed). Hidden from shoppers, with every
+  // product it carries, while PlatformSettings.demoCatalogEnabled is off.
+  isDemo        Boolean   @default(false)
   vacationUntil DateTime?
   // When vacation mode was last switched on and off. Vacation stops the
   // late-dispatch penalty clock, and these say for how long.

@@ -4,6 +4,15 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HomeBannerView } from '@clowe/shared';
 import { safeHref } from '@clowe/shared';
+import { ArtPanel } from '@/components/DesignedArt';
+
+/** The art panel's icon: from where the banner leads, else one of a few in turn. */
+function heroIcon(href: string | null | undefined, i: number): string {
+  if (href?.startsWith('/tryon')) return '🪞';
+  if (href?.includes('category=electronics') || href?.includes('category=mobiles')) return '📱';
+  if (href?.includes('category=fashion')) return '👗';
+  return ['🛍️', '✨', '📦'][i % 3]!;
+}
 
 const AI_PILLS = [
   { icon: '✦', label: 'AI Recommendations', href: '/products' },
@@ -104,13 +113,20 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
                 </div>
               </div>
               <div className="hidden justify-end lg:flex">
-                {banner.imageUrl && (
+                {banner.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={banner.imageUrl}
                     alt=""
                     loading={i === 0 ? 'eager' : 'lazy'}
                     className="h-72 w-full max-w-lg rounded-2xl object-cover shadow-lg"
+                  />
+                ) : (
+                  // Until a banner image is uploaded in admin: designed, not blank.
+                  <ArtPanel
+                    icon={heroIcon(banner.primaryHref, i)}
+                    caption={banner.highlight?.replace(/[.!]+$/, '')}
+                    className="h-72 w-full max-w-lg shadow-lg"
                   />
                 )}
               </div>

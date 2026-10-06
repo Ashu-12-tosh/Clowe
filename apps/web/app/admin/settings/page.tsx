@@ -37,6 +37,7 @@ export default function AdminSettingsPage() {
   });
   const [couponsEnabled, setCouponsEnabled] = useState(false);
   const [foodCategoriesEnabled, setFoodCategoriesEnabled] = useState(false);
+  const [demoCatalogEnabled, setDemoCatalogEnabled] = useState(false);
   const [dispatch, setDispatch] = useState({ slaHours: '', afterHours: '', penaltyRupees: '', enabled: true });
   // Read-only: set by the migration that introduced the per-order penalty.
   const [penaltyFrom, setPenaltyFrom] = useState<string | null>(null);
@@ -63,6 +64,7 @@ export default function AdminSettingsPage() {
         setKycMinScore(String(s.kycNameMatchMinScore));
         setCouponsEnabled(s.couponsEnabled);
         setFoodCategoriesEnabled(s.foodCategoriesEnabled);
+        setDemoCatalogEnabled(s.demoCatalogEnabled);
         setSocial(s.socialLinks);
         setSupportEmails(s.supportEmails);
         setLegal(s.legalEntity);
@@ -132,6 +134,7 @@ export default function AdminSettingsPage() {
           kycNameMatchMinScore: Math.min(100, Math.max(0, Math.round(Number(kycMinScore) || 0))),
           couponsEnabled,
           foodCategoriesEnabled,
+          demoCatalogEnabled,
           dispatchSlaHours: Math.max(1, Math.round(Number(dispatch.slaHours) || 0)),
           lateDispatchPenaltyAfterHours: Math.max(1, Math.round(Number(dispatch.afterHours) || 0)),
           lateDispatchPenaltyPaise: toPaise(dispatch.penaltyRupees),
@@ -290,6 +293,26 @@ export default function AdminSettingsPage() {
             />
           </div>
         ))}
+      </div>
+
+      {/* Demo catalog */}
+      <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
+        <h2 className="text-sm font-bold">&#129514; Demo catalog</h2>
+        <label className="mt-2 flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={demoCatalogEnabled}
+            onChange={(e) => setDemoCatalogEnabled(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>Show the seeded demo store and its products to shoppers</span>
+        </label>
+        <p className="mt-1 text-xs text-gray-400">
+          Off hides the demo store and every product in it from shoppers &mdash; listings, search,
+          the home page, store and product pages &mdash; and keeps the stock photos the demo data
+          uses off every page. Nothing is deleted, and switching this on brings it all back. Leave it
+          off on the live site: the demo listings are not real goods.
+        </p>
       </div>
 
       {/* Legal entity */}

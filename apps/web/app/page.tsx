@@ -7,6 +7,7 @@ import { useReturnWindowDays } from '@/lib/returnWindow';
 import { api, ApiRequestError } from '@/lib/api';
 import HeroCarousel from '@/components/home/HeroCarousel';
 import RecentlyViewed from '@/components/home/RecentlyViewed';
+import { CategoryGlyph, TileMark } from '@/components/DesignedArt';
 import {
   Countdown,
   DealCard,
@@ -29,6 +30,21 @@ const AI_FEATURES = [
   { icon: '✦', title: 'AI Recommendations', text: 'Picks just for you', href: '/products' },
   { icon: '💬', title: 'AI Assistant', text: 'Your shopping buddy', href: '/pages/help' },
 ];
+
+/**
+ * The icon for a promo tile without a photo: the icon of the department its
+ * link opens (a sub-category counts as its root's), else a tag.
+ */
+function promoIcon(href: string, categories: HomePayload['categories']): string {
+  let slug: string | null = null;
+  try {
+    slug = new URL(href, 'https://x.invalid').searchParams.get('category');
+  } catch {
+    // An unparsable link just gets the default.
+  }
+  const root = slug ? categories.find((c) => slug === c.slug || slug!.startsWith(`${c.slug}-`)) : undefined;
+  return root?.icon ?? '🏷️';
+}
 
 const BOTTOM_STRIP = [
   { icon: '🏷', title: 'Best Prices', text: 'We offer competitive prices' },
@@ -173,7 +189,7 @@ export default function HomePage() {
               href={safeHref(card.href) ?? '/products'}
               className={`group relative overflow-hidden rounded-2xl ${i % 2 === 0 ? 'bg-ink-950 text-white' : 'bg-cream-100 text-ink-900'}`}
             >
-              {card.imageUrl && (
+              {card.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={card.imageUrl}
@@ -181,6 +197,8 @@ export default function HomePage() {
                   loading="lazy"
                   className="absolute inset-0 h-full w-full object-cover opacity-30 transition duration-300 group-hover:scale-105 group-hover:opacity-40"
                 />
+              ) : (
+                <TileMark icon={promoIcon(card.href, home.categories)} tone={i % 2 === 0 ? 'dark' : 'light'} />
               )}
               <div className="relative p-5">
                 <p className="text-xs font-bold uppercase tracking-widest opacity-70">
@@ -237,7 +255,7 @@ export default function HomePage() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={cat.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
                   ) : (
-                    <span className="text-3xl">{cat.icon ?? '🛍'}</span>
+                    <CategoryGlyph icon={cat.icon} name={cat.name} />
                   )}
                 </span>
                 <span className="text-center text-xs font-medium text-gray-700 group-hover:text-brand-600">
@@ -287,7 +305,45 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 7 ─ Trending Now */}
+      {/* 7 ─ Nothing to buy yet: say so, rather than leave a gap where the rails go */}
+      {home.trending.length === 0 && !(home.deal && home.deal.products.length > 0) && (
+        <section className="mt-10 grid items-center gap-6 overflow-hidden rounded-3xl border border-brand-100 bg-brand-50 p-7 sm:p-10 lg:grid-cols-[1fr_auto]">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-brand-600">Opening soon</p>
+            <h2 className="t-section mt-2 text-ink-900">Sellers are setting up shop</h2>
+            <p className="t-section-desc mt-2 max-w-xl text-gray-600">
+              We are bringing verified sellers on board across fashion, electronics, home, beauty and
+              books. Their first listings will appear here as they go live.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link
+                href="/sell"
+                className="rounded-lg bg-ink-900 px-6 py-3 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800"
+              >
+                Sell on Clowe
+              </Link>
+              <a
+                href="#newsletter"
+                className="rounded-lg border border-brand-600 px-6 py-3 text-sm font-bold uppercase tracking-wide text-brand-600 hover:bg-brand-100"
+              >
+                Tell me when it opens
+              </a>
+            </div>
+          </div>
+          <div className="hidden grid-cols-3 gap-3 lg:grid" aria-hidden>
+            {['👗', '📱', '🏠', '💄', '📚', '🎧'].map((icon) => (
+              <span
+                key={icon}
+                className="flex h-20 w-20 items-center justify-center rounded-2xl border border-brand-100 bg-white text-3xl shadow-sm"
+              >
+                {icon}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* 8 ─ Trending Now */}
       {home.trending.length > 0 && (
         <section className="mt-10">
           <SectionHeader title="Trending Now" href="/products" />
@@ -301,7 +357,7 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* 8 ─ Promo strips */}
+      {/* 9 ─ Promo strips */}
       {home.promoStrips.length > 0 && (
         <section className="mt-10 grid gap-4 lg:grid-cols-3">
           {home.promoStrips.map((strip) => (
@@ -310,7 +366,7 @@ export default function HomePage() {
               href={safeHref(strip.href) ?? '/products'}
               className="group relative flex h-36 items-center overflow-hidden rounded-2xl bg-ink-950 text-white"
             >
-              {strip.imageUrl && (
+              {strip.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={strip.imageUrl}
@@ -318,6 +374,8 @@ export default function HomePage() {
                   loading="lazy"
                   className="absolute inset-0 h-full w-full object-cover opacity-40 transition duration-300 group-hover:scale-105"
                 />
+              ) : (
+                <TileMark icon={promoIcon(strip.href, home.categories)} />
               )}
               <div className="relative p-6">
                 <p className="font-display text-lg font-bold uppercase tracking-wide">{strip.title}</p>
@@ -333,7 +391,7 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* 9 ─ Top Brands */}
+      {/* 10 ─ Top Brands */}
       {home.brands.length > 0 && (
         <section className="mt-10">
           <SectionHeader title="Top Brands" href="/products" />
@@ -360,10 +418,10 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* 10 ─ Recently viewed (browser history; hides itself when empty) */}
+      {/* 11 ─ Recently viewed (browser history; hides itself when empty) */}
       <RecentlyViewed />
 
-      {/* 11 ─ Bottom strip + newsletter */}
+      {/* 12 ─ Bottom strip + newsletter */}
       <section className="mb-4 mt-10 grid gap-4 lg:grid-cols-[1fr_auto]">
         <div className="grid gap-3 sm:grid-cols-3">
           {BOTTOM_STRIP.map((item) => (
@@ -376,7 +434,7 @@ export default function HomePage() {
             </div>
           ))}
         </div>
-        <div className="flex flex-col justify-center rounded-2xl bg-cream-100 px-5 py-4 lg:w-96">
+        <div id="newsletter" className="flex scroll-mt-24 flex-col justify-center rounded-2xl bg-cream-100 px-5 py-4 lg:w-96">
           <p className="text-sm font-bold text-ink-900">Stay Updated with CLOWE 🎁</p>
           <p className="mb-2.5 mt-0.5 text-xs text-gray-500">
             Get exclusive offers, latest deals &amp; more.

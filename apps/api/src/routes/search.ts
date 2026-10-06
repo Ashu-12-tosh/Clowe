@@ -22,7 +22,7 @@ import {
   searchProducts,
 } from '../services/productSearch';
 import { querySuggestionVersion, suggestQueries } from '../services/querySuggestions';
-import { visibleCategoryWhere } from '../services/foodCategories';
+import { visibleProductWhere } from '../services/shopperVisibility';
 
 export const searchRouter = Router();
 searchRouter.use(suggestLimiter);
@@ -32,7 +32,7 @@ searchRouter.use(suggestLimiter);
  * included. A suggestion that leads to a 404 is worse than no suggestion.
  */
 async function live(): Promise<Prisma.ProductWhereInput> {
-  return { ...LIVE_PRODUCT_WHERE, ...(await visibleCategoryWhere()) };
+  return { ...LIVE_PRODUCT_WHERE, ...(await visibleProductWhere()) };
 }
 
 // ---------------------------------------------------------------------------

@@ -97,7 +97,19 @@ promos that link there, category and product pages, store pages, wishlist and
 cart), and sellers cannot list anything new in them. Nothing is deleted — the
 categories, products, cart lines and orders stay as they are — and the "Grocery
 & Supplements" checkbox in admin settings brings all of it back at once. The
-rule lives in `apps/api/src/services/foodCategories.ts`.
+rule lives in `apps/api/src/services/shopperVisibility.ts`.
+
+**The demo catalog is switched off.** `demoCatalogEnabled` defaults to `false`:
+the seeded demo store (`SellerProfile.isDemo`, set by migration on the seed's
+seller, phone 9000000001) and every product it carries are hidden from shoppers
+the same way, and its store page is a 404. Its listings used stock photos
+(picsum, loremflickr), so no shopper-facing API answer carries one while this is
+off — home banners, promo tiles and category images show designed text-and-icon
+versions until real images are uploaded in admin, and a home tile linking to a
+department with nothing to buy is left out. Nothing is deleted; the "Demo
+catalog" checkbox in admin settings brings it all back. On production the demo
+store is the only seller, so with this off the storefront shows its "opening
+soon" state until real sellers list.
 
 ---
 

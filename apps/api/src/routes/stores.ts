@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { type PublicStore, type StoreHighlight } from '@clowe/shared';
 import { prisma } from '../db';
-import { visibleCategoryWhere } from '../services/foodCategories';
+import { isHiddenSeller, visibleProductWhere } from '../services/shopperVisibility';
 import { getSettings } from '../services/settingsService';
 import { ApiError } from '../utils/ApiError';
 
@@ -16,8 +16,11 @@ storesRouter.get('/:slug', async (req, res, next) => {
       where: { slug: req.params.slug },
       include: { user: { select: { createdAt: true } } },
     });
-    // Only approved shops have a public page; suspended ones 404.
-    if (!seller || seller.status !== 'APPROVED') throw ApiError.notFound('Store not found');
+    // Only approved shops have a public page; suspended ones 404, and so
+    // does the demo store while the demo catalog is hidden.
+    if (!seller || seller.status !== 'APPROVED' || (await isHiddenSeller(seller.id))) {
+      throw ApiError.notFound('Store not found');
+    }
 
     const [category, productCount, reviews] = await Promise.all([
       seller.primaryCategoryId
@@ -27,7 +30,7 @@ storesRouter.get('/:slug', async (req, res, next) => {
           })
         : Promise.resolve(null),
       prisma.product.count({
-        where: { sellerId: seller.id, status: 'APPROVED', isVisible: true, ...(await visibleCategoryWhere()) },
+        where: { sellerId: seller.id, status: 'APPROVED', isVisible: true, ...(await visibleProductWhere()) },
       }),
       prisma.review.aggregate({
         where: { product: { sellerId: seller.id } },
@@ -80,13 +83,16 @@ storesRouter.get('/:slug/products', async (req, res, next) => {
       where: { slug: req.params.slug },
       select: { id: true, status: true, vacationMode: true },
     });
-    if (!seller || seller.status !== 'APPROVED') throw ApiError.notFound('Store not found');
+    // The demo store is hidden with the demo catalog.
+    if (!seller || seller.status !== 'APPROVED' || (await isHiddenSeller(seller.id))) {
+      throw ApiError.notFound('Store not found');
+    }
 
     const where: Prisma.ProductWhereInput = {
       sellerId: seller.id,
       status: 'APPROVED',
       isVisible: true,
-      ...(await visibleCategoryWhere()),
+      ...(await visibleProductWhere()),
     };
     const [total, products] = await Promise.all([
       prisma.product.count({ where }),

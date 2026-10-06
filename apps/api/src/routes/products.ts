@@ -32,7 +32,7 @@ import {
   resolveCategory,
   returnWindowDaysFor,
 } from '../services/categoryRules';
-import { isHiddenCategory, visibleCategoryWhere } from '../services/foodCategories';
+import { isHiddenCategory, isHiddenProduct, visibleProductWhere } from '../services/shopperVisibility';
 import {
   ENGINE_SELECT,
   runFacetEngine,
@@ -108,7 +108,7 @@ productsRouter.get('/', async (req, res, next) => {
     }
     const scopeWhere: Prisma.ProductWhereInput = {
       ...LIVE,
-      ...(await visibleCategoryWhere()),
+      ...(await visibleProductWhere()),
       ...(categoryIds ? { categoryId: { in: categoryIds } } : {}),
     };
     const filters = railFiltersFrom(query);
@@ -233,7 +233,7 @@ productsRouter.get('/addons', async (req, res, next) => {
     const products = await prisma.product.findMany({
       where: {
         ...LIVE,
-        ...(await visibleCategoryWhere()),
+        ...(await visibleProductWhere()),
         ...(exclude.length ? { id: { notIn: exclude } } : {}),
         variants: { some: { stock: { gt: 0 }, pricePaise: { lte: 200000 } } },
       },
@@ -288,7 +288,7 @@ productsRouter.get('/by-ids', async (req, res, next) => {
       return;
     }
     const products = await prisma.product.findMany({
-      where: { ...LIVE, ...(await visibleCategoryWhere()), id: { in: ids } },
+      where: { ...LIVE, ...(await visibleProductWhere()), id: { in: ids } },
       include: productListItemInclude,
     });
     const byId = new Map(products.map((p) => [p.id, p]));
@@ -331,13 +331,13 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
     });
     // Hidden listings 404 like an unapproved one — the seller's own toggle.
     // A shop on vacation is treated the same way, and so is a closed food
-    // category.
+    // category or the demo catalog.
     if (
       !product ||
       product.status !== 'APPROVED' ||
       !product.isVisible ||
       product.seller.vacationMode ||
-      (await isHiddenCategory(product.categoryId))
+      (await isHiddenProduct(product))
     ) {
       throw ApiError.notFound('Product not found');
     }

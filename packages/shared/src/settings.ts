@@ -159,6 +159,16 @@ export interface PlatformSettings {
    */
   foodCategoriesEnabled: boolean;
   /**
+   * Whether the seeded demo catalog is shown: the demo store and every
+   * product it carries. Off by default — the demo listings use stock photos
+   * and are not real goods.
+   *
+   * Off hides them from shoppers everywhere, the same way closed food
+   * categories are hidden, and keeps stock-photo URLs out of every shopper
+   * response. Nothing is deleted; turning this on brings them all back.
+   */
+  demoCatalogEnabled: boolean;
+  /**
    * The business behind the site: legal name, registered address, LLPIN,
    * GSTIN, support email and phone. Shown in the footer, on Contact Us and
    * About, and in every policy page; an empty field is hidden, not shown
@@ -220,6 +230,7 @@ export const updateSettingsSchema = z.object({
   kycNameMatchMinScore: z.number().int().min(0).max(100).optional(),
   couponsEnabled: z.boolean().optional(),
   foodCategoriesEnabled: z.boolean().optional(),
+  demoCatalogEnabled: z.boolean().optional(),
   // Each field optional: the admin form sends all six, but a partial update
   // must not blank the others. Empty is allowed (and hidden on the site)
   // for all but the name; anything typed must look like what it claims to be.

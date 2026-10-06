@@ -10,7 +10,7 @@ import {
 import { prisma } from '../db';
 import type { Prisma } from '@prisma/client';
 import { descendantIds } from './categoryRules';
-import { hiddenCategoryIds, visibleCategoryWhere } from './foodCategories';
+import { hiddenCategoryIds, visibleProductWhere } from './shopperVisibility';
 import { LIVE_PRODUCT_WHERE, searchCatalog, searchProducts } from './productSearch';
 import {
   categoryWords,
@@ -156,7 +156,7 @@ export async function verifyPhrase(
 ): Promise<Verification> {
   const result = await searchProducts({
     raw: phrase,
-    baseWhere: baseWhere ?? { ...LIVE_PRODUCT_WHERE, ...(await visibleCategoryWhere()) },
+    baseWhere: baseWhere ?? { ...LIVE_PRODUCT_WHERE, ...(await visibleProductWhere()) },
     sort: 'popularity',
     skip: 0,
     // Every id, not one page: price bounds and scores are computed from them.
@@ -212,7 +212,7 @@ async function build(version: number): Promise<QuerySuggestionSnapshot> {
   const catalog = await searchCatalog();
   // Closed food categories are not in the catalog, so no phrase leads to them.
   const hidden = await hiddenCategoryIds();
-  const liveWhere: Prisma.ProductWhereInput = { ...LIVE_PRODUCT_WHERE, ...(await visibleCategoryWhere()) };
+  const liveWhere: Prisma.ProductWhereInput = { ...LIVE_PRODUCT_WHERE, ...(await visibleProductWhere()) };
 
   // One read of the whole live catalog. Price bounds, scores and brand checks
   // are all computed from this rather than asked of the database per phrase.

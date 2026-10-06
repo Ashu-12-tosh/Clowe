@@ -3,7 +3,7 @@ import type { CategoryCallout, CategoryDetail, CategoryNode } from '@clowe/share
 import { prisma } from '../db';
 import { specFieldsFor } from '@clowe/shared';
 import { chainOf, descendantIds, facetsFromChain, rulesFromChain } from '../services/categoryRules';
-import { hiddenCategoryIds } from '../services/foodCategories';
+import { hiddenCategoryIds } from '../services/shopperVisibility';
 import { ApiError } from '../utils/ApiError';
 
 export const categoriesRouter = Router();
@@ -99,6 +99,7 @@ categoriesRouter.get('/:slug', async (req, res, next) => {
       name: category.name,
       slug: category.slug,
       description: category.description,
+      icon: category.icon,
       tileShape: category.tileShape === 'circle' ? 'circle' : 'square',
       banners: category.banners.map((b) => ({
         id: b.id,
@@ -117,6 +118,7 @@ categoriesRouter.get('/:slug', async (req, res, next) => {
         name: child.name,
         slug: child.slug,
         imageUrl: child.imageUrl,
+        icon: child.icon ?? category.icon,
         productCount: countById.get(child.id) ?? 0,
       })),
       productCount: scopeIds.reduce((sum, id) => sum + (countById.get(id) ?? 0), 0),
