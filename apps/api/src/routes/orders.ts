@@ -16,6 +16,7 @@ import {
   type OrderListRow,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { hiddenCategoryIds } from '../services/foodCategories';
 import { getSettings } from '../services/settingsService';
 import { recordRedemptions } from '../services/promotionService';
 import { orderLineReturnWindowDays, saleReturnWindows } from '../services/categoryRules';
@@ -106,6 +107,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
             title: true,
             status: true,
             isVisible: true,
+            categoryId: true,
             seller: { select: { status: true, vacationMode: true } },
           },
         },
@@ -117,9 +119,11 @@ ordersRouter.post('/checkout', async (req, res, next) => {
     // a seller hides their listings, but a cart filled the hour before still
     // pointed at them, so the shop kept taking money after it was stopped. The
     // coupon is re-validated a few lines down for the same reason.
+    const hiddenCategories = await hiddenCategoryIds();
     const unsellable = variants.filter(
       (v) =>
         v.product.status !== 'APPROVED' ||
+        hiddenCategories.has(v.product.categoryId) ||
         !v.product.isVisible ||
         v.product.seller.vacationMode ||
         v.product.seller.status !== 'APPROVED',
@@ -451,6 +455,7 @@ ordersRouter.get('/', async (req, res, next) => {
               product: {
                 select: {
                   status: true,
+                  categoryId: true,
                   images: { orderBy: { sortOrder: 'asc' }, take: 1 },
                 },
               },
@@ -479,6 +484,7 @@ ordersRouter.get('/', async (req, res, next) => {
       }),
     ) as Record<OrderFilter, number>;
 
+    const hiddenCategories = await hiddenCategoryIds();
     const rows: OrderListRow[] = orders.map((o) => {
       const images = o.items
         .map((i) => i.product.images[0]?.url)
@@ -503,7 +509,9 @@ ordersRouter.get('/', async (req, res, next) => {
             : null,
         etaFrom: o.etaFrom?.toISOString() ?? null,
         etaTo: o.etaTo?.toISOString() ?? null,
-        canBuyAgain: o.items.every((i) => i.product.status === 'APPROVED' && i.variant.stock > 0),
+        canBuyAgain: o.items.every(
+          (i) => i.product.status === 'APPROVED' && !hiddenCategories.has(i.product.categoryId) && i.variant.stock > 0,
+        ),
         createdAt: o.createdAt.toISOString(),
       };
     });
@@ -535,7 +543,7 @@ ordersRouter.post('/:id/buy-again', async (req, res, next) => {
       include: {
         items: {
           include: {
-            variant: { include: { product: { select: { status: true } } } },
+            variant: { include: { product: { select: { status: true, categoryId: true } } } },
           },
         },
       },
@@ -548,11 +556,14 @@ ordersRouter.post('/:id/buy-again', async (req, res, next) => {
       create: { userId },
     });
 
+    const hiddenCategories = await hiddenCategoryIds();
     let moved = 0;
     const skipped: string[] = [];
     for (const item of order.items) {
       const sellable =
-        item.variant.product.status === 'APPROVED' && item.variant.stock >= item.quantity;
+        item.variant.product.status === 'APPROVED' &&
+        !hiddenCategories.has(item.variant.product.categoryId) &&
+        item.variant.stock >= item.quantity;
       if (!sellable) {
         skipped.push(item.title);
         continue;
@@ -588,7 +599,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
         items: {
           include: {
             product: { include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } } },
-            variant: { include: { product: { select: { status: true } } } },
+            variant: { include: { product: { select: { status: true, categoryId: true } } } },
             seller: { select: { shopName: true, returnWindowDays: true } },
             return: { include: { refund: true } },
           },
@@ -638,6 +649,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
     const platformWindowDays = (await getSettings()).returnWindowDays;
     const windowMsFor = (itemId: string) =>
       (windowDaysByItem.get(itemId) ?? platformWindowDays) * 24 * 60 * 60 * 1000;
+    const hiddenCategories = await hiddenCategoryIds();
     const body: OrderDetailView = {
       id: order.id,
       orderNumber: order.orderNumber,
@@ -717,7 +729,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
         shippedAt: i.shippedAt?.toISOString() ?? null,
         deliveredAt: i.deliveredAt?.toISOString() ?? null,
         canReview: i.status === 'DELIVERED' && !reviewedProductIds.has(i.productId),
-        variantId: i.variant.stock >= 0 && i.variant.product.status === 'APPROVED'
+        variantId: i.variant.stock >= 0 && i.variant.product.status === 'APPROVED' && !hiddenCategories.has(i.variant.product.categoryId)
           ? i.variantId
           : null,
       })),

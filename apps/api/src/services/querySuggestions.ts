@@ -8,7 +8,9 @@ import {
   type QuerySuggestion,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import type { Prisma } from '@prisma/client';
 import { descendantIds } from './categoryRules';
+import { hiddenCategoryIds, visibleCategoryWhere } from './foodCategories';
 import { LIVE_PRODUCT_WHERE, searchCatalog, searchProducts } from './productSearch';
 import {
   categoryWords,
@@ -146,10 +148,15 @@ type Verification =
  *
  * Exported for tests: the rejection reasons are the contract.
  */
-export async function verifyPhrase(phrase: string, liveCount: number): Promise<Verification> {
+export async function verifyPhrase(
+  phrase: string,
+  liveCount: number,
+  // The build works this out once and passes it to every phrase.
+  baseWhere?: Prisma.ProductWhereInput,
+): Promise<Verification> {
   const result = await searchProducts({
     raw: phrase,
-    baseWhere: LIVE_PRODUCT_WHERE,
+    baseWhere: baseWhere ?? { ...LIVE_PRODUCT_WHERE, ...(await visibleCategoryWhere()) },
     sort: 'popularity',
     skip: 0,
     // Every id, not one page: price bounds and scores are computed from them.
@@ -203,11 +210,14 @@ async function build(version: number): Promise<QuerySuggestionSnapshot> {
   };
 
   const catalog = await searchCatalog();
+  // Closed food categories are not in the catalog, so no phrase leads to them.
+  const hidden = await hiddenCategoryIds();
+  const liveWhere: Prisma.ProductWhereInput = { ...LIVE_PRODUCT_WHERE, ...(await visibleCategoryWhere()) };
 
   // One read of the whole live catalog. Price bounds, scores and brand checks
   // are all computed from this rather than asked of the database per phrase.
   const live = await prisma.product.findMany({
-    where: LIVE_PRODUCT_WHERE,
+    where: liveWhere,
     select: {
       id: true,
       title: true,
@@ -273,7 +283,7 @@ async function build(version: number): Promise<QuerySuggestionSnapshot> {
     const known = checked.get(text);
     if (known) return known;
     stats.verified += 1;
-    const outcome = await verifyPhrase(text, liveCount);
+    const outcome = await verifyPhrase(text, liveCount, liveWhere);
     if (!outcome.ok) stats.rejected[outcome.reason] += 1;
     checked.set(text, outcome);
     return outcome;
@@ -306,10 +316,12 @@ async function build(version: number): Promise<QuerySuggestionSnapshot> {
   // Words from the synonym map and from category names. Each is searched on its
   // own first; only the ones that narrow the catalog become topics.
 
-  const categories = await prisma.category.findMany({
-    where: { isActive: true },
-    select: { id: true, name: true },
-  });
+  const categories = (
+    await prisma.category.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+    })
+  ).filter((c) => !hidden.has(c.id));
   // Same-named categories are one topic: this catalog has two "Smartphones".
   const categoryIdsByName = new Map<string, Set<string>>();
   for (const category of categories) {

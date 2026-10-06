@@ -28,6 +28,7 @@ import {
   type SellerStats,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { isHiddenCategory } from '../services/foodCategories';
 import { categoryRulesFor, categoryRulesMap } from '../services/categoryRules';
 import { gstSettings } from '../services/economicsRates';
 import { priceInput, sellerPricesOf, type PricedUpsertInput } from '../services/sellerPricing';
@@ -554,6 +555,13 @@ function assertRequiredAttributes(input: SellerProductUpsertInput, rules: Catego
   }
 }
 
+/** Closed food categories take no new listings (PlatformSettings.foodCategoriesEnabled). */
+async function assertCategoryOpen(categoryId: string) {
+  if (await isHiddenCategory(categoryId)) {
+    throw ApiError.badRequest('This category is not open for new listings yet', 'CATEGORY_CLOSED');
+  }
+}
+
 sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req, res, next) => {
   try {
     // A typed name that matches a brand is linked to it, in the brand's own spelling.
@@ -562,6 +570,7 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
     const input = await priceInput(parsed, parsed.categoryId);
     const category = await prisma.category.findUnique({ where: { id: input.categoryId } });
     if (!category) throw ApiError.badRequest('Category not found', 'CATEGORY_NOT_FOUND');
+    await assertCategoryOpen(category.id);
     const rules = await categoryRulesFor(category.id);
     assertRequiredAttributes(input, rules);
     if (input.mode !== 'DRAFT') assertParcelForReview(input);
@@ -741,6 +750,9 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
     // A typed name that matches a brand is linked to it, in the brand's own spelling.
     const parsed = await linkBrand(sellerProductUpsertSchema.parse(req.body));
     const product = await ownProduct(req, req.params.id);
+    // A listing already filed under a closed category can still be edited;
+    // moving one into it would be a new listing there by another route.
+    if (parsed.categoryId !== product.categoryId) await assertCategoryOpen(parsed.categoryId);
     // Priced on the live category for a live listing (a category change
     // waits for review, and the approval reprices), else on the one sent.
     const input = await priceInput(

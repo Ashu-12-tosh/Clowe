@@ -16,6 +16,7 @@ import {
   type SavedPaymentMethodInfo,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { visibleCategoryWhere } from '../services/foodCategories';
 import { getSettings } from '../services/settingsService';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -31,10 +32,10 @@ meRouter.get('/counts', async (req, res, next) => {
     const userId = req.auth!.userId;
     const [cartAgg, wishlist, notifications] = await Promise.all([
       prisma.cartItem.aggregate({
-        where: { cart: { userId }, variant: { product: { status: 'APPROVED' } } },
+        where: { cart: { userId }, variant: { product: { status: 'APPROVED', ...(await visibleCategoryWhere()) } } },
         _sum: { quantity: true },
       }),
-      prisma.wishlist.count({ where: { userId, product: { status: 'APPROVED' } } }),
+      prisma.wishlist.count({ where: { userId, product: { status: 'APPROVED', ...(await visibleCategoryWhere()) } } }),
       prisma.notification.count({ where: { userId, readAt: null } }),
     ]);
     const body: MyCounts = {
@@ -89,7 +90,7 @@ function toPaymentMethod(row: {
 /** Products this shopper looked at recently, newest first and de-duplicated. */
 async function recentlyViewedFor(userId: string, take = 8): Promise<ProductListItem[]> {
   const views = await prisma.productView.findMany({
-    where: { userId, product: { status: 'APPROVED' } },
+    where: { userId, product: { status: 'APPROVED', ...(await visibleCategoryWhere()) } },
     orderBy: { createdAt: 'desc' },
     take: take * 6, // over-fetch: the same product is often viewed repeatedly
     select: { productId: true },
@@ -123,7 +124,7 @@ meRouter.get('/overview', async (req, res, next) => {
       await Promise.all([
         prisma.user.findUnique({ where: { id: userId } }),
         prisma.order.count({ where: { userId } }),
-        prisma.wishlist.count({ where: { userId, product: { status: 'APPROVED' } } }),
+        prisma.wishlist.count({ where: { userId, product: { status: 'APPROVED', ...(await visibleCategoryWhere()) } } }),
         // Counted only when the feature is on; the tile is hidden either way,
         // but a number nobody can act on is worse than no number.
         prisma.coupon.count({

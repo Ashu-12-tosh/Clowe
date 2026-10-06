@@ -11,12 +11,14 @@ import {
   type SearchRelaxation,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { hiddenCategoryIds, visibleCategoryWhere } from './foodCategories';
 
 /**
  * What the storefront treats as buyable: approved, switched on by its seller,
  * and the seller not away. The suggest endpoint and the phrase generator both
  * filter on this, so neither can offer something the listing would not show.
- * Must match LIVE in routes/products.ts.
+ * Must match LIVE in routes/products.ts. Storefront queries also spread
+ * visibleCategoryWhere() beside it, which keeps closed food categories out.
  */
 export const LIVE_PRODUCT_WHERE = {
   status: 'APPROVED' as const,
@@ -103,9 +105,10 @@ export interface LiveBrands {
 }
 
 export async function liveBrands(): Promise<LiveBrands> {
+  const visible = await visibleCategoryWhere();
   const [linked, named] = await Promise.all([
-    prisma.product.groupBy({ by: ['brandId'], where: { ...LIVE_PRODUCT_WHERE, brandId: { not: null } } }),
-    prisma.product.groupBy({ by: ['brand'], where: { ...LIVE_PRODUCT_WHERE, brand: { not: null } } }),
+    prisma.product.groupBy({ by: ['brandId'], where: { ...LIVE_PRODUCT_WHERE, ...visible, brandId: { not: null } } }),
+    prisma.product.groupBy({ by: ['brand'], where: { ...LIVE_PRODUCT_WHERE, ...visible, brand: { not: null } } }),
   ]);
   return {
     ids: new Set(linked.flatMap((g) => (g.brandId ? [g.brandId] : []))),
@@ -147,13 +150,14 @@ let catalogCache: CachedCatalog | null = null;
 export async function searchCatalog(): Promise<CachedCatalog> {
   if (catalogCache && catalogCache.expires > Date.now()) return catalogCache;
 
-  const [allBrands, live, categories, ratingAgg] = await Promise.all([
+  const [allBrands, live, allCategories, hidden, ratingAgg] = await Promise.all([
     prisma.brand.findMany({ select: { id: true, name: true } }),
     liveBrands(),
     prisma.category.findMany({
       where: { isActive: true },
-      select: { slug: true, name: true, parent: { select: { name: true } } },
+      select: { id: true, slug: true, name: true, parent: { select: { name: true } } },
     }),
+    hiddenCategoryIds(),
     prisma.product.aggregate({
       _avg: { ratingAvg: true },
       where: { status: 'APPROVED', isVisible: true, ratingCount: { gt: 0 } },
@@ -162,6 +166,8 @@ export async function searchCatalog(): Promise<CachedCatalog> {
 
   // Only brands with something to buy: the parser and the suggestions both read this.
   const brands = allBrands.filter((b) => isLiveBrand(b, live));
+  // A closed food category is neither suggested nor recognised as a topic.
+  const categories = allCategories.filter((c) => !hidden.has(c.id));
   catalogCache = {
     brands: brands.map((b) => b.name),
     categories: categories.map((c) => ({ slug: c.slug, name: c.name })),
@@ -178,7 +184,7 @@ export async function searchCatalog(): Promise<CachedCatalog> {
   return catalogCache;
 }
 
-/** Drop the cache after an admin edits brands or categories. */
+/** Drop the cache after an admin edits brands or categories, or opens or closes the food categories. */
 export function invalidateSearchCatalog(): void {
   catalogCache = null;
 }

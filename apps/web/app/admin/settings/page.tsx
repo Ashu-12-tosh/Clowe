@@ -33,6 +33,7 @@ export default function AdminSettingsPage() {
     holdDays: '',
   });
   const [couponsEnabled, setCouponsEnabled] = useState(false);
+  const [foodCategoriesEnabled, setFoodCategoriesEnabled] = useState(false);
   const [dispatch, setDispatch] = useState({ slaHours: '', afterHours: '', penaltyRupees: '', enabled: true });
   // Read-only: set by the migration that introduced the per-order penalty.
   const [penaltyFrom, setPenaltyFrom] = useState<string | null>(null);
@@ -58,6 +59,7 @@ export default function AdminSettingsPage() {
         setTryonMin(toRupees(s.tryonMinPricePaise));
         setKycMinScore(String(s.kycNameMatchMinScore));
         setCouponsEnabled(s.couponsEnabled);
+        setFoodCategoriesEnabled(s.foodCategoriesEnabled);
         setSocial(s.socialLinks);
         setSupportEmails(s.supportEmails);
         setCodMaxRupees(toRupees(s.codMaxOrderPaise));
@@ -124,6 +126,7 @@ export default function AdminSettingsPage() {
           payoutHoldDays: Math.max(0, Math.round(Number(payout.holdDays) || 0)),
           kycNameMatchMinScore: Math.min(100, Math.max(0, Math.round(Number(kycMinScore) || 0))),
           couponsEnabled,
+          foodCategoriesEnabled,
           dispatchSlaHours: Math.max(1, Math.round(Number(dispatch.slaHours) || 0)),
           lateDispatchPenaltyAfterHours: Math.max(1, Math.round(Number(dispatch.afterHours) || 0)),
           lateDispatchPenaltyPaise: toPaise(dispatch.penaltyRupees),
@@ -218,6 +221,27 @@ export default function AdminSettingsPage() {
           discount on past orders all stay, and switching this back on restores the feature
           as it was. It also governs seller promo codes, which are redeemed through the same
           box, so sellers cannot create a code while this is off.
+        </p>
+      </div>
+
+      {/* Food categories (FSSAI) */}
+      <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
+        <h2 className="text-sm font-bold">&#128722; Grocery &amp; Supplements</h2>
+        <label className="mt-2 flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={foodCategoriesEnabled}
+            onChange={(e) => setFoodCategoriesEnabled(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>Open the food categories (needs an FSSAI licence)</span>
+        </label>
+        <p className="mt-1 text-xs text-gray-400">
+          Off hides Grocery and Supplements, with every sub-category and product in them, from
+          shoppers &mdash; navigation, search, filters, the home page and the category and product
+          pages &mdash; and sellers cannot list anything new there. Nothing is deleted: the
+          categories, their products and past orders all stay, and switching this on brings them
+          back as they were.
         </p>
       </div>
 

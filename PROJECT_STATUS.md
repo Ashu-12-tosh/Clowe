@@ -89,6 +89,16 @@ back on is one checkbox in admin settings. Seller promo codes are redeemed
 through the same box, so sellers are blocked from creating a code while it is
 off, rather than creating one nothing could redeem.
 
+**Grocery and Supplements are switched off until there is an FSSAI licence.**
+`foodCategoriesEnabled` in platform settings defaults to `false`: the two
+categories, everything under them and their products are hidden from shoppers
+everywhere (navigation, search and its suggestions, filters, home rails and the
+promos that link there, category and product pages, store pages, wishlist and
+cart), and sellers cannot list anything new in them. Nothing is deleted — the
+categories, products, cart lines and orders stay as they are — and the "Grocery
+& Supplements" checkbox in admin settings brings all of it back at once. The
+rule lives in `apps/api/src/services/foodCategories.ts`.
+
 ---
 
 ## Security

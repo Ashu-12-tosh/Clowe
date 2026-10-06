@@ -1,7 +1,9 @@
+import type { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 import { type PublicStore, type StoreHighlight } from '@clowe/shared';
 import { prisma } from '../db';
+import { visibleCategoryWhere } from '../services/foodCategories';
 import { getSettings } from '../services/settingsService';
 import { ApiError } from '../utils/ApiError';
 
@@ -25,7 +27,7 @@ storesRouter.get('/:slug', async (req, res, next) => {
           })
         : Promise.resolve(null),
       prisma.product.count({
-        where: { sellerId: seller.id, status: 'APPROVED', isVisible: true },
+        where: { sellerId: seller.id, status: 'APPROVED', isVisible: true, ...(await visibleCategoryWhere()) },
       }),
       prisma.review.aggregate({
         where: { product: { sellerId: seller.id } },
@@ -80,7 +82,12 @@ storesRouter.get('/:slug/products', async (req, res, next) => {
     });
     if (!seller || seller.status !== 'APPROVED') throw ApiError.notFound('Store not found');
 
-    const where = { sellerId: seller.id, status: 'APPROVED' as const, isVisible: true };
+    const where: Prisma.ProductWhereInput = {
+      sellerId: seller.id,
+      status: 'APPROVED',
+      isVisible: true,
+      ...(await visibleCategoryWhere()),
+    };
     const [total, products] = await Promise.all([
       prisma.product.count({ where }),
       prisma.product.findMany({

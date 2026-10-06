@@ -146,6 +146,17 @@ export interface PlatformSettings {
    * sellers are stopped from creating a code that could never be used.
    */
   couponsEnabled: boolean;
+  /**
+   * Whether the food categories — Grocery and Supplements, with everything
+   * under them — are open. Off until there is an FSSAI licence.
+   *
+   * Off hides them from shoppers everywhere (navigation, search, filters,
+   * home rails, category and product pages, cart and checkout) and stops
+   * sellers listing anything new in them. Nothing is deleted: the categories,
+   * their products and every order stay as they are, and turning this on
+   * brings all of it back.
+   */
+  foodCategoriesEnabled: boolean;
 }
 
 /** Subset that anonymous visitors may read. */
@@ -198,6 +209,7 @@ export const updateSettingsSchema = z.object({
   penaltyEnabled: z.boolean().optional(),
   kycNameMatchMinScore: z.number().int().min(0).max(100).optional(),
   couponsEnabled: z.boolean().optional(),
+  foodCategoriesEnabled: z.boolean().optional(),
   socialLinks: z
     .object({
       facebook: httpUrlSchema().or(z.literal('')),

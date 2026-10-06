@@ -32,6 +32,7 @@ import {
   resolveCategory,
   returnWindowDaysFor,
 } from '../services/categoryRules';
+import { isHiddenCategory, visibleCategoryWhere } from '../services/foodCategories';
 import {
   ENGINE_SELECT,
   runFacetEngine,
@@ -101,12 +102,13 @@ productsRouter.get('/', async (req, res, next) => {
     let explicitCategoryId: string | null = null;
     if (query.category) {
       const category = await prisma.category.findUnique({ where: { slug: query.category } });
-      if (!category) throw ApiError.notFound('Category not found');
+      if (!category || (await isHiddenCategory(category.id))) throw ApiError.notFound('Category not found');
       explicitCategoryId = category.id;
       categoryIds = await descendantIds(category.id);
     }
     const scopeWhere: Prisma.ProductWhereInput = {
       ...LIVE,
+      ...(await visibleCategoryWhere()),
       ...(categoryIds ? { categoryId: { in: categoryIds } } : {}),
     };
     const filters = railFiltersFrom(query);
@@ -231,6 +233,7 @@ productsRouter.get('/addons', async (req, res, next) => {
     const products = await prisma.product.findMany({
       where: {
         ...LIVE,
+        ...(await visibleCategoryWhere()),
         ...(exclude.length ? { id: { notIn: exclude } } : {}),
         variants: { some: { stock: { gt: 0 }, pricePaise: { lte: 200000 } } },
       },
@@ -285,7 +288,7 @@ productsRouter.get('/by-ids', async (req, res, next) => {
       return;
     }
     const products = await prisma.product.findMany({
-      where: { ...LIVE, id: { in: ids } },
+      where: { ...LIVE, ...(await visibleCategoryWhere()), id: { in: ids } },
       include: productListItemInclude,
     });
     const byId = new Map(products.map((p) => [p.id, p]));
@@ -327,12 +330,14 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
       },
     });
     // Hidden listings 404 like an unapproved one — the seller's own toggle.
-    // A shop on vacation is treated the same way.
+    // A shop on vacation is treated the same way, and so is a closed food
+    // category.
     if (
       !product ||
       product.status !== 'APPROVED' ||
       !product.isVisible ||
-      product.seller.vacationMode
+      product.seller.vacationMode ||
+      (await isHiddenCategory(product.categoryId))
     ) {
       throw ApiError.notFound('Product not found');
     }

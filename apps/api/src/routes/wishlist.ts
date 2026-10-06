@@ -3,6 +3,7 @@ import { Router } from 'express';
 import type { Prisma } from '@prisma/client';
 import type { CategoryRules, SharedWishlist, WishlistEntry, WishlistShare } from '@clowe/shared';
 import { prisma } from '../db';
+import { hiddenCategoryIds, isHiddenCategory, visibleCategoryWhere } from '../services/foodCategories';
 import { categoryRulesMap } from '../services/categoryRules';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -72,7 +73,10 @@ async function wishlistFor(userId: string): Promise<WishlistEntry[]> {
     orderBy: { createdAt: 'desc' },
     include: WISHLIST_INCLUDE,
   });
-  const live = rows.filter((row) => row.product.status === 'APPROVED');
+  // Saved items in a closed food category stay saved, out of sight, and come
+  // back when it opens.
+  const hidden = await hiddenCategoryIds();
+  const live = rows.filter((row) => row.product.status === 'APPROVED' && !hidden.has(row.product.categoryId));
   const rules = await categoryRulesMap(live.map((row) => row.product.categoryId));
   return live.map((row) => toEntry(row, rules));
 }
@@ -165,7 +169,7 @@ async function cartIdFor(userId: string): Promise<string> {
 async function moveToCart(userId: string, productIds: string[]) {
   const cartId = await cartIdFor(userId);
   const products = await prisma.product.findMany({
-    where: { id: { in: productIds }, status: 'APPROVED' },
+    where: { id: { in: productIds }, status: 'APPROVED', ...(await visibleCategoryWhere()) },
     include: { variants: { select: { id: true, pricePaise: true, stock: true } } },
   });
 
@@ -218,7 +222,9 @@ wishlistRouter.post('/:productId', async (req, res, next) => {
       where: { id: req.params.productId },
       include: { variants: { select: { id: true, pricePaise: true, stock: true } } },
     });
-    if (!product || product.status !== 'APPROVED') throw ApiError.notFound('Product not found');
+    if (!product || product.status !== 'APPROVED' || (await isHiddenCategory(product.categoryId))) {
+      throw ApiError.notFound('Product not found');
+    }
 
     // Remember today's price so a later drop can be flagged on the card.
     const cheapest = product.variants.reduce<number | null>(

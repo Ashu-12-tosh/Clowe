@@ -3,6 +3,7 @@ import type { CategoryCallout, CategoryDetail, CategoryNode } from '@clowe/share
 import { prisma } from '../db';
 import { specFieldsFor } from '@clowe/shared';
 import { chainOf, descendantIds, facetsFromChain, rulesFromChain } from '../services/categoryRules';
+import { hiddenCategoryIds } from '../services/foodCategories';
 import { ApiError } from '../utils/ApiError';
 
 export const categoriesRouter = Router();
@@ -21,13 +22,17 @@ function asCallouts(value: unknown): CategoryCallout[] {
   });
 }
 
-// Full active category tree (roots with children), for nav + filters.
+// Full active category tree (roots with children), for nav + filters, and
+// for the seller's category picker — so a closed food category is in neither.
 categoriesRouter.get('/', async (_req, res, next) => {
   try {
-    const categories = await prisma.category.findMany({
-      where: { isActive: true },
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-    });
+    const hidden = await hiddenCategoryIds();
+    const categories = (
+      await prisma.category.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      })
+    ).filter((c) => !hidden.has(c.id));
 
     const byId = new Map(categories.map((c) => [c.id, c]));
     const byParent = new Map<string | null, typeof categories>();
@@ -76,7 +81,9 @@ categoriesRouter.get('/:slug', async (req, res, next) => {
         },
       },
     });
-    if (!category || !category.isActive) throw ApiError.notFound('Category not found');
+    if (!category || !category.isActive || (await hiddenCategoryIds()).has(category.id)) {
+      throw ApiError.notFound('Category not found');
+    }
 
     // One grouped count covers the category and every child in one round trip.
     const scopeIds = await descendantIds(category.id);

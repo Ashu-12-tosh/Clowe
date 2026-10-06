@@ -7,6 +7,7 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { isLiveBrand, liveBrands } from '../services/productSearch';
+import { hiddenCategories, linksToHiddenCategory, visibleCategoryWhere } from '../services/foodCategories';
 
 export const homeRouter = Router();
 
@@ -81,8 +82,9 @@ async function trendingCards(): Promise<HomeProductCard[]> {
 
   const rankedIds = [...score.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
 
+  const visible = await visibleCategoryWhere();
   const products = await prisma.product.findMany({
-    where: { id: { in: rankedIds.slice(0, 30) }, status: 'APPROVED', isVisible: true, seller: { vacationMode: false } },
+    where: { id: { in: rankedIds.slice(0, 30) }, status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, ...visible },
     include: cardInclude,
   });
   const byId = new Map(products.map((p) => [p.id, p]));
@@ -95,7 +97,7 @@ async function trendingCards(): Promise<HomeProductCard[]> {
   // Sparse signals (fresh database) — pad with all-time best sellers.
   if (cards.length < 8) {
     const pad = await prisma.product.findMany({
-      where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, id: { notIn: cards.map((c) => c.id) } },
+      where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, ...visible, id: { notIn: cards.map((c) => c.id) } },
       orderBy: { soldCount: 'desc' },
       take: 12 - cards.length,
       include: cardInclude,
@@ -107,6 +109,10 @@ async function trendingCards(): Promise<HomeProductCard[]> {
 
 async function buildHomePayload(): Promise<HomePayload> {
   const now = new Date();
+  // Closed food categories: their products, their tiles, and any banner or
+  // promo that links into them stay off the homepage.
+  const hidden = await hiddenCategories();
+  const opensHidden = (href: string | null | undefined) => linksToHiddenCategory(href, hidden.slugs);
 
   const [banners, promoTiles, deal, rootCategories, brands, trending] = await Promise.all([
     prisma.homeBanner.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
@@ -134,7 +140,9 @@ async function buildHomePayload(): Promise<HomePayload> {
   ]);
 
   return {
-    banners: banners.map((b) => ({
+    banners: banners
+      .filter((b) => !opensHidden(b.primaryHref) && !opensHidden(b.secondaryHref))
+      .map((b) => ({
       id: b.id,
       headline: b.headline,
       highlight: b.highlight,
@@ -146,7 +154,7 @@ async function buildHomePayload(): Promise<HomePayload> {
       secondaryHref: b.secondaryHref,
     })),
     promoCards: promoTiles
-      .filter((t) => t.placement === 'PROMO_CARD')
+      .filter((t) => t.placement === 'PROMO_CARD' && !opensHidden(t.href))
       .map((t) => ({ id: t.id, title: t.title, subtitle: t.subtitle, imageUrl: t.imageUrl, href: t.href })),
     deal: deal
       ? {
@@ -154,11 +162,13 @@ async function buildHomePayload(): Promise<HomePayload> {
           title: deal.title,
           endsAt: deal.endAt.toISOString(),
           products: deal.items
-            .filter((i) => i.product.status === 'APPROVED')
+            .filter((i) => i.product.status === 'APPROVED' && !hidden.ids.has(i.product.categoryId))
             .map((i) => toCard(i.product)),
         }
       : null,
-    categories: rootCategories.map((c) => ({
+    categories: rootCategories
+      .filter((c) => !hidden.ids.has(c.id))
+      .map((c) => ({
       id: c.id,
       name: c.name,
       slug: c.slug,
@@ -167,7 +177,7 @@ async function buildHomePayload(): Promise<HomePayload> {
     })),
     trending,
     promoStrips: promoTiles
-      .filter((t) => t.placement === 'PROMO_STRIP')
+      .filter((t) => t.placement === 'PROMO_STRIP' && !opensHidden(t.href))
       .map((t) => ({ id: t.id, title: t.title, subtitle: t.subtitle, imageUrl: t.imageUrl, href: t.href })),
     brands: brands.map((b) => ({ id: b.id, name: b.name, slug: b.slug, logoUrl: b.logoUrl })),
   };

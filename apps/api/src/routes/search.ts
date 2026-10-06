@@ -22,15 +22,18 @@ import {
   searchProducts,
 } from '../services/productSearch';
 import { querySuggestionVersion, suggestQueries } from '../services/querySuggestions';
+import { visibleCategoryWhere } from '../services/foodCategories';
 
 export const searchRouter = Router();
 searchRouter.use(suggestLimiter);
 
 /**
- * Same visibility rule the storefront listing uses. A suggestion that leads to
- * a 404 is worse than no suggestion.
+ * Same visibility rule the storefront listing uses, closed food categories
+ * included. A suggestion that leads to a 404 is worse than no suggestion.
  */
-const LIVE = LIVE_PRODUCT_WHERE;
+async function live(): Promise<Prisma.ProductWhereInput> {
+  return { ...LIVE_PRODUCT_WHERE, ...(await visibleCategoryWhere()) };
+}
 
 // ---------------------------------------------------------------------------
 // Caches
@@ -68,13 +71,19 @@ function cacheSet(key: string, value: SuggestResponse): void {
   suggestCache.set(key, { value, expires: Date.now() + SUGGEST_TTL_MS });
 }
 
+/** Forget every cached answer — after the food categories open or close. */
+export function clearSuggestCaches(): void {
+  suggestCache.clear();
+  trendingCache = null;
+}
+
 /** Best sellers for the dropdown's empty state, refreshed on the same clock. */
 let trendingCache: { value: ProductSuggestion[]; expires: number } | null = null;
 
 async function trendingProducts(): Promise<ProductSuggestion[]> {
   if (trendingCache && trendingCache.expires > Date.now()) return trendingCache.value;
   const rows = await prisma.product.findMany({
-    where: LIVE,
+    where: await live(),
     orderBy: { soldCount: 'desc' },
     take: SUGGEST_GROUP_LIMIT,
     select: SUGGEST_SELECT,
@@ -293,7 +302,7 @@ searchRouter.get('/suggest', async (req, res, next) => {
       // Same filter semantics as the results page — buildFilterWhere is the one
       // definition of what "under 15k" or "on sale" narrows to.
       const filters = buildFilterWhere(parsed, []);
-      products = await lookupProducts({ ...LIVE, ...filters, ...titleWhere(terms) }, terms);
+      products = await lookupProducts({ ...(await live()), ...filters, ...titleWhere(terms) }, terms);
 
       // A bound that is still being typed ("phone under 15" on the way to 15k)
       // can exclude everything for a keystroke or two. Showing the words without
@@ -301,7 +310,7 @@ searchRouter.get('/suggest', async (req, res, next) => {
       // is mid-word — the same "never return nothing" rule the results page
       // follows when it relaxes a filter.
       if (products.length === 0 && Object.keys(filters).length > 0) {
-        products = await lookupProducts({ ...LIVE, ...titleWhere(terms) }, terms);
+        products = await lookupProducts({ ...(await live()), ...titleWhere(terms) }, terms);
       }
     }
 
@@ -312,7 +321,7 @@ searchRouter.get('/suggest', async (req, res, next) => {
     if (products.length === 0 && brands.length === 0 && categories.length === 0 && chips.length > 0) {
       const ranked = await searchProducts({
         raw: q,
-        baseWhere: LIVE,
+        baseWhere: await live(),
         sort: parsed.sort ?? 'popularity',
         skip: 0,
         take: SUGGEST_GROUP_LIMIT,

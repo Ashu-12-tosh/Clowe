@@ -55,6 +55,9 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   // — here or from admin settings — brings the whole feature back with no
   // other change.
   couponsEnabled: false,
+  // Off until there is an FSSAI licence: Grocery and Supplements are hidden,
+  // not deleted. See services/foodCategories.ts.
+  foodCategoriesEnabled: false,
   socialLinks: {
     facebook: 'https://www.facebook.com/profile.php?id=61594554615215',
     twitter: '',
@@ -155,6 +158,9 @@ export async function getSettings(): Promise<PlatformSettings> {
       DEFAULT_SETTINGS.kycNameMatchMinScore,
     couponsEnabled:
       (byKey.get('couponsEnabled') as boolean | undefined) ?? DEFAULT_SETTINGS.couponsEnabled,
+    foodCategoriesEnabled:
+      (byKey.get('foodCategoriesEnabled') as boolean | undefined) ??
+      DEFAULT_SETTINGS.foodCategoriesEnabled,
     // Merged, not replaced: a value saved before a network was added to the
     // shape would otherwise come back without it.
     socialLinks: {

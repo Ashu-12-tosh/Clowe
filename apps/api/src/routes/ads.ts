@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AD_PLACEMENTS, type ActiveAd } from '@clowe/shared';
 import { prisma } from '../db';
+import { visibleCategoryWhere } from '../services/foodCategories';
 import { listingStockFields, pricesVary } from '../utils/productListing';
 
 export const adsRouter = Router();
@@ -40,7 +41,11 @@ adsRouter.get('/active', async (req, res, next) => {
     await expireDueAds();
 
     const ads = await prisma.ad.findMany({
-      where: { status: 'ACTIVE', placement, product: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false } } },
+      where: {
+        status: 'ACTIVE',
+        placement,
+        product: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, ...(await visibleCategoryWhere()) },
+      },
       orderBy: { startAt: 'desc' },
       take: 10,
       include: {

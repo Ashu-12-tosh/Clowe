@@ -16,7 +16,7 @@ import {
   type RailFacet,
   type SearchDroppable,
 } from '@clowe/shared';
-import { api } from '@/lib/api';
+import { api, ApiRequestError } from '@/lib/api';
 import { fetchWishlistIds } from '@/lib/wishlist';
 import ProductCard from '@/components/ProductCard';
 import SearchSummary from '@/components/search/SearchSummary';
@@ -115,7 +115,14 @@ function ProductsPageInner() {
     setError('');
     api<ProductListResponse>(`/api/products?${searchParams.toString()}`)
       .then(setData)
-      .catch(() => setError('Could not load products. Is the API running?'))
+      .catch((err) =>
+        // A category that is gone, or closed (food, until FSSAI), is not an outage.
+        setError(
+          err instanceof ApiRequestError && err.code === 'NOT_FOUND'
+            ? 'That category is not available.'
+            : 'Could not load products. Is the API running?',
+        ),
+      )
       .finally(() => setLoading(false));
   }, [searchParams]);
 

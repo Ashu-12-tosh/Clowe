@@ -22,6 +22,10 @@ import {
 } from '@clowe/shared';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
+import { bustHomeCache } from './home';
+import { clearSuggestCaches } from './search';
+import { invalidateSearchCatalog } from '../services/productSearch';
+import { refreshQuerySuggestions } from '../services/querySuggestions';
 import {
   categoryRulesFor,
   chainOf,
@@ -791,6 +795,21 @@ adminRouter.put('/settings', async (req, res, next) => {
       if (input[key] !== undefined) await setSetting(key, input[key]);
     }
     if (gstChanging) await repriceProducts({});
+    // Food categories (FSSAI): hidden or shown everywhere at once. The home
+    // page, search and its suggestions hold the catalog in memory, so they are
+    // dropped and rebuilt rather than left to expire.
+    if (
+      input.foodCategoriesEnabled !== undefined &&
+      input.foodCategoriesEnabled !== before.foodCategoriesEnabled
+    ) {
+      await setSetting('foodCategoriesEnabled', input.foodCategoriesEnabled);
+      bustHomeCache();
+      invalidateSearchCatalog();
+      clearSuggestCaches();
+      refreshQuerySuggestions().catch((err) =>
+        console.error('[clowe-api] query suggestions: rebuild after food categories change failed', err),
+      );
+    }
     res.json({ success: true, data: await getSettings() });
   } catch (err) {
     next(err);
