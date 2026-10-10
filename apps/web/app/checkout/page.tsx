@@ -57,7 +57,8 @@ const TRUST_STRIP = [
   { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
 ];
 
-const PAYMENT_METHODS = ['VISA', 'Mastercard', 'RuPay', 'UPI', 'Paytm'];
+// How customers can pay, by method — not card or wallet brands, which depend on the gateway.
+const PAYMENT_METHODS = ['UPI', 'Cards', 'Net banking', 'Cash on Delivery'];
 
 const DELIVERY_ICON: Record<DeliveryMethod, typeof TruckIcon> = {
   STANDARD: TruckIcon,
@@ -714,9 +715,6 @@ export default function CheckoutPage() {
                   {method}
                 </span>
               ))}
-              <span className="rounded-md border border-gray-200 bg-cream-50 px-2.5 py-1.5 text-[11px] font-bold text-gray-500">
-                +5
-              </span>
             </div>
           </div>
 

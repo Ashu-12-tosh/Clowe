@@ -43,7 +43,8 @@ const TRUST_STRIP = [
   { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
 ];
 
-const SECURITY_MARKS = ['PCI DSS', 'Verified by Visa', 'Mastercard SecureCode', 'RuPay Secure'];
+// What is true of every payment here, not certification marks the site does not hold itself.
+const SECURITY_MARKS = ['Encrypted connection', 'Card details never stored by Clowe'];
 const UPI_APPS = ['Google Pay', 'PhonePe', 'Paytm', 'BHIM', 'Amazon Pay'];
 const CARD_NETWORKS = ['Visa', 'Mastercard', 'RuPay', 'Amex'];
 const BANKS = ['HDFC Bank', 'ICICI Bank', 'State Bank of India', 'Axis Bank', 'Kotak Mahindra'];

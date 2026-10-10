@@ -39,7 +39,8 @@ const TRUST_STRIP = [
   { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
 ];
 
-const PAYMENT_METHODS = ['VISA', 'Mastercard', 'RuPay', 'UPI', 'Paytm'];
+// How customers can pay, by method — not card or wallet brands, which depend on the gateway.
+const PAYMENT_METHODS = ['UPI', 'Cards', 'Net banking', 'Cash on Delivery'];
 
 /** Header/summary counts are in items, matching the "(5 Items)" in the title. */
 function itemCount(lines: CartLine[]): number {
@@ -636,9 +637,6 @@ export default function CartPage() {
                   {method}
                 </span>
               ))}
-              <span className="rounded-md border border-gray-200 bg-cream-50 px-2.5 py-1.5 text-[11px] font-bold text-gray-500">
-                +5
-              </span>
             </div>
           </div>
 

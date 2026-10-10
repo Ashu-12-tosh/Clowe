@@ -199,6 +199,15 @@ payments run on the mock pay button, payouts are a mock, and **KYC runs on a
 mock that marks every well-formed PAN, GSTIN and account as verified — which is
 not a real check, and real sellers must not be approved against it.**
 
+**The payment gateway is also a code dependency, not only an activation.**
+`PAYMENT_PROVIDER` accepts only `mock` and `razorpay` today: there is no
+Cashfree payment provider in `apps/api/src/services/payments/`. Before real
+payments, one has to be written against the same interface the Razorpay one
+implements — create the gateway order, verify the payment (callback and
+webhook), and refund (cancellations and returns both refund through it). The
+storefront names payment methods (UPI, cards, net banking, COD), not gateway or
+wallet brands, so nothing on the site has to change when it goes in.
+
 ---
 
 ## Known gaps — real, not scheduled

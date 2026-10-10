@@ -54,7 +54,8 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   },
 ];
 
-const PAYMENT_METHODS = ['VISA', 'MasterCard', 'RuPay', 'UPI', 'Paytm'];
+// How customers can pay, by method — not card or wallet brands, which depend on the gateway.
+const PAYMENT_METHODS = ['UPI', 'Cards', 'Net banking', 'Cash on Delivery'];
 
 /**
  * Social marks, drawn to the same recipe as the other icons in this app —

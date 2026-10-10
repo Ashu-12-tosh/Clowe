@@ -12,7 +12,7 @@
 
 ## Payments
 
-- **Which methods are accepted?** UPI, cards (Visa/MasterCard/RuPay), net banking and wallets.
+- **Which methods are accepted?** UPI, debit and credit cards, net banking, and Cash on Delivery on eligible orders.
 - **Is it safe?** Payments are processed by PCI-DSS compliant gateways. Clowe never stores card numbers.
 
 ## AI Try-On

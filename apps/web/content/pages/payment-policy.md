@@ -2,7 +2,7 @@
 
 Payments on cloweshop.com are collected by **{{legal.name}}** through certified payment gateways.
 
-- **Accepted methods:** UPI, Visa, MasterCard, RuPay, net banking and popular wallets.
+- **Accepted methods:** UPI, debit and credit cards, net banking, and Cash on Delivery on eligible orders.
 - Payments are processed by PCI-DSS compliant gateways; Clowe never stores card numbers.
 - **Refunds** always go back to the original payment method.
 - Clowe Credits earned from purchases can be redeemed at checkout.
