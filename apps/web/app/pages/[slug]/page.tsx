@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound, permanentRedirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { fillLegalEntity, fillReturnWindow } from '@clowe/shared';
 import { CONTENT_PAGES, getContentPage, renderMarkdown } from '@/lib/contentPages';
 import { serverPublicSettings } from '@/lib/serverSettings';
@@ -11,7 +11,8 @@ interface Props {
 
 // No generateStaticParams: every page renders per request so its scripts carry
 // that request's CSP nonce, and since Next 15 a page with static params is
-// prerendered whatever the root layout says. Unknown slugs still 404 below.
+// prerendered whatever the root layout says. Unknown slugs get their 404 in
+// middleware.ts — by the time this page runs, a 200 has already started.
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -22,8 +23,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ContentPage({ params }: Props) {
   const { slug } = await params;
-  // Contact Us lives at /contact; this is where people (and gateways) guess it.
-  if (slug === 'contact') permanentRedirect('/contact');
   const page = getContentPage(slug);
   if (!page) notFound();
 

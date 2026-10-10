@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { buildContentSecurityPolicy } from '@clowe/shared';
+import { isContentPageSlug } from './lib/contentPageList';
 
 /**
  * Content-Security-Policy, with a fresh nonce per page.
@@ -24,6 +25,28 @@ const dev = process.env.NODE_ENV !== 'production';
 const apiOrigin = new URL(process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000').origin;
 const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL ? new URL(process.env.NEXT_PUBLIC_SITE_URL).origin : null;
 
+/**
+ * A path no route can ever match: app/ folders starting with "_" are private
+ * and never become routes. Rewriting here renders app/not-found.tsx with a
+ * real 404 status.
+ */
+const NOT_FOUND_PATH = '/_no-such-page';
+
+/**
+ * /pages/<slug> for a slug that has no page. The page itself cannot answer
+ * 404: the root loading.tsx has already started a 200 response by the time it
+ * would call notFound(), so it is decided here, before anything renders.
+ */
+function isMissingContentPage(pathname: string): boolean {
+  const match = /^\/pages\/([^/]+)\/?$/.exec(pathname);
+  if (!match) return false;
+  try {
+    return !isContentPageSlug(decodeURIComponent(match[1]!));
+  } catch {
+    return true; // malformed escape: no page has that name
+  }
+}
+
 function freshNonce(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
@@ -43,7 +66,9 @@ export function middleware(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(HEADER, policy);
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  const response = isMissingContentPage(request.nextUrl.pathname)
+    ? NextResponse.rewrite(new URL(NOT_FOUND_PATH, request.url), { request: { headers: requestHeaders } })
+    : NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set(HEADER, policy);
   return response;
 }

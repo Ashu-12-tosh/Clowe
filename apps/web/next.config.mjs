@@ -62,6 +62,11 @@ export default function config(phase) {
     transpilePackages: ['@clowe/shared'],
     // Self-contained server bundle for the production Docker image.
     output: 'standalone',
+    // Contact Us lives at /contact; /pages/contact is where people (and payment
+    // gateways) guess it. A real 308, before anything renders.
+    async redirects() {
+      return [{ source: '/pages/contact', destination: '/contact', permanent: true }];
+    },
     // Security headers that do not change per request. The
     // Content-Security-Policy carries a per-request nonce, so it is set in
     // middleware.ts instead.
