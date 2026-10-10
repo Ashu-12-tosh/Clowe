@@ -15,9 +15,10 @@ import {
   SectionHeader,
   TrendingCard,
 } from '@/components/home/HomeBits';
+import PolicyText from '@/components/PolicyText';
 
 const TRUST_ITEMS = [
-  { icon: '🚚', title: 'Free Shipping', text: 'On orders above ₹499' },
+  { icon: '🚚', title: 'Free Shipping', text: 'On orders {{freeShippingFrom}}' },
   { icon: '↩️', title: 'Easy Returns', text: 'Hassle-free returns' },
   { icon: '🔒', title: 'Secure Payments', text: '100% protected' },
   { icon: '🤖', title: 'AI Shopping Assistant', text: 'Get smart help' },
@@ -173,7 +174,7 @@ export default function HomePage() {
               <p className="text-xs text-gray-500">
                 {item.title === 'Easy Returns' && windowDays
                   ? `${returnWindowPhrase(windowDays)} easy returns`
-                  : item.text}
+                  : <PolicyText text={item.text} />}
               </p>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { fillLegalEntity, fillReturnWindow } from '@clowe/shared';
+import { fillLegalEntity, fillPolicyText } from '@clowe/shared';
 import { CONTENT_PAGES, getContentPage, renderMarkdown } from '@/lib/contentPages';
 import { serverPublicSettings } from '@/lib/serverSettings';
 
@@ -26,12 +26,12 @@ export default async function ContentPage({ params }: Props) {
   const page = getContentPage(slug);
   if (!page) notFound();
 
-  // The return window and the legal entity come from settings. Without the
+  // Platform rules (return window, free shipping, …) and the legal entity come from settings. Without the
   // API, the window reads "the window shown on the product page" and only the
   // registered name is filled in — the other legal lines drop out.
   const settings = await serverPublicSettings();
   const markdown = fillLegalEntity(
-    fillReturnWindow(page.markdown, settings?.returnWindowDays ?? null),
+    fillPolicyText(page.markdown, settings),
     settings?.legalEntity,
   );
   // The markdown's own "# heading" renders as the page title.

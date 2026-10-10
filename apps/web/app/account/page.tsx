@@ -14,9 +14,10 @@ import {
   ReturnIcon,
   ShieldCheckIcon,
 } from '@/components/cart/CartIcons';
+import PolicyText from '@/components/PolicyText';
 
 const TRUST_STRIP = [
-  { Icon: BoxIcon, title: 'Free Shipping', text: 'On orders above ₹999' },
+  { Icon: BoxIcon, title: 'Free Shipping', text: 'On orders {{freeShippingFrom}}' },
   { Icon: ReturnIcon, title: 'Easy Returns', text: 'Easy return policy' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure' },
   { Icon: HeadsetIcon, title: '24x7 Support', text: 'We are here for you' },
@@ -318,7 +319,7 @@ export default function AccountOverviewPage() {
             <Icon className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
             <div className="min-w-0">
               <p className="text-sm font-bold text-ink-900">{title}</p>
-              <p className="text-xs text-gray-500">{text}</p>
+              <p className="text-xs text-gray-500"><PolicyText text={text} /></p>
             </div>
           </div>
         ))}

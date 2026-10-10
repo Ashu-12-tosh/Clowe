@@ -141,11 +141,11 @@ ordersRouter.post('/checkout', async (req, res, next) => {
     const orderNumber = await generateOrderNumber();
     const subtotalPaise = cart.subtotalPaise;
     // Shipping follows the chosen speed, priced server-side.
-    const member = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { isPremium: true },
-    });
-    const shippingPaise = deliveryPriceFor(deliveryMethod, subtotalPaise, member?.isPremium ?? false);
+    const [member, { freeShippingThresholdPaise }] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { isPremium: true } }),
+      getSettings(),
+    ]);
+    const shippingPaise = deliveryPriceFor(deliveryMethod, subtotalPaise, freeShippingThresholdPaise, member?.isPremium ?? false);
     const eta = etaWindowFor(deliveryMethod);
 
     // Coupon: re-validated here, so a code that expired between the cart page

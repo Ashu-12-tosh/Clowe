@@ -4,18 +4,19 @@ import {
   type DeliveryOption,
 } from '@clowe/shared';
 
-// Standard shipping rule: free at/above ₹999, else ₹49.
-export const FREE_SHIPPING_THRESHOLD_PAISE = 99900;
+// Standard shipping: free at or above the platform's free-shipping threshold
+// (PlatformSettings.freeShippingThresholdPaise), else this fee.
 export const SHIPPING_FEE_PAISE = 4900;
 
 /**
- * Standard-speed shipping for a subtotal. Premium members get it free with no
- * minimum — that is the membership's headline benefit.
+ * Standard-speed shipping for a subtotal. The threshold is the platform
+ * setting, passed in so this stays a pure function. Premium members get it
+ * free with no minimum — that is the membership's headline benefit.
  */
-export function shippingFor(subtotalPaise: number, isPremium = false): number {
+export function shippingFor(subtotalPaise: number, freeShippingThresholdPaise: number, isPremium = false): number {
   if (subtotalPaise === 0) return 0;
   if (isPremium) return 0;
-  return subtotalPaise >= FREE_SHIPPING_THRESHOLD_PAISE ? 0 : SHIPPING_FEE_PAISE;
+  return subtotalPaise >= freeShippingThresholdPaise ? 0 : SHIPPING_FEE_PAISE;
 }
 
 /** Same-day orders must be placed before this hour (IST) to go out today. */
@@ -70,6 +71,7 @@ function istHour(now: Date): number {
 export function deliveryPriceFor(
   method: DeliveryMethod,
   subtotalPaise: number,
+  freeShippingThresholdPaise: number,
   isPremium = false,
 ): number {
   switch (method) {
@@ -79,7 +81,7 @@ export function deliveryPriceFor(
       return SAME_DAY_FEE_PAISE;
     case 'STANDARD':
     default:
-      return shippingFor(subtotalPaise, isPremium);
+      return shippingFor(subtotalPaise, freeShippingThresholdPaise, isPremium);
   }
 }
 
@@ -98,13 +100,14 @@ export function etaWindowFor(method: DeliveryMethod, now = new Date()): { from: 
 /** Every speed, priced and dated for this cart — the checkout's step 2. */
 export function deliveryOptionsFor(
   subtotalPaise: number,
+  freeShippingThresholdPaise: number,
   now = new Date(),
   isPremium = false,
 ): DeliveryOption[] {
   const pastCutoff = istHour(now) >= SAME_DAY_CUTOFF_HOUR;
 
   return DELIVERY_METHODS.map((method) => {
-    const pricePaise = deliveryPriceFor(method, subtotalPaise, isPremium);
+    const pricePaise = deliveryPriceFor(method, subtotalPaise, freeShippingThresholdPaise, isPremium);
     const { from, to } = etaWindowFor(method, now);
     const available = method !== 'SAME_DAY' || !pastCutoff;
     return {
@@ -127,5 +130,6 @@ export function deliveryOptionsFor(
 
 /** Throws-free availability check used by checkout before charging. */
 export function isDeliveryMethodAvailable(method: DeliveryMethod, now = new Date()): boolean {
-  return deliveryOptionsFor(0, now).find((o) => o.method === method)?.available ?? false;
+  // Availability does not depend on price, so the threshold here is immaterial.
+  return deliveryOptionsFor(0, 0, now).find((o) => o.method === method)?.available ?? false;
 }

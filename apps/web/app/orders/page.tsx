@@ -20,6 +20,7 @@ import {
   ShieldCheckIcon,
   TruckIcon,
 } from '@/components/cart/CartIcons';
+import PolicyText from '@/components/PolicyText';
 
 const PAGE_SIZE = 10;
 
@@ -39,7 +40,7 @@ const TRUST_STRIP = [
   { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
   { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
-  { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
+  { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
   { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
 ];
 
@@ -570,7 +571,7 @@ export default function OrdersPage() {
             <Icon className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
             <div className="min-w-0">
               <p className="t-caption font-bold text-ink-900">{title}</p>
-              <p className="t-caption text-gray-500">{text}</p>
+              <p className="t-caption text-gray-500"><PolicyText text={text} /></p>
             </div>
           </div>
         ))}

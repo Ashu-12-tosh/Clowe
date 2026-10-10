@@ -746,6 +746,9 @@ adminRouter.put('/settings', async (req, res, next) => {
     if (input.socialLinks !== undefined) await setSetting('socialLinks', input.socialLinks);
     if (input.supportEmails !== undefined) await setSetting('supportEmails', input.supportEmails);
     if (input.codMaxOrderPaise !== undefined) await setSetting('codMaxOrderPaise', input.codMaxOrderPaise);
+    if (input.freeShippingThresholdPaise !== undefined) {
+      await setSetting('freeShippingThresholdPaise', input.freeShippingThresholdPaise);
+    }
     if (input.adPricing !== undefined) await setSetting('adPricing', input.adPricing);
     // Partial: fields not sent keep their saved value.
     if (input.legalEntity !== undefined) {

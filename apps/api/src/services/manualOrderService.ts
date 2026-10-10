@@ -83,7 +83,8 @@ export async function createManualOrder(input: {
   });
 
   const subtotalPaise = lines.reduce((sum, l) => sum + l.pricePaise * l.quantity, 0);
-  const shippingPaise = deliveryPriceFor(input.deliveryMethod, subtotalPaise, user.isPremium);
+  const { freeShippingThresholdPaise } = await getSettings();
+  const shippingPaise = deliveryPriceFor(input.deliveryMethod, subtotalPaise, freeShippingThresholdPaise, user.isPremium);
   const totalPaise = subtotalPaise + shippingPaise;
   const eta = etaWindowFor(input.deliveryMethod);
   const orderNumber = await generateOrderNumber();

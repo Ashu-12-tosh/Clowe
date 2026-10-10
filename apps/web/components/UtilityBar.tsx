@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import PolicyText from '@/components/PolicyText';
 
 /**
  * Thin black strip that used to sit above the main header: app download and
@@ -16,7 +17,8 @@ export default function UtilityBar() {
           <Link href="/sell" className="hover:text-white">🏪 Become a Seller</Link>
         </div>
         <p className="t-announce mx-auto truncate text-center sm:absolute sm:left-1/2 sm:-translate-x-1/2">
-          <span className="font-semibold text-brand-400">Free Shipping</span> on orders above ₹499
+          <span className="font-semibold text-brand-400">Free Shipping</span> on orders{' '}
+          <PolicyText text="{{freeShippingFrom}}" />
           <span className="mx-1.5 text-gray-500">|</span>Easy Returns
         </p>
         <Link href="/pages/help" className="hidden shrink-0 hover:text-white sm:block">

@@ -24,6 +24,7 @@ import {
   ShieldCheckIcon,
   TruckIcon,
 } from '@/components/cart/CartIcons';
+import PolicyText from '@/components/PolicyText';
 
 /** "12K+ Sold" / "845 Sold". */
 function compactCount(n: number): string {
@@ -247,13 +248,13 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
     { Icon: BoxIcon, title: '100% Original', text: 'Products' },
     { Icon: ReturnIcon, title: 'Easy Returns', text: returnsText },
     { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% Safe & Secure' },
-    { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
+    { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
   ];
   const trustStrip = [
     { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
     { Icon: ReturnIcon, title: 'Easy Returns', text: `Hassle-free returns ${returnsText.toLowerCase()}` },
     { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
-    { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders above ₹999' },
+    { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
     { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
   ];
 
@@ -465,7 +466,7 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
                 <Icon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-ink-900">{title}</p>
-                  <p className="text-[11px] text-gray-500">{text}</p>
+                  <p className="text-[11px] text-gray-500"><PolicyText text={text} /></p>
                 </div>
               </div>
             ))}
@@ -602,7 +603,7 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
             <Icon className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
             <div className="min-w-0">
               <p className="text-xs font-bold text-ink-900">{title}</p>
-              <p className="text-[11px] text-gray-500">{text}</p>
+              <p className="text-[11px] text-gray-500"><PolicyText text={text} /></p>
             </div>
           </div>
         ))}

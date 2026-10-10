@@ -75,6 +75,8 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
     vendor: 'vendor-support@cloweshop.com',
   },
   codMaxOrderPaise: 500000, // ₹5,000
+  // Standard delivery is free at or above this; every page quotes it from here.
+  freeShippingThresholdPaise: 99900, // ₹999
   adPricing: {
     HOME_BANNER: { '7': 49900, '15': 89900, '30': 149900 },
     CATEGORY_SPONSORED: { '7': 29900, '15': 49900, '30': 79900 },
@@ -186,6 +188,9 @@ export async function getSettings(): Promise<PlatformSettings> {
     },
     codMaxOrderPaise:
       (byKey.get('codMaxOrderPaise') as number | undefined) ?? DEFAULT_SETTINGS.codMaxOrderPaise,
+    freeShippingThresholdPaise:
+      (byKey.get('freeShippingThresholdPaise') as number | undefined) ??
+      DEFAULT_SETTINGS.freeShippingThresholdPaise,
     adPricing:
       (byKey.get('adPricing') as PlatformSettings['adPricing'] | undefined) ??
       DEFAULT_SETTINGS.adPricing,
@@ -206,6 +211,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     socialLinks: s.socialLinks,
     supportEmails: s.supportEmails,
     codMaxOrderPaise: s.codMaxOrderPaise,
+    freeShippingThresholdPaise: s.freeShippingThresholdPaise,
     pdpOffers: s.pdpOffers,
     couponsEnabled: s.couponsEnabled,
     legalEntity: s.legalEntity,

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { deliveryOptionsFor } from '../services/deliveryService';
+import { getSettings } from '../services/settingsService';
 
 export const deliveryRouter = Router();
 
@@ -20,7 +21,7 @@ const querySchema = z.object({
  * serviceability API is wired in: every valid 6-digit pincode is served, and
  * remote ones (starting 19x/79x/9xx) lose the same-day option.
  */
-deliveryRouter.get('/options', (req, res, next) => {
+deliveryRouter.get('/options', async (req, res, next) => {
   try {
     const parsed = querySchema.safeParse(req.query);
     if (!parsed.success) {
@@ -37,7 +38,8 @@ deliveryRouter.get('/options', (req, res, next) => {
     }
     const { subtotalPaise, pincode } = parsed.data;
     const remote = pincode ? /^(19|79|9)/.test(pincode) : false;
-    const options = deliveryOptionsFor(subtotalPaise).map((option) =>
+    const { freeShippingThresholdPaise } = await getSettings();
+    const options = deliveryOptionsFor(subtotalPaise, freeShippingThresholdPaise).map((option) =>
       remote && option.method === 'SAME_DAY'
         ? {
             ...option,
