@@ -1271,6 +1271,9 @@ model Payment {
   amountPaise       Int
   status            PaymentStatus @default(CREATED)
   failureReason     String?
+  // When the money was taken: the gateway confirmed it, or a COD order was
+  // delivered and paid. Kept when the payment is later refunded.
+  paidAt            DateTime?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 

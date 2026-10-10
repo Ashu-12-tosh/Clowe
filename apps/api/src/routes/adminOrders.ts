@@ -30,6 +30,7 @@ import {
   istStartOfDay,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { refundCancelledOrder } from '../services/refundService';
 import { getSettings } from '../services/settingsService';
 import { gstSettings } from '../services/economicsRates';
 import { categoryRulesMap } from '../services/categoryRules';
@@ -509,7 +510,7 @@ adminOrdersRouter.get('/:id', async (req, res, next) => {
         provider: order.payment?.provider ?? null,
         providerOrderId: order.payment?.providerOrderId ?? null,
         providerPaymentId: order.payment?.providerPaymentId ?? null,
-        paidAt: order.payment?.status === 'PAID' ? order.payment.updatedAt.toISOString() : null,
+        paidAt: order.payment?.paidAt?.toISOString() ?? null,
         failureReason: order.payment?.failureReason ?? null,
         refundedPaise: order.refunds
           .filter((r) => r.status === 'PROCESSED')
@@ -742,14 +743,6 @@ adminOrdersRouter.post('/:id/cancel', async (req, res, next) => {
             }),
           ]
         : []),
-      ...(order.payment && order.payment.status === 'PAID'
-        ? [
-            prisma.payment.update({
-              where: { id: order.payment.id },
-              data: { status: 'REFUNDED' },
-            }),
-          ]
-        : []),
     ]);
 
     await prisma.$transaction(async (tx) => {
@@ -775,7 +768,10 @@ adminOrdersRouter.post('/:id/cancel', async (req, res, next) => {
       },
     });
 
-    res.json({ success: true, data: { cancelled: live.length } });
+    // What was paid for the cancelled lines goes back through the gateway, the
+    // same path returns use; the refund is recorded whether it succeeds or fails.
+    const refund = await refundCancelledOrder(order.id, `Cancelled by admin: ${input.reason}`, req.auth!.userId);
+    res.json({ success: true, data: { cancelled: live.length, refund } });
   } catch (err) {
     next(err);
   }

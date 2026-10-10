@@ -30,7 +30,7 @@ export async function settlePaymentSuccess(orderId: string, providerPaymentId?: 
   await prisma.$transaction([
     prisma.payment.update({
       where: { id: order.payment.id },
-      data: { status: 'PAID', providerPaymentId: providerPaymentId ?? null },
+      data: { status: 'PAID', providerPaymentId: providerPaymentId ?? null, paidAt: new Date() },
     }),
     prisma.order.update({ where: { id: order.id }, data: { status: 'CONFIRMED' } }),
     prisma.orderItem.updateMany({

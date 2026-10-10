@@ -78,7 +78,7 @@ export async function settleCodIfDelivered(orderId: string): Promise<void> {
   const live = order.items.filter((i) => i.status !== 'CANCELLED');
   if (live.length === 0 || !live.every((i) => i.status === 'DELIVERED')) return;
 
-  await prisma.payment.update({ where: { id: order.payment.id }, data: { status: 'PAID' } });
+  await prisma.payment.update({ where: { id: order.payment.id }, data: { status: 'PAID', paidAt: new Date() } });
 }
 
 /**

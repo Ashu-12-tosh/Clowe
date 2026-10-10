@@ -16,6 +16,7 @@ import {
   type OrderListRow,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { refundCancelledOrder } from '../services/refundService';
 import { hiddenProductTest } from '../services/shopperVisibility';
 import { getSettings } from '../services/settingsService';
 import { recordRedemptions } from '../services/promotionService';
@@ -742,8 +743,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
             provider: order.payment.provider,
             status: order.payment.status,
             transactionId: order.payment.providerPaymentId ?? order.payment.providerOrderId,
-            paidAt:
-              order.payment.status === 'PAID' ? order.payment.updatedAt.toISOString() : null,
+            paidAt: order.payment.paidAt?.toISOString() ?? null,
           }
         : null,
       awaitingPayment: order.payment?.status === 'CREATED' && order.status === 'PLACED',
@@ -814,15 +814,6 @@ ordersRouter.post('/:id/cancel', async (req, res, next) => {
             }),
           ]
         : []),
-      // Paid orders are marked for refund (actual gateway refund is a later phase).
-      ...(order.payment && order.payment.status === 'PAID'
-        ? [
-            prisma.payment.update({
-              where: { id: order.payment.id },
-              data: { status: 'REFUNDED' },
-            }),
-          ]
-        : []),
     ]);
 
     // The variant totals are back up; put the units back on the shelf they
@@ -839,7 +830,10 @@ ordersRouter.post('/:id/cancel', async (req, res, next) => {
       }
     });
 
-    res.json({ success: true, data: { cancelled: true } });
+    // A paid order is refunded through the gateway, the same path returns use;
+    // the refund is recorded whether it goes through or fails.
+    const refund = await refundCancelledOrder(order.id, 'Order cancelled by customer');
+    res.json({ success: true, data: { cancelled: true, refund } });
   } catch (err) {
     next(err);
   }

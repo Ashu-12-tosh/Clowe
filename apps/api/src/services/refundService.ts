@@ -4,9 +4,10 @@ import { sendToUserSafe } from './messaging';
 
 /**
  * Process a PENDING refund through the payment gateway (mock simulates it).
- * On success: refund PROCESSED, return REFUNDED, customer notified.
+ * On success: refund PROCESSED, return REFUNDED, customer notified, and the
+ * payment marked REFUNDED once its refunds cover all of it.
  * On gateway failure the refund is marked FAILED (kept for retry/inspection);
- * the return stays RECEIVED.
+ * the return stays RECEIVED and the payment stays PAID.
  */
 export async function processRefund(refundId: string): Promise<void> {
   const refund = await prisma.refund.findUnique({
@@ -19,6 +20,14 @@ export async function processRefund(refundId: string): Promise<void> {
   if (!refund || refund.status !== 'PENDING') return;
 
   const rupees = (refund.amountPaise / 100).toFixed(2);
+  const payment = refund.order.payment;
+  const processedBefore = (
+    await prisma.refund.aggregate({
+      where: { orderId: refund.orderId, status: 'PROCESSED' },
+      _sum: { amountPaise: true },
+    })
+  )._sum.amountPaise ?? 0;
+  const coversPayment = payment !== null && processedBefore + refund.amountPaise >= payment.amountPaise;
   // A goodwill refund an admin issued has no return behind it, so the ledger
   // entry describes the order rather than a returned item.
   const subject = refund.return
@@ -41,6 +50,10 @@ export async function processRefund(refundId: string): Promise<void> {
               data: { status: 'REFUNDED' as const, resolvedAt: new Date() },
             }),
           ]
+        : []),
+      // paidAt stays: when the money was taken does not change on refund.
+      ...(coversPayment && payment
+        ? [prisma.payment.update({ where: { id: payment.id }, data: { status: 'REFUNDED' as const } })]
         : []),
       prisma.notification.create({
         data: {
@@ -70,4 +83,40 @@ export async function processRefund(refundId: string): Promise<void> {
       },
     });
   }
+}
+
+/**
+ * Refund what is left of a paid order's payment, through the gateway — the
+ * same path a return's refund takes. Called when an order, or what remains of
+ * it, is cancelled. Nothing is owed on an unpaid or not-yet-collected COD
+ * order. The refund is recorded either way it goes: PROCESSED, or FAILED for
+ * an admin to retry, never silently skipped.
+ */
+export async function refundCancelledOrder(
+  orderId: string,
+  reason: string,
+  issuedByAdminId?: string,
+): Promise<{ id: string; status: string; amountPaise: number } | null> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { payment: true, refunds: { where: { status: { in: ['PENDING', 'PROCESSED'] } } } },
+  });
+  if (!order?.payment || order.payment.status !== 'PAID') return null;
+  const alreadyRefunded = order.refunds.reduce((sum, r) => sum + r.amountPaise, 0);
+  const amountPaise = order.payment.amountPaise - alreadyRefunded;
+  if (amountPaise <= 0) return null;
+
+  const refund = await prisma.refund.create({
+    data: {
+      orderId,
+      amountPaise,
+      provider: order.payment.provider,
+      status: 'PENDING',
+      reason,
+      issuedByAdminId: issuedByAdminId ?? null,
+    },
+  });
+  await processRefund(refund.id);
+  const settled = await prisma.refund.findUniqueOrThrow({ where: { id: refund.id } });
+  return { id: settled.id, status: settled.status, amountPaise: settled.amountPaise };
 }
