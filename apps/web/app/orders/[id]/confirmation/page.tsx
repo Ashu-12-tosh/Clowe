@@ -32,17 +32,17 @@ const STEPS = [
 
 const HAPPINESS = [
   { Icon: ReturnIcon, title: 'Easy Returns', text: 'On eligible items' },
-  { Icon: BoxIcon, title: '100% Original', text: 'Products' },
+  { Icon: BoxIcon, title: 'Approved', text: 'Sellers' },
   { Icon: ShieldCheckIcon, title: 'Secure', text: 'Payments' },
-  { Icon: HeadsetIcon, title: '24/7', text: 'Customer Support' },
+  { Icon: HeadsetIcon, title: 'Help', text: 'Centre & chat' },
 ];
 
 const TRUST_STRIP = [
-  { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
+  { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
   { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
-  { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
+  { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
-  { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
+  { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
 ];
 
 function fmtDateTime(iso: string): string {
@@ -355,7 +355,7 @@ export default function OrderConfirmationPage({ params: paramsPromise }: { param
                 <HeadsetIcon className="h-4 w-4 text-gray-500" />
                 Need Help?
               </p>
-              <p className="t-caption mt-3 text-center text-gray-500">We are here for you 24/7</p>
+              <p className="t-caption mt-3 text-center text-gray-500">Help centre and support chat are a tap away</p>
               <Link
                 href="/pages/help"
                 className="t-card-label mt-3 flex items-center justify-between border-t border-gray-100 pt-3 text-ink-900 hover:text-brand-600"

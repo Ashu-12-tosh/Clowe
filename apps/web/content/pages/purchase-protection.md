@@ -1,4 +1,4 @@
-# 100% Purchase Protection
+# Purchase Protection
 
 Shop on Clowe with complete confidence.
 

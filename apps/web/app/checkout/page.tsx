@@ -43,18 +43,18 @@ const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
 
 const WHY_SHOP = [
-  { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
+  { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
   { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
-  { Icon: HeadsetIcon, title: '24/7 Customer Support', text: 'We are here for you' },
+  { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
 ];
 
 const TRUST_STRIP = [
-  { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
+  { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
   { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
-  { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
+  { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
-  { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
+  { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
 ];
 
 const PAYMENT_METHODS = ['VISA', 'Mastercard', 'RuPay', 'UPI', 'Paytm'];
@@ -701,7 +701,7 @@ export default function CheckoutPage() {
               <div>
                 <p className="text-sm font-bold text-ink-900">Safe &amp; Secure Payments</p>
                 <p className="mt-0.5 text-xs text-gray-500">
-                  Your payment information is 100% secure
+                  Your payment details are handled securely
                 </p>
               </div>
             </div>

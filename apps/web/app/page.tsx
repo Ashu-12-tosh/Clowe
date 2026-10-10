@@ -20,9 +20,9 @@ import PolicyText from '@/components/PolicyText';
 const TRUST_ITEMS = [
   { icon: '🚚', title: 'Free Shipping', text: 'On orders {{freeShippingFrom}}' },
   { icon: '↩️', title: 'Easy Returns', text: 'Hassle-free returns' },
-  { icon: '🔒', title: 'Secure Payments', text: '100% protected' },
+  { icon: '🔒', title: 'Secure Payments', text: 'Safe & secure checkout' },
   { icon: '🤖', title: 'AI Shopping Assistant', text: 'Get smart help' },
-  { icon: '🎧', title: '24x7 Support', text: "We're here for you" },
+  { icon: '🎧', title: 'Help & Support', text: 'Help centre and support chat' },
 ];
 
 const AI_FEATURES = [
@@ -48,8 +48,8 @@ function promoIcon(href: string, categories: HomePayload['categories']): string 
 }
 
 const BOTTOM_STRIP = [
-  { icon: '🏷', title: 'Best Prices', text: 'We offer competitive prices' },
-  { icon: '🗂', title: 'Wide Assortment', text: 'Thousands of products in one place' },
+  { icon: '🏷', title: 'Clear Pricing', text: 'GST included in every price' },
+  { icon: '🗂', title: 'Many Departments', text: 'Fashion, electronics, home, beauty & more' },
   { icon: '🤝', title: 'Trusted Shopping', text: 'Secure payments & easy returns' },
 ];
 

@@ -203,7 +203,7 @@ export default function Footer() {
                 {method}
               </span>
             ))}
-            <span className="ml-1 text-xs text-gray-500">🛡 100% Secure Payments</span>
+            <span className="ml-1 text-xs text-gray-500">🛡 Secure payments</span>
           </div>
           <p className="t-copyright text-gray-400">
             © {new Date().getFullYear()} {legalDisplayName(legalName)}. All rights reserved.

@@ -47,11 +47,11 @@ const HELP_RESOURCES = [
 ];
 
 const TRUST_STRIP = [
-  { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
+  { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
   { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
-  { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
+  { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
-  { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
+  { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
 ];
 
 /** Bot answers use \n\n paragraphs — render them as real paragraphs. */

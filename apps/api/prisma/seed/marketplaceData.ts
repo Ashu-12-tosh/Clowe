@@ -550,7 +550,7 @@ export const HERO_BANNERS = [
     headline: 'Shop Everything. Smarter with AI.',
     highlight: 'AI.',
     subtext:
-      'Discover thousands of products with intelligent recommendations and personalised shopping.',
+      'Discover products from approved sellers, with intelligent recommendations and personalised shopping.',
     primaryLabel: 'Shop Now',
     primaryHref: '/products',
     secondaryLabel: 'Explore AI Features',
@@ -587,7 +587,7 @@ export const PROMO_CARDS = [
 ];
 
 export const PROMO_STRIPS = [
-  { title: 'Genuine Supplements', subtitle: 'Up to 35% Off', href: '/products?category=supplements', image: 'strip-supplements' },
+  { title: 'Supplements', subtitle: 'Up to 35% Off', href: '/products?category=supplements', image: 'strip-supplements' },
   { title: 'Premium Beauty', subtitle: 'Up to 40% Off', href: '/products?category=beauty', image: 'strip-beauty' },
   { title: 'Grocery Essentials', subtitle: 'Up to 30% Off', href: '/products?category=grocery', image: 'strip-grocery' },
 ];

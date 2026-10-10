@@ -324,14 +324,14 @@ export async function seedFashion(prisma: PrismaClient) {
     description: 'Your style. Your way. Explore the latest trends in clothing, footwear, accessories and more.',
     tileShape: 'circle',
     highlights: [
-      { icon: '⭐', title: 'Top Brands', subtitle: '1000+ Premium Brands' },
+      { icon: '✅', title: 'Approved Sellers', subtitle: 'Every Shop Reviewed' },
       { icon: '✨', title: 'Latest Trends', subtitle: 'Stay Ahead in Style' },
       { icon: '↩', title: 'Easy Returns', subtitle: 'Hassle-free returns' },
     ],
     features: [
-      { icon: '✨', title: 'Latest Trends', subtitle: 'New styles added daily' },
-      { icon: '⭐', title: 'Top Brands', subtitle: '1000+ premium brands' },
-      { icon: '💎', title: 'Premium Quality', subtitle: '100% original products' },
+      { icon: '✨', title: 'Latest Trends', subtitle: 'New styles from our sellers' },
+      { icon: '✅', title: 'Approved Sellers', subtitle: 'Every shop is reviewed before it sells' },
+      { icon: '💎', title: 'Listings Reviewed', subtitle: 'Checked before they go live' },
       { icon: '↩', title: 'Easy Returns', subtitle: 'Hassle-free return policy' },
       { icon: '🛡', title: 'Secure Payments', subtitle: 'Safe & secure transactions' },
       { icon: '💡', title: 'Fashion Advice', subtitle: 'Style tips & inspiration' },

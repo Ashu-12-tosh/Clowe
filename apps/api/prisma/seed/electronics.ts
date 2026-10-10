@@ -431,15 +431,15 @@ export async function seedElectronics(prisma: PrismaClient) {
     description: 'Upgrade your life with the latest electronics.',
     tileShape: 'square',
     highlights: [
-      { icon: '⭐', title: 'Top Brands', subtitle: 'Best of tech, all in one place' },
+      { icon: '⭐', title: 'Known Brands', subtitle: 'Tech from approved sellers' },
       { icon: '⚡', title: 'Latest Technology', subtitle: 'Upgrade to the newest innovations' },
-      { icon: '🛡', title: 'Secure Payments', subtitle: '100% safe & secure' },
+      { icon: '🛡', title: 'Secure Payments', subtitle: 'Safe & secure checkout' },
     ],
     features: [
-      { icon: '⭐', title: 'Top Brands', subtitle: 'Best of tech, all in one place.' },
+      { icon: '⭐', title: 'Known Brands', subtitle: 'Tech from approved sellers.' },
       { icon: '⚡', title: 'Latest Technology', subtitle: 'Upgrade to the newest innovations.' },
-      { icon: '🏷', title: 'Unbeatable Deals', subtitle: 'Best prices on top products.' },
-      { icon: '🛡', title: 'Secure Payments', subtitle: '100% safe & secure.' },
+      { icon: '🏷', title: 'Clear Pricing', subtitle: 'GST included in every price.' },
+      { icon: '🛡', title: 'Secure Payments', subtitle: 'Safe & secure checkout.' },
       { icon: '↩', title: 'Easy Returns', subtitle: 'Hassle-free return policy.' },
     ],
   };

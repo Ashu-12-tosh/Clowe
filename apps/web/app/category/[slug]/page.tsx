@@ -36,9 +36,9 @@ const CAROUSEL_MS = 6000;
 
 /** Used when a category has no feature strip configured. */
 const DEFAULT_FEATURES: CategoryCallout[] = [
-  { icon: '⭐', title: 'Top Brands', subtitle: 'Handpicked, all in one place.' },
-  { icon: '🏷', title: 'Unbeatable Deals', subtitle: 'Best prices on top products.' },
-  { icon: '🛡', title: 'Secure Payments', subtitle: '100% safe & secure.' },
+  { icon: '✅', title: 'Approved Sellers', subtitle: 'Every shop is reviewed before it sells.' },
+  { icon: '🏷', title: 'Clear Pricing', subtitle: 'GST included in every price.' },
+  { icon: '🛡', title: 'Secure Payments', subtitle: 'Safe & secure checkout.' },
   { icon: '↩', title: 'Easy Returns', subtitle: 'Hassle-free return policy.' },
 ];
 

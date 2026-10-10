@@ -245,17 +245,17 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
   const returnsText = `Within ${product.returnWindowDays} day${product.returnWindowDays === 1 ? '' : 's'}`;
 
   const trustRow = [
-    { Icon: BoxIcon, title: '100% Original', text: 'Products' },
+    { Icon: BoxIcon, title: 'Approved', text: 'Sellers' },
     { Icon: ReturnIcon, title: 'Easy Returns', text: returnsText },
-    { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% Safe & Secure' },
+    { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
     { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
   ];
   const trustStrip = [
-    { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
+    { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
     { Icon: ReturnIcon, title: 'Easy Returns', text: `Hassle-free returns ${returnsText.toLowerCase()}` },
-    { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
+    { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
     { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
-    { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
+    { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
   ];
 
   return (

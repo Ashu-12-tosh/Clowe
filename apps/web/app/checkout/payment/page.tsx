@@ -36,11 +36,11 @@ import {
 import PolicyText from '@/components/PolicyText';
 
 const TRUST_STRIP = [
-  { Icon: BoxIcon, title: '100% Original Products', text: 'Sourced directly from brands' },
+  { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
   { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
-  { Icon: ShieldCheckIcon, title: 'Secure Payments', text: '100% safe & secure payments' },
+  { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
-  { Icon: HeadsetIcon, title: '24/7 Support', text: 'We are here for you' },
+  { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
 ];
 
 const SECURITY_MARKS = ['PCI DSS', 'Verified by Visa', 'Mastercard SecureCode', 'RuPay Secure'];
@@ -594,7 +594,7 @@ function PaymentPageInner() {
               <p className="t-caption flex items-start gap-2 text-gray-600">
                 <ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
                 <span>
-                  <span className="font-bold text-ink-900">100% Secure Payments</span>
+                  <span className="font-bold text-ink-900">Secure payments</span>
                   <br />
                   Card and UPI details are entered on the gateway, never stored by Clowe.
                 </span>
