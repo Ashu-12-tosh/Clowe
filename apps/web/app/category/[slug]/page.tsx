@@ -371,7 +371,9 @@ function CategoryPageInner() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-gray-500">
               {data
-                ? `Showing ${data.total === 0 ? 0 : firstItem}-${lastItem} of ${data.total} products`
+                ? data.total === 0 && railCount === 0
+                  ? 'No products yet'
+                  : `Showing ${data.total === 0 ? 0 : firstItem}-${lastItem} of ${data.total} products`
                 : 'Loading…'}
             </p>
             <label className="flex items-center gap-2 text-sm">
@@ -433,7 +435,18 @@ function CategoryPageInner() {
             </div>
           )}
 
-          {data && data.items.length === 0 && sponsoredAds.length === 0 && (
+          {/* Empty with no filters set means nothing is listed yet — the same
+              words as /products — not that a filter was too tight. */}
+          {data && data.items.length === 0 && sponsoredAds.length === 0 && railCount === 0 && (
+            <div className="mt-12 text-center">
+              <p className="text-sm font-semibold text-ink-900">Nothing listed here yet.</p>
+              <p className="mt-1 text-sm text-gray-500">
+                Sellers are setting up shop — new listings appear here as they go live.
+              </p>
+            </div>
+          )}
+
+          {data && data.items.length === 0 && sponsoredAds.length === 0 && railCount > 0 && (
             <div className="mt-12 text-center">
               <p className="text-sm text-gray-500">No products match these filters.</p>
               <Link
