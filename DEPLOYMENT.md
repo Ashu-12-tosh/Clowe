@@ -78,8 +78,8 @@ docker compose -f docker-compose.prod.yml ps
 # Migrations ran automatically on API start. Seed the admin + demo catalog:
 docker compose -f docker-compose.prod.yml exec api npx tsx prisma/seed.ts   # if tsx missing, see note below
 
-# Health check
-curl http://localhost/api/health
+# Health check — the Host header matters: nginx 301s names it does not serve
+curl -sk -H 'Host: cloweshop.com' https://localhost/api/health
 ```
 
 Visit `http://yourdomain.com` — the store should load. 🎉

@@ -420,8 +420,13 @@ Four checks, in this order. Each one rules out a different layer.
 ### 4.1 — API is alive and can reach the database
 
 ```sh
-curl -s http://localhost/api/health
+curl -sk -H 'Host: cloweshop.com' https://localhost/api/health
 ```
+
+The `Host` header matters: nginx answers a request for any name it does not
+serve (`localhost`, the bare IP) with a 301 to `https://cloweshop.com`, so a
+plain `curl https://localhost/...` now gets the redirect, not the health
+answer. Before HTTPS is set up (§6), use `http://` with the same header.
 
 ✅ **Correct result:**
 
@@ -560,6 +565,12 @@ rsync -av root@YOUR_VPS_IP:/root/clowe/backups/ ./clowe-backups/
 
 Only once `dig +short yourdomain.com` returns your VPS IP.
 
+> ⚠️ **On a fresh server, nginx needs the certificate before it can start.**
+> `nginx/www-redirect.conf` (mounted by `docker-compose.prod.yml`) serves
+> `www` over HTTPS with `/etc/letsencrypt/live/cloweshop.com/`. Until certbot
+> has issued that certificate, comment out its line under the nginx
+> `volumes:` in `docker-compose.prod.yml`, and put it back after this step.
+
 ```sh
 docker run --rm \
   -v clowe_certbot_certs:/etc/letsencrypt \
@@ -637,7 +648,7 @@ fullchain.pem"` — the §3.1 replacement missed the HTTPS block.
 ```sh
 nano nginx/nginx.conf        # re-comment the 443 block AND the HTTP→HTTPS redirect
 dc restart nginx
-curl -s http://localhost/api/health
+curl -s -H 'Host: cloweshop.com' http://localhost/api/health
 ```
 
 ✅ Site is back on HTTP. Now fix the domain in the HTTPS block, run
