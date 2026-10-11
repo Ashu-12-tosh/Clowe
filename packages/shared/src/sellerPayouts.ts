@@ -156,6 +156,19 @@ export interface SellerPayoutOverview {
   insights: { key: string; tone: 'GOOD' | 'INFO' | 'WARN'; title: string; body: string }[];
   /** Set while payouts are blocked for want of a verified PAN. */
   panBlock: PayoutPanBlock | null;
+  /** Set while payouts are blocked for want of a GSTIN. */
+  gstinBlock: PayoutGstinBlock | null;
+}
+
+/**
+ * No payouts without a GSTIN: the tax invoice to the buyer is the seller's,
+ * issued under it. Sellers approved before it was required see this until
+ * they add one.
+ */
+export interface PayoutGstinBlock {
+  code: 'GSTIN_REQUIRED';
+  reason: string;
+  action: string;
 }
 
 // ---------------------------------------------------------------------------

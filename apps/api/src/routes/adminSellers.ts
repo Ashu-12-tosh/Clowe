@@ -465,6 +465,15 @@ adminSellersRouter.patch('/:id/status', async (req, res, next) => {
     // who was approved before and then suspended.
     let kycWarnings: string[] = [];
     const firstApproval = step.status === 'APPROVED' && seller.approvedAt === null;
+    // Unlike KYC, a GSTIN does block: every tax invoice to a buyer is the
+    // seller's, issued under it. (Sellers approved before this rule keep
+    // selling; their payouts wait for one — payoutService.gstinBlockFor.)
+    if (firstApproval && !seller.gstNumber?.trim()) {
+      throw ApiError.badRequest(
+        "Add the seller's GSTIN before approving: every tax invoice to a buyer is issued under it.",
+        'GSTIN_REQUIRED',
+      );
+    }
     if (firstApproval) {
       kycWarnings = kycApprovalWarnings(await getSellerKycSummary(seller.id));
       const acknowledged = 'acknowledgeKycWarnings' in input && input.acknowledgeKycWarnings === true;

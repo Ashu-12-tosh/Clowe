@@ -82,7 +82,8 @@ async function makeSeller() {
     },
   });
   const seller = await prisma.sellerProfile.create({
-    data: { userId: user.id, shopName: `Ledger Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date() },
+    // A GSTIN on file: payouts need one.
+    data: { userId: user.id, shopName: `Ledger Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date(), gstNumber: '27ABCDE1234F1Z5' },
   });
   const product = await prisma.product.create({
     data: {

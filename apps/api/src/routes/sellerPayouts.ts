@@ -27,6 +27,7 @@ import {
   availableBalance,
   describeMethod,
   feesFor,
+  gstinBlockFor,
   panBlockFor,
   requestPayout,
   sumFees,
@@ -157,6 +158,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         }),
         panBlockFor(sellerId),
       ]);
+    const gstinBlock = await gstinBlockFor(sellerId);
 
     // Returned lines were earned then reversed — they don't count as income.
     const earning = monthItems.filter((i) => i.status === 'DELIVERED');
@@ -248,7 +250,9 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         body: `Deliveries clear ${settings.payoutHoldDays} days after the buyer receives them (return window).`,
       });
     }
-    if (panBlock) {
+    if (gstinBlock) {
+      insights.push({ key: 'gstin', tone: 'WARN', title: 'Payouts need your GSTIN', body: gstinBlock.reason });
+    } else if (panBlock) {
       insights.push({ key: 'pan', tone: 'WARN', title: 'Payouts need a verified PAN', body: panBlock.reason });
     } else if (balance.payablePaise >= settings.payoutMinPaise) {
       insights.push({
@@ -335,6 +339,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       methods: methods.map(toMethodRow),
       insights,
       panBlock,
+      gstinBlock,
     };
 
     res.json({ success: true, data: body });

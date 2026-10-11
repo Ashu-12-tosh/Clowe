@@ -210,6 +210,21 @@ wallet brands, so nothing on the site has to change when it goes in.
 
 ---
 
+**Tax invoices: a CA should confirm the format before launch.** The buyer's
+invoice is now the seller's (supplier: the seller's legal name — the name on
+their PAN — GSTIN and address), naming Clowe Partners LLP as the marketplace,
+one per seller on an order, with HSN and CGST + SGST or IGST at each line's
+recorded rate (`apps/api/src/services/taxInvoice.ts`; the seller's copy is the
+same document). Delivery charges, coupons and credits sit in an order summary
+outside the invoices. Open questions for the CA: who invoices the delivery
+charge and at what rate; credit notes for returned lines; whether the legal
+name should come from the GSTIN registration rather than the PAN; and the
+marketplace's TCS details on the invoice. A seller cannot be approved without
+a GSTIN; sellers approved before that see a banner and get no payouts until
+they add one.
+
+---
+
 ## Known gaps — real, not scheduled
 
 Each is understood and none is urgent. They are written down so they are not

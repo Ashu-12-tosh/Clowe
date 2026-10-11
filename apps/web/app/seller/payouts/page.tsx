@@ -216,6 +216,7 @@ export default function SellerPayoutsPage() {
     !!k &&
     !!overview &&
     !overview.panBlock &&
+    !overview.gstinBlock &&
     k.payablePaise >= overview.rates.minPayoutPaise &&
     overview.methods.length > 0;
 
@@ -269,7 +270,9 @@ export default function SellerPayoutsPage() {
             title={
               !overview
                 ? undefined
-                : overview.panBlock
+                : overview.gstinBlock
+                  ? 'Payouts need your GSTIN'
+                  : overview.panBlock
                   ? 'Payouts need a verified PAN'
                   : overview.methods.length === 0
                   ? 'Add a payout method first'
@@ -283,6 +286,26 @@ export default function SellerPayoutsPage() {
           </button>
         </div>
       </div>
+
+      {overview?.gstinBlock && (
+        <div
+          data-gstin-block
+          className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div>
+            <p className="font-semibold">Payouts are on hold until your GSTIN is on file</p>
+            <p className="mt-0.5 text-xs">
+              {overview.gstinBlock.reason} {overview.gstinBlock.action}
+            </p>
+          </div>
+          <Link
+            href="/seller/settings?tab=BUSINESS"
+            className="shrink-0 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-700"
+          >
+            Add GSTIN
+          </Link>
+        </div>
+      )}
 
       {overview?.panBlock && (
         <div

@@ -3,6 +3,7 @@ import {
   payoutPanBlock,
   payoutPanMessage,
   type CategoryRules,
+  type PayoutGstinBlock,
   type PayoutPanBlock,
   type PlatformSettings,
 } from '@clowe/shared';
@@ -260,6 +261,17 @@ async function nextReference(): Promise<string> {
  * Why this seller cannot be paid for want of a verified PAN, or null. Reads
  * the stored checks only: it never calls the KYC provider.
  */
+/** No payouts without a GSTIN: the buyer's tax invoice is issued under it. */
+export async function gstinBlockFor(sellerId: string): Promise<PayoutGstinBlock | null> {
+  const seller = await prisma.sellerProfile.findUnique({ where: { id: sellerId }, select: { gstNumber: true } });
+  if (seller?.gstNumber?.trim()) return null;
+  return {
+    code: 'GSTIN_REQUIRED',
+    reason: 'Every tax invoice to your buyers is issued under your GSTIN, and there is none on file.',
+    action: 'Add it in Store settings → Business.',
+  };
+}
+
 export async function panBlockFor(sellerId: string): Promise<PayoutPanBlock | null> {
   return payoutPanBlock((await getSellerKycSummary(sellerId)).pan);
 }
@@ -280,6 +292,9 @@ export async function requestPayout(sellerId: string, methodId?: string) {
       'SELLER_NOT_PAYABLE',
     );
   }
+
+  const gstinBlock = await gstinBlockFor(sellerId);
+  if (gstinBlock) throw ApiError.forbidden(`Payouts need your GSTIN. ${gstinBlock.reason} ${gstinBlock.action}`, gstinBlock.code);
 
   // TDS is deposited against the PAN, so none is paid without a verified one —
   // whatever the admin accepted at approval.

@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import {
-  gstRateForInclusive,
   packingVideoAttachSchema,
   PACKING_VIDEO_REQUIRED_MESSAGE,
   SELLER_ORDER_TABS,
@@ -25,9 +24,7 @@ import {
 } from '@clowe/shared';
 import QRCode from 'qrcode';
 import { prisma } from '../db';
-import { getSettings } from '../services/settingsService';
-import { gstSettings } from '../services/economicsRates';
-import { categoryRulesMap } from '../services/categoryRules';
+import { buildTaxInvoice } from '../services/taxInvoice';
 import { webPublicUrl } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -696,82 +693,12 @@ sellerOrdersRouter.get('/labels', async (req, res, next) => {
 
 sellerOrdersRouter.get('/:orderId/invoice', async (req, res, next) => {
   try {
-    const seller = req.seller!;
-    const order = await prisma.order.findUnique({
-      where: { id: req.params.orderId },
-      include: {
-        user: { select: { name: true } },
-        payment: { select: { status: true } },
-        items: {
-          where: { sellerId: seller.id },
-          include: { product: { select: { categoryId: true } } },
-        },
-      },
-    });
-    if (!order || order.items.length === 0) throw ApiError.notFound('Order not found');
-    if (order.status === 'PLACED') throw ApiError.badRequest('This order is not paid yet');
-    // GST: gstRateForInclusive, the one rate function for an order line — the category's rule (value
-    // slab per piece, or a flat rate) with the admin's GST settings.
-    const taxRules = await categoryRulesMap(order.items.map((i) => i.product.categoryId));
-    const gst = gstSettings(await getSettings());
-
-    const lines = order.items.map((i) => {
-      const gross = i.pricePaise * i.quantity;
-      // The rate the line was sold at; worked out only for a line that recorded none.
-      const rate = i.gstRatePercent ?? gstRateForInclusive(i.pricePaise, taxRules.get(i.product.categoryId), gst).ratePercent;
-      const taxable = Math.round(gross / (1 + rate / 100));
-      return {
-        title: i.title,
-        size: i.size,
-        color: i.color,
-        variantLabel: i.variantLabel,
-        quantity: i.quantity,
-        unitPricePaise: i.pricePaise,
-        grossPaise: gross,
-        taxablePaise: taxable,
-        gstPaise: gross - taxable,
-        gstRatePercent: rate,
-      };
-    });
-
-    const taxablePaise = lines.reduce((sum, l) => sum + l.taxablePaise, 0);
-    const gstPaise = lines.reduce((sum, l) => sum + l.gstPaise, 0);
-
-    const invoiceNumber = `INV-${order.orderNumber}-${seller.id.slice(-4).toUpperCase()}`;
+    // The same invoice the buyer sees (services/taxInvoice), with the seller's QR.
+    const invoice = await buildTaxInvoice(req.params.orderId, req.seller!.id);
+    if (!invoice) throw ApiError.notFound('Order not found');
     const body: SellerInvoice = {
-      invoiceNumber,
-      issuedAt: new Date().toISOString(),
-      orderNumber: order.orderNumber,
-      placedAt: order.createdAt.toISOString(),
-      paymentMethod: order.paymentMethod,
-      paymentStatus:
-        order.payment?.status ?? (order.paymentMethod === 'COD' ? 'COD_PENDING' : 'CREATED'),
-      seller: {
-        shopName: seller.shopName,
-        line1: seller.addressLine1,
-        city: seller.city,
-        state: seller.state,
-        pincode: seller.pincode,
-        gstNumber: seller.gstNumber,
-        panNumber: seller.panNumber,
-      },
-      billTo: {
-        name: order.billName ?? order.shipName,
-        line1: order.billLine1 ?? order.shipLine1,
-        line2: order.billLine2 ?? order.shipLine2,
-        city: order.billCity ?? order.shipCity,
-        state: order.billState ?? order.shipState,
-        pincode: order.billPincode ?? order.shipPincode,
-      },
-      customer: { name: order.user.name ?? order.shipName },
-      lines,
-      gstRatePercent: lines[0].gstRatePercent,
-      taxablePaise,
-      gstPaise,
-      isIntraState:
-        !!seller.state && seller.state.toLowerCase() === (order.shipState ?? '').toLowerCase(),
-      totalPaise: taxablePaise + gstPaise,
-      qr: await sellerOrderQr(order.id, { invoice: invoiceNumber }),
+      ...invoice,
+      qr: await sellerOrderQr(req.params.orderId, { invoice: invoice.invoiceNumber }),
     };
     res.json({ success: true, data: body });
   } catch (err) {

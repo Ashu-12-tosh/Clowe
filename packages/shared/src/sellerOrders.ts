@@ -239,8 +239,11 @@ export interface SellerInvoice {
   placedAt: string;
   paymentMethod: string;
   paymentStatus: string;
+  /** The supplier: the tax invoice is the seller's, issued under their GSTIN. */
   seller: {
     shopName: string;
+    /** The registered name: the name on the seller's PAN, else the shop name. */
+    legalName: string;
     line1: string | null;
     city: string | null;
     state: string | null;
@@ -248,6 +251,8 @@ export interface SellerInvoice {
     gstNumber: string | null;
     panNumber: string | null;
   };
+  /** The e-commerce operator the sale went through (Clowe Partners LLP), from settings. */
+  marketplace: { name: string; gstin: string | null; address: string | null };
   billTo: SellerShipTo;
   /** Buyer name only - no contact details reach sellers. */
   customer: { name: string };
@@ -264,6 +269,12 @@ export interface SellerInvoice {
     gstPaise: number;
     /** This line's rate — lines of one order can sit in different slabs. */
     gstRatePercent: number;
+    /** HSN of the line's category, when one is set. */
+    hsnCode: string | null;
+    /** The line's GST, split: CGST + SGST for a same-state supply, else IGST. */
+    cgstPaise: number;
+    sgstPaise: number;
+    igstPaise: number;
   }[];
   /** GST rate of the first line, e.g. 5 or 18; each line carries its own. */
   gstRatePercent: number;
@@ -271,9 +282,16 @@ export interface SellerInvoice {
   gstPaise: number;
   /** Same-state supply splits GST into CGST + SGST, otherwise IGST. */
   isIntraState: boolean;
+  cgstPaise: number;
+  sgstPaise: number;
+  igstPaise: number;
   totalPaise: number;
   qr: SellerQr;
 }
+/** A tax invoice without the seller's QR code: the buyer's copy, and what the service builds.
+ */
+export type TaxInvoice = Omit<SellerInvoice, 'qr'>;
+
 
 // ---------------------------------------------------------------------------
 // Packing video, per order

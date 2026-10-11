@@ -142,6 +142,7 @@ function toProfileInfo(p: SellerProfile): SellerProfileInfo {
     city: p.city,
     state: p.state,
     createdAt: p.createdAt.toISOString(),
+    hasGstin: Boolean(p.gstNumber?.trim()),
   };
 }
 

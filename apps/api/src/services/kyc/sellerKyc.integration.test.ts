@@ -211,8 +211,8 @@ describe('the bank account', () => {
   });
 });
 
-describe('GSTIN is optional', () => {
-  it('is never checked when absent, and never blocks approval', async () => {
+describe('a GSTIN that is absent', () => {
+  it('is never checked, raises no KYC warning — and blocks approval, since every tax invoice is issued under it', async () => {
     const s = await makeSeller({ gstNumber: '' });
     const calls = spies();
     const { json } = await verify(s.token);
@@ -222,7 +222,8 @@ describe('GSTIN is optional', () => {
     const d = await detail(s.id);
     expect(d.kycApprovalWarnings).toEqual([]);
     const approve = await http('PATCH', `/api/admin/sellers/${s.id}/status`, adminToken, { action: 'approve' });
-    expect(approve.status).toBe(200);
+    expect(approve.status).toBe(400);
+    expect((approve.json as unknown as { error: { code: string } }).error.code).toBe('GSTIN_REQUIRED');
   });
 });
 

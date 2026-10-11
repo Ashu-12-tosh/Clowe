@@ -139,8 +139,28 @@ function Panel({
 function StatusBanner() {
   const { state } = useSeller();
   if (state.kind !== 'ready') return null;
-  const { status, rejectionReason } = state.profile;
-  if (status === 'APPROVED') return null;
+  const { status, rejectionReason, hasGstin } = state.profile;
+  if (status === 'APPROVED') {
+    if (hasGstin) return null;
+    // Approved before a GSTIN was required: selling goes on, payouts wait.
+    return (
+      <div
+        data-gstin-banner
+        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      >
+        <span>
+          <span className="font-semibold">Add your GSTIN</span> — every tax invoice to your buyers is issued under
+          it, and payouts are on hold until it is on file.
+        </span>
+        <Link
+          href="/seller/settings?tab=BUSINESS"
+          className="shrink-0 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-700"
+        >
+          Add GSTIN
+        </Link>
+      </div>
+    );
+  }
 
   const styles: Record<string, string> = {
     PENDING: 'border-yellow-200 bg-yellow-50 text-yellow-800',

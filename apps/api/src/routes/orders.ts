@@ -14,9 +14,11 @@ import {
   type CheckoutResult,
   type OrderDetailView,
   type OrderListRow,
+  type TaxInvoice,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { refundCancelledOrder } from '../services/refundService';
+import { buildTaxInvoice } from '../services/taxInvoice';
 import { settleEarnedCredits } from '../services/purchaseCredits';
 import { hiddenProductTest } from '../services/shopperVisibility';
 import { getSettings } from '../services/settingsService';
@@ -770,6 +772,26 @@ ordersRouter.get('/:id', async (req, res, next) => {
 });
 
 // Cancel an order while nothing has shipped. Restores stock.
+// The buyer's tax invoices: one per seller on the order, each issued by that
+// seller under their GSTIN, naming Clowe Partners LLP as the marketplace —
+// the same documents the sellers see (services/taxInvoice).
+ordersRouter.get('/:id/invoices', async (req, res, next) => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.id },
+      select: { userId: true, items: { select: { sellerId: true } } },
+    });
+    if (!order || order.userId !== req.auth!.userId) throw ApiError.notFound('Order not found');
+    const sellerIds = [...new Set(order.items.map((i) => i.sellerId))];
+    const invoices = (await Promise.all(sellerIds.map((id) => buildTaxInvoice(req.params.id, id)))).filter(
+      (inv): inv is TaxInvoice => inv !== null,
+    );
+    res.json({ success: true, data: invoices });
+  } catch (err) {
+    next(err);
+  }
+});
+
 ordersRouter.post('/:id/cancel', async (req, res, next) => {
   try {
     const order = await prisma.order.findUnique({

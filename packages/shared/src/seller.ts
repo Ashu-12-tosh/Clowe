@@ -61,6 +61,8 @@ export interface SellerProfileInfo {
   city: string | null;
   state: string | null;
   createdAt: string;
+  /** Whether a GSTIN is on file. Without one there are no payouts: every tax invoice is issued under it. */
+  hasGstin: boolean;
 }
 
 // ---------------------------------------------------------------------------
