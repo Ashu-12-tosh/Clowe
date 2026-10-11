@@ -976,10 +976,14 @@ adminPaymentsRouter.get('/export', async (req, res, next) => {
 
 adminPaymentsRouter.get('/gstr8', async (req, res, next) => {
   try {
-    const month = z
-      .string()
-      .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be YYYY-MM')
-      .parse(req.query.month);
+    // Parsed as a named field, so a missing month says which field and why.
+    const { month } = z
+      .object({
+        month: z
+          .string({ required_error: 'Pick a month to export, as ?month=YYYY-MM (e.g. 2026-10)' })
+          .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be YYYY-MM, e.g. 2026-10'),
+      })
+      .parse(req.query);
     const rows = await gstr8Rows(month);
     const rupees = (paise: number) => (paise / 100).toFixed(2);
     const header = [

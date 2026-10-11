@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { DEFAULT_LEGAL_ENTITY, legalDisplayName } from '@clowe/shared';
+import { DEFAULT_LEGAL_ENTITY } from '@clowe/shared';
 import { serverPublicSettings } from '@/lib/serverSettings';
 
 export const metadata: Metadata = {
@@ -111,10 +111,6 @@ export default async function ContactPage() {
           <Link href="/pages/shipping-policy" className="hover:underline">Shipping</Link>
         </p>
       </article>
-
-      <p className="mt-6 text-center text-xs text-gray-400">
-        © {new Date().getFullYear()} {legalDisplayName(legal.name)}
-      </p>
     </main>
   );
 }

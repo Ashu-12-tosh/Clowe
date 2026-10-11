@@ -60,6 +60,8 @@ export default function config(phase) {
 
   return {
     transpilePackages: ['@clowe/shared'],
+    // No "X-Powered-By: Next.js" header.
+    poweredByHeader: false,
     // Self-contained server bundle for the production Docker image.
     output: 'standalone',
     // Contact Us lives at /contact; /pages/contact is where people (and payment

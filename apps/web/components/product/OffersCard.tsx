@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { CouponOffer, PdpOffer } from '@clowe/shared';
-import { api } from '@/lib/api';
+import { api, getStoredUser } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { TagIcon } from '@/components/cart/CartIcons';
 
@@ -32,7 +32,9 @@ export default function OffersCard({ pricePaise, offers }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    // Public list; logged-out shoppers still see what's available.
+    // The coupon list is for a signed-in shopper (it is read against their
+    // cart); signed out, the bank offers above are what there is to show.
+    if (!getStoredUser()) return;
     api<CouponOffer[]>('/api/cart/coupons', { auth: true })
       .then(setCoupons)
       .catch(() => setCoupons([]));

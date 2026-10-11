@@ -93,6 +93,8 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       # www → bare domain; its own file so the server's edited nginx.conf is untouched.
       - ./nginx/www-redirect.conf:/etc/nginx/conf.d/00-www-redirect.conf:ro
+      # server_tokens off: no nginx version in headers or error pages.
+      - ./nginx/security.conf:/etc/nginx/conf.d/00-security.conf:ro
       - certbot_certs:/etc/letsencrypt
       - certbot_www:/var/www/certbot
     depends_on:

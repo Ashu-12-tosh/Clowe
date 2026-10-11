@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import LoginBackdrop from '@/components/LoginBackdrop';
+import LegalCopyright from '@/components/LegalCopyright';
 import type { AuthTokensResponse, AuthUser, UserRole } from '@clowe/shared';
 import {
   api,
@@ -641,9 +642,7 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="pb-5 text-center text-xs text-gray-400">
-          © {new Date().getFullYear()} Clowe. All rights reserved.
-        </p>
+        <LegalCopyright className="pb-5 text-center text-xs text-gray-400" />
       </main>
     </div>
   );

@@ -186,5 +186,11 @@ describe('GSTR-8', () => {
     expect(csv.split('\n')[0]).toContain('GSTIN of supplier');
     expect(csv).toContain('TOTAL');
     expect((await fetch(`${base}/api/admin/payments/gstr8?month=2026-13`, { headers: { authorization: `Bearer ${adminToken}` } })).status).toBe(400);
+    // No month at all: a message that names the field and its form.
+    const missing = await fetch(`${base}/api/admin/payments/gstr8`, { headers: { authorization: `Bearer ${adminToken}` } });
+    expect(missing.status).toBe(400);
+    expect(((await missing.json()) as { error: { message: string } }).error.message).toBe(
+      'month: Pick a month to export, as ?month=YYYY-MM (e.g. 2026-10)',
+    );
   });
 });
