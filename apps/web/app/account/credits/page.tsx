@@ -39,6 +39,7 @@ const REASON_ICON: Record<string, string> = {
   EARN_TOPUP: '🪙',
   REDEEM_CHECKOUT: '🛒',
   REFUND_CREDITS: '↩',
+  REVERSE_PURCHASE: '↺',
   EXPIRED: '⏳',
 };
 

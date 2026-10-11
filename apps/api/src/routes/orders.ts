@@ -17,6 +17,7 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { refundCancelledOrder } from '../services/refundService';
+import { settleEarnedCredits } from '../services/purchaseCredits';
 import { hiddenProductTest } from '../services/shopperVisibility';
 import { getSettings } from '../services/settingsService';
 import { recordRedemptions } from '../services/promotionService';
@@ -166,7 +167,9 @@ ordersRouter.post('/checkout', async (req, res, next) => {
         0,
         subtotalPaise + shippingPaise - couponDiscountPaise - 100,
       );
-      creditsUsed = Math.min(me?.creditsBalance ?? 0, Math.floor(maxDiscountPaise / CREDIT_VALUE_PAISE));
+      // A balance below zero (credits taken back after they were spent) is
+      // never a discount the other way.
+      creditsUsed = Math.max(0, Math.min(me?.creditsBalance ?? 0, Math.floor(maxDiscountPaise / CREDIT_VALUE_PAISE)));
     }
     const discountPaise = creditsToPaise(creditsUsed) + couponDiscountPaise;
     const totalPaise = subtotalPaise + shippingPaise - discountPaise;
@@ -621,11 +624,12 @@ ordersRouter.get('/:id', async (req, res, next) => {
     });
     const reviewedProductIds = new Set(reviews.map((r) => r.productId));
 
+    // Net of any reversal: a cancelled or returned line takes its reward back.
     const earnedRows = await prisma.creditLedger.findMany({
-      where: { orderId: order.id, delta: { gt: 0 }, reason: 'EARN_PURCHASE' },
+      where: { orderId: order.id, reason: { in: ['EARN_PURCHASE', 'REVERSE_PURCHASE'] } },
       select: { delta: true },
     });
-    const earnedCredits = earnedRows.reduce((sum, r) => sum + r.delta, 0);
+    const earnedCredits = Math.max(0, earnedRows.reduce((sum, r) => sum + r.delta, 0));
 
     // Order-level milestones = the last item to reach each stage.
     const shippedStamps = order.items.map((i) => i.shippedAt).filter((d): d is Date => d !== null);
@@ -833,6 +837,8 @@ ordersRouter.post('/:id/cancel', async (req, res, next) => {
     // A paid order is refunded through the gateway, the same path returns use;
     // the refund is recorded whether it goes through or fails.
     const refund = await refundCancelledOrder(order.id, 'Order cancelled by customer');
+    // Reward credits earned on it go back too: nothing on it was bought.
+    await settleEarnedCredits(order.id);
     res.json({ success: true, data: { cancelled: true, refund } });
   } catch (err) {
     next(err);

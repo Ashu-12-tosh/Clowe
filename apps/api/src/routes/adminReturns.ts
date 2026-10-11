@@ -35,6 +35,7 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { processRefund } from '../services/refundService';
 import { postReturnReversal } from '../services/sellerLedgerService';
+import { settleEarnedCredits } from '../services/purchaseCredits';
 import { getSettings, setSetting } from '../services/settingsService';
 import { creditExpiryFrom } from './credits';
 import { withPhotoUrls } from '../services/assets';
@@ -834,6 +835,7 @@ async function applyAdminAction(
           ),
         ]);
         await postReturnReversal(r.orderItemId);
+        await settleEarnedCredits(r.orderItem.orderId);
       } else {
         const refund = await prisma.refund.create({
           data: {
@@ -850,6 +852,7 @@ async function applyAdminAction(
           data: { status: 'RETURNED' },
         });
         await postReturnReversal(r.orderItemId);
+        await settleEarnedCredits(r.orderItem.orderId);
         // processRefund flips the return to REFUNDED and notifies the shopper.
         await processRefund(refund.id);
       }

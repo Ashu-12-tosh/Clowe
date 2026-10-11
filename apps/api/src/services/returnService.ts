@@ -4,6 +4,7 @@ import { sendToUserSafe } from './messaging';
 import { paymentProvider } from './payments';
 import { processRefund } from './refundService';
 import { postReturnReversal } from './sellerLedgerService';
+import { settleEarnedCredits } from './purchaseCredits';
 import { istDate, istDayStart, type SellerReturnActionInput } from '@clowe/shared';
 
 /**
@@ -173,6 +174,7 @@ export async function applyReturnDecision(
     // The line is RETURNED whatever its condition, so its earning comes off
     // the seller's ledger either way; a damaged return is a support matter.
     await postReturnReversal(item.id);
+    await settleEarnedCredits(item.orderId);
     if (input.condition === 'OK' && refundRecord && 'returnId' in refundRecord) {
       await processRefund(refundRecord.id);
     }

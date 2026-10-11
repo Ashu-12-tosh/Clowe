@@ -31,6 +31,7 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { refundCancelledOrder } from '../services/refundService';
+import { settleEarnedCredits } from '../services/purchaseCredits';
 import { getSettings } from '../services/settingsService';
 import { gstSettings } from '../services/economicsRates';
 import { categoryRulesMap } from '../services/categoryRules';
@@ -771,6 +772,7 @@ adminOrdersRouter.post('/:id/cancel', async (req, res, next) => {
     // What was paid for the cancelled lines goes back through the gateway, the
     // same path returns use; the refund is recorded whether it succeeds or fails.
     const refund = await refundCancelledOrder(order.id, `Cancelled by admin: ${input.reason}`, req.auth!.userId);
+    await settleEarnedCredits(order.id);
     res.json({ success: true, data: { cancelled: live.length, refund } });
   } catch (err) {
     next(err);

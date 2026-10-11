@@ -269,6 +269,7 @@ export const CREDIT_REASONS = [
   'EARN_TOPUP',
   'REDEEM_CHECKOUT',
   'REFUND_CREDITS',
+  'REVERSE_PURCHASE',
   'EXPIRED',
 ] as const;
 export type CreditReason = (typeof CREDIT_REASONS)[number];
@@ -279,6 +280,7 @@ export const CREDIT_REASON_LABELS: Record<CreditReason, string> = {
   EARN_TOPUP: 'Credits purchased',
   REDEEM_CHECKOUT: 'Used on an order',
   REFUND_CREDITS: 'Credits returned',
+  REVERSE_PURCHASE: 'Order reward reversed (cancelled or returned)',
   EXPIRED: 'Credits expired',
 };
 

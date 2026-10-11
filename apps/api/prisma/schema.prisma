@@ -284,7 +284,7 @@ model CreditLedger {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   delta     Int // credits, signed
-  reason    String // EARN_PURCHASE | EARN_REFERRAL | EARN_TOPUP | REDEEM_CHECKOUT | REFUND_CREDITS | EXPIRED
+  reason    String // EARN_PURCHASE | EARN_REFERRAL | EARN_TOPUP | REDEEM_CHECKOUT | REFUND_CREDITS | REVERSE_PURCHASE | EXPIRED
   orderId   String?
   order     Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
   // Earned credits lapse after CREDIT_EXPIRY_MONTHS; spends leave this null.
