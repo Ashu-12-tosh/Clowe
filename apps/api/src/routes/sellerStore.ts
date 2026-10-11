@@ -24,6 +24,19 @@ sellerStoreRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
 
 const EMPTY_SOCIALS = { website: '', instagram: '', facebook: '', youtube: '' };
 
+/**
+ * One optional text field of a section save. Absent is not empty: undefined
+ * leaves the stored value alone (Prisma skips undefined), "" clears it, and
+ * anything else is saved trimmed. The settings form always sends every field
+ * of the section, as "" when blank, so clearing from the page still works; a
+ * client that sends only what it changed no longer wipes the rest.
+ */
+function fieldUpdate(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  const v = value?.trim();
+  return v ? v : null;
+}
+
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -272,13 +285,13 @@ sellerStoreRouter.put('/profile', async (req, res, next) => {
       data: {
         shopName: input.shopName,
         slug,
-        tagline: input.tagline?.trim() || null,
-        description: input.description?.trim() || null,
-        logoUrl: input.logoUrl || null,
-        bannerUrl: input.bannerUrl || null,
-        storeEmail: input.storeEmail || null,
-        storePhone: input.storePhone?.trim() || null,
-        primaryCategoryId: input.primaryCategoryId || null,
+        tagline: fieldUpdate(input.tagline),
+        description: fieldUpdate(input.description),
+        logoUrl: fieldUpdate(input.logoUrl),
+        bannerUrl: fieldUpdate(input.bannerUrl),
+        storeEmail: fieldUpdate(input.storeEmail),
+        storePhone: fieldUpdate(input.storePhone),
+        primaryCategoryId: fieldUpdate(input.primaryCategoryId),
         ...(input.highlights ? { highlights: input.highlights as object } : {}),
         ...(input.socialLinks ? { socialLinks: input.socialLinks as object } : {}),
       },
@@ -319,25 +332,24 @@ sellerStoreRouter.put('/business', async (req, res, next) => {
     await prisma.sellerProfile.update({
       where: { id: seller.id },
       data: {
-        businessType: input.businessType || null,
+        businessType: fieldUpdate(input.businessType),
         ...(locked
           ? {
               ...(addingPan ? { panNumber: input.panNumber } : {}),
               ...(addingPanName ? { panName: input.panName } : {}),
             }
           : {
-              // Absent is not empty: a save that leaves the GSTIN out keeps the one
-              // on file (payouts and every tax invoice depend on it); "" clears it.
-              ...(input.gstNumber !== undefined ? { gstNumber: input.gstNumber || null } : {}),
-              panNumber: input.panNumber || null,
-              ...(input.panName !== undefined ? { panName: input.panName || null } : {}),
+              // Payouts and every tax invoice depend on the GSTIN: never wiped by omission.
+              gstNumber: fieldUpdate(input.gstNumber),
+              panNumber: fieldUpdate(input.panNumber),
+              panName: fieldUpdate(input.panName),
             }),
-        addressLine1: input.addressLine1?.trim() || null,
-        addressLine2: input.addressLine2?.trim() || null,
-        landmark: input.landmark?.trim() || null,
-        city: input.city?.trim() || null,
-        state: input.state?.trim() || null,
-        pincode: input.pincode || null,
+        addressLine1: fieldUpdate(input.addressLine1),
+        addressLine2: fieldUpdate(input.addressLine2),
+        landmark: fieldUpdate(input.landmark),
+        city: fieldUpdate(input.city),
+        state: fieldUpdate(input.state),
+        pincode: fieldUpdate(input.pincode),
         // Editing documents after a rejection puts the shop back in the queue.
         ...(seller.kycStatus === 'REJECTED' ? { kycStatus: 'UNDER_REVIEW' as const } : {}),
       },
@@ -357,7 +369,10 @@ sellerStoreRouter.put('/shipping', async (req, res, next) => {
     const seller = req.seller!;
     const input = storeShippingSchema.parse(req.body);
 
-    if (!input.pickupSameAsBusiness && (!input.pickupLine1 || !input.pickupPincode)) {
+    // Judge the address as it will be saved: an omitted field keeps the stored one.
+    const pickupLine1 = input.pickupLine1 === undefined ? seller.pickupLine1 : input.pickupLine1?.trim();
+    const pickupPincode = input.pickupPincode === undefined ? seller.pickupPincode : input.pickupPincode?.trim();
+    if (!input.pickupSameAsBusiness && (!pickupLine1 || !pickupPincode)) {
       throw ApiError.badRequest(
         'A separate pickup address needs at least a street address and PIN code',
         'PICKUP_INCOMPLETE',
@@ -368,13 +383,13 @@ sellerStoreRouter.put('/shipping', async (req, res, next) => {
       where: { id: seller.id },
       data: {
         pickupSameAsBusiness: input.pickupSameAsBusiness,
-        pickupName: input.pickupName?.trim() || null,
-        pickupPhone: input.pickupPhone?.trim() || null,
-        pickupLine1: input.pickupLine1?.trim() || null,
-        pickupLine2: input.pickupLine2?.trim() || null,
-        pickupCity: input.pickupCity?.trim() || null,
-        pickupState: input.pickupState?.trim() || null,
-        pickupPincode: input.pickupPincode || null,
+        pickupName: fieldUpdate(input.pickupName),
+        pickupPhone: fieldUpdate(input.pickupPhone),
+        pickupLine1: fieldUpdate(input.pickupLine1),
+        pickupLine2: fieldUpdate(input.pickupLine2),
+        pickupCity: fieldUpdate(input.pickupCity),
+        pickupState: fieldUpdate(input.pickupState),
+        pickupPincode: fieldUpdate(input.pickupPincode),
         dispatchDays: input.dispatchDays,
         codEnabled: input.codEnabled,
       },
@@ -406,12 +421,13 @@ sellerStoreRouter.put('/returns', async (req, res, next) => {
     await prisma.sellerProfile.update({
       where: { id: seller.id },
       data: {
-        returnWindowDays: input.returnWindowDays ?? null,
+        // Absent keeps the shop's window; null sets it back to the platform default.
+        returnWindowDays: input.returnWindowDays,
         returnAddressSameAsPickup: input.returnAddressSameAsPickup,
-        returnLine1: input.returnLine1?.trim() || null,
-        returnCity: input.returnCity?.trim() || null,
-        returnState: input.returnState?.trim() || null,
-        returnPincode: input.returnPincode || null,
+        returnLine1: fieldUpdate(input.returnLine1),
+        returnCity: fieldUpdate(input.returnCity),
+        returnState: fieldUpdate(input.returnState),
+        returnPincode: fieldUpdate(input.returnPincode),
       },
     });
     await respond(seller.id, res);
@@ -442,8 +458,9 @@ sellerStoreRouter.put('/vacation', async (req, res, next) => {
       data: {
         vacationMode: input.vacationMode,
         ...vacationStamps,
-        vacationUntil: until && !Number.isNaN(until.getTime()) ? until : null,
-        vacationMessage: input.vacationMessage?.trim() || null,
+        vacationUntil:
+          input.vacationUntil === undefined ? undefined : until && !Number.isNaN(until.getTime()) ? until : null,
+        vacationMessage: fieldUpdate(input.vacationMessage),
       },
     });
     await respond(seller.id, res);
