@@ -844,14 +844,19 @@ SMS_PANEL_USERNAME=<panel username>
 SMS_PANEL_API_KEY=<panel API key>
 SMS_PANEL_SENDER_ID=<6-character DLT header>
 SMS_PANEL_TEMPLATE_ID=<DLT template ID of the OTP template>
-SMS_PANEL_OTP_TEMPLATE='<approved template text, with {#var#} where the code goes>'
+SMS_PANEL_OTP_TEMPLATE="<approved template text, with its {#num#} where the code goes>"
 ```
 
 The template must be the approved DLT text **character for character** —
-spaces, punctuation and case — or operators drop the SMS. Paste it with its
-`{#var#}`, exactly once. Keep the single quotes: without them compose reads
-` #…` as a comment and cuts the text short. If the text contains an
-apostrophe, use double quotes instead and write any `$` as `$$`.
+spaces, punctuation, case and line breaks — or operators drop the SMS. Paste
+it with its DLT variable (`{#num#}`, `{#var#}`, …), exactly once. Use double
+quotes: without quotes compose reads ` #…` as a comment and cuts the text
+short. Write a line break as `\n`, which compose turns into a real one (in
+single quotes it would stay a backslash and an n; the API converts that too,
+but double quotes are the form compose itself gets right). Inside the double
+quotes write any `$` as `$$` and any `"` as `\"`. Check what the API will
+receive with `dc config --format json | python3 -c 'import json,sys;
+print(repr(json.load(sys.stdin)["services"]["api"]["environment"]["SMS_PANEL_OTP_TEMPLATE"]))'`.
 
 The DLT entity ID is configured inside the panel, not here. The route is
 always `TRANS`.
@@ -870,7 +875,7 @@ in the log.
 
 ❌ **The API exits at boot with `SMS_PANEL_… must …`:** a setting is present
 but malformed (an `http://` URL, a sender that is not 6 characters, a template
-without exactly one `{#var#}`). The message names the setting.
+without exactly one DLT variable such as `{#num#}`). The message names the setting.
 
 **3. Log in with your own number** and check the SMS arrives.
 

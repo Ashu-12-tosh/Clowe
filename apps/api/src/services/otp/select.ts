@@ -34,7 +34,7 @@ export function missingPanelSettings(e: OtpEnv): string[] {
  *   missing, the mock, with a warning at boot naming what is missing
  *
  * A setting that is present but malformed (http:// URL, a template without
- * exactly one {#var#}) stops the server instead: that is a typo to fix, and
+ * exactly one DLT variable such as {#num#}) stops the server instead: that is a typo to fix, and
  * the error says which setting.
  */
 export function createOtpProvider(e: OtpEnv): OtpProvider {

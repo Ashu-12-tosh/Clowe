@@ -50,8 +50,9 @@ const envSchema = z.object({
   SMS_PANEL_SENDER_ID: optionalSecret,
   // The DLT template ID of the approved OTP template.
   SMS_PANEL_TEMPLATE_ID: optionalSecret,
-  // The approved template text, character for character, with {#var#} where
-  // the code goes. Not trimmed: DLT matches the text exactly.
+  // The approved template text, character for character, with its one DLT
+  // variable ({#num#}, {#var#}, …) where the code goes. Not trimmed: DLT
+  // matches the text exactly. A line break is written \n inside double quotes.
   SMS_PANEL_OTP_TEMPLATE: blankAsUnset(z.string().optional()),
 
   // Phone number that gets the ADMIN role via the seed script.

@@ -1,7 +1,11 @@
 import { OtpSendError, type OtpProvider, type OtpSendFailure } from './OtpProvider';
 
-/** DLT's variable marker. The approved template holds exactly one, where the code goes. */
-export const TEMPLATE_VAR = '{#var#}';
+/**
+ * A DLT variable marker — {#var#}, {#num#}, {#numeric#}, … whichever type the
+ * template was approved with. The OTP template holds exactly one, where the
+ * code goes.
+ */
+const TEMPLATE_VAR = /\{#[A-Za-z]+#\}/g;
 
 const SEND_PATH = '/sms-panel/api/http/index.php';
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -22,7 +26,7 @@ export interface SmsPanelConfig {
   apiKey: string;
   senderId: string;
   templateId: string;
-  /** The approved DLT template text with one {#var#}. */
+  /** The approved DLT template text with one variable marker, e.g. {#num#}. */
   template: string;
   timeoutMs?: number;
   /** Tests pass a stub; production uses the global fetch. */
@@ -47,6 +51,7 @@ export class SmsPanelOtpProvider implements OtpProvider {
   private readonly origin: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
+  private readonly template: string;
 
   constructor(private readonly config: SmsPanelConfig) {
     this.origin = panelOrigin(config.baseUrl);
@@ -57,8 +62,11 @@ export class SmsPanelOtpProvider implements OtpProvider {
     if (!/^\d+$/.test(config.templateId)) {
       throw new Error('SMS_PANEL_TEMPLATE_ID must be the numeric DLT template ID');
     }
-    if (config.template.split(TEMPLATE_VAR).length !== 2) {
-      throw new Error(`SMS_PANEL_OTP_TEMPLATE must contain ${TEMPLATE_VAR} exactly once, where the code goes`);
+    // A template with a line break, written in single quotes in the env file,
+    // arrives with a literal backslash-n; DLT matches the real line break.
+    this.template = config.template.replace(/\\n/g, '\n');
+    if ((this.template.match(TEMPLATE_VAR) ?? []).length !== 1) {
+      throw new Error('SMS_PANEL_OTP_TEMPLATE must contain one DLT variable such as {#num#} exactly once, where the code goes');
     }
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.fetchImpl = config.fetchImpl ?? fetch;
@@ -117,7 +125,7 @@ export class SmsPanelOtpProvider implements OtpProvider {
       ['apirequest', 'Text'],
       ['sender', this.config.senderId],
       ['mobile', phone],
-      ['message', this.config.template.replace(TEMPLATE_VAR, code)],
+      ['message', this.template.replace(TEMPLATE_VAR, () => code)],
       ['route', 'TRANS'],
       ['TemplateID', this.config.templateId],
       ['format', 'JSON'],

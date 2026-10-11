@@ -122,6 +122,31 @@ describe('the request', () => {
     expect(params.get('message')).toBe(template.replace('{#var#}', CODE));
   });
 
+  describe('with the approved CLOWE template (DLT 1777179076693657384)', () => {
+    // As approved, including the {#num#} variable, the line break and the trailing header.
+    const APPROVED = '{#num#} is your OTP for CLOWE login. Valid for 5 minutes. Do not share it with anyone.\nCLOWEP';
+    const SENT = '123456 is your OTP for CLOWE login. Valid for 5 minutes. Do not share it with anyone.\nCLOWEP';
+
+    async function messageSent(template: string) {
+      const { fetchImpl, calls } = stub(panel({ status: 'success' }));
+      await provider(fetchImpl, { template, senderId: 'CLOWEP', templateId: '1777179076693657384' }).sendOtp(PHONE, '123456');
+      return calls[0].url.split('?')[1].split('&').find((p) => p.startsWith('message='))!.slice('message='.length);
+    }
+
+    it('sends the template byte for byte with the code in place of {#num#}', async () => {
+      const raw = await messageSent(APPROVED);
+      expect(Buffer.from(decodeURIComponent(raw), 'utf8').equals(Buffer.from(SENT, 'utf8'))).toBe(true);
+      // The line break goes as a single LF: no CR, no literal backslash.
+      expect(raw).toContain('anyone.%0ACLOWEP');
+      expect(raw).not.toMatch(/%0D|%5C/);
+    });
+
+    it('sends the same bytes when the env file left the line break as a literal \\n', async () => {
+      const raw = await messageSent(APPROVED.replace('\n', '\\n'));
+      expect(decodeURIComponent(raw)).toBe(SENT);
+    });
+  });
+
   it('refuses redirects and sets a 10s timeout', async () => {
     const { fetchImpl, calls } = stub(panel({ status: 'success' }));
     await provider(fetchImpl).sendOtp(PHONE, CODE);
@@ -284,6 +309,8 @@ describe('configuration', () => {
   it.each([
     ['no {#var#}', 'Your code is 123'],
     ['two {#var#}', 'Code {#var#}, valid {#var#} min'],
+    ['two different variables', 'Code {#num#}, valid {#var#} min'],
+    ['a malformed variable', 'Code {#num} is yours'],
   ])('rejects a template with %s', (_label, template) => {
     expect(() => provider(fetchImpl, { template })).toThrow('exactly once');
   });
