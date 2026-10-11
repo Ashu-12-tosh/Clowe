@@ -10,6 +10,7 @@ import {
   type PlatformSettings,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { publicSettingsChanged } from '@/lib/settings';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -155,6 +156,7 @@ export default function AdminSettingsPage() {
       });
       setSettings(fresh);
       setSaved(true);
+      publicSettingsChanged();
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not save settings');

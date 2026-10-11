@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getPublicSettings } from '@/lib/settings';
+import { getPublicSettings, onPublicSettingsChanged } from '@/lib/settings';
 import { ExternalLink } from '@/components/ExternalLink';
 import { DEFAULT_LEGAL_ENTITY, legalDisplayName, safeHref } from '@clowe/shared';
 
@@ -123,12 +123,15 @@ export default function Footer() {
   const [legalName, setLegalName] = useState(DEFAULT_LEGAL_ENTITY.name);
 
   useEffect(() => {
-    getPublicSettings()
-      .then((s) => {
-        setSocial(s.socialLinks);
-        setLegalName(s.legalEntity.name);
-      })
-      .catch(() => {});
+    const load = () =>
+      getPublicSettings()
+        .then((s) => {
+          setSocial(s.socialLinks);
+          setLegalName(s.legalEntity.name);
+        })
+        .catch(() => {});
+    load();
+    return onPublicSettingsChanged(load);
   }, []);
 
   // Only networks with a link. A greyed-out "coming soon" mark is a promise
