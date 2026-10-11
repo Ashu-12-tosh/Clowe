@@ -326,7 +326,9 @@ sellerStoreRouter.put('/business', async (req, res, next) => {
               ...(addingPanName ? { panName: input.panName } : {}),
             }
           : {
-              gstNumber: input.gstNumber || null,
+              // Absent is not empty: a save that leaves the GSTIN out keeps the one
+              // on file (payouts and every tax invoice depend on it); "" clears it.
+              ...(input.gstNumber !== undefined ? { gstNumber: input.gstNumber || null } : {}),
               panNumber: input.panNumber || null,
               ...(input.panName !== undefined ? { panName: input.panName || null } : {}),
             }),
