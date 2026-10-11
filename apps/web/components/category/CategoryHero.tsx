@@ -108,14 +108,14 @@ export default function CategoryHero({ icon, slides, highlights, intervalMs = 60
           <button
             onClick={() => go(-1)}
             aria-label="Previous slide"
-            className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink-900 shadow-md transition hover:bg-white"
+            className="absolute left-3 top-1/2 hidden h-9 w-9 sm:flex -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink-900 shadow-md transition hover:bg-white"
           >
             ‹
           </button>
           <button
             onClick={() => go(1)}
             aria-label="Next slide"
-            className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink-900 shadow-md transition hover:bg-white"
+            className="absolute right-3 top-1/2 hidden h-9 w-9 sm:flex -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink-900 shadow-md transition hover:bg-white"
           >
             ›
           </button>

@@ -450,8 +450,11 @@ export interface SettlementPosition {
 
 /**
  * The settlement bucket split into cleared and clearing. A delivery's entries
- * clear when the line's deliveredAt is older than the hold; everything else
- * (penalties, waivers, payouts, reversals, adjustments) counts at once.
+ * clear when the line's deliveredAt is older than the hold — and so does a
+ * return's reversal of them, so a sale returned within the hold nets to
+ * nothing in clearing instead of showing as money on its way while its
+ * reversal is already taken off. Everything else (penalties, waivers,
+ * payouts, adjustments) counts at once.
  * Judged on the line's own delivery date rather than the entry's timestamp so
  * a lazily backfilled entry clears on the same day a prompt one would have.
  */
@@ -467,7 +470,7 @@ export async function settlementPosition(
       COALESCE(SUM(e."amountPaise"), 0)::int AS balance,
       COALESCE(SUM(
         CASE
-          WHEN e.type::text IN (${Prisma.join([...DELIVERY_ENTRY_TYPES])})
+          WHEN e.type::text IN (${Prisma.join([...DELIVERY_ENTRY_TYPES, 'RETURN_REVERSAL'])})
            AND i."deliveredAt" > ${cutoff}
           THEN 0
           ELSE e."amountPaise"

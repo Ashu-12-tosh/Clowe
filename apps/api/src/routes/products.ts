@@ -342,8 +342,9 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
       throw ApiError.notFound('Product not found');
     }
 
-    // Trending signal: record the view without delaying the response.
-    void prisma
+    // Trending signal: record the view without delaying the response. The web
+    // server reading a product for its page <title> is not a view.
+    if (req.get('x-clowe-metadata') !== '1') void prisma
       .$transaction([
         prisma.productView.create({
           data: { productId: product.id, userId: req.auth?.userId ?? null },

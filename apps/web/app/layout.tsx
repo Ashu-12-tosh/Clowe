@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     template: '%s | Clowe',
   },
   description:
-    'Multi-vendor online marketplace for electronics, mobiles, fashion, home & kitchen, beauty, books, groceries and more — with AI virtual try-on on fashion.',
+    'Multi-vendor online marketplace for electronics, mobiles, fashion, home & kitchen, beauty, books and more — with AI virtual try-on on fashion.',
   keywords: ['online shopping', 'marketplace', 'electronics', 'mobiles', 'fashion', 'home', 'beauty', 'books', 'AI try-on', 'India'],
   openGraph: {
     title: 'Clowe — Everything you need, one marketplace',

@@ -42,13 +42,6 @@ import PolicyText from '@/components/PolicyText';
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
 
-const WHY_SHOP = [
-  { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
-  { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
-  { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
-];
-
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
   { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
@@ -718,21 +711,6 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {/* Why shop */}
-          <div className="rounded-2xl border border-gray-100 bg-white p-4">
-            <p className="text-sm font-bold text-ink-900">Why shop at CLOWE?</p>
-            <div className="mt-3 space-y-2.5">
-              {WHY_SHOP.map(({ Icon, title, text }) => (
-                <div key={title} className="flex items-start gap-2">
-                  <Icon className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-ink-900">{title}</p>
-                    <p className="text-[11px] text-gray-500"><PolicyText text={text} /></p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
           <div className="hidden lg:block">
             <button

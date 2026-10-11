@@ -101,7 +101,11 @@ export default function SupportChat() {
         <button
           onClick={() => void openChat()}
           aria-label="Open support chat"
-          className="fixed bottom-5 right-5 z-40 flex items-center justify-center rounded-full bg-ink-900 p-3.5 text-2xl shadow-lg transition hover:scale-105 hover:bg-ink-800"
+          className={`fixed right-5 z-40 flex items-center justify-center rounded-full bg-ink-900 p-3.5 text-2xl shadow-lg transition hover:scale-105 hover:bg-ink-800 ${
+            // The cart and checkout have a sticky pay bar along the bottom on
+            // phones; the bubble sits above it rather than over its button.
+            pathname === '/cart' || pathname === '/checkout' ? 'bottom-24 lg:bottom-5' : 'bottom-5'
+          }`}
         >
           💬
         </button>
