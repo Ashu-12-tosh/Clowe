@@ -238,9 +238,11 @@ sellerRouter.post('/register', async (req, res, next) => {
         }),
       ]);
     }
-    // Role becomes SELLER (they can still shop as a customer).
-    await prisma.user.update({
-      where: { id: req.auth!.userId },
+    // A customer becomes a SELLER (they can still shop). An admin stays ADMIN:
+    // seller pages go by the shop, not the role, and demoting the only admin
+    // would lock everyone out of the admin panel.
+    await prisma.user.updateMany({
+      where: { id: req.auth!.userId, role: 'CUSTOMER' },
       data: { role: 'SELLER' },
     });
     res.json({ success: true, data: toProfileInfo(profile) });
