@@ -28,6 +28,8 @@ import {
   type OrderTab,
   istDayKey,
   istStartOfDay,
+  NOT_A_SALE_STATUSES,
+  isNotASale,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { refundCancelledOrder } from '../services/refundService';
@@ -284,7 +286,7 @@ adminOrdersRouter.get('/summary', async (req, res, next) => {
       prisma.orderItem.findMany({
         where: {
           order: { createdAt: { gte: from } },
-          status: { notIn: ['CANCELLED', 'RETURNED'] },
+          status: { notIn: [...NOT_A_SALE_STATUSES] },
         },
         select: {
           orderId: true,
@@ -302,11 +304,11 @@ adminOrdersRouter.get('/summary', async (req, res, next) => {
 
     // Revenue counts orders that were not cancelled or returned — the same rule
     // the marketplace overview uses, so the two dashboards agree.
-    const live = orders.filter((o) => !['CANCELLED', 'RETURNED'].includes(o.status));
+    const live = orders.filter((o) => !isNotASale(o.status));
     const revenuePaise = live.reduce((sum, o) => sum + o.totalPaise, 0);
     const aov = live.length > 0 ? Math.round(revenuePaise / live.length) : 0;
 
-    const previousLive = previous.filter((o) => !['CANCELLED', 'RETURNED'].includes(o.status));
+    const previousLive = previous.filter((o) => !isNotASale(o.status));
     const previousRevenue = previousLive.reduce((sum, o) => sum + o.totalPaise, 0);
     const previousAov =
       previousLive.length > 0 ? Math.round(previousRevenue / previousLive.length) : 0;
@@ -326,7 +328,7 @@ adminOrdersRouter.get('/summary', async (req, res, next) => {
       const bucket = trend.get(dayKey(o.createdAt));
       if (!bucket) continue;
       bucket.orders += 1;
-      if (!['CANCELLED', 'RETURNED'].includes(o.status)) bucket.revenuePaise += o.totalPaise;
+      if (!isNotASale(o.status)) bucket.revenuePaise += o.totalPaise;
     }
 
     // --- Payment split ---------------------------------------------------
@@ -357,7 +359,11 @@ adminOrdersRouter.get('/summary', async (req, res, next) => {
         processing: (counts.get('CONFIRMED') ?? 0) + (counts.get('PACKED') ?? 0),
         shipped: counts.get('SHIPPED') ?? 0,
         delivered: counts.get('DELIVERED') ?? 0,
-        returned: (counts.get('RETURNED') ?? 0) + (counts.get('RETURN_REQUESTED') ?? 0),
+        returned:
+          (counts.get('RETURNED') ?? 0) +
+          (counts.get('RETURN_REQUESTED') ?? 0) +
+          (counts.get('RTO_IN_TRANSIT') ?? 0) +
+          (counts.get('RTO_DELIVERED') ?? 0),
         cancelled: counts.get('CANCELLED') ?? 0,
         revenuePaise,
         averageOrderValuePaise: aov,
@@ -437,7 +443,7 @@ adminOrdersRouter.get('/:id', async (req, res, next) => {
     const [orderCount, lifetime] = await Promise.all([
       prisma.order.count({ where: { userId: order.userId } }),
       prisma.order.aggregate({
-        where: { userId: order.userId, status: { notIn: ['CANCELLED', 'RETURNED'] } },
+        where: { userId: order.userId, status: { notIn: [...NOT_A_SALE_STATUSES] } },
         _sum: { totalPaise: true },
       }),
     ]);
@@ -578,7 +584,7 @@ adminOrdersRouter.patch('/:id/status', async (req, res, next) => {
     const targets = input.itemId
       ? order.items.filter((i) => i.id === input.itemId)
       : order.items.filter(
-          (i) => !['CANCELLED', 'RETURNED', 'RETURN_REQUESTED'].includes(i.status),
+          (i) => !(isNotASale(i.status) || i.status === 'RETURN_REQUESTED'),
         );
     if (targets.length === 0) throw ApiError.badRequest('Nothing on this order can be moved');
 
@@ -701,7 +707,7 @@ adminOrdersRouter.post('/:id/cancel', async (req, res, next) => {
     if (order.status === 'CANCELLED') throw ApiError.badRequest('Order is already cancelled');
 
     const live = order.items.filter(
-      (i) => !['CANCELLED', 'RETURNED', 'RETURN_REQUESTED'].includes(i.status),
+      (i) => !(isNotASale(i.status) || i.status === 'RETURN_REQUESTED'),
     );
     if (live.some((i) => i.status === 'DELIVERED')) {
       throw ApiError.badRequest(

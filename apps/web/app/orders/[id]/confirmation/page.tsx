@@ -76,6 +76,8 @@ function reachedIndex(status: string): number {
     case 'DELIVERED':
     case 'RETURN_REQUESTED':
     case 'RETURNED':
+    case 'RTO_IN_TRANSIT':
+    case 'RTO_DELIVERED':
       return 4;
     case 'SHIPPED':
       return 2;

@@ -18,6 +18,7 @@ import {
   type SellerCustomerSummary,
   monthToDateIST,
   periodWindow,
+  isNotASale,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -109,7 +110,7 @@ async function loadCustomers(sellerId: string): Promise<CustomerAccumulator[]> {
 
     entry.orders.add(item.order.id);
     entry.unitsBought += item.quantity;
-    if (!['CANCELLED', 'RETURNED'].includes(item.status)) {
+    if (!isNotASale(item.status)) {
       entry.ltvPaise += item.pricePaise * item.quantity;
     }
     if (item.status === 'RETURNED' || item.status === 'RETURN_REQUESTED') {
@@ -510,7 +511,7 @@ sellerCustomersRouter.get('/:userId', async (req, res, next) => {
       entry.amountPaise += item.pricePaise * item.quantity;
       orders.set(item.order.id, entry);
 
-      if (['CANCELLED', 'RETURNED'].includes(item.status)) continue;
+      if (isNotASale(item.status)) continue;
       const catName = item.product.category.name;
       const cat = categories.get(catName) ?? { unitsBought: 0, spentPaise: 0 };
       cat.unitsBought += item.quantity;

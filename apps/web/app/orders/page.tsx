@@ -53,6 +53,8 @@ const STATUS_LOOK: Record<string, { tint: string; icon: string }> = {
   CANCELLED: { tint: 'text-gray-500', icon: '⊗' },
   RETURN_REQUESTED: { tint: 'text-orange-600', icon: '↩' },
   RETURNED: { tint: 'text-orange-600', icon: '↩' },
+  RTO_IN_TRANSIT: { tint: 'text-orange-600', icon: '↩' },
+  RTO_DELIVERED: { tint: 'text-orange-600', icon: '↩' },
 };
 
 function statusLabel(status: string): string {
@@ -87,6 +89,8 @@ function statusDetail(order: OrderListRow): string {
   if (order.status === 'CANCELLED') return 'This order was cancelled';
   if (order.status === 'RETURN_REQUESTED') return 'Return in progress';
   if (order.status === 'RETURNED') return 'Returned';
+  if (order.status === 'RTO_IN_TRANSIT') return 'Couldn’t be delivered — going back to the seller';
+  if (order.status === 'RTO_DELIVERED') return 'Couldn’t be delivered — returned to the seller';
   if (order.etaTo) return `Expected by ${fmtShort(order.etaTo)}`;
   return 'Your order is being processed';
 }

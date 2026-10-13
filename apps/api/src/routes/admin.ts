@@ -19,6 +19,7 @@ import {
   type AdminUserRow,
   updateSettingsSchema,
   voidReferralSchema,
+  NOT_A_SALE_STATUSES,
 } from '@clowe/shared';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
@@ -92,7 +93,7 @@ adminRouter.get('/stats', async (_req, res, next) => {
     // Sales aggregates from order items (excludes cancelled/returned).
     const soldItems = await prisma.orderItem.findMany({
       // PLACED = unpaid; excluded from sales stats along with cancelled/returned.
-      where: { status: { notIn: ['PLACED', 'CANCELLED', 'RETURNED'] } },
+      where: { status: { notIn: ['PLACED', ...NOT_A_SALE_STATUSES] } },
       select: { productId: true, sellerId: true, quantity: true, pricePaise: true },
     });
     const unitsSold = soldItems.reduce((sum, i) => sum + i.quantity, 0);

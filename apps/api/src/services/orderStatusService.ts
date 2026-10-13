@@ -17,7 +17,12 @@ export const STAGE_RANK: Record<string, number> = {
   PACKED: 2,
   SHIPPED: 3,
   DELIVERED: 4,
+  // Undelivered and on its way back: still moving, but past everything else.
+  RTO_IN_TRANSIT: 5,
 };
+
+/** Lines that are done with: nothing more will happen to them. */
+const FINISHED = new Set(['CANCELLED', 'RETURNED', 'RTO_DELIVERED']);
 
 /** One status for a set of lines. `mixed` is true when they disagree. */
 export function aggregateStatus(lines: { status: string }[]): { status: string; mixed: boolean } {
@@ -26,10 +31,10 @@ export function aggregateStatus(lines: { status: string }[]): { status: string; 
   if (statuses.has('RETURN_REQUESTED')) {
     return { status: 'RETURN_REQUESTED', mixed: statuses.size > 1 };
   }
-  const active = lines.filter((l) => l.status !== 'CANCELLED' && l.status !== 'RETURNED');
+  const active = lines.filter((l) => !FINISHED.has(l.status));
   if (active.length === 0) {
     return {
-      status: statuses.has('RETURNED') ? 'RETURNED' : 'CANCELLED',
+      status: statuses.has('RETURNED') ? 'RETURNED' : statuses.has('RTO_DELIVERED') ? 'RTO_DELIVERED' : 'CANCELLED',
       mixed: statuses.size > 1,
     };
   }

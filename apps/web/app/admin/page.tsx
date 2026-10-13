@@ -22,6 +22,8 @@ const STATUS_STYLES: Record<string, string> = {
   CANCELLED: 'bg-gray-100 text-gray-600',
   RETURN_REQUESTED: 'bg-orange-100 text-orange-700',
   RETURNED: 'bg-red-100 text-red-700',
+  RTO_IN_TRANSIT: 'bg-red-100 text-red-700',
+  RTO_DELIVERED: 'bg-red-100 text-red-700',
 };
 
 const HEALTH_STYLES: Record<string, string> = {

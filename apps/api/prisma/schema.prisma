@@ -77,6 +77,38 @@ enum OrderStatus {
   CANCELLED
   RETURN_REQUESTED
   RETURNED
+  // The parcel could not be delivered and is on its way back to the seller
+  // (Delhivery RT scans); then back with the seller. Not a sale.
+  RTO_IN_TRANSIT
+  RTO_DELIVERED
+}
+
+/// FORWARD: seller to buyer. REVERSE: a return picked up from the buyer.
+enum ShipmentKind {
+  FORWARD
+  REVERSE
+}
+
+/// Where a parcel is, in our words; mapped from the courier's scans.
+enum ShipmentStatus {
+  CREATED // manifested: AWB issued, label printable, not yet handed over
+  PICKUP_REQUESTED
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERY_FAILED // an attempt failed (NDR); the courier will try again or return it
+  DELIVERED
+  RTO_IN_TRANSIT
+  RTO_DELIVERED
+  CANCELLED
+  LOST
+}
+
+/// A seller's pickup address as registered with the courier (a Delhivery "warehouse").
+enum CourierWarehouseStatus {
+  NONE
+  PENDING
+  ACTIVE
+  FAILED
 }
 
 enum PaymentStatus {
@@ -231,6 +263,9 @@ model User {
   referralCode String   @unique // shareable code for the referral program
   // Shopping credits: earned on paid orders (1 per ₹20), 1 credit = 50 paise.
   creditsBalance Int @default(0)
+  // Orders of theirs that came back undelivered (RTO). Shown to sellers and
+  // admins; never blocks ordering.
+  rtoCount       Int @default(0)
   // Premium membership: free standard delivery with no minimum order.
   isPremium      Boolean   @default(false)
   premiumSince   DateTime?
@@ -448,6 +483,15 @@ model SellerProfile {
   pickupCity    String?
   pickupState   String?
   pickupPincode String?
+  // The pickup address as registered with the courier. The name never
+  // changes once set (Delhivery matches it exactly); a new address that the
+  // courier cannot edit in place gets a new, versioned name.
+  courierWarehouseName      String?
+  courierWarehouseStatus    CourierWarehouseStatus @default(NONE)
+  courierWarehouseError     String?
+  courierWarehouseSyncedAt  DateTime?
+  // Fingerprint of the address last registered, to notice an edit.
+  courierWarehouseAddressHash String?
 
   // --- Fulfilment preferences --------------------------------------------
   // Working days allowed to dispatch before a shipment counts as late.
@@ -482,6 +526,7 @@ model SellerProfile {
 
   products          Product[]
   orderItems        OrderItem[]
+  shipments         Shipment[]
   ads               Ad[]
   referralsGiven    SellerReferral[] @relation("SellerReferrer")
   referralsReceived SellerReferral[] @relation("SellerReferred")
@@ -1224,6 +1269,7 @@ model Order {
   updatedAt DateTime @updatedAt
 
   items      OrderItem[]
+  shipments  Shipment[]
   payment    Payment?
   complaints Complaint[]
   refunds    Refund[]
@@ -1272,9 +1318,13 @@ model OrderItem {
   gstRatePercent Int?
 
   // Delivery partner details (filled when the seller ships via ShippingProvider).
+  // Display copies of the line's shipment, kept so existing readers work.
   awbNumber   String?
   courierName String?
   trackingUrl String?
+  // The parcel this line travels in: one per order and seller.
+  shipmentId  String?
+  shipment    Shipment? @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
 
   return Return?
 
@@ -1293,6 +1343,94 @@ model OrderItem {
   @@index([sellerId, orderId])
   @@index([sellerId, payoutId])
   @@map("order_items")
+}
+
+/// One parcel with the courier. FORWARD: a seller's part of an order (its
+/// order lines point here). REVERSE: a return being picked up from the buyer
+/// and taken back to the seller's pickup address.
+model Shipment {
+  id          String         @id @default(cuid())
+  kind        ShipmentKind   @default(FORWARD)
+  orderId     String
+  order       Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sellerId    String
+  seller      SellerProfile  @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  /// REVERSE only: the return it carries.
+  returnId    String?        @unique
+  return      Return?        @relation(fields: [returnId], references: [id], onDelete: SetNull)
+  /// mock | delhivery
+  provider    String
+  /// mock | staging | production — which courier system issued the AWB.
+  environment String
+  awbNumber   String?        @unique
+  /// SURFACE | EXPRESS
+  mode        String         @default("SURFACE")
+  /// PREPAID | COD | PICKUP (reverse)
+  paymentType String
+  /// What the courier collects from the buyer; 0 unless COD.
+  codAmountPaise Int         @default(0)
+  /// The box as the seller declared it.
+  weightGrams Int
+  lengthMm    Int?
+  widthMm     Int?
+  heightMm    Int?
+  /// What the courier weighed and charged on (dead or volumetric, higher).
+  chargedWeightGrams Int?
+  status      ShipmentStatus @default(CREATED)
+  /// The courier's own words for the last scan, as shown to people.
+  statusText  String?
+  lastScanAt  DateTime?
+  pickupRequestId String?
+  pickupRequestedAt DateTime?
+  pickedUpAt  DateTime?
+  deliveredAt DateTime?
+  rtoInitiatedAt DateTime?
+  rtoDeliveredAt DateTime?
+  cancelledAt DateTime?
+  /// A4 | THERMAL_4X6 — the seller's last print.
+  labelSize   String?
+  /// Freight in paise: the quote at booking, then the courier's final charge.
+  estimatedFreightPaise Int?
+  finalFreightPaise     Int?
+  rtoFreightPaise       Int?
+  /// COD lines are payable only once the courier's remittance for this AWB is matched.
+  codRemittedAt     DateTime?
+  codRemittanceRef  String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  items  OrderItem[]
+  events ShipmentEvent[]
+
+  @@index([orderId, sellerId])
+  @@index([sellerId, status])
+  @@index([status, lastScanAt])
+  @@map("shipments")
+}
+
+/// One courier scan on a shipment, kept once however often it is pushed or
+/// polled (the unique tuple makes a replay a no-op).
+model ShipmentEvent {
+  id         String   @id @default(cuid())
+  shipmentId String
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  /// When the courier says it happened.
+  at         DateTime
+  /// Courier status words, e.g. "In Transit", "RTO".
+  status     String
+  /// Courier status type, e.g. UD, DL, RT, PP, PU, CN.
+  statusType String
+  /// Courier status code, e.g. EOD-74 (empty when none).
+  code       String   @default("")
+  location   String?
+  instructions String?
+  /// WEBHOOK | POLL | MOCK
+  source     String
+  createdAt  DateTime @default(now())
+
+  @@unique([shipmentId, at, status, code])
+  @@index([shipmentId, at])
+  @@map("shipment_events")
 }
 
 model Payment {
@@ -1373,6 +1511,8 @@ model Return {
   createdAt         DateTime  @default(now())
 
   refund Refund?
+  // The courier pickup that brings it back, once booked.
+  reverseShipment Shipment?
 
   @@index([status, createdAt])
   @@map("returns")

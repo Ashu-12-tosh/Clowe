@@ -46,6 +46,8 @@ const STATUS_STYLES: Record<string, string> = {
   CANCELLED: 'bg-gray-100 text-gray-600',
   RETURN_REQUESTED: 'bg-orange-100 text-orange-700',
   RETURNED: 'bg-red-100 text-red-700',
+  RTO_IN_TRANSIT: 'bg-red-100 text-red-700',
+  RTO_DELIVERED: 'bg-red-100 text-red-700',
 };
 
 const PAYMENT_STYLES: Record<string, string> = {
@@ -953,7 +955,7 @@ function OrderDrawer({
   }
 
   const next = NEXT_STATUS[detail.status];
-  const closed = ['CANCELLED', 'RETURNED'].includes(detail.status);
+  const closed = ['CANCELLED', 'RETURNED', 'RTO_DELIVERED'].includes(detail.status);
 
   return (
     <aside className="space-y-4">

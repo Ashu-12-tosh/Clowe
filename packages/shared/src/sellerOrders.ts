@@ -21,6 +21,8 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
   CANCELLED: 'Cancelled',
   RETURN_REQUESTED: 'Return requested',
   RETURNED: 'Returned',
+  RTO_IN_TRANSIT: 'Returning to you (RTO)',
+  RTO_DELIVERED: 'Back with you (RTO)',
 };
 
 /** Tiles across the top of the page; each one filters the table. */
@@ -55,7 +57,8 @@ export const SELLER_ORDER_TAB_STATUSES: Record<SellerOrderTab, string[] | null> 
   SHIPPED: ['SHIPPED'],
   DELIVERED: ['DELIVERED'],
   CANCELLED: ['CANCELLED'],
-  RETURNED: ['RETURNED'],
+  // Undelivered parcels coming back (RTO) are shown with returns.
+  RETURNED: ['RETURNED', 'RTO_IN_TRANSIT', 'RTO_DELIVERED'],
   REFUNDS: ['RETURN_REQUESTED'],
 };
 

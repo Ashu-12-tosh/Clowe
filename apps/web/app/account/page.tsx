@@ -32,6 +32,8 @@ const STATUS_STYLES: Record<string, string> = {
   CANCELLED: 'bg-gray-100 text-gray-600',
   RETURN_REQUESTED: 'bg-orange-50 text-orange-700',
   RETURNED: 'bg-orange-50 text-orange-700',
+  RTO_IN_TRANSIT: 'bg-orange-50 text-orange-700',
+  RTO_DELIVERED: 'bg-orange-50 text-orange-700',
 };
 
 function statusLabel(status: string): string {

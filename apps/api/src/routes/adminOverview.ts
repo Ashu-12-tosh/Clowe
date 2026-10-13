@@ -10,6 +10,7 @@ import {
   istDayKey,
   istStartOfDay,
   periodToDateIST,
+  isNotASale,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -206,10 +207,10 @@ adminOverviewRouter.get('/', async (req, res, next) => {
     ]);
 
     // --- GMV / revenue ------------------------------------------------------
-    const counted = items.filter((i) => !['CANCELLED', 'RETURNED'].includes(i.status));
+    const counted = items.filter((i) => !isNotASale(i.status));
     const gmvPaise = counted.reduce((sum, i) => sum + i.pricePaise * i.quantity, 0);
     const previousGmv = previousItems
-      .filter((i) => !['CANCELLED', 'RETURNED'].includes(i.status))
+      .filter((i) => !isNotASale(i.status))
       .reduce((sum, i) => sum + i.pricePaise * i.quantity, 0);
 
     // The marketplace keeps commission + gateway charges, not the whole GMV.
@@ -222,7 +223,7 @@ adminOverviewRouter.get('/', async (req, res, next) => {
     const orders = new Set(counted.map((i) => i.orderId)).size;
     const previousOrders = new Set(
       previousItems
-        .filter((i) => !['CANCELLED', 'RETURNED'].includes(i.status))
+        .filter((i) => !isNotASale(i.status))
         .map((i) => i.orderId),
     ).size;
 

@@ -41,7 +41,8 @@ export const ORDER_TAB_STATUSES: Record<OrderTab, string[]> = {
   SHIPPED: ['SHIPPED'],
   DELIVERED: ['DELIVERED'],
   CANCELLED: ['CANCELLED'],
-  RETURNED: ['RETURN_REQUESTED', 'RETURNED'],
+  // RTO (came back undelivered) sits with returns: neither is a sale.
+  RETURNED: ['RETURN_REQUESTED', 'RETURNED', 'RTO_IN_TRANSIT', 'RTO_DELIVERED'],
 };
 
 export const ADMIN_ORDER_STATUSES = [
@@ -53,6 +54,8 @@ export const ADMIN_ORDER_STATUSES = [
   'CANCELLED',
   'RETURN_REQUESTED',
   'RETURNED',
+  'RTO_IN_TRANSIT',
+  'RTO_DELIVERED',
 ] as const;
 export type AdminOrderStatus = (typeof ADMIN_ORDER_STATUSES)[number];
 
@@ -65,6 +68,8 @@ export const ADMIN_ORDER_STATUS_LABELS: Record<AdminOrderStatus, string> = {
   CANCELLED: 'Cancelled',
   RETURN_REQUESTED: 'Return requested',
   RETURNED: 'Returned',
+  RTO_IN_TRANSIT: 'Returning to seller (RTO)',
+  RTO_DELIVERED: 'Back with seller (RTO)',
 };
 
 export const ADMIN_PAYMENT_STATUSES = [

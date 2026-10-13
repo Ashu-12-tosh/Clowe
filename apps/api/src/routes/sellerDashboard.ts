@@ -40,7 +40,7 @@ const STATUS_BUCKETS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'PROCESSING', label: 'Processing', statuses: ['CONFIRMED', 'PACKED'] },
   { key: 'SHIPPED', label: 'Shipped', statuses: ['SHIPPED'] },
   { key: 'CANCELLED', label: 'Cancelled', statuses: ['CANCELLED'] },
-  { key: 'RETURNED', label: 'Returned', statuses: ['RETURN_REQUESTED', 'RETURNED'] },
+  { key: 'RETURNED', label: 'Returned / RTO', statuses: ['RETURN_REQUESTED', 'RETURNED', 'RTO_IN_TRANSIT', 'RTO_DELIVERED'] },
 ];
 
 // ---------------------------------------------------------------------------

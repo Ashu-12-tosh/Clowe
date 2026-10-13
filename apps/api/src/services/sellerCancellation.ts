@@ -1,4 +1,4 @@
-import type { SellerOrderCancelResult } from '@clowe/shared';
+import { NOT_A_SALE_STATUSES, type SellerOrderCancelResult } from '@clowe/shared';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 import { syncOrderStatus } from './orderStatusService';
@@ -21,7 +21,7 @@ import { returnStock } from './stockService';
 // ---------------------------------------------------------------------------
 
 const CANCELLABLE = ['PLACED', 'CONFIRMED', 'PACKED'] as const;
-const LIVE_EXCLUDED = new Set(['CANCELLED', 'RETURNED']);
+const LIVE_EXCLUDED = new Set<string>(NOT_A_SALE_STATUSES);
 
 /**
  * Charge the seller-cancellation penalty for this order if the rule applies.

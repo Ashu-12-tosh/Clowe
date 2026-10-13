@@ -12,6 +12,8 @@ import {
   type InventorySummary,
   type StockState,
   type StockUpdateResult,
+  NOT_A_SALE_STATUSES,
+  isNotASale,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -70,7 +72,7 @@ async function movementByVariant(
   const map = new Map<string, { unitsSold: number; reserved: number }>();
   for (const item of items) {
     const entry = map.get(item.variantId) ?? { unitsSold: 0, reserved: 0 };
-    if (!['CANCELLED', 'RETURNED'].includes(item.status)) entry.unitsSold += item.quantity;
+    if (!isNotASale(item.status)) entry.unitsSold += item.quantity;
     // Paid but not yet handed to a courier — the stock is spoken for.
     if (['CONFIRMED', 'PACKED'].includes(item.status)) entry.reserved += item.quantity;
     map.set(item.variantId, entry);
@@ -208,7 +210,7 @@ sellerInventoryRouter.get('/summary', async (req, res, next) => {
       prisma.orderItem.findMany({
         where: {
           sellerId,
-          status: { notIn: ['PLACED', 'CANCELLED', 'RETURNED'] },
+          status: { notIn: ['PLACED', ...NOT_A_SALE_STATUSES] },
           order: { createdAt: { gte: windowStart } },
         },
         select: { quantity: true, pricePaise: true, orderId: true },

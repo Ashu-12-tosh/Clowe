@@ -22,6 +22,7 @@ import {
   type SellerOrderTab,
   type SellerQr,
   type SellerShippingLabel,
+  isNotASale,
 } from '@clowe/shared';
 import QRCode from 'qrcode';
 import { prisma } from '../db';
@@ -388,7 +389,7 @@ sellerOrdersRouter.get('/summary', async (req, res, next) => {
     });
 
     // Sales exclude cancelled/returned lines, matching the dashboard's revenue.
-    const sold = items.filter((i) => !['CANCELLED', 'RETURNED'].includes(i.status));
+    const sold = items.filter((i) => !isNotASale(i.status));
     const totalSalesPaise = sold.reduce((sum, i) => sum + i.pricePaise * i.quantity, 0);
     const totalOrders = new Set(items.map((i) => i.orderId)).size;
     const units = items.reduce((sum, i) => sum + i.quantity, 0);

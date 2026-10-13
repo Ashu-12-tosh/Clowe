@@ -26,6 +26,7 @@ import {
   istMonthStart,
   monthToDateIST,
   periodWindow,
+  isNotASale,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -108,7 +109,7 @@ async function salesBySeller(): Promise<Map<string, SalesRollup>> {
       } satisfies SalesRollup);
 
     const line = item.pricePaise * item.quantity;
-    const counts = !['CANCELLED', 'RETURNED'].includes(item.status);
+    const counts = !isNotASale(item.status);
     if (counts) {
       roll.gmvTotalPaise += line;
       roll.unitsSold += item.quantity;

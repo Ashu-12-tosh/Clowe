@@ -23,6 +23,7 @@ import {
   type TransactionType,
   istDayKey,
   istStartOfDay,
+  NOT_A_SALE_STATUSES,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -458,14 +459,14 @@ adminPaymentsRouter.get('/summary', async (req, res, next) => {
         take: SCAN_CAP,
       }),
       prisma.order.findMany({
-        where: { createdAt: { gte: from }, status: { notIn: ['PLACED', 'CANCELLED', 'RETURNED'] } },
+        where: { createdAt: { gte: from }, status: { notIn: ['PLACED', ...NOT_A_SALE_STATUSES] } },
         select: { totalPaise: true, createdAt: true },
         take: SCAN_CAP,
       }),
       prisma.order.findMany({
         where: {
           createdAt: { gte: previousFrom, lt: from },
-          status: { notIn: ['PLACED', 'CANCELLED', 'RETURNED'] },
+          status: { notIn: ['PLACED', ...NOT_A_SALE_STATUSES] },
         },
         select: { totalPaise: true },
         take: SCAN_CAP,

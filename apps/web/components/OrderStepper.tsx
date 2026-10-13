@@ -9,7 +9,7 @@ const STEP_LABELS: Record<string, string> = {
 
 function stepIndex(status: string): number {
   if (status === 'DELIVERED' || status === 'RETURN_REQUESTED' || status === 'RETURNED') return 2;
-  if (status === 'SHIPPED') return 1;
+  if (status === 'SHIPPED' || status === 'RTO_IN_TRANSIT' || status === 'RTO_DELIVERED') return 1;
   if (status === 'CONFIRMED' || status === 'PACKED') return 0;
   return -1; // PLACED / CANCELLED
 }

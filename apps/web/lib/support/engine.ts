@@ -71,6 +71,8 @@ const STATUS_EMOJI: Record<string, string> = {
   CANCELLED: '❌',
   RETURN_REQUESTED: '↩️',
   RETURNED: '↩️',
+  RTO_IN_TRANSIT: '↩️',
+  RTO_DELIVERED: '↩️',
 };
 
 interface ComplaintDraft {

@@ -26,6 +26,7 @@ import {
   type SellerReferralInfo,
   type SellerReturnRow,
   type SellerStats,
+  NOT_A_SALE_STATUSES,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { isHiddenCategory } from '../services/shopperVisibility';
@@ -1133,7 +1134,7 @@ sellerRouter.get('/stats', requireSeller, async (req, res, next) => {
         prisma.product.count({ where: { sellerId, status: 'PENDING' } }),
         prisma.orderItem.aggregate({
           // PLACED = unpaid; excluded from sales stats along with cancelled/returned.
-          where: { sellerId, status: { notIn: ['PLACED', 'CANCELLED', 'RETURNED'] } },
+          where: { sellerId, status: { notIn: ['PLACED', ...NOT_A_SALE_STATUSES] } },
           _count: { id: true },
           _sum: { quantity: true },
         }),
@@ -1144,7 +1145,7 @@ sellerRouter.get('/stats', requireSeller, async (req, res, next) => {
 
     // Revenue = sum(price × qty) over non-cancelled/returned items.
     const revenueItems = await prisma.orderItem.findMany({
-      where: { sellerId, status: { notIn: ['PLACED', 'CANCELLED', 'RETURNED'] } },
+      where: { sellerId, status: { notIn: ['PLACED', ...NOT_A_SALE_STATUSES] } },
       select: { pricePaise: true, quantity: true },
     });
     const revenuePaise = revenueItems.reduce((sum, i) => sum + i.pricePaise * i.quantity, 0);

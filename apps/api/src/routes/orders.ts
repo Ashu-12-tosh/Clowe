@@ -414,7 +414,7 @@ const FILTER_STATUSES: Record<OrderFilter, OrderStatus[] | null> = {
   SHIPPED: ['SHIPPED'],
   DELIVERED: ['DELIVERED'],
   CANCELLED: ['CANCELLED'],
-  RETURNED: ['RETURN_REQUESTED', 'RETURNED'],
+  RETURNED: ['RETURN_REQUESTED', 'RETURNED', 'RTO_IN_TRANSIT', 'RTO_DELIVERED'],
 };
 
 ordersRouter.get('/', async (req, res, next) => {

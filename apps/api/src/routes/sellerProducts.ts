@@ -11,6 +11,7 @@ import {
   type SellerProductPage,
   type SellerProductRow,
   type SellerProductSort,
+  NOT_A_SALE_STATUSES,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -64,7 +65,7 @@ interface SalesRow {
 /** Units and revenue per product, over lines that actually count as sales. */
 async function salesByProduct(sellerId: string): Promise<Map<string, SalesRow>> {
   const items = await prisma.orderItem.findMany({
-    where: { sellerId, status: { notIn: ['PLACED', 'CANCELLED', 'RETURNED'] } },
+    where: { sellerId, status: { notIn: ['PLACED', ...NOT_A_SALE_STATUSES] } },
     select: { productId: true, quantity: true, pricePaise: true },
   });
   const map = new Map<string, SalesRow>();
@@ -219,7 +220,7 @@ sellerProductsRouter.get('/summary', async (req, res, next) => {
       prisma.orderItem.findMany({
         where: {
           sellerId,
-          status: { notIn: ['PLACED', 'CANCELLED', 'RETURNED'] },
+          status: { notIn: ['PLACED', ...NOT_A_SALE_STATUSES] },
           order: { createdAt: { gte: period.previousFrom } },
         },
         select: { pricePaise: true, quantity: true, order: { select: { createdAt: true } } },

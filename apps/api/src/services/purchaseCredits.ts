@@ -1,4 +1,5 @@
 import { prisma } from '../db';
+import { isNotASale } from '@clowe/shared';
 
 /**
  * Reward credits follow what was actually bought.
@@ -37,7 +38,7 @@ export async function settleEarnedCredits(orderId: string): Promise<number> {
 
   const value = (items: typeof order.items) => items.reduce((s, i) => s + i.pricePaise * i.quantity, 0);
   const allValue = value(order.items);
-  const keptValue = value(order.items.filter((i) => i.status !== 'CANCELLED' && i.status !== 'RETURNED'));
+  const keptValue = value(order.items.filter((i) => !isNotASale(i.status)));
   const keep = allValue > 0 ? Math.floor((earned * keptValue) / allValue) : 0;
 
   const owed = earned - keep - reversed;
