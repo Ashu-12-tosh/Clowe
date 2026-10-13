@@ -318,6 +318,10 @@ export type TaxInvoice = Omit<SellerInvoice, 'qr'>;
 // ---------------------------------------------------------------------------
 
 export const PACKING_VIDEO_RETENTION_DAYS = 45;
+/** A packing clip is recorded in the page and stops itself at this length. */
+export const PACKING_VIDEO_MAX_SECONDS = 60;
+/** …or at this size, whichever comes first (the upload limit is 50 MB). */
+export const PACKING_VIDEO_MAX_BYTES = 40 * 1024 * 1024;
 
 export interface PackingVideoView {
   /** Signed, short-lived link to play it; null in lists, and once the file is gone. */
