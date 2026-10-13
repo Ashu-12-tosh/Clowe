@@ -172,7 +172,7 @@ export const ENGINE_SELECT = {
   mrpPaise: true,
   attributes: true,
   brandRef: { select: { name: true } },
-  variants: { select: { id: true, optionValues: true, pricePaise: true, mrpPaise: true, stock: true } },
+  variants: { where: { retiredAt: null }, select: { id: true, optionValues: true, pricePaise: true, mrpPaise: true, stock: true } },
 } satisfies Prisma.ProductSelect;
 
 export function toEngineProduct(row: Prisma.ProductGetPayload<{ select: typeof ENGINE_SELECT }>): EngineProduct {

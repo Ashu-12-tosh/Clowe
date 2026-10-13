@@ -103,7 +103,7 @@ storesRouter.get('/:slug/products', async (req, res, next) => {
         take: query.pageSize,
         include: {
           images: { orderBy: { sortOrder: 'asc' }, take: 1 },
-          variants: { select: { pricePaise: true, mrpPaise: true } },
+          variants: { where: { retiredAt: null }, select: { pricePaise: true, mrpPaise: true } },
         },
       }),
     ]);

@@ -170,7 +170,7 @@ tryonRouter.post('/', async (req, res, next) => {
       include: {
         images: { orderBy: { sortOrder: 'asc' }, take: 1 },
         category: { select: { name: true } },
-        variants: { select: { size: true } },
+        variants: { where: { retiredAt: null }, select: { size: true } },
         seller: { select: { id: true, tryOnCredits: true } },
       },
     });

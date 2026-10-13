@@ -235,14 +235,14 @@ productsRouter.get('/addons', async (req, res, next) => {
         ...LIVE,
         ...(await visibleProductWhere()),
         ...(exclude.length ? { id: { notIn: exclude } } : {}),
-        variants: { some: { stock: { gt: 0 }, pricePaise: { lte: 200000 } } },
+        variants: { some: { retiredAt: null, stock: { gt: 0 }, pricePaise: { lte: 200000 } } },
       },
       orderBy: [{ ratingCount: 'desc' }, { createdAt: 'desc' }],
       take: limit * 3, // over-fetch, then keep the cheapest picks
       include: {
         images: { orderBy: { sortOrder: 'asc' }, take: 1 },
         variants: {
-          where: { stock: { gt: 0 } },
+          where: { retiredAt: null, stock: { gt: 0 } },
           orderBy: { pricePaise: 'asc' },
           take: 1,
         },
@@ -326,7 +326,7 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
         // The product's own gallery, untouched: variant pictures live in their
         // own table precisely so this keeps meaning what it always meant.
         images: { orderBy: { sortOrder: 'asc' } },
-        variants: { include: { images: { orderBy: { sortOrder: 'asc' } } } },
+        variants: { where: { retiredAt: null }, include: { images: { orderBy: { sortOrder: 'asc' } } } },
       },
     });
     // Hidden listings 404 like an unapproved one — the seller's own toggle.

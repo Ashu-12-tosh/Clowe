@@ -52,7 +52,7 @@ adsRouter.get('/active', async (req, res, next) => {
         product: {
           include: {
             images: { orderBy: { sortOrder: 'asc' }, take: 1 },
-            variants: true,
+            variants: { where: { retiredAt: null } },
             category: { include: { parent: { select: { slug: true } } } },
           },
         },

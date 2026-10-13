@@ -103,7 +103,7 @@ const SUGGEST_SELECT = {
   slug: true,
   basePricePaise: true,
   images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } },
-  variants: { orderBy: { pricePaise: 'asc' }, take: 1, select: { pricePaise: true } },
+  variants: { where: { retiredAt: null }, orderBy: { pricePaise: 'asc' }, take: 1, select: { pricePaise: true } },
 } satisfies Prisma.ProductSelect;
 
 interface SuggestRow {

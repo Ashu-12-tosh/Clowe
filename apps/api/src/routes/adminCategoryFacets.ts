@@ -39,7 +39,7 @@ async function view(categoryId: string): Promise<AdminCategoryFacets> {
 
   const products = await prisma.product.findMany({
     where: { ...LIVE_PRODUCT_WHERE, categoryId: { in: await descendantIds(categoryId) } },
-    select: { attributes: true, variants: { select: { optionValues: true } } },
+    select: { attributes: true, variants: { where: { retiredAt: null }, select: { optionValues: true } } },
   });
   const readings = products.map((p) => ({
     attributes: normaliseAttributes(p.attributes),

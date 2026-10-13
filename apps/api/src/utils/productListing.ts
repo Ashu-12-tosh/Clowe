@@ -66,6 +66,7 @@ export const productListItemInclude = {
   category: { select: { name: true } },
   images: { orderBy: { sortOrder: 'asc' }, take: 1 },
   variants: {
+    where: { retiredAt: null },
     select: { id: true, size: true, color: true, pricePaise: true, mrpPaise: true, stock: true },
   },
 } as const;

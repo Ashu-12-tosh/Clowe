@@ -18,6 +18,7 @@ const WISHLIST_INCLUDE = {
       category: { select: { name: true, slug: true, parent: { select: { name: true, slug: true } } } },
       images: { orderBy: { sortOrder: 'asc' as const }, take: 1 },
       variants: {
+        where: { retiredAt: null },
         select: {
           id: true,
           size: true,
@@ -170,7 +171,7 @@ async function moveToCart(userId: string, productIds: string[]) {
   const cartId = await cartIdFor(userId);
   const products = await prisma.product.findMany({
     where: { id: { in: productIds }, status: 'APPROVED', ...(await visibleProductWhere()) },
-    include: { variants: { select: { id: true, pricePaise: true, stock: true } } },
+    include: { variants: { where: { retiredAt: null }, select: { id: true, pricePaise: true, stock: true } } },
   });
 
   const movedProductIds: string[] = [];
@@ -220,7 +221,7 @@ wishlistRouter.post('/:productId', async (req, res, next) => {
   try {
     const product = await prisma.product.findUnique({
       where: { id: req.params.productId },
-      include: { variants: { select: { id: true, pricePaise: true, stock: true } } },
+      include: { variants: { where: { retiredAt: null }, select: { id: true, pricePaise: true, stock: true } } },
     });
     if (!product || product.status !== 'APPROVED' || (await isHiddenProduct(product))) {
       throw ApiError.notFound('Product not found');

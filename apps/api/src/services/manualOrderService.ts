@@ -45,7 +45,7 @@ export async function createManualOrder(input: {
   }
 
   const variants = await prisma.productVariant.findMany({
-    where: { id: { in: input.items.map((i) => i.variantId) } },
+    where: { id: { in: input.items.map((i) => i.variantId) }, retiredAt: null },
     select: {
       id: true,
       size: true,

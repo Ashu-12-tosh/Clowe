@@ -176,9 +176,9 @@ export async function applyRevision(productId: string): Promise<void> {
         ]
       : []),
     ...content.variantEdits.flatMap((edit) => [
-      // Scoped to this product: a variant removed since the edit was made is simply not there.
+      // Scoped to this product: a variant removed (or retired) since the edit was made is left alone.
       prisma.productVariant.updateMany({
-        where: { id: edit.id, productId: product.id },
+        where: { id: edit.id, productId: product.id, retiredAt: null },
         data: {
           optionValues: edit.optionValues,
           optionsKey: edit.optionsKey,

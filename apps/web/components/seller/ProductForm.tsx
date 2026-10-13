@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   MAX_VARIANT_AXES,
@@ -30,6 +30,7 @@ import {
 import { api, ApiRequestError, uploadImages } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { PricingBreakdown, loadRates } from '@/components/seller/PricingBreakdown';
+import VariantGrid from '@/components/seller/VariantGrid';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -38,7 +39,7 @@ const STEPS = [
   { key: 'BASIC', label: 'Basic info' },
   { key: 'CATEGORY', label: 'Category & details' },
   { key: 'MEDIA', label: 'Images & video' },
-  { key: 'VARIANTS', label: 'Variants' },
+  { key: 'VARIANTS', label: 'Price & options' },
   { key: 'INVENTORY', label: 'Inventory & pricing' },
   { key: 'SHIPPING', label: 'Shipping & SEO' },
   { key: 'REVIEW', label: 'Review' },
@@ -48,6 +49,8 @@ type StepKey = (typeof STEPS)[number]['key'];
 const MAX_IMAGES = 8;
 /** Per variant; the API caps this too. */
 const MAX_VARIANT_IMAGES = 6;
+/** The API's cap on variants per listing. */
+const MAX_VARIANTS = 60;
 
 /** Rules used until a category is picked / the tree has loaded. */
 const NO_RULES: CategoryRules = {
@@ -256,6 +259,17 @@ export default function ProductForm({ initial }: Props) {
   }, [axesTouched, selectedNode, rules.variantAxes]);
 
   const activeAxes = useMemo(() => (hasVariants ? axes : []), [hasVariants, axes]);
+  // One version always has its one row to hold the price and stock (the grid may have cleared them all).
+  useEffect(() => {
+    if (!hasVariants && rows.length === 0) setRows([{ ...emptyRow }]);
+  }, [hasVariants, rows.length]);
+  // Exactly a colour and a size (clothing, footwear): built as a grid instead of row by row.
+  const gridAxes = useMemo(() => {
+    if (activeAxes.length !== 2) return null;
+    const colour = activeAxes.find((a) => /colou?r/i.test(a.key) || /colou?r/i.test(a.label));
+    const size = activeAxes.find((a) => /size/i.test(a.key) || /size/i.test(a.label));
+    return colour && size && colour !== size ? { colour, size } : null;
+  }, [activeAxes]);
 
   // --- Images by option value -------------------------------------------
   // Pictures vary by colour, never by size: a 5-colour x 4-size listing has 20
@@ -321,39 +335,53 @@ export default function ProductForm({ initial }: Props) {
     });
   }, [rows, imageAxis, activeAxes]);
 
-  /**
-   * Legacy listings have no variant pictures at all, and a colour now needs
-   * them to pass review. Rather than block the edit, seed each empty colour
-   * from the product gallery and mark it dirty, so the seller sees exactly
-   * what will be saved and can replace it — the listing heals on its next
-   * edit instead of refusing one. Runs once; a seller who then clears a
-   * colour is not overruled on the next render.
-   */
-  const prefilledRef = useRef(false);
-  useEffect(() => {
-    if (prefilledRef.current || !initial || !imageAxis || imageGroups === null) return;
-    const empty = imageGroups.filter((g) => g.urls.length === 0);
-    if (empty.length === 0) {
-      prefilledRef.current = true;
-      return;
-    }
-    if (imageUrls.length === 0) return; // nothing to seed from yet
-    prefilledRef.current = true;
-    const seed = imageUrls.slice(0, MAX_VARIANT_IMAGES);
-    const targets = new Set(empty.flatMap((g) => g.idxs));
-    setRows((prev) =>
-      prev.map((row, i) =>
-        targets.has(i) ? { ...row, imageUrls: seed, imagesDirty: true } : row,
-      ),
-    );
-  }, [initial, imageAxis, imageGroups, imageUrls]);
-
   /** Row index -> its group, so a cell can find its own without rescanning. */
   const groupByRow = useMemo(() => {
     const m = new Map<number, NonNullable<typeof imageGroups>[number]>();
     (imageGroups ?? []).forEach((g) => g.idxs.forEach((i) => m.set(i, g)));
     return m;
   }, [imageGroups]);
+
+  /** The small button that opens one colour's (or variant's) picture picker. */
+  function imageOpener(g: NonNullable<typeof imageGroups>[number]) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setPickerFor(
+            pickerFor?.label === g.label ? null : { label: g.label, top: r.bottom + 6, left: r.right - 288 },
+          );
+        }}
+        aria-expanded={pickerFor?.label === g.label}
+        aria-label={`Images for ${g.label}`}
+        title={g.urls.length === 0 ? 'No pictures of its own: shows the product photos' : undefined}
+        className={`relative flex h-9 w-12 items-center justify-center overflow-hidden rounded-md border ${
+          g.urls.length === 0
+            ? 'border-dashed border-gray-300 text-gray-400 hover:border-brand-600 hover:text-brand-600'
+            : 'border-gray-200'
+        }`}
+      >
+        {g.urls[0] ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={g.urls[0]} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="text-base leading-none">&#xff0b;</span>
+        )}
+        {g.urls.length > 1 && (
+          <span className="absolute bottom-0 right-0 rounded-tl bg-ink-900/80 px-1 text-[10px] font-semibold leading-tight text-white">
+            +{g.urls.length - 1}
+          </span>
+        )}
+        {g.mixed && (
+          <span
+            className="absolute right-0 top-0 h-2 w-2 rounded-full bg-amber-500"
+            title="Variants of this colour have different images"
+          />
+        )}
+      </button>
+    );
+  }
 
   /** Write a set to every variant in the group and mark them dirty. */
   function setGroupImages(idxs: number[], urls: string[]) {
@@ -979,6 +1007,11 @@ export default function ProductForm({ initial }: Props) {
             <p className="mt-0.5 text-xs text-gray-400">
               First image is the main one. JPG / PNG / WebP, up to {MAX_IMAGES} images.
             </p>
+            <p className="mt-2 rounded-lg bg-cream-50 px-3 py-2 text-xs text-gray-600">
+              <span className="font-semibold text-ink-900">These photos are for the whole product.</span>{' '}
+              A colour can have its own pictures (in Variants): shoppers who pick that colour see
+              those, and any colour without its own sees these.
+            </p>
 
             <div
               onDragOver={(e) => {
@@ -1074,26 +1107,88 @@ export default function ProductForm({ initial }: Props) {
           <section className="rounded-2xl border border-gray-100 bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="text-sm font-bold text-ink-900">4. Variants</h2>
+                <h2 className="text-sm font-bold text-ink-900">4. Price, stock &amp; options</h2>
                 <p className="text-xs text-gray-400">
                   Does this product come in options — colour, size, storage, flavour…? Each
                   combination is its own sellable unit with its own price and stock.
                 </p>
               </div>
-              <label className="flex items-center gap-2 text-xs font-semibold text-gray-600">
-                This product has variants
-                <input
-                  type="checkbox"
-                  checked={hasVariants}
-                  onChange={(e) => {
-                    setHasVariants(e.target.checked);
-                    setAxesTouched(true);
-                    if (!e.target.checked) setRows((prev) => prev.slice(0, 1));
-                  }}
-                  className="h-4 w-4 accent-[#B8860B]"
-                />
-              </label>
+              <div role="radiogroup" aria-label="Options" className="flex rounded-lg border border-gray-300 p-0.5 text-xs font-semibold">
+                {[
+                  { value: false, label: 'One version' },
+                  { value: true, label: 'Comes in options' },
+                ].map((o) => (
+                  <button
+                    key={o.label}
+                    type="button"
+                    role="radio"
+                    aria-checked={hasVariants === o.value}
+                    onClick={() => {
+                      if (hasVariants === o.value) return;
+                      setHasVariants(o.value);
+                      setAxesTouched(true);
+                      // One version keeps the first row as the product's price and stock.
+                      if (!o.value) setRows((prev) => prev.slice(0, 1));
+                    }}
+                    className={`rounded-md px-3 py-1.5 ${
+                      hasVariants === o.value ? 'bg-ink-900 text-white' : 'text-gray-600 hover:text-ink-900'
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* One version: the listing's single (hidden) variant, as plain fields. */}
+            {!hasVariants && rows[0] && (
+              <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                <label className="text-sm font-medium">
+                  Price before GST (₹) *
+                  <input
+                    type="number"
+                    min={1}
+                    value={rows[0].price}
+                    onChange={(e) => setRow(0, { price: e.target.value })}
+                    className={`mt-1 ${field}`}
+                    placeholder="499"
+                  />
+                </label>
+                <label className="text-sm font-medium">
+                  MRP before GST (₹)
+                  <input
+                    type="number"
+                    min={1}
+                    value={rows[0].mrp}
+                    onChange={(e) => setRow(0, { mrp: e.target.value })}
+                    className={`mt-1 ${field}`}
+                    placeholder="799"
+                  />
+                </label>
+                <label className="text-sm font-medium">
+                  Stock
+                  <input
+                    type="number"
+                    min={0}
+                    value={rows[0].stock}
+                    onChange={(e) => setRow(0, { stock: e.target.value })}
+                    className={`mt-1 ${field}`}
+                  />
+                </label>
+                <label className="text-sm font-medium">
+                  SKU <span className="font-normal text-gray-400">(optional)</span>
+                  <input
+                    value={rows[0].sku}
+                    onChange={(e) => setRow(0, { sku: e.target.value })}
+                    className={`mt-1 ${field}`}
+                    placeholder="auto"
+                  />
+                </label>
+                <p className="text-xs text-gray-400 sm:col-span-4">
+                  One price and one stock count for the whole listing. Pictures come from Images &amp; video.
+                </p>
+              </div>
+            )}
 
             {hasVariants && (
               <div className="mt-3 rounded-xl bg-cream-50 p-3">
@@ -1159,6 +1254,23 @@ export default function ProductForm({ initial }: Props) {
               </div>
             )}
 
+            {hasVariants && gridAxes && (
+              <VariantGrid
+                // A different pair of options is a different grid.
+                key={`${gridAxes.colour.key}|${gridAxes.size.key}`}
+                colourAxis={gridAxes.colour}
+                sizeAxis={gridAxes.size}
+                rows={rows}
+                setRows={setRows}
+                maxVariants={MAX_VARIANTS}
+                renderColourImages={(colour) => {
+                  const g = (imageGroups ?? []).find((x) => x.label === colour);
+                  return g ? imageOpener(g) : null;
+                }}
+              />
+            )}
+
+            {hasVariants && !gridAxes && (
             <div className="mt-3 overflow-x-auto">
               <table className="w-full min-w-[584px] table-fixed text-sm">
                 <thead>
@@ -1248,44 +1360,7 @@ export default function ProductForm({ initial }: Props) {
                               </span>
                             );
                           }
-                          return (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                const r = e.currentTarget.getBoundingClientRect();
-                                setPickerFor(
-                                  pickerFor?.label === g.label
-                                    ? null
-                                    : { label: g.label, top: r.bottom + 6, left: r.right - 288 },
-                                );
-                              }}
-                              aria-expanded={pickerFor?.label === g.label}
-                              aria-label={`Images for ${g.label}`}
-                              className={`relative flex h-9 w-12 items-center justify-center overflow-hidden rounded-md border ${
-                                g.urls.length === 0
-                                  ? 'border-dashed border-gray-300 text-gray-400 hover:border-brand-600 hover:text-brand-600'
-                                  : 'border-gray-200'
-                              }`}
-                            >
-                              {g.urls[0] ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={g.urls[0]} alt="" className="h-full w-full object-cover" />
-                              ) : (
-                                <span className="text-base leading-none">&#xff0b;</span>
-                              )}
-                              {g.urls.length > 1 && (
-                                <span className="absolute bottom-0 right-0 rounded-tl bg-ink-900/80 px-1 text-[10px] font-semibold leading-tight text-white">
-                                  +{g.urls.length - 1}
-                                </span>
-                              )}
-                              {g.mixed && (
-                                <span
-                                  className="absolute right-0 top-0 h-2 w-2 rounded-full bg-amber-500"
-                                  title="Variants of this colour have different images"
-                                />
-                              )}
-                            </button>
-                          );
+                          return imageOpener(g);
                         })()}
                       </td>
                       <td className="pt-1">
@@ -1293,6 +1368,7 @@ export default function ProductForm({ initial }: Props) {
                           type="button"
                           onClick={() => setRows((prev) => prev.filter((_, j) => j !== i))}
                           disabled={rows.length === 1}
+                          title={rows.length === 1 ? 'The last option can’t be removed — choose “One version” instead' : 'Remove this variant'}
                           className="text-red-500 disabled:opacity-30"
                           aria-label="Remove variant"
                         >
@@ -1313,6 +1389,7 @@ export default function ProductForm({ initial }: Props) {
                 ) : null,
               )}
             </div>
+            )}
 
 
             {/* The one picker. Fixed-positioned from the cell it was opened
@@ -1385,8 +1462,8 @@ export default function ProductForm({ initial }: Props) {
 
                       {g.urls.length === 0 && (
                         <p className="mt-2 text-[11px] text-gray-500">
-                          Empty uses the listing&rsquo;s main images. A colour needs its own
-                          before you can submit for review.
+                          No pictures of its own: shoppers who pick {g.label} see the product
+                          photos. Add some to show this colour.
                         </p>
                       )}
                       {g.mixed && (
@@ -1406,7 +1483,7 @@ export default function ProductForm({ initial }: Props) {
                 );
               })()}
 
-            {hasVariants ? (
+            {hasVariants && !gridAxes && (
               <button
                 type="button"
                 onClick={() =>
@@ -1424,10 +1501,6 @@ export default function ProductForm({ initial }: Props) {
               >
                 ＋ Add variant row
               </button>
-            ) : (
-              <p className="mt-2 text-xs text-gray-400">
-                Single SKU — one price and one stock count for the whole listing.
-              </p>
             )}
           </section>
         )}

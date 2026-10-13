@@ -37,6 +37,7 @@ const PRODUCT_INCLUDE = {
   category: { select: { id: true, name: true } },
   images: { orderBy: { sortOrder: 'asc' }, take: 1 },
   variants: {
+    where: { retiredAt: null },
     orderBy: { createdAt: 'asc' },
     select: { sku: true, stock: true, pricePaise: true, mrpPaise: true },
   },
@@ -143,7 +144,7 @@ async function loadRows(
             { title: { contains: query.q, mode: 'insensitive' } },
             { brand: { contains: query.q, mode: 'insensitive' } },
             { category: { name: { contains: query.q, mode: 'insensitive' } } },
-            { variants: { some: { sku: { contains: query.q, mode: 'insensitive' } } } },
+            { variants: { some: { retiredAt: null, sku: { contains: query.q, mode: 'insensitive' } } } },
             { tags: { has: query.q.toLowerCase() } },
           ],
         }

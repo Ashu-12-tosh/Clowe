@@ -319,7 +319,7 @@ export function buildFilterWhere(
   }
 
   return {
-    ...(Object.keys(variant).length ? { variants: { some: variant } } : {}),
+    ...(Object.keys(variant).length ? { variants: { some: { ...variant, retiredAt: null } } } : {}),
     ...(!dropped.includes('brands') && filters.brands.length
       ? { brand: { in: filters.brands, mode: 'insensitive' as const } }
       : {}),
@@ -738,6 +738,7 @@ export async function searchFacets(where: Prisma.ProductWhereInput) {
             ...where,
             variants: {
               some: {
+                retiredAt: null,
                 ...(bucket.minPaise != null ? { pricePaise: { gte: bucket.minPaise } } : {}),
                 ...(bucket.maxPaise != null
                   ? { pricePaise: { lte: bucket.maxPaise, ...(bucket.minPaise != null ? { gte: bucket.minPaise } : {}) } }

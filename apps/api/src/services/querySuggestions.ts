@@ -224,7 +224,7 @@ async function build(version: number): Promise<QuerySuggestionSnapshot> {
       soldCount: true,
       categoryId: true,
       brand: true,
-      variants: { select: { pricePaise: true } },
+      variants: { where: { retiredAt: null }, select: { pricePaise: true } },
     },
   });
   const liveCount = live.length;

@@ -960,6 +960,11 @@ model ProductVariant {
   sellerMrpPaise   Int?
   stock        Int      @default(0)
   createdAt    DateTime @default(now())
+  // Set when the seller removes a variant that has been ordered: its order
+  // lines still point at it (stock goes back here on a cancel or return), so
+  // it cannot be deleted. Retired variants are invisible everywhere but those
+  // orders; their optionsKey is freed so the combination can be added again.
+  retiredAt    DateTime?
 
   cartItems  CartItem[]
   orderItems OrderItem[]

@@ -29,7 +29,7 @@ export function bustHomeCache() {
 
 const cardInclude = {
   images: { orderBy: { sortOrder: 'asc' as const }, take: 1 },
-  variants: { select: { id: true, pricePaise: true, mrpPaise: true, stock: true } },
+  variants: { where: { retiredAt: null }, select: { id: true, pricePaise: true, mrpPaise: true, stock: true } },
 };
 
 type CardSource = Prisma.ProductGetPayload<{ include: typeof cardInclude }>;

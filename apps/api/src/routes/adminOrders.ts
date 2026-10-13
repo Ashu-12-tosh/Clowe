@@ -836,7 +836,7 @@ adminOrdersRouter.post('/manual/import', async (req, res, next) => {
         },
       }),
       prisma.productVariant.findMany({
-        where: { sku: { in: [...new Set(input.rows.map((r) => r.sku))] } },
+        where: { retiredAt: null, sku: { in: [...new Set(input.rows.map((r) => r.sku))] } },
         select: { id: true, sku: true },
       }),
     ]);

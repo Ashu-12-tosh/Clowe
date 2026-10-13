@@ -1507,6 +1507,7 @@ adminInventoryRouter.get('/meta/variants', async (req, res, next) => {
 
     const variants = await prisma.productVariant.findMany({
       where: {
+        retiredAt: null,
         product: { status: { not: 'ARCHIVED' } },
         OR: [
           { sku: { contains: q, mode: 'insensitive' } },
@@ -1777,7 +1778,7 @@ adminInventoryRouter.post('/stock/import', async (req, res, next) => {
 
     const [variants, warehouses] = await Promise.all([
       prisma.productVariant.findMany({
-        where: { sku: { in: [...new Set(input.rows.map((r) => r.sku))] } },
+        where: { retiredAt: null, sku: { in: [...new Set(input.rows.map((r) => r.sku))] } },
         select: { id: true, sku: true },
       }),
       prisma.warehouse.findMany({ select: { id: true, code: true, isActive: true } }),

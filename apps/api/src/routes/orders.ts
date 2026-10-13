@@ -126,6 +126,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
     const isHidden = await hiddenProductTest();
     const unsellable = variants.filter(
       (v) =>
+        v.retiredAt !== null ||
         v.product.status !== 'APPROVED' ||
         isHidden(v.product) ||
         !v.product.isVisible ||

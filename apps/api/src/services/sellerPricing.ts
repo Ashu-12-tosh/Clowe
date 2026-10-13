@@ -167,6 +167,7 @@ async function variantsWithRules(where: Prisma.ProductWhereInput) {
       title: true,
       categoryId: true,
       variants: {
+        where: { retiredAt: null },
         select: { id: true, label: true, pricePaise: true, mrpPaise: true, sellerPricePaise: true, sellerMrpPaise: true },
       },
     },

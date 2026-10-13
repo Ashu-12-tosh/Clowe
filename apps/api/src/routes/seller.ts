@@ -305,7 +305,8 @@ async function ownProduct(req: Request, id: string) {
       images: { orderBy: { sortOrder: 'asc' } },
       // The edit form needs each variant's own pictures to show them grouped,
       // and the ownership guard on PUT reads variants from here too.
-      variants: { include: { images: { orderBy: { sortOrder: 'asc' } } } },
+      // Retired variants (removed after being ordered) are no longer the listing's.
+      variants: { where: { retiredAt: null }, include: { images: { orderBy: { sortOrder: 'asc' } } } },
       revision: true,
     },
   });
@@ -370,7 +371,9 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
             id: v.id,
             size: changed ? changed.size : v.size,
             color: changed ? changed.color : v.color,
-            optionValues: changed ? changed.optionValues : optionValuesFromJson(v.optionValues),
+            // Read the same way either side: a pending edit's options carry the derived
+            // color_family too, which must not come back to the form as an option.
+            optionValues: optionValuesFromJson(changed ? changed.optionValues : v.optionValues),
             label: changed ? changed.label : v.label,
             sku: v.sku,
             ...prices(v),
@@ -383,7 +386,7 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
           id: '',
           size: n.size,
           color: n.color,
-          optionValues: n.optionValues,
+          optionValues: optionValuesFromJson(n.optionValues),
           label: n.label,
           sku: n.sku ?? '',
           ...prices(n),
@@ -505,44 +508,32 @@ function assertParcelForReview(input: SellerProductUpsertInput) {
 
 /** Spec fields the category marks required must be filled before review. */
 /**
- * Every colour must have pictures before a listing goes for review.
- *
- * A colour is the one thing the product gallery genuinely misrepresents — a
- * Navy jacket shown in Black photos is wrong in a way a size never is. So the
- * requirement is scoped to listings that vary on colour; a product that only
- * varies on size keeps using the product gallery, which is already mandatory
- * to submit and so can never be empty.
- *
- * This cannot live in the Zod schema, and the reason is worth stating: an
- * absent `imageUrls` means "leave the stored pictures alone", so the payload
- * on its own does not say whether a variant has images. Only the route knows,
- * because only the route has loaded what is stored. `stored` is empty on
- * create, where the payload is the whole truth.
+ * The writes that take the variants a save left out off a listing. One never
+ * ordered is deleted. One that was ordered cannot be — its order lines point
+ * at it, and a cancel or return puts stock back on it — so it is retired:
+ * stock 0, hidden from buyers and from the seller's form, its option key freed
+ * so the same combination can be added again, and taken out of every cart.
+ * Before this, removing an ordered variant failed the whole save with a
+ * foreign-key error, so the seller's X appeared to do nothing.
  */
-function assertVariantImages(
-  input: SellerProductUpsertInput,
-  stored: Map<string, number>,
-) {
-  if (input.mode !== 'SUBMIT') return; // a draft may be half-finished
-  const colourKeyOf = (v: SellerProductUpsertInput['variants'][number]) =>
-    Object.keys(v.optionValues ?? {}).find((k) => /colou?r/i.test(k));
-  const colourKey = input.variants.map(colourKeyOf).find(Boolean);
-  if (!colourKey) return; // no colour axis — the product gallery is the answer
-
-  const missing = new Set<string>();
-  for (const v of input.variants) {
-    const colour = (v.optionValues?.[colourKey] ?? '').trim();
-    if (!colour) continue;
-    // Payload wins when present; otherwise fall back to what is stored.
-    const count = v.imageUrls !== undefined ? v.imageUrls.length : (v.id ? (stored.get(v.id) ?? 0) : 0);
-    if (count === 0) missing.add(colour);
-  }
-  if (missing.size > 0) {
-    throw ApiError.badRequest(
-      `Add at least one image for ${[...missing].join(', ')} — each colour needs its own pictures`,
-      'VARIANT_IMAGES_REQUIRED',
-    );
-  }
+async function variantRemovalWrites(productId: string, keptIds: string[]) {
+  const removed = { productId, id: { notIn: keptIds }, retiredAt: null };
+  const retiring = await prisma.productVariant.findMany({
+    where: { ...removed, orderItems: { some: {} } },
+    select: { id: true },
+  });
+  const retiringIds = retiring.map((v) => v.id);
+  const now = new Date();
+  return [
+    ...retiring.map((v) =>
+      prisma.productVariant.updateMany({
+        where: { id: v.id, productId },
+        data: { retiredAt: now, stock: 0, optionsKey: `retired:${v.id}` },
+      }),
+    ),
+    ...(retiringIds.length ? [prisma.cartItem.deleteMany({ where: { variantId: { in: retiringIds } } })] : []),
+    prisma.productVariant.deleteMany({ where: { ...removed, orderItems: { none: {} } } }),
+  ];
 }
 
 function assertRequiredAttributes(input: SellerProductUpsertInput, rules: CategoryRules) {
@@ -577,7 +568,6 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
     const rules = await categoryRulesFor(category.id);
     assertRequiredAttributes(input, rules);
     if (input.mode !== 'DRAFT') assertParcelForReview(input);
-    assertVariantImages(input, new Map());
     const variantRows = variantRowsFrom(input);
 
     const slug = `${slugify(`${input.brand ?? ''} ${input.title}`)}-${randomBytes(3).toString('hex')}`;
@@ -713,7 +703,7 @@ async function saveLiveEdit(
         basePricePaise: Math.min(...kept.map((r) => r.input.pricePaise)),
       },
     }),
-    prisma.productVariant.deleteMany({ where: { productId: product.id, id: { notIn: keptIds } } }),
+    ...(await variantRemovalWrites(product.id, keptIds)),
     ...kept.map(({ input: v }) =>
       prisma.productVariant.updateMany({
         where: { id: v.id!, productId: product.id },
@@ -765,10 +755,6 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
     );
     const rules = await categoryRulesFor(input.categoryId);
     assertRequiredAttributes(input, rules);
-    assertVariantImages(
-      input,
-      new Map(product.variants.map((v) => [v.id, v.images.length])),
-    );
     const variantRows = variantRowsFrom(input);
 
     const keptIds = input.variants.filter((v) => v.id).map((v) => v.id!);
@@ -824,10 +810,8 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
             }),
           ]
         : []),
-      // Variants: update kept ones, remove missing, add new.
-      prisma.productVariant.deleteMany({
-        where: { productId: product.id, id: { notIn: keptIds } },
-      }),
+      // Variants: remove missing (retiring ordered ones), update kept, add new.
+      ...(await variantRemovalWrites(product.id, keptIds)),
       ...variantRows
         .filter((r) => r.input.id)
         .map(({ input: v, fields }) =>
@@ -1154,7 +1138,7 @@ sellerRouter.get('/stats', requireSeller, async (req, res, next) => {
           _sum: { quantity: true },
         }),
         prisma.productVariant.count({
-          where: { product: { sellerId, status: { not: 'ARCHIVED' } }, stock: { lt: 5 } },
+          where: { retiredAt: null, product: { sellerId, status: { not: 'ARCHIVED' } }, stock: { lt: 5 } },
         }),
       ]);
 

@@ -288,7 +288,12 @@ cartRouter.post('/items', async (req, res, next) => {
       where: { id: variantId },
       include: { product: { select: { status: true, categoryId: true, sellerId: true } } },
     });
-    if (!variant || variant.product.status !== 'APPROVED' || (await isHiddenProduct(variant.product))) {
+    if (
+      !variant ||
+      variant.retiredAt ||
+      variant.product.status !== 'APPROVED' ||
+      (await isHiddenProduct(variant.product))
+    ) {
       throw ApiError.notFound('Product not available');
     }
     if (variant.stock < quantity) {

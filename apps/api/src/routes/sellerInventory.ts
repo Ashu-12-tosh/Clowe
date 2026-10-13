@@ -131,6 +131,7 @@ async function loadRows(
   query: z.infer<typeof listQuery>,
 ): Promise<InventoryRow[]> {
   const where: Prisma.ProductVariantWhereInput = {
+    retiredAt: null,
     product: {
       sellerId,
       status: { not: 'ARCHIVED' },
@@ -315,7 +316,7 @@ sellerInventoryRouter.patch('/stock', async (req, res, next) => {
 
     const ids = input.updates.map((u) => u.variantId);
     const owned = await prisma.productVariant.findMany({
-      where: { id: { in: ids }, product: { sellerId } },
+      where: { id: { in: ids }, retiredAt: null, product: { sellerId } },
       select: { id: true, stock: true },
     });
     const stockById = new Map(owned.map((v) => [v.id, v.stock]));
@@ -353,7 +354,7 @@ sellerInventoryRouter.patch('/stock', async (req, res, next) => {
 
     // Return the fresh rows so the table reflects the new state immediately.
     const refreshed = await prisma.productVariant.findMany({
-      where: { id: { in: ids }, product: { sellerId } },
+      where: { id: { in: ids }, retiredAt: null, product: { sellerId } },
       include: VARIANT_INCLUDE,
     });
     const movement = await movementByVariant(sellerId);

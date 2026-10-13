@@ -188,7 +188,7 @@ adminRouter.get('/products', async (req, res, next) => {
         category: { select: { name: true } },
         seller: { select: { shopName: true } },
         images: { orderBy: { sortOrder: 'asc' }, take: 1 },
-        variants: { select: { pricePaise: true } },
+        variants: { where: { retiredAt: null }, select: { pricePaise: true } },
         revision: { select: { status: true, submittedAt: true } },
       },
     });
@@ -222,7 +222,7 @@ adminRouter.get('/products/:id', async (req, res, next) => {
       include: {
         category: { select: { name: true } },
         images: { orderBy: { sortOrder: 'asc' } },
-        variants: { orderBy: [{ color: 'asc' }, { size: 'asc' }] },
+        variants: { where: { retiredAt: null }, orderBy: [{ color: 'asc' }, { size: 'asc' }] },
         seller: { include: { user: { select: { phone: true } } } },
         revision: true,
       },

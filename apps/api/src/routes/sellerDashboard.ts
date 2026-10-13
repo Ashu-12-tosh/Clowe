@@ -307,7 +307,7 @@ sellerDashboardRouter.get('/', async (req, res, next) => {
         where: { orderItem: { sellerId }, status: 'REQUESTED' },
       }),
       prisma.productVariant.count({
-        where: { product: { sellerId, status: { not: 'ARCHIVED' } }, stock: { lt: 5 } },
+        where: { retiredAt: null, product: { sellerId, status: { not: 'ARCHIVED' } }, stock: { lt: 5 } },
       }),
       prisma.product.count({ where: { sellerId, status: 'PENDING' } }),
     ]);
