@@ -1,7 +1,7 @@
 import type { env } from '../../env';
 import type { OtpProvider } from './OtpProvider';
 import { MockOtpProvider } from './MockOtpProvider';
-import { SmsPanelOtpProvider } from './SmsPanelOtpProvider';
+import { SmsPanelOtpProvider, type OtpSendRecord } from './SmsPanelOtpProvider';
 
 export type OtpEnv = Pick<
   typeof env,
@@ -37,7 +37,11 @@ export function missingPanelSettings(e: OtpEnv): string[] {
  * exactly one DLT variable such as {#num#}) stops the server instead: that is a typo to fix, and
  * the error says which setting.
  */
-export function createOtpProvider(e: OtpEnv): OtpProvider {
+export function createOtpProvider(
+  e: OtpEnv,
+  /** Where each panel send attempt is kept (production: the database). */
+  onSend?: (record: OtpSendRecord) => void | Promise<void>,
+): OtpProvider {
   if (e.OTP_PROVIDER !== 'smspanel' || missingPanelSettings(e).length > 0) {
     return new MockOtpProvider();
   }
@@ -48,5 +52,6 @@ export function createOtpProvider(e: OtpEnv): OtpProvider {
     senderId: e.SMS_PANEL_SENDER_ID!,
     templateId: e.SMS_PANEL_TEMPLATE_ID!,
     template: e.SMS_PANEL_OTP_TEMPLATE!,
+    onSend,
   });
 }

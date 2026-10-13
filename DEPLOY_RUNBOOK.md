@@ -949,6 +949,23 @@ not renew it in time, every send fails with the certificate line above. See
 
 To go back to the mock at any time: `OTP_PROVIDER=mock`, then `dc up -d api`.
 
+**A code that never arrived.** Every send attempt is also kept in the
+database (`otp_send_logs`), so it survives deploys, which throw the
+container's log away: the time, the number masked to its last four digits,
+whether the panel accepted it (or why not), the panel's status and message,
+and its **message ID** — search the panel's delivery report by that. Never
+the code, the key or the full number.
+
+```sh
+dc exec -T db sh -c 'psql -U $POSTGRES_USER -d $POSTGRES_DB -c "
+  SELECT \"createdAt\", \"phoneMasked\", accepted, reason, \"panelStatus\", \"panelMessage\", \"messageId\"
+  FROM otp_send_logs WHERE \"createdAt\" > now() - interval '"'"'48 hours'"'"' ORDER BY \"createdAt\";"'
+```
+
+Accepted by the panel but not received means the loss is after the panel
+(DLT scrubbing, credit, the operator): the delivery report for that message
+ID says which.
+
 ---
 
 ## Quick reference

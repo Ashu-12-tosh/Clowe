@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OtpSendError } from './OtpProvider';
-import { SmsPanelOtpProvider, type SmsPanelConfig } from './SmsPanelOtpProvider';
+import { SmsPanelOtpProvider, type OtpSendRecord, type SmsPanelConfig } from './SmsPanelOtpProvider';
 import { createOtpProvider, missingPanelSettings } from './select';
 
 /**
@@ -361,5 +361,66 @@ describe('provider selection', () => {
 
   it('smspanel with a malformed setting stops the server rather than sending wrong texts', () => {
     expect(() => createOtpProvider({ ...full, SMS_PANEL_BASE_URL: 'http://alots.in' })).toThrow('https://');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('the record of each send', () => {
+  const recorded = () => {
+    const records: OtpSendRecord[] = [];
+    return { records, onSend: (r: OtpSendRecord) => void records.push(r) };
+  };
+  const noSecrets = (r: OtpSendRecord) => {
+    const all = JSON.stringify(r);
+    for (const s of [API_KEY, USERNAME, PHONE, CODE]) expect(all).not.toContain(s);
+  };
+
+  it('keeps an accepted send: masked number, the panel reply and its message ID', async () => {
+    const { records, onSend } = recorded();
+    const { fetchImpl } = stub(panel({ status: 'success', 'message-id': ['516e-934-fd8e-915a'], message: 'SMS Sent Successfully' }));
+    await provider(fetchImpl, { onSend }).sendOtp(PHONE, CODE);
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      phoneMasked: 'xxxxxx3210',
+      host: 'alots.in',
+      accepted: true,
+      reason: null,
+      httpStatus: 200,
+      panelStatus: 'success',
+      panelMessage: 'SMS Sent Successfully',
+      messageId: '516e-934-fd8e-915a',
+      detail: null,
+    });
+    expect(records[0]!.durationMs).toBeGreaterThanOrEqual(0);
+    noSecrets(records[0]!);
+  });
+
+  it('keeps a refusal, with what the panel said cleaned of the key, code and number', async () => {
+    const { records, onSend } = recorded();
+    const { fetchImpl } = stub(panel({ status: 'error', message: `Invalid template for ${PHONE} code ${CODE} key ${API_KEY}` }));
+    await expect(provider(fetchImpl, { onSend }).sendOtp(PHONE, CODE)).rejects.toBeInstanceOf(OtpSendError);
+    expect(records[0]).toMatchObject({ accepted: false, reason: 'invalid_template', panelStatus: 'error', messageId: null });
+    expect(records[0]!.panelMessage).toBe('Invalid template for *** code *** key ***');
+    noSecrets(records[0]!);
+  });
+
+  it('keeps a send the panel never answered', async () => {
+    const { records, onSend } = recorded();
+    const fetchImpl = (async () => {
+      throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+    }) as unknown as typeof fetch;
+    await expect(provider(fetchImpl, { onSend }).sendOtp(PHONE, CODE)).rejects.toBeInstanceOf(OtpSendError);
+    expect(records[0]).toMatchObject({ accepted: false, reason: 'timeout', httpStatus: null, panelStatus: null });
+    expect(records[0]!.detail).toContain('did not answer within');
+  });
+
+  it('still sends when the record cannot be kept', async () => {
+    const { fetchImpl } = stub(panel({ status: 'success', 'message-id': ['abc'] }));
+    const onSend = () => {
+      throw new Error('database down');
+    };
+    await expect(provider(fetchImpl, { onSend }).sendOtp(PHONE, CODE)).resolves.toBeUndefined();
+    expect(logged.some((l) => l.includes('OTP send record not kept: database down'))).toBe(true);
   });
 });

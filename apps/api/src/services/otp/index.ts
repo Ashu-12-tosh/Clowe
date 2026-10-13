@@ -1,8 +1,10 @@
 import { env } from '../../env';
 import { createOtpProvider, missingPanelSettings } from './select';
 import { SmsPanelOtpProvider } from './SmsPanelOtpProvider';
+import { storeOtpSend } from './sendLog';
 
-export const otpProvider = createOtpProvider(env);
+// Every panel send attempt is kept in otp_send_logs, so it outlives the container's log.
+export const otpProvider = createOtpProvider(env, storeOtpSend);
 
 /** Say which provider is live. No probe send: every SMS is billed. */
 export function logOtpProviderStatus(): void {

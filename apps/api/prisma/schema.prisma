@@ -336,6 +336,33 @@ model OtpCode {
   @@map("otp_codes")
 }
 
+/// One attempt to send a login code through the SMS panel, and what the panel
+/// answered — kept in the database so a code that never arrived can still be
+/// traced after a deploy has replaced the container and its log. Never the
+/// code, the API key or the full number.
+model OtpSendLog {
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  /// xxxxxx3821
+  phoneMasked  String
+  host         String
+  accepted     Boolean
+  /// Why it was not sent (an OtpSendFailure); null when accepted.
+  reason       String?
+  httpStatus   Int?
+  panelStatus  String?
+  panelMessage String?
+  /// What the panel's delivery report is searched by.
+  messageId    String?
+  /// The failure in words, as logged; null when accepted.
+  detail       String?
+  durationMs   Int
+
+  @@index([createdAt])
+  @@index([phoneMasked, createdAt])
+  @@map("otp_send_logs")
+}
+
 // Refresh tokens are stored hashed; rotation revokes the old one.
 model RefreshToken {
   id        String    @id @default(cuid())

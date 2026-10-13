@@ -31,6 +31,40 @@ export interface SmsPanelConfig {
   timeoutMs?: number;
   /** Tests pass a stub; production uses the global fetch. */
   fetchImpl?: typeof fetch;
+  /**
+   * Told about every attempt, accepted or not (production stores it, so a
+   * code that never arrived can be traced after a deploy has replaced the
+   * container's log). A failure here never fails the send.
+   */
+  onSend?: (record: OtpSendRecord) => void | Promise<void>;
+}
+
+/**
+ * One attempt to send a code, as it is kept. Never the code, the API key or
+ * the full number: the number is masked, and anything the panel says is
+ * cleaned of all of them (even if the panel echoes one back).
+ */
+export interface OtpSendRecord {
+  /** xxxxxx3821 */
+  phoneMasked: string;
+  host: string;
+  accepted: boolean;
+  /** Why it was not sent; null when accepted. */
+  reason: OtpSendFailure | null;
+  /** HTTP status of the panel's answer; null when it never answered. */
+  httpStatus: number | null;
+  panelStatus: string | null;
+  panelMessage: string | null;
+  /** What the panel's delivery report is searched by. */
+  messageId: string | null;
+  /** The failure in words, as logged; null when accepted. */
+  detail: string | null;
+  durationMs: number;
+}
+
+/** The last four digits only. */
+export function maskPhone(phone: string): string {
+  return `xxxxxx${phone.slice(-4)}`;
 }
 
 /**
@@ -74,57 +108,91 @@ export class SmsPanelOtpProvider implements OtpProvider {
 
   async sendOtp(phone: string, code: string): Promise<void> {
     const secrets = [this.config.apiKey, this.config.username, code, phone];
+    const startedAt = Date.now();
+    const record: OtpSendRecord = {
+      phoneMasked: maskPhone(phone),
+      host: this.host,
+      accepted: false,
+      reason: null,
+      httpStatus: null,
+      panelStatus: null,
+      panelMessage: null,
+      messageId: null,
+      detail: null,
+      durationMs: 0,
+    };
     const fail = (reason: OtpSendFailure, detail: string) => {
-      console.error(`[clowe-api] SMS OTP not sent: ${clean(detail, secrets)}`);
+      record.reason = reason;
+      record.detail = clean(detail, secrets);
+      console.error(`[clowe-api] SMS OTP not sent: ${record.detail}`);
       return new OtpSendError(reason);
     };
 
-    const startedAt = Date.now();
-    let text: string;
-    let status: number;
     try {
-      const res = await this.fetchImpl(this.sendUrl(phone, code), {
-        method: 'GET',
-        redirect: 'error',
-        signal: AbortSignal.timeout(this.timeoutMs),
-      });
-      status = res.status;
-      text = await res.text();
+      let text: string;
+      let status: number;
+      try {
+        const res = await this.fetchImpl(this.sendUrl(phone, code), {
+          method: 'GET',
+          redirect: 'error',
+          signal: AbortSignal.timeout(this.timeoutMs),
+        });
+        status = res.status;
+        record.httpStatus = status;
+        text = await res.text();
+      } catch (err) {
+        const { reason, detail } = this.describeFetchError(err);
+        throw fail(reason, detail);
+      }
+
+      if (status < 200 || status >= 300) {
+        throw fail('http_error', `${this.host} answered HTTP ${status}`);
+      }
+
+      // The panel answers HTTP 200 for errors too, labelled text/html: only the
+      // JSON body says what happened, and only "success" counts as sent.
+      let body: unknown;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        throw fail('bad_response', `${this.host} did not answer with JSON`);
+      }
+      const panelStatus = field(body, 'status');
+      const panelMessage = field(body, 'message');
+      record.panelStatus = panelStatus === undefined ? null : clean(panelStatus, secrets);
+      record.panelMessage = panelMessage === undefined ? null : clean(panelMessage, secrets);
+      if (panelStatus?.toLowerCase() === 'success') {
+        // The panel's message ID is what its delivery report is searched by, so
+        // a code that never arrived can be traced. Never the number or the code.
+        const id = messageId(body);
+        record.accepted = true;
+        record.messageId = id ? clean(id, secrets) : null;
+        console.log(
+          `[clowe-api] SMS OTP accepted by ${this.host} in ${Date.now() - startedAt}ms` +
+            (record.messageId ? ` (message ID ${record.messageId})` : ''),
+        );
+        return;
+      }
+
+      if (panelStatus === undefined && panelMessage === undefined) {
+        throw fail('bad_response', `${this.host} answered JSON without a status`);
+      }
+      const reason = classifyPanelMessage(panelMessage ?? '');
+      throw fail(reason, `${PANEL_REASON_TEXT[reason]} (panel said: "${panelMessage ?? panelStatus}")`);
+    } finally {
+      record.durationMs = Date.now() - startedAt;
+      await this.report(record);
+    }
+  }
+
+  /** Hand the attempt on; keeping it must never break sending it. */
+  private async report(record: OtpSendRecord): Promise<void> {
+    if (!this.config.onSend) return;
+    try {
+      await this.config.onSend(record);
     } catch (err) {
-      const { reason, detail } = this.describeFetchError(err);
-      throw fail(reason, detail);
+      console.error(`[clowe-api] OTP send record not kept: ${err instanceof Error ? err.message : String(err)}`);
     }
-
-    if (status < 200 || status >= 300) {
-      throw fail('http_error', `${this.host} answered HTTP ${status}`);
-    }
-
-    // The panel answers HTTP 200 for errors too, labelled text/html: only the
-    // JSON body says what happened, and only "success" counts as sent.
-    let body: unknown;
-    try {
-      body = JSON.parse(text);
-    } catch {
-      throw fail('bad_response', `${this.host} did not answer with JSON`);
-    }
-    const panelStatus = field(body, 'status');
-    if (panelStatus?.toLowerCase() === 'success') {
-      // The panel's message ID is what its delivery report is searched by, so
-      // a code that never arrived can be traced. Never the number or the code.
-      const id = messageId(body);
-      console.log(
-        `[clowe-api] SMS OTP accepted by ${this.host} in ${Date.now() - startedAt}ms` +
-          (id ? ` (message ID ${clean(id, secrets)})` : ''),
-      );
-      return;
-    }
-
-    const panelMessage = field(body, 'message');
-    if (panelStatus === undefined && panelMessage === undefined) {
-      throw fail('bad_response', `${this.host} answered JSON without a status`);
-    }
-    const reason = classifyPanelMessage(panelMessage ?? '');
-    throw fail(reason, `${PANEL_REASON_TEXT[reason]} (panel said: "${panelMessage ?? panelStatus}")`);
   }
 
   /** The only place the full URL exists. Every value is percent-encoded. */
