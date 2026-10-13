@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { AuthUser } from '@clowe/shared';
-import { api, getStoredUser, logoutSession } from '@/lib/api';
+import { getStoredUser, logoutSession } from '@/lib/api';
+import { useUnreadNotifications } from '@/lib/badges';
 
 export interface DashNavItem {
   href: string;
@@ -108,13 +109,11 @@ export default function DashShell({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [unread, setUnread] = useState(0);
+  // Polled, so an admin's approval reaches the seller within seconds.
+  const unread = useUnreadNotifications()?.unreadCount ?? 0;
 
   useEffect(() => {
     setUser(getStoredUser());
-    api<{ unreadCount: number }>('/api/notifications', { auth: true })
-      .then((d) => setUnread(d.unreadCount))
-      .catch(() => {});
   }, [pathname]);
   // Close overlays on navigation.
   useEffect(() => {

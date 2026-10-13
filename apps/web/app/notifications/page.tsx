@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -13,7 +13,7 @@ import {
   safeHref,
 } from '@clowe/shared';
 import { api, getStoredUser } from '@/lib/api';
-import { BADGES_EVENT } from '@/components/Header';
+import { BADGES_EVENT, useUnreadNotifications } from '@/lib/badges';
 
 const PAGE_SIZE = 10;
 
@@ -130,6 +130,15 @@ export default function NotificationsPage() {
   }, [ready, page, category, period]);
 
   useEffect(load, [load]);
+
+  // A notification that arrives while the page is open joins the list.
+  const latestAt = useUnreadNotifications()?.latestAt;
+  const seenLatest = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (latestAt === undefined) return;
+    if (seenLatest.current !== undefined && seenLatest.current !== latestAt) load();
+    seenLatest.current = latestAt;
+  }, [latestAt, load]);
 
   // Years to offer: this year back to the year of the oldest notification.
   const firstAt = data?.summary.firstAt ?? null;

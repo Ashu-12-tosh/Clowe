@@ -82,6 +82,13 @@ export interface NotificationRow {
   createdAt: string;
 }
 
+/** What a badge polls: cheap enough to ask every few seconds. */
+export interface UnreadNotifications {
+  unreadCount: number;
+  /** When the newest notification arrived; a change means "reload the list". */
+  latestAt: string | null;
+}
+
 export interface NotificationList {
   items: NotificationRow[];
   unreadCount: number;

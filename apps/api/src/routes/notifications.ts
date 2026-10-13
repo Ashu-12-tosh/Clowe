@@ -5,6 +5,7 @@ import {
   notificationCategory,
   type NotificationCategory,
   type NotificationList,
+  type UnreadNotifications,
   istStartOfDay,
 } from '@clowe/shared';
 import { prisma } from '../db';
@@ -81,6 +82,26 @@ notificationsRouter.get('/', async (req, res, next) => {
         firstAt: all.length > 0 ? all[all.length - 1].createdAt.toISOString() : null,
       },
     };
+    res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The badge: unread count and the newest arrival. Polled every few seconds by
+// every open tab, so two indexed lookups and nothing else.
+notificationsRouter.get('/unread', async (req, res, next) => {
+  try {
+    const userId = req.auth!.userId;
+    const [unreadCount, latest] = await Promise.all([
+      prisma.notification.count({ where: { userId, readAt: null } }),
+      prisma.notification.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }),
+    ]);
+    const body: UnreadNotifications = { unreadCount, latestAt: latest?.createdAt.toISOString() ?? null };
     res.json({ success: true, data: body });
   } catch (err) {
     next(err);

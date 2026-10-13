@@ -12,6 +12,7 @@ import {
 } from '@clowe/shared';
 import type { VoiceResultList, VoiceSearchEnding } from '@clowe/shared';
 import { api, getStoredUser, logoutSession } from '@/lib/api';
+import { BADGES_EVENT, useUnreadNotifications } from '@/lib/badges';
 import CategoryNav from './CategoryNav';
 import SearchBar from './search/SearchBar';
 
@@ -72,7 +73,7 @@ async function isBraveBrowser(): Promise<boolean> {
 const VOICE_TIMEOUT_MS = 10000;
 
 /** Other components dispatch this after cart/wishlist writes to refresh badges. */
-export const BADGES_EVENT = 'clowe:refresh-badges';
+export { BADGES_EVENT };
 
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
@@ -94,6 +95,8 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const [q, setQ] = useState('');
   const [user, setUser] = useState<AuthUser | null>(null);
   const [counts, setCounts] = useState<MyCounts>({ cart: 0, wishlist: 0, notifications: 0 });
+  // Polled, so a notification shows within seconds without changing page.
+  const unread = useUnreadNotifications();
   const [listening, setListening] = useState(false);
   // What went wrong last time the recogniser was asked, in words. Empty when
   // nothing has gone wrong or the shopper stopped it themselves.
@@ -389,7 +392,7 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
                   ) : (
                     '👤'
                   )}
-                  <Badge count={counts.notifications} />
+                  <Badge count={unread?.unreadCount ?? counts.notifications} />
                 </span>
                 <span className="hidden text-left leading-tight lg:block">
                   <span className="block max-w-28 truncate text-sm font-semibold">
