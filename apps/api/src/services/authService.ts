@@ -1,5 +1,5 @@
 import type { User } from '@prisma/client';
-import type { AuthTokensResponse, AuthUser } from '@clowe/shared';
+import type { AuthTokensResponse, AuthUser, OtpRequestResult } from '@clowe/shared';
 import { prisma } from '../db';
 import { env } from '../env';
 import { ApiError } from '../utils/ApiError';
@@ -14,6 +14,11 @@ import { signAccessToken } from '../utils/jwt';
 import { OtpSendError, otpProvider } from './otp';
 
 const OTP_RESEND_COOLDOWN_SEC = 45;
+/**
+ * How many still-valid codes a sign-in accepts: the latest and the two before
+ * it, for an SMS that arrives after its resend. Few, so guessing stays as hard.
+ */
+const OTP_OPEN_CODES = 3;
 const PIN_MAX_ATTEMPTS = 5;
 /** The one answer to a failed PIN login, whatever the reason. */
 const PIN_LOGIN_FAILED = "That number and PIN don't match. Use OTP if you've forgotten your PIN.";
@@ -65,21 +70,30 @@ export function toAuthUser(user: User): AuthUser {
  * Used by login AND the phone-change flow.
  */
 export async function consumeOtp(phone: string, code: string): Promise<void> {
-  const otp = await prisma.otpCode.findFirst({
+  // Every code still valid, newest first. After "Resend" the earlier SMS can
+  // still arrive — even after the new one — so any of them signs in; the
+  // newest carries the wrong-attempt count, which a resend starts afresh.
+  const open = await prisma.otpCode.findMany({
     where: { phone, consumedAt: null, expiresAt: { gt: new Date() } },
     orderBy: { createdAt: 'desc' },
+    take: OTP_OPEN_CODES,
   });
-  if (!otp) {
+  const newest = open[0];
+  if (!newest) {
     throw ApiError.badRequest('OTP expired or not requested. Please request a new one.', 'OTP_INVALID');
   }
-  if (otp.attempts >= env.OTP_MAX_ATTEMPTS) {
+  if (newest.attempts >= env.OTP_MAX_ATTEMPTS) {
     throw ApiError.tooMany('Too many wrong attempts. Please request a new OTP.', 'OTP_LOCKED');
   }
-  if (!hashMatches(code, otp.codeHash)) {
-    await prisma.otpCode.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
+  if (!open.some((otp) => hashMatches(code, otp.codeHash))) {
+    await prisma.otpCode.update({ where: { id: newest.id }, data: { attempts: { increment: 1 } } });
     throw ApiError.badRequest('Incorrect OTP', 'OTP_INCORRECT');
   }
-  await prisma.otpCode.update({ where: { id: otp.id }, data: { consumedAt: new Date() } });
+  // One sign-in uses up every code sent for it.
+  await prisma.otpCode.updateMany({
+    where: { phone, consumedAt: null },
+    data: { consumedAt: new Date() },
+  });
 }
 
 async function issueTokens(user: User): Promise<{ accessToken: string; refreshToken: string }> {
@@ -120,7 +134,7 @@ export const authService = {
    * response (devOtp) so the login page can show it. Never once a real SMS
    * provider is live: then the code exists only in the SMS.
    */
-  async requestOtp(phone: string): Promise<{ resendAfterSec: number; devOtp?: string }> {
+  async requestOtp(phone: string): Promise<OtpRequestResult> {
     const latest = await prisma.otpCode.findFirst({
       where: { phone },
       orderBy: { createdAt: 'desc' },
@@ -157,6 +171,7 @@ export const authService = {
     const showCode = env.NODE_ENV !== 'production' && otpProvider.name === 'mock';
     return {
       resendAfterSec: OTP_RESEND_COOLDOWN_SEC,
+      expiresInSec: env.OTP_TTL_MIN * 60,
       ...(showCode ? { devOtp: code } : {}),
     };
   },

@@ -154,10 +154,20 @@ describe('the request', () => {
     expect(calls[0].init.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it('logs nothing on success — not the code, not the number', async () => {
-    const { fetchImpl } = stub(panel({ status: 'success' }));
+  it('logs one line on success with the panel message ID — not the code, not the number', async () => {
+    const { fetchImpl } = stub(panel({ status: 'success', 'message-id': ['516e-934-fd8e-915a'], message: 'SMS Sent Successfully' }));
     await provider(fetchImpl).sendOtp(PHONE, CODE);
-    expect(logged).toEqual([]);
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatch(/^\[clowe-api\] SMS OTP accepted by alots\.in in \d+ms \(message ID 516e-934-fd8e-915a\)$/);
+    expect(logged[0]).not.toContain(PHONE);
+    expect(logged[0]).not.toContain(CODE);
+  });
+
+  it('masks the code or number even if the panel echoes one as the message ID', async () => {
+    const { fetchImpl } = stub(panel({ status: 'success', 'message-id': `${PHONE}-${CODE}` }));
+    await provider(fetchImpl).sendOtp(PHONE, CODE);
+    expect(logged[0]).not.toContain(PHONE);
+    expect(logged[0]).not.toContain(CODE);
   });
 });
 

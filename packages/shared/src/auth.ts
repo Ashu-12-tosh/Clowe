@@ -145,6 +145,16 @@ export interface AuthUser {
 }
 
 /** Response of verify-otp and refresh. */
+/** POST /api/auth/request-otp. */
+export interface OtpRequestResult {
+  /** Seconds until another code may be requested for this number. */
+  resendAfterSec: number;
+  /** Seconds a code stays valid. Every code sent in that time works. */
+  expiresInSec: number;
+  /** Only with the mock provider outside production. */
+  devOtp?: string;
+}
+
 export interface AuthTokensResponse {
   user: AuthUser;
   accessToken: string;

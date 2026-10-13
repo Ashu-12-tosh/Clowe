@@ -79,6 +79,7 @@ export class SmsPanelOtpProvider implements OtpProvider {
       return new OtpSendError(reason);
     };
 
+    const startedAt = Date.now();
     let text: string;
     let status: number;
     try {
@@ -107,7 +108,16 @@ export class SmsPanelOtpProvider implements OtpProvider {
       throw fail('bad_response', `${this.host} did not answer with JSON`);
     }
     const panelStatus = field(body, 'status');
-    if (panelStatus?.toLowerCase() === 'success') return;
+    if (panelStatus?.toLowerCase() === 'success') {
+      // The panel's message ID is what its delivery report is searched by, so
+      // a code that never arrived can be traced. Never the number or the code.
+      const id = messageId(body);
+      console.log(
+        `[clowe-api] SMS OTP accepted by ${this.host} in ${Date.now() - startedAt}ms` +
+          (id ? ` (message ID ${clean(id, secrets)})` : ''),
+      );
+      return;
+    }
 
     const panelMessage = field(body, 'message');
     if (panelStatus === undefined && panelMessage === undefined) {
@@ -193,6 +203,14 @@ function panelOrigin(baseUrl: string): string {
 /** encodeURIComponent, plus the five characters it leaves alone. */
 function encodeParam(value: string): string {
   return encodeURIComponent(value).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+/** The panel answers "message-id": ["…"] (or a plain string). */
+function messageId(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) return undefined;
+  const value = (body as Record<string, unknown>)['message-id'];
+  const id = Array.isArray(value) ? value.filter((v) => typeof v === 'string').join(', ') : value;
+  return typeof id === 'string' && id ? id.slice(0, 100) : undefined;
 }
 
 function field(body: unknown, key: string): string | undefined {

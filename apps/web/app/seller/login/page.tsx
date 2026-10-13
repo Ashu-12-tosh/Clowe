@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { AuthTokensResponse, SellerProfileInfo } from '@clowe/shared';
+import type { AuthTokensResponse, OtpRequestResult, SellerProfileInfo } from '@clowe/shared';
+import ResendOtp from '@/components/auth/ResendOtp';
 import { api, ApiRequestError, saveSession } from '@/lib/api';
 import { useSeller } from '@/components/seller/SellerContext';
 
@@ -14,6 +15,7 @@ export default function SellerLoginPage() {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [devOtp, setDevOtp] = useState('');
+  const [otpSent, setOtpSent] = useState<{ result: OtpRequestResult; n: number } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -23,11 +25,10 @@ export default function SellerLoginPage() {
     try {
       // Any number gets an OTP; whether it has a seller account is told only
       // after it is verified.
-      const otp = await api<{ devOtp?: string }>('/api/auth/request-otp', { body: { phone } });
-      if (otp.devOtp) {
-        setDevOtp(otp.devOtp);
-        setCode(otp.devOtp);
-      }
+      const otp = await api<OtpRequestResult>('/api/auth/request-otp', { body: { phone } });
+      setDevOtp(otp.devOtp ?? '');
+      setCode(otp.devOtp ?? '');
+      setOtpSent((prev) => ({ result: otp, n: (prev?.n ?? 0) + 1 }));
       setStep('otp');
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
@@ -154,6 +155,15 @@ export default function SellerLoginPage() {
           >
             {busy ? 'Logging in…' : 'Login to Dashboard →'}
           </button>
+          <ResendOtp
+            key={otpSent?.n ?? 0}
+            phone={phone}
+            firstSent={otpSent?.result ?? null}
+            onSent={(r) => {
+              setDevOtp(r.devOtp ?? '');
+              setCode(r.devOtp ?? '');
+            }}
+          />
         </form>
       )}
 

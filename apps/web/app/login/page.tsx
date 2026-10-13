@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import LoginBackdrop from '@/components/LoginBackdrop';
 import LegalCopyright from '@/components/LegalCopyright';
-import type { AuthTokensResponse, AuthUser, UserRole } from '@clowe/shared';
+import ResendOtp from '@/components/auth/ResendOtp';
+import type { AuthTokensResponse, AuthUser, OtpRequestResult, UserRole } from '@clowe/shared';
 import {
   api,
   ApiRequestError,
@@ -149,7 +150,8 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [devOtp, setDevOtp] = useState('');
   const [signupMode, setSignupMode] = useState(false);
-  const [resendIn, setResendIn] = useState(0);
+  // The request that sent the code on screen; a new one restarts the resend countdown.
+  const [otpSent, setOtpSent] = useState<{ result: OtpRequestResult; n: number } | null>(null);
 
   // Onboarding (new users only)
   const [name, setName] = useState('');
@@ -166,12 +168,6 @@ export default function LoginPage() {
     if (getStoredUser()) router.replace('/account');
   }, [router]);
 
-  // OTP resend countdown.
-  useEffect(() => {
-    if (resendIn <= 0) return;
-    const t = setInterval(() => setResendIn((s) => s - 1), 1000);
-    return () => clearInterval(t);
-  }, [resendIn]);
 
   useEffect(() => {
     if (!photoFile) return;
@@ -195,7 +191,7 @@ export default function LoginPage() {
     setError('');
     setBusy(true);
     try {
-      const data = await api<{ resendAfterSec: number; devOtp?: string }>('/api/auth/request-otp', {
+      const data = await api<OtpRequestResult>('/api/auth/request-otp', {
         body: { phone },
       });
       if (data.devOtp) {
@@ -205,7 +201,7 @@ export default function LoginPage() {
         setCode('');
       }
       if (message) setNotice(message);
-      setResendIn(60);
+      setOtpSent((prev) => ({ result: data, n: (prev?.n ?? 0) + 1 }));
       setStep('otp');
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
@@ -540,15 +536,15 @@ export default function LoginPage() {
                 >
                   {busy ? 'Verifying…' : 'Verify & Login'}
                 </button>
-                <p className="text-center text-sm text-gray-500">
-                  {resendIn > 0 ? (
-                    <>Resend OTP in {resendIn}s</>
-                  ) : (
-                    <button onClick={() => void sendOtp()} className="font-semibold text-brand-600 hover:underline">
-                      Resend OTP
-                    </button>
-                  )}
-                </p>
+                <ResendOtp
+                  key={otpSent?.n ?? 0}
+                  phone={phone}
+                  firstSent={otpSent?.result ?? null}
+                  onSent={(r) => {
+                    setDevOtp(r.devOtp ?? '');
+                    setCode(r.devOtp ?? '');
+                  }}
+                />
               </div>
             )}
 

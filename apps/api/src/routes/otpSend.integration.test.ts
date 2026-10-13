@@ -109,7 +109,7 @@ describe('when the code is sent', () => {
     const res = await requestOtp(P.real);
     expect(res.status).toBe(200);
     expect(codes).toHaveLength(1);
-    expect(JSON.parse(res.text).data).toEqual({ resendAfterSec: 45 });
+    expect(JSON.parse(res.text).data).toEqual({ resendAfterSec: 45, expiresInSec: 300 });
     expect(res.text).not.toContain(codes[0]);
     expect(logged.join('\n')).not.toContain(codes[0]);
   });

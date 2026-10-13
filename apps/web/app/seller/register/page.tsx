@@ -6,11 +6,13 @@ import { useRouter } from 'next/navigation';
 import {
   sellerRegisterSchema,
   type AuthTokensResponse,
+  type OtpRequestResult,
   type SellerRegisterInput,
 } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser, refreshSession, saveSession } from '@/lib/api';
 import { bankNameFromIfsc } from '@clowe/shared';
 import { useSeller } from '@/components/seller/SellerContext';
+import ResendOtp from '@/components/auth/ResendOtp';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -26,6 +28,7 @@ export default function SellerRegisterPage() {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [devOtp, setDevOtp] = useState('');
+  const [otpSent, setOtpSent] = useState<{ result: OtpRequestResult; n: number } | null>(null);
   const [pendingApplication, setPendingApplication] = useState<SellerRegisterInput | null>(null);
   // Prefilled from the IFSC until the seller types a bank name themselves.
   const [bankName, setBankName] = useState('');
@@ -82,13 +85,12 @@ export default function SellerRegisterPage() {
         setError('Enter a valid 10-digit mobile number');
         return;
       }
-      const otp = await api<{ devOtp?: string }>('/api/auth/request-otp', {
+      const otp = await api<OtpRequestResult>('/api/auth/request-otp', {
         body: { phone: enteredPhone },
       });
-      if (otp.devOtp) {
-        setDevOtp(otp.devOtp);
-        setCode(otp.devOtp);
-      }
+      setDevOtp(otp.devOtp ?? '');
+      setCode(otp.devOtp ?? '');
+      setOtpSent((prev) => ({ result: otp, n: (prev?.n ?? 0) + 1 }));
       setPhone(enteredPhone);
       setPendingApplication(parsed.data);
       setStep('otp');
@@ -161,6 +163,15 @@ export default function SellerRegisterPage() {
           >
             {busy ? 'Verifying…' : 'Verify & Submit application'}
           </button>
+          <ResendOtp
+            key={otpSent?.n ?? 0}
+            phone={phone}
+            firstSent={otpSent?.result ?? null}
+            onSent={(r) => {
+              setDevOtp(r.devOtp ?? '');
+              setCode(r.devOtp ?? '');
+            }}
+          />
         </form>
       </main>
     );
