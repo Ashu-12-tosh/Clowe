@@ -16,7 +16,7 @@ import { PackingVideoPanel } from '@/components/seller/orders/PackingVideoPanel'
 import { CancelOrderPanel } from '@/components/seller/orders/CancelOrderPanel';
 import { ExternalLink } from '@/components/ExternalLink';
 
-type Action = 'pack' | 'ship' | 'deliver';
+type Action = 'assign' | 'pack' | 'ship' | 'deliver';
 
 function fmt(iso: string | null): string {
   return iso
@@ -81,9 +81,10 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
     try {
       await api(`/api/seller/orders/${itemId}/status`, {
         method: 'PATCH',
-        body: { action, ...(action === 'ship' && courier ? { courier } : {}) },
+        body: { action, ...((action === 'ship' || action === 'assign') && courier ? { courier } : {}) },
         auth: true,
       });
+      if (action === 'assign') flash('Courier assigned — the label now carries the AWB.');
       load();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Action failed');
@@ -288,6 +289,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                   </p>
                   {line.awbNumber && (
                     <p className="mt-1 text-xs text-gray-600">
+                      {line.canAssign && <span className="font-semibold text-amber-700">Assigned, not shipped · </span>}
                       {line.courierName} · AWB{' '}
                       <span className="font-mono font-semibold">{line.awbNumber}</span>
                       {line.trackingUrl && (
@@ -322,6 +324,17 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
               </dl>
 
               <div className="mt-3 flex flex-wrap gap-2">
+                {line.canAssign && (
+                  <button
+                    disabled={busy !== null}
+                    onClick={() => void act(line.id, 'assign')}
+                    title="Book the courier and AWB now, so the label carries them"
+                    className="rounded-lg border border-gray-300 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    🏷 {line.awbNumber ? 'Change courier' : 'Assign courier'}
+                    {courier ? ` (${courier})` : ''}
+                  </button>
+                )}
                 {line.canPack && (
                   <button
                     disabled={busy !== null || !hasClip}

@@ -209,6 +209,7 @@ function toLine(item: OrderRecord['items'][number], orderCancelled: boolean): Se
     deliveredAt: item.deliveredAt?.toISOString() ?? null,
     returnId: item.return?.id ?? null,
     returnStatus: item.return?.status ?? null,
+    canAssign: !orderCancelled && (item.status === 'CONFIRMED' || item.status === 'PACKED'),
     canPack: !orderCancelled && item.status === 'CONFIRMED',
     canShip: !orderCancelled && (item.status === 'CONFIRMED' || item.status === 'PACKED'),
     canDeliver: !orderCancelled && item.status === 'SHIPPED',
@@ -368,6 +369,7 @@ sellerOrdersRouter.get('/summary', async (req, res, next) => {
         pricePaise: true,
         quantity: true,
         courierName: true,
+        shippedAt: true,
       },
     });
 
@@ -397,7 +399,7 @@ sellerOrdersRouter.get('/summary', async (req, res, next) => {
       .filter((i) => i.status === 'CANCELLED')
       .reduce((sum, i) => sum + i.quantity, 0);
 
-    const shipped = items.filter((i) => i.courierName);
+    const shipped = items.filter((i) => i.courierName && i.shippedAt);
     const courierCounts = new Map<string, number>();
     for (const i of shipped) {
       courierCounts.set(i.courierName!, (courierCounts.get(i.courierName!) ?? 0) + 1);
@@ -458,7 +460,7 @@ sellerOrdersRouter.get('/summary', async (req, res, next) => {
 // Fulfilment transitions
 // ---------------------------------------------------------------------------
 
-type Action = 'pack' | 'ship' | 'deliver';
+type Action = 'assign' | 'pack' | 'ship' | 'deliver';
 
 type ItemForAction = Prisma.OrderItemGetPayload<{
   include: { order: { include: { user: { select: { id: true; phone: true } } } } };
@@ -474,6 +476,27 @@ async function applyAction(
   courier: string | undefined,
 ): Promise<string | null> {
   if (item.order.status === 'CANCELLED') return 'Order was cancelled';
+
+  // Book the courier and AWB before the parcel leaves, so the label carries
+  // them. No packing video needed yet: the label goes on before the clip is
+  // filmed. Assigning again picks a new courier, until the item ships.
+  if (action === 'assign') {
+    if (item.status !== 'CONFIRMED' && item.status !== 'PACKED') {
+      return `Cannot assign a courier to an item in status ${item.status}`;
+    }
+    const shipment = await shippingProvider.createShipment({
+      orderNumber: item.order.orderNumber,
+      orderItemId: item.id,
+      destinationCity: item.order.shipCity,
+      destinationPincode: item.order.shipPincode,
+      preferredCourier: courier,
+    });
+    await prisma.orderItem.update({
+      where: { id: item.id },
+      data: { awbNumber: shipment.awbNumber, courierName: shipment.courierName, trackingUrl: shipment.trackingUrl },
+    });
+    return null;
+  }
 
   if (action === 'pack') {
     if (item.status !== 'CONFIRMED') return `Cannot pack an item in status ${item.status}`;
@@ -505,13 +528,18 @@ async function applyAction(
       return `Cannot ship an item in status ${item.status}`;
     }
     if (!(await hasPackingVideo(item.orderId, item.sellerId))) return PACKING_VIDEO_REQUIRED_MESSAGE;
-    const shipment = await shippingProvider.createShipment({
-      orderNumber: item.order.orderNumber,
-      orderItemId: item.id,
-      destinationCity: item.order.shipCity,
-      destinationPincode: item.order.shipPincode,
-      preferredCourier: courier,
-    });
+    // The courier assigned earlier (and printed on the label) is the one that
+    // takes it, unless a different one is picked now.
+    const reuse = !!item.awbNumber && !!item.courierName && (!courier || courier === item.courierName);
+    const shipment = reuse
+      ? { awbNumber: item.awbNumber!, courierName: item.courierName!, trackingUrl: item.trackingUrl, etaDays: null as number | null }
+      : await shippingProvider.createShipment({
+          orderNumber: item.order.orderNumber,
+          orderItemId: item.id,
+          destinationCity: item.order.shipCity,
+          destinationPincode: item.order.shipPincode,
+          preferredCourier: courier,
+        });
     await prisma.$transaction([
       prisma.orderItem.update({
         where: { id: item.id },
@@ -528,7 +556,7 @@ async function applyAction(
           userId: item.order.user.id,
           type: 'ITEM_SHIPPED',
           title: 'Your order is on its way 🚚',
-          body: `"${item.title}" (${item.order.orderNumber}) shipped via ${shipment.courierName} — AWB ${shipment.awbNumber}. Expected in ~${shipment.etaDays} days.`,
+          body: `"${item.title}" (${item.order.orderNumber}) shipped via ${shipment.courierName} — AWB ${shipment.awbNumber}.${shipment.etaDays ? ` Expected in ~${shipment.etaDays} days.` : ''}`,
           linkHref: `/account/orders/${item.orderId}`,
         },
       }),

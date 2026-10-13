@@ -94,6 +94,8 @@ export interface SellerOrderLine {
   returnId: string | null;
   returnStatus: string | null;
   /** True when this line can move to the next stage right now. */
+  /** A courier can be assigned (or changed) — not shipped yet. */
+  canAssign: boolean;
   canPack: boolean;
   canShip: boolean;
   canDeliver: boolean;
@@ -176,8 +178,13 @@ export interface SellerOrderSummary {
 }
 
 export const sellerOrderActionSchema = z.object({
-  action: z.enum(['pack', 'ship', 'deliver']),
-  /** Only used by 'ship'. */
+  /**
+   * assign: book the courier and AWB (for the label) without shipping; again
+   * to change courier until it ships. ship: hand it over — reusing the AWB
+   * already assigned, or booking one now.
+   */
+  action: z.enum(['assign', 'pack', 'ship', 'deliver']),
+  /** Used by 'assign' and 'ship'; empty lets the provider pick. */
   courier: z.string().trim().max(60).optional(),
 });
 export type SellerOrderActionInput = z.infer<typeof sellerOrderActionSchema>;
@@ -199,7 +206,7 @@ export interface SellerOrderCancelResult {
 
 export const sellerOrderBulkSchema = z.object({
   itemIds: z.array(z.string().min(1)).min(1, 'Select at least one item').max(200),
-  action: z.enum(['pack', 'ship', 'deliver']),
+  action: z.enum(['assign', 'pack', 'ship', 'deliver']),
   courier: z.string().trim().max(60).optional(),
 });
 export type SellerOrderBulkInput = z.infer<typeof sellerOrderBulkSchema>;

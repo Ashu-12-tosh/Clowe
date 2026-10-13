@@ -80,6 +80,8 @@ export default function SellerOrdersPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  /** Whether the last bulk action left items undone (shown amber, not green). */
+  const [noticeWarn, setNoticeWarn] = useState(false);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -154,7 +156,7 @@ export default function SellerOrdersPage() {
     );
   }
 
-  async function runBulk(action: 'pack' | 'ship' | 'deliver') {
+  async function runBulk(action: 'assign' | 'pack' | 'ship' | 'deliver') {
     if (selectedItemIds.length === 0) return;
     setBusy(true);
     setError('');
@@ -165,9 +167,12 @@ export default function SellerOrdersPage() {
         body: { itemIds: selectedItemIds, action, ...(courier ? { courier } : {}) },
         auth: true,
       });
+      // Every distinct reason, so "3 skipped" says why for each kind of item.
+      const reasons = [...new Set(result.skipped.map((s) => s.reason))];
+      setNoticeWarn(result.updated === 0 || result.skipped.length > 0);
       setNotice(
-        `${result.updated} item(s) updated` +
-          (result.skipped.length > 0 ? ` · ${result.skipped.length} skipped (${result.skipped[0].reason})` : ''),
+        `${result.updated} item(s) ${action === 'assign' ? 'given a courier and AWB — labels now carry them' : 'updated'}` +
+          (result.skipped.length > 0 ? ` · ${result.skipped.length} skipped: ${reasons.join('; ')}` : ''),
       );
       setSelected(new Set());
       await Promise.all([loadOrders(), loadSummary()]);
@@ -228,7 +233,11 @@ export default function SellerOrdersPage() {
         </p>
       )}
       {notice && (
-        <p className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-700">
+        <p
+          className={`mt-4 rounded-xl border px-4 py-2.5 text-sm ${
+            noticeWarn ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-green-200 bg-green-50 text-green-700'
+          }`}
+        >
           {notice}
         </p>
       )}
@@ -346,6 +355,14 @@ export default function SellerOrdersPage() {
             </select>
             <button
               disabled={busy || selectedItemIds.length === 0}
+              onClick={() => void runBulk('assign')}
+              title="Book the courier and AWB now, so the labels you print carry them"
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-semibold hover:bg-gray-50 disabled:opacity-50"
+            >
+              🏷 Assign courier
+            </button>
+            <button
+              disabled={busy || selectedItemIds.length === 0}
               onClick={() => void runBulk('pack')}
               className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-semibold hover:bg-gray-50 disabled:opacity-50"
             >
@@ -356,7 +373,7 @@ export default function SellerOrdersPage() {
               onClick={() => void runBulk('ship')}
               className="rounded-lg bg-ink-900 px-3 py-1.5 font-semibold text-white hover:bg-ink-800 disabled:opacity-50"
             >
-              🚚 Ship &amp; assign courier
+              🚚 Ship
             </button>
             <button
               disabled={busy || selectedItemIds.length === 0}
@@ -625,11 +642,19 @@ export default function SellerOrdersPage() {
                 </a>
               </li>
               <li>
-                <p className="font-semibold text-ink-900">🚚 Assign courier</p>
-                <p className="text-gray-500">
-                  Pick a courier above, then use “Ship” — {summary?.couriers.length ?? 0} partners
-                  available
-                </p>
+                <button
+                  type="button"
+                  disabled={busy || selectedItemIds.length === 0}
+                  onClick={() => void runBulk('assign')}
+                  className="text-left disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <p className="font-semibold text-ink-900">🚚 Assign courier</p>
+                  <p className="text-gray-500">
+                    {selectedItemIds.length > 0
+                      ? `Book ${courier || 'the best available courier'} + AWB for ${selectedItemIds.length} item(s), then print labels`
+                      : `Select orders first — ${summary?.couriers.length ?? 0} partners available`}
+                  </p>
+                </button>
               </li>
               <li>
                 <Link href="/track">
