@@ -110,6 +110,10 @@ export default function SellerSupportPage() {
 
   // New ticket form
   const [showForm, setShowForm] = useState(false);
+  const formRef = useRef<HTMLElement>(null);
+  // The form's own errors show beside its Submit button, not at the top of the page.
+  const [formError, setFormError] = useState('');
+  const [ticketNotice, setTicketNotice] = useState('');
   const [form, setForm] = useState({
     category: 'ORDERS' as TicketCategory,
     subject: '',
@@ -194,8 +198,19 @@ export default function SellerSupportPage() {
     }
   }
 
+  /** Open the ticket form wherever the seller clicked from, and take them to it. */
+  function openForm() {
+    setFormError('');
+    setShowForm(true);
+    // After it renders: scroll it into view and put the cursor in the subject.
+    requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      formRef.current?.querySelector<HTMLInputElement>('input[data-subject]')?.focus({ preventScroll: true });
+    });
+  }
+
   async function createTicket() {
-    setError('');
+    setFormError('');
     const payload = {
       category: form.category,
       subject: form.subject.trim(),
@@ -206,7 +221,7 @@ export default function SellerSupportPage() {
     };
     const parsed = ticketCreateSchema.safeParse(payload);
     if (!parsed.success) {
-      setError(parsed.error.issues[0].message);
+      setFormError(parsed.error.issues[0].message);
       return;
     }
 
@@ -215,9 +230,10 @@ export default function SellerSupportPage() {
       await api('/api/seller/support/tickets', { body: parsed.data, auth: true });
       setForm({ category: 'ORDERS', subject: '', body: '', priority: 'MEDIUM', orderNumber: '' });
       setShowForm(false);
+      setTicketNotice('Ticket raised — the support team will reply here, and you’ll get a notification.');
       await Promise.all([loadSummary(), loadTickets()]);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not raise the ticket');
+      setFormError(err instanceof ApiRequestError ? err.message : 'Could not raise the ticket');
     } finally {
       setCreating(false);
     }
@@ -255,7 +271,7 @@ export default function SellerSupportPage() {
           )}
         </div>
         <button
-          onClick={() => setShowForm((v) => !v)}
+          onClick={openForm}
           className="rounded-lg bg-brand-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-700"
         >
           ＋ Raise a ticket
@@ -301,8 +317,14 @@ export default function SellerSupportPage() {
       </div>
 
       {/* --- New ticket form --------------------------------------------- */}
+      {ticketNotice && (
+        <p className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-800">
+          {ticketNotice}
+        </p>
+      )}
+
       {showForm && (
-        <section className="mt-4 rounded-2xl border border-gray-100 bg-white p-4">
+        <section ref={formRef} className="mt-4 scroll-mt-4 rounded-2xl border border-gray-100 bg-white p-4">
           <h2 className="text-sm font-bold text-ink-900">Raise a support ticket</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div>
@@ -336,8 +358,11 @@ export default function SellerSupportPage() {
               </select>
             </div>
             <div className="sm:col-span-2 min-w-0">
-              <label className="text-xs font-semibold text-gray-500">Subject</label>
+              <label className="text-xs font-semibold text-gray-500">
+                Subject <span className="font-normal">(at least 5 characters)</span>
+              </label>
               <input
+                data-subject
                 value={form.subject}
                 onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
                 maxLength={120}
@@ -346,8 +371,11 @@ export default function SellerSupportPage() {
               />
             </div>
             <div className="sm:col-span-2 min-w-0">
-              <label className="text-xs font-semibold text-gray-500">
-                Details (at least 20 characters)
+              <label className="flex justify-between text-xs font-semibold text-gray-500">
+                <span>Details (at least 20 characters)</span>
+                <span className={form.body.trim().length < 20 ? 'font-normal text-gray-400' : 'font-normal text-green-700'}>
+                  {form.body.trim().length}/20
+                </span>
               </label>
               <textarea
                 value={form.body}
@@ -370,6 +398,11 @@ export default function SellerSupportPage() {
               />
             </div>
           </div>
+          {formError && (
+            <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+              {formError}
+            </p>
+          )}
           <div className="mt-3 flex justify-end gap-2">
             <button
               onClick={() => setShowForm(false)}
@@ -696,7 +729,7 @@ export default function SellerSupportPage() {
               moment they reply.
             </p>
             <button
-              onClick={() => setShowForm(true)}
+              onClick={openForm}
               className="mt-3 w-full rounded-lg bg-ink-900 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800"
             >
               Raise a ticket
