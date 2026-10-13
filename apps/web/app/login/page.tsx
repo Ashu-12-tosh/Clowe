@@ -544,6 +544,23 @@ export default function LoginPage() {
                   <button onClick={() => { setPinReset(false); setStep('phone'); }} className="text-brand-600 hover:underline">
                     Change
                   </button>
+                  {!signupMode && (
+                    <>
+                      {' · '}
+                      {/* Straight to the PIN for this number; nothing is sent, and a
+                          pending "Forgot PIN?" is dropped (its PIN is untouched until a
+                          code is verified). */}
+                      <button
+                        onClick={() => {
+                          setPinReset(false);
+                          choosePin();
+                        }}
+                        className="text-brand-600 hover:underline"
+                      >
+                        Use PIN instead
+                      </button>
+                    </>
+                  )}
                 </p>
                 {devOtp && (
                   <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-center text-sm text-blue-800">

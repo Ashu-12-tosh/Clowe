@@ -291,6 +291,19 @@ export default function SellerLoginPage() {
             <button type="button" onClick={backToPhone} className={link}>
               change
             </button>
+            {' · '}
+            {/* Straight to the PIN for this number; nothing is sent, and a pending
+                "Forgot PIN?" is dropped (its PIN is untouched until a code is verified). */}
+            <button
+              type="button"
+              onClick={() => {
+                setPinReset(false);
+                choosePin();
+              }}
+              className={link}
+            >
+              Use PIN instead
+            </button>
           </p>
           {devOtp && (
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
