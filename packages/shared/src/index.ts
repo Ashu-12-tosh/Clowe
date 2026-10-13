@@ -61,6 +61,7 @@ export * from './adminPayments';
 export * from './adminReturns';
 export * from './adminSellers';
 export * from './adminSupportDesk';
+export * from './supportInbox';
 export * from './adminTryon';
 export * from './ai';
 export * from './growth';

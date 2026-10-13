@@ -128,8 +128,10 @@ const ADMIN_PAGE_PATHS = [
   '/admin', '/admin/ads', '/admin/audit', '/admin/banners', '/admin/brands', '/admin/categories',
   '/admin/csp-reports', '/admin/deals', '/admin/facets', '/admin/inventory', '/admin/newsletter', '/admin/orders',
   '/admin/payments', '/admin/products', '/admin/promos', '/admin/returns', '/admin/search', '/admin/seller-referrals',
-  '/admin/sellers', '/admin/settings', '/admin/support', '/admin/tryon', '/admin/users',
+  '/admin/sellers', '/admin/settings', '/admin/support', '/admin/support/queue', '/admin/tryon', '/admin/users',
 ];
+/** The WhatsApp-style support inbox: list + chat side by side, or one at a time on a phone. */
+const INBOX_PAGE = '/admin/support';
 /** Listings that carry the filter rail. */
 const RAIL_PAGES = new Set([
   '/products',
@@ -410,6 +412,50 @@ const PAGES = [
   ...SELLER_PUBLIC_PATHS, ...SELLER_PAGES, ...ADMIN_PAGES,
 ].filter((p) => !ONLY || ONLY.some((prefix) => p === prefix || p.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`) || p.startsWith(`${prefix}?`)));
 
+/**
+ * The support inbox. From RAIL_SIDEBAR_FROM up the list and the conversation
+ * sit side by side; below, the list alone, then the conversation full screen
+ * with a back button that returns to the list. Nothing may spill sideways.
+ */
+async function checkInbox(page, width) {
+  await page.locator('[data-inbox-list]').waitFor({ state: 'attached', timeout: 15000 });
+  await page.waitForFunction(() => !document.querySelector('[data-inbox-list]')?.textContent?.includes('Loading…'), null, { timeout: 15000 });
+  const row = page.locator('[data-inbox-row]').first();
+  if ((await row.count()) === 0) return { ok: true, text: 'no conversations' };
+  const wide = width >= RAIL_SIDEBAR_FROM;
+  await row.click();
+  await page.locator('[data-inbox-chat] header').waitFor({ timeout: 10000 });
+  const state = () =>
+    page.evaluate(() => {
+      const box = (sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { visible: r.width > 0 && r.height > 0 && getComputedStyle(el).display !== 'none', left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      };
+      return {
+        list: box('[data-inbox-list]'),
+        chat: box('[data-inbox-chat]'),
+        back: box('[data-inbox-back]'),
+        sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
+        vw: window.innerWidth,
+        vh: window.innerHeight,
+      };
+    });
+  const open = await state();
+  if (open.sideways) return { ok: false, text: 'inbox spills sideways' };
+  if (wide) {
+    const ok = open.list?.visible && open.chat?.visible && !open.back?.visible && open.list.right <= open.chat.left + 1;
+    return { ok: !!ok, text: ok ? 'inbox side by side' : 'inbox NOT side by side' };
+  }
+  const fullScreen = open.chat?.visible && open.chat.left <= 1 && open.chat.right >= open.vw - 1 && open.chat.top <= 1 && open.chat.bottom >= open.vh - 1;
+  if (!fullScreen || open.list?.visible || !open.back?.visible) return { ok: false, text: 'inbox chat not full screen with back' };
+  await page.locator('[data-inbox-back]').click();
+  const back = await state();
+  const ok = back.list?.visible && !back.chat?.visible;
+  return { ok: !!ok, text: ok ? 'inbox list → chat → back' : 'inbox back did not return to list' };
+}
+
 /** Sidebar from RAIL_SIDEBAR_FROM up; below, the sheet the Filters button opens. */
 async function checkRail(page, width) {
   // The rail renders (in the sidebar, hidden or not) once the listing has loaded.
@@ -495,7 +541,7 @@ for (const path of PAGES) {
       // After the page measure: opening the sheet changes the page.
       // The search overlay opened above would cover the Filters button: start clean.
       if (RAIL_PAGES.has(path) && overlayed) await page.reload({ waitUntil: 'networkidle', timeout: 30000 });
-      const rail = RAIL_PAGES.has(path) ? await checkRail(page, width) : null;
+      const rail = RAIL_PAGES.has(path) ? await checkRail(page, width) : path === INBOX_PAGE ? await checkInbox(page, width) : null;
       const railBad = rail !== null && !rail.ok;
       if (overflowBad || searchBad || railBad) failures += 1;
 

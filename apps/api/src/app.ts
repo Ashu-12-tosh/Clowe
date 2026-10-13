@@ -39,6 +39,7 @@ import { cspReportsRouter } from './routes/cspReports';
 import { filesRouter } from './routes/files';
 import { adminSearchRouter } from './routes/adminSearch';
 import { adminSupportDeskRouter } from './routes/adminSupportDesk';
+import { adminSupportInboxRouter } from './routes/adminSupportInbox';
 import { adminOverviewRouter } from './routes/adminOverview';
 import { adminInventoryRouter } from './routes/adminInventory';
 import { adminOrdersRouter } from './routes/adminOrders';
@@ -156,6 +157,7 @@ export function createApp() {
   app.use('/api/admin/audit', adminAuditRouter);
   app.use('/api/admin/search', adminSearchRouter);
   app.use('/api/admin/support-desk', adminSupportDeskRouter);
+  app.use('/api/admin/support-inbox', adminSupportInboxRouter);
   app.use('/api/admin/overview', adminOverviewRouter);
   app.use('/api/admin/inventory', adminInventoryRouter);
   app.use('/api/admin/orders', adminOrdersRouter);

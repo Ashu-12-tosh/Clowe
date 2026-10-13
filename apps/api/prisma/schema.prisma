@@ -494,6 +494,8 @@ model SupportTicket {
   // Timestamp of the first staff reply — feeds the response-time metric.
   firstReplyAt DateTime?
   lastMessageAt DateTime     @default(now())
+  // When an admin last opened it in the support inbox (unread = seller messages since).
+  adminReadAt DateTime?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -1456,6 +1458,8 @@ model Complaint {
   rating        Int?
   ratingComment String?
   lastMessageAt DateTime @default(now())
+  // When an admin last opened it in the support inbox (unread = customer messages since).
+  adminReadAt   DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
