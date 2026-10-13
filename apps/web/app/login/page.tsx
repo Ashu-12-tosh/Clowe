@@ -8,6 +8,7 @@ import LegalCopyright from '@/components/LegalCopyright';
 import ResendOtp from '@/components/auth/ResendOtp';
 import LoginMethodChoice from '@/components/auth/LoginMethodChoice';
 import { lastLoginMethod, rememberLoginMethod as rememberMethod, type LoginMethod } from '@/lib/loginMethod';
+import { closeLogin } from '@/lib/returnTo';
 import { phoneSubmitAction, preselectedLoginMethod, type AuthTokensResponse, type AuthUser, type OtpRequestResult, type UserRole } from '@clowe/shared';
 import {
   api,
@@ -126,6 +127,17 @@ export default function LoginPage() {
   const [pinReset, setPinReset] = useState(false);
   /** The new PIN, typed a second time. */
   const [pinConfirm, setPinConfirm] = useState('');
+  // Esc leaves the login page (nothing typed is sent), like the X and the back arrow.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeLogin(router);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [router]);
   /** "Login with PIN" is preselected on a device last signed in with a PIN; nothing else is. */
   const [preselected, setPreselected] = useState<LoginMethod | null>(null);
   useEffect(() => setPreselected(preselectedLoginMethod(lastLoginMethod())), []);
@@ -371,6 +383,15 @@ export default function LoginPage() {
 
         {/* Mobile compact brand header */}
         <div className="relative z-10 bg-ink-950 px-5 py-4 text-center lg:hidden">
+          <button
+            type="button"
+            onClick={() => closeLogin(router)}
+            aria-label="Back"
+            data-login-back
+            className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full text-2xl leading-none text-brand-400 hover:bg-white/10"
+          >
+            ←
+          </button>
           <span className="font-display text-xl font-bold uppercase tracking-[0.25em] text-brand-400">
             Clowe
           </span>
@@ -397,7 +418,17 @@ export default function LoginPage() {
         </div>
 
         <div className="relative z-10 flex flex-1 items-start justify-center px-4 py-6 sm:items-center sm:py-10">
-          <div className="w-full max-w-md rounded-3xl border border-gray-100 bg-white p-6 shadow-xl sm:p-9">
+          <div className="relative w-full max-w-md rounded-3xl border border-gray-100 bg-white p-6 shadow-xl sm:p-9">
+            <button
+              type="button"
+              onClick={() => closeLogin(router)}
+              aria-label="Close"
+              title="Close (Esc)"
+              data-login-close
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full text-xl leading-none text-gray-400 hover:bg-gray-100 hover:text-ink-900"
+            >
+              ✕
+            </button>
             {/* Card header */}
             <h2 className="text-center font-display text-3xl font-bold text-ink-900">
               {step === 'newpin'

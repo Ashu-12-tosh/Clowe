@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { AuthUser, CategoryNode } from '@clowe/shared';
 import { api, getStoredUser } from '@/lib/api';
+import { recordPage } from '@/lib/returnTo';
 import Header from './Header';
 import Footer from './Footer';
 
@@ -129,6 +130,9 @@ function MobileDrawer({ onNavigate }: { onNavigate: () => void }) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const pathname = usePathname();
+
+  // Where closing the login page returns to: every page this tab visits.
+  useEffect(() => recordPage(window.location.pathname + window.location.search), [pathname]);
 
   // Close the mobile drawer on navigation.
   useEffect(() => setDrawerOpen(false), [pathname]);
