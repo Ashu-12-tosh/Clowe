@@ -6,6 +6,7 @@ import { startTryOnPhotoRetention } from './services/tryonPhotoRetention';
 import { logStorageStatus } from './services/storage';
 import { logTryOnProviderStatus } from './services/tryon';
 import { logKycProviderStatus } from './services/kyc';
+import { logShippingProviderStatus } from './services/shipping';
 import { logOtpProviderStatus } from './services/otp';
 import { startSearchLogCleanup } from './services/searchAnalytics';
 import { startQuerySuggestionRefresh } from './services/querySuggestions';
@@ -19,6 +20,7 @@ app.listen(env.PORT, () => {
   void logTryOnProviderStatus();
   logOtpProviderStatus();
   logKycProviderStatus();
+  logShippingProviderStatus();
   void logStorageStatus();
 });
 

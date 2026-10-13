@@ -95,8 +95,18 @@ const envSchema = z.object({
   REFERRAL_REWARD_PAISE: z.coerce.number().int().min(0).default(10000),
   // 'mock' logs WhatsApp/SMS/email to the console. MSG91/Gupshup/SES later.
   MESSAGING_PROVIDER: z.enum(['mock']).default('mock'),
-  // 'mock' fabricates AWB numbers. Shiprocket/Delhivery later.
-  SHIPPING_PROVIDER: z.enum(['mock']).default('mock'),
+  // --- Shipping: Delhivery is the only courier ---
+  // 'mock' imitates Delhivery (no network, no money); 'delhivery' calls its
+  // API with DELHIVERY_API_TOKEN.
+  SHIPPING_PROVIDER: z.enum(['mock', 'delhivery']).default('mock'),
+  // Staging (staging-express.delhivery.com) unless set to production
+  // (track.delhivery.com). Staging and production have different tokens.
+  DELHIVERY_ENV: blankAsUnset(z.enum(['staging', 'production']).default('staging')),
+  DELHIVERY_API_TOKEN: optionalSecret,
+  // Production only, and off unless exactly 'true': booking, pickup requests,
+  // cancellations and warehouse registration — anything that moves a real
+  // parcel or spends wallet money. Without it live Delhivery is read-only.
+  DELHIVERY_PRODUCTION_WRITES: blankAsUnset(z.enum(['true', 'false']).default('false')),
 
   // --- Seller KYC verification (PAN, GSTIN, bank account) ---
   // 'auto': Cashfree when its verification credentials are set, otherwise the
@@ -147,6 +157,13 @@ const envSchema = z.object({
 
 export const env = envSchema
   .superRefine((e, ctx) => {
+    if (e.SHIPPING_PROVIDER === 'delhivery' && !e.DELHIVERY_API_TOKEN) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DELHIVERY_API_TOKEN'],
+        message: 'SHIPPING_PROVIDER=delhivery requires DELHIVERY_API_TOKEN',
+      });
+    }
     if (e.NODE_ENV === 'production' && (!e.KYC_FINGERPRINT_SECRET || e.KYC_FINGERPRINT_SECRET.length < 32)) {
       ctx.addIssue({
         code: 'custom',

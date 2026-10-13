@@ -314,7 +314,7 @@ adminOverviewRouter.get('/', async (req, res, next) => {
 
     for (const [key, label, name] of [
       ['payments', 'Payment gateway', paymentProvider.name],
-      ['shipping', 'Shipping partner', shippingProvider.name],
+      ['shipping', 'Shipping partner', `${shippingProvider.name} (${shippingProvider.environment})`],
       ['payouts', 'Payouts', payoutProvider.name],
       ['ai', 'AI services', aiProvider.name],
       ['tryon', 'AI Try-On', tryOnProvider.name],
