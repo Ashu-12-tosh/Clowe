@@ -30,6 +30,12 @@ export const verifyOtpSchema = z.object({
   name: z.string().trim().min(2).max(60).optional(),
   /** Optional referral code entered at signup. */
   referralCode: z.string().trim().min(4).max(20).optional(),
+  /**
+   * PIN_RESET ("Forgot PIN?"): on success the old PIN stops working at once,
+   * the lockout clears, every other session is signed out, and the answer
+   * says a new PIN must be set (pinResetRequired).
+   */
+  purpose: z.enum(['LOGIN', 'PIN_RESET']).default('LOGIN'),
 });
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
 
@@ -101,8 +107,13 @@ export const checkPhoneSchema = z.object({ phone: phoneSchema });
 /** POST /api/auth/pin-login */
 export const pinLoginSchema = z.object({ phone: phoneSchema, pin: pinSchema });
 
-/** POST /api/auth/me/set-pin */
-export const setPinSchema = z.object({ pin: pinSchema });
+/** POST /api/auth/me/set-pin. confirmPin, when sent, must match. */
+export const setPinSchema = z
+  .object({ pin: pinSchema, confirmPin: pinSchema.optional() })
+  .refine((v) => v.confirmPin === undefined || v.confirmPin === v.pin, {
+    message: 'The two PINs don’t match',
+    path: ['confirmPin'],
+  });
 
 /** Phone change — OTP-verified on the NEW number. */
 export const phoneChangeRequestSchema = z.object({ newPhone: phoneSchema });
@@ -161,6 +172,8 @@ export interface AuthTokensResponse {
   refreshToken: string;
   /** True when verify-otp just created the account. */
   isNewUser?: boolean;
+  /** A "Forgot PIN?" verification: the old PIN is gone and a new one must be set. */
+  pinResetRequired?: boolean;
 }
 
 // ---------------------------------------------------------------------------

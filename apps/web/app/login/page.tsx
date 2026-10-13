@@ -16,7 +16,7 @@ import {
   uploadPrivateImages,
 } from '@/lib/api';
 
-type Step = 'phone' | 'pin' | 'otp' | 'profile' | 'photo' | 'setpin';
+type Step = 'phone' | 'pin' | 'otp' | 'profile' | 'photo' | 'setpin' | 'newpin';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-brand-600';
@@ -142,6 +142,10 @@ export default function LoginPage() {
   const [step, setStep] = useState<Step>('phone');
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
+  /** "Forgot PIN?": the OTP about to be checked resets the PIN. */
+  const [pinReset, setPinReset] = useState(false);
+  /** The new PIN, typed a second time. */
+  const [pinConfirm, setPinConfirm] = useState('');
   const [code, setCode] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -182,7 +186,12 @@ export default function LoginPage() {
     setUser(data.user);
     setError('');
     setNotice('');
-    if (data.isNewUser) setStep('profile');
+    if (data.pinResetRequired) {
+      // The old PIN is already gone; a new one is set before going in.
+      setPin('');
+      setPinConfirm('');
+      setStep('newpin');
+    } else if (data.isNewUser) setStep('profile');
     else if (!data.user.hasPin) setStep('setpin');
     else router.push(dashboardFor(data.user.role));
   }
@@ -226,7 +235,14 @@ export default function LoginPage() {
 
   async function chooseOtp() {
     rememberMethod('otp');
+    setPinReset(false);
     await sendOtp();
+  }
+
+  /** "Forgot PIN?": an OTP, then a new PIN — the old one stops working once the code is verified. */
+  async function forgotPin() {
+    setPinReset(true);
+    await sendOtp('Enter the code we sent. Then you’ll choose a new PIN — your old PIN stops working.');
   }
 
   async function loginWithPin(pinValue: string) {
@@ -250,7 +266,12 @@ export default function LoginPage() {
     setBusy(true);
     try {
       const data = await api<AuthTokensResponse>('/api/auth/verify-otp', {
-        body: { phone, code: codeValue ?? code, referralCode: referralCode.trim() || undefined },
+        body: {
+          phone,
+          code: codeValue ?? code,
+          referralCode: referralCode.trim() || undefined,
+          ...(pinReset ? { purpose: 'PIN_RESET' } : {}),
+        },
       });
       finishAuth(data);
     } catch (err) {
@@ -308,14 +329,21 @@ export default function LoginPage() {
     }
   }
 
-  async function savePinAndFinish(pinValue: string) {
+  async function savePinAndFinish(pinValue: string, confirmValue?: string) {
     setError('');
+    if (confirmValue !== undefined && confirmValue !== pinValue) {
+      setError('The two PINs don’t match — enter them again.');
+      setPin('');
+      setPinConfirm('');
+      return;
+    }
     setBusy(true);
     try {
       const me = await api<AuthUser>('/api/auth/me/set-pin', {
-        body: { pin: pinValue },
+        body: { pin: pinValue, ...(confirmValue !== undefined ? { confirmPin: confirmValue } : {}) },
         auth: true,
       });
+      setPinReset(false);
       setStoredUser(me);
       rememberMethod('pin');
       router.push(dashboardFor(me.role));
@@ -359,6 +387,7 @@ export default function LoginPage() {
           <button
             onClick={() => {
               setSignupMode((v) => !v);
+              setPinReset(false);
               setStep('phone');
               setError('');
               setNotice('');
@@ -373,7 +402,9 @@ export default function LoginPage() {
           <div className="w-full max-w-md rounded-3xl border border-gray-100 bg-white p-6 shadow-xl sm:p-9">
             {/* Card header */}
             <h2 className="text-center font-display text-3xl font-bold text-ink-900">
-              {step === 'profile'
+              {step === 'newpin'
+                ? 'Choose a New PIN'
+                : step === 'profile'
                 ? 'Almost there!'
                 : step === 'photo'
                   ? 'Your Try-On Photo'
@@ -384,7 +415,9 @@ export default function LoginPage() {
                       : 'Welcome Back'}
             </h2>
             <p className="mt-1.5 text-center text-sm text-gray-500">
-              {step === 'profile'
+              {step === 'newpin'
+                ? 'Your old PIN no longer works. Set a new one to continue.'
+                : step === 'profile'
                 ? 'Tell us a little about yourself — you only do this once'
                 : step === 'photo'
                   ? 'Upload once — every ✨ Try On Me uses it automatically'
@@ -459,7 +492,7 @@ export default function LoginPage() {
               <div className="mt-6 space-y-5">
                 <p className="text-center text-sm text-gray-600">
                   PIN login for <span className="font-semibold">{maskedPhone(phone)}</span>{' '}
-                  <button onClick={() => setStep('phone')} className="text-brand-600 hover:underline">
+                  <button onClick={() => { setPinReset(false); setStep('phone'); }} className="text-brand-600 hover:underline">
                     Change number
                   </button>
                 </p>
@@ -488,7 +521,7 @@ export default function LoginPage() {
                     Use OTP instead
                   </button>
                   <button
-                    onClick={() => void sendOtp("No problem — login with OTP, then set a new PIN from this screen.")}
+                    onClick={() => void forgotPin()}
                     className="text-gray-500 hover:text-brand-600 hover:underline"
                   >
                     Forgot PIN?
@@ -502,7 +535,7 @@ export default function LoginPage() {
               <div className="mt-6 space-y-5">
                 <p className="text-center text-sm text-gray-600">
                   OTP sent to <span className="font-semibold">{maskedPhone(phone)}</span>{' '}
-                  <button onClick={() => setStep('phone')} className="text-brand-600 hover:underline">
+                  <button onClick={() => { setPinReset(false); setStep('phone'); }} className="text-brand-600 hover:underline">
                     Change
                   </button>
                 </p>
@@ -618,6 +651,39 @@ export default function LoginPage() {
                 >
                   Skip for now
                 </button>
+              </div>
+            )}
+
+            {/* ---------------- Step: new PIN after "Forgot PIN?" (required) ---------------- */}
+            {step === 'newpin' && user && (
+              <div className="mt-6 space-y-5" data-new-pin>
+                <div>
+                  <p className="mb-2 text-center text-sm font-semibold text-ink-900">New 4-digit PIN</p>
+                  <DigitBoxes length={4} value={pin} onChange={setPin} masked autoFocus />
+                </div>
+                <div>
+                  <p className="mb-2 text-center text-sm font-semibold text-ink-900">Enter it again</p>
+                  <DigitBoxes
+                    length={4}
+                    value={pinConfirm}
+                    onChange={setPinConfirm}
+                    masked
+                    onComplete={(v) => {
+                      if (pin.length === 4) void savePinAndFinish(pin, v);
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={() => void savePinAndFinish(pin, pinConfirm)}
+                  disabled={busy || pin.length !== 4 || pinConfirm.length !== 4}
+                  className="w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:bg-brand-700 disabled:opacity-50"
+                >
+                  {busy ? 'Saving…' : 'Save new PIN & Continue'}
+                </button>
+                <p className="text-center text-xs text-gray-500">
+                  You&apos;ve been signed out on your other devices. If you leave now, sign in with an OTP next
+                  time.
+                </p>
               </div>
             )}
 

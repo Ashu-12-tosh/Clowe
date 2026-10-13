@@ -185,6 +185,7 @@ export const authService = {
     code: string;
     name?: string;
     referralCode?: string;
+    purpose?: 'LOGIN' | 'PIN_RESET';
   }): Promise<AuthTokensResponse> {
     await consumeOtp(input.phone, input.code);
 
@@ -208,6 +209,20 @@ export const authService = {
 
     if (!user.isActive) {
       throw ApiError.forbidden('This account has been deactivated', 'ACCOUNT_DISABLED');
+    }
+
+    // "Forgot PIN?": the code proves the phone, so from this moment the old
+    // PIN is gone (not merely replaced later — a page closed halfway must not
+    // leave it working), the lockout is cleared, and every session signed in
+    // until now is signed out. The new session is issued after, so it stays.
+    if (input.purpose === 'PIN_RESET' && !isNewUser) {
+      const now = new Date();
+      [user] = await prisma.$transaction([
+        prisma.user.update({ where: { id: user.id }, data: { pinHash: null, pinAttempts: 0 } }),
+        prisma.refreshToken.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: now } }),
+      ]);
+      const tokens = await issueTokens(user);
+      return { user: toAuthUser(user), ...tokens, isNewUser, pinResetRequired: true };
     }
 
     // A successful OTP login clears any PIN lockout.
