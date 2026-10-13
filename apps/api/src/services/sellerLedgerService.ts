@@ -1,6 +1,7 @@
 import { Prisma, type SellerLedgerBucket, type SellerLedgerType } from '@prisma/client';
 import {
   computeListingEconomics,
+  type PenaltyKind,
   type SellerLedgerEntryRow,
   type SellerLedgerPage,
   type SellerLedgerTypeValue,
@@ -224,7 +225,27 @@ export async function ensureLedgerCoversDeliveries(sellerId: string, db: Db = pr
 
 /** One late-dispatch penalty per order and seller; its waiver likewise. */
 export const latePenaltyKey = (orderId: string, sellerId: string) => `late-dispatch:${orderId}:${sellerId}`;
-const lateWaiverKey = (orderId: string, sellerId: string) => `late-dispatch-waiver:${orderId}:${sellerId}`;
+/** One cancellation penalty per order and seller; its waiver likewise. */
+export const cancelPenaltyKey = (orderId: string, sellerId: string) => `seller-cancel:${orderId}:${sellerId}`;
+
+const WAIVER_KEY_PREFIX: Record<PenaltyKind, string> = {
+  LATE_DISPATCH: 'late-dispatch-waiver',
+  SELLER_CANCEL: 'seller-cancel-waiver',
+};
+const waiverKey = (kind: PenaltyKind, orderId: string, sellerId: string) =>
+  `${WAIVER_KEY_PREFIX[kind]}:${orderId}:${sellerId}`;
+
+/** The penalty a ledger row is about: by its type, or for a waiver by its key. */
+export function penaltyKindOf(type: SellerLedgerType, idempotencyKey: string | null): PenaltyKind | null {
+  if (type === 'LATE_DISPATCH_PENALTY') return 'LATE_DISPATCH';
+  if (type === 'SELLER_CANCEL_PENALTY') return 'SELLER_CANCEL';
+  if (type !== 'PENALTY_WAIVER') return null;
+  // A per-line waiver from before keys existed forgave a late dispatch.
+  if (!idempotencyKey) return 'LATE_DISPATCH';
+  return idempotencyKey.startsWith(`${WAIVER_KEY_PREFIX.SELLER_CANCEL}:`) ? 'SELLER_CANCEL' : 'LATE_DISPATCH';
+}
+
+const PENALTY_TYPES: SellerLedgerType[] = ['LATE_DISPATCH_PENALTY', 'SELLER_CANCEL_PENALTY'];
 
 export type WaiveOutcome = 'WAIVED' | 'ALREADY_WAIVED' | 'NOT_A_PENALTY';
 
@@ -242,7 +263,8 @@ export async function waivePenalty(
   db: Db = prisma,
 ): Promise<{ outcome: WaiveOutcome; amountPaise: number; orderItemId: string | null }> {
   const entry = await db.sellerLedgerEntry.findFirst({ where: { id: entryId, sellerId } });
-  if (!entry || entry.type !== 'LATE_DISPATCH_PENALTY' || (!entry.orderItemId && !entry.orderId)) {
+  const kind = entry ? penaltyKindOf(entry.type, null) : null;
+  if (!entry || entry.type === 'PENALTY_WAIVER' || !kind || (!entry.orderItemId && !entry.orderId)) {
     return { outcome: 'NOT_A_PENALTY', amountPaise: 0, orderItemId: null };
   }
   const posted = await postEntry(
@@ -253,7 +275,7 @@ export async function waivePenalty(
       amountPaise: -entry.amountPaise,
       orderId: entry.orderId,
       orderItemId: entry.orderItemId,
-      idempotencyKey: entry.orderItemId ? null : lateWaiverKey(entry.orderId!, sellerId),
+      idempotencyKey: entry.orderItemId ? null : waiverKey(kind, entry.orderId!, sellerId),
       note: `Waived: ${reason}`,
       createdById: adminId,
     },
@@ -279,19 +301,22 @@ export async function penaltiesView(
   const settings = await getSettings();
   const [penalties, waivers] = await Promise.all([
     db.sellerLedgerEntry.findMany({
-      where: { sellerId, type: 'LATE_DISPATCH_PENALTY' },
+      where: { sellerId, type: { in: PENALTY_TYPES } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      select: { id: true, orderId: true, orderItemId: true, amountPaise: true, note: true, createdAt: true },
+      select: { id: true, type: true, orderId: true, orderItemId: true, amountPaise: true, note: true, createdAt: true },
     }),
     db.sellerLedgerEntry.findMany({
       where: { sellerId, type: 'PENALTY_WAIVER' },
-      select: { orderId: true, orderItemId: true, amountPaise: true, note: true, createdAt: true },
+      select: { orderId: true, orderItemId: true, amountPaise: true, note: true, createdAt: true, idempotencyKey: true },
     }),
   ]);
-  // A penalty is per order now; one charged before that is per line.
-  const keyOf = (e: { orderId: string | null; orderItemId: string | null }) =>
-    e.orderItemId ? `item:${e.orderItemId}` : `order:${e.orderId}`;
-  const waiverByKey = new Map(waivers.map((w) => [keyOf(w), w]));
+  // A penalty is per order and kind now (one order can carry both kinds); one
+  // charged before that is per line.
+  const keyOf = (kind: PenaltyKind, e: { orderId: string | null; orderItemId: string | null }) =>
+    e.orderItemId ? `item:${e.orderItemId}` : `${kind}:order:${e.orderId}`;
+  const waiverByKey = new Map(
+    waivers.map((w) => [keyOf(penaltyKindOf('PENALTY_WAIVER', w.idempotencyKey)!, w), w]),
+  );
 
   const shown = penalties.slice(0, limit);
   const itemIds = shown.map((p) => p.orderItemId).filter((id): id is string => !!id);
@@ -321,11 +346,18 @@ export async function penaltiesView(
       slaHours: settings.dispatchSlaHours,
       effectiveFrom: settings.lateDispatchPenaltyEffectiveFrom,
     },
+    cancelRule: {
+      enabled: settings.penaltyEnabled && settings.sellerCancelPenaltyPaise > 0,
+      penaltyPaise: settings.sellerCancelPenaltyPaise,
+      effectiveFrom: settings.sellerCancelPenaltyEffectiveFrom,
+    },
     rows: shown.map((p) => {
       const item = p.orderItemId ? itemById.get(p.orderItemId) : undefined;
-      const waiver = waiverByKey.get(keyOf(p));
+      const kind = penaltyKindOf(p.type, null)!;
+      const waiver = waiverByKey.get(keyOf(kind, p));
       return {
         entryId: p.id,
+        kind,
         orderId: p.orderId,
         orderNumber: item?.order.orderNumber ?? (p.orderId ? (orderNumberById.get(p.orderId) ?? null) : null),
         itemTitle: item?.title ?? null,
@@ -502,6 +534,7 @@ interface HistoryRow {
   orderItemId: string | null;
   payoutId: string | null;
   adId: string | null;
+  idempotencyKey: string | null;
   createdAt: Date;
   running: number;
 }
@@ -524,7 +557,7 @@ export async function history(
     db.$queryRaw<HistoryRow[]>(Prisma.sql`
       SELECT
         e.id, e.type, e.bucket, e."amountPaise", e.note, e."orderId", e."orderItemId", e."payoutId", e."adId",
-        e."createdAt",
+        e."idempotencyKey", e."createdAt",
         SUM(e."amountPaise") OVER (
           ORDER BY e."createdAt", e.id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
         )::int AS running
@@ -574,6 +607,7 @@ export async function history(
         adId: r.adId,
       },
       createdAt: r.createdAt.toISOString(),
+      penaltyKind: penaltyKindOf(r.type, r.idempotencyKey),
     };
   });
 

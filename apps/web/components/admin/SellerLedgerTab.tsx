@@ -47,8 +47,9 @@ export default function SellerLedgerTab({ sellerId }: { sellerId: string }) {
 
   // Which penalties already carry a waiver, so the button is not offered twice.
   // A penalty is per order; one charged before that is per line.
+  // One order can carry both kinds of penalty: a waiver matches by kind too.
   const penaltyKey = (r: SellerLedgerEntryRow) =>
-    r.reference.orderItemId ? `item:${r.reference.orderItemId}` : `order:${r.reference.orderId}`;
+    r.reference.orderItemId ? `item:${r.reference.orderItemId}` : `${r.penaltyKind}:order:${r.reference.orderId}`;
   const waived = new Set(data?.rows.filter((r) => r.type === 'PENALTY_WAIVER').map(penaltyKey) ?? []);
 
   async function waive(entryId: string) {
@@ -120,7 +121,7 @@ export default function SellerLedgerTab({ sellerId }: { sellerId: string }) {
                   (row.reference.adId ? `Ad ${row.reference.adId.slice(-6).toUpperCase()}` : '')}
                 {row.note ? ` · ${row.note}` : ''}
               </p>
-              {row.type === 'LATE_DISPATCH_PENALTY' &&
+              {(row.type === 'LATE_DISPATCH_PENALTY' || row.type === 'SELLER_CANCEL_PENALTY') &&
                 (row.reference.orderItemId || row.reference.orderId) &&
                 !waived.has(penaltyKey(row)) && (
                   <button

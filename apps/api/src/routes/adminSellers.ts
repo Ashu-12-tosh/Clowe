@@ -667,8 +667,8 @@ adminSellersRouter.get('/:id/ledger', async (req, res, next) => {
   }
 });
 
-// Forgive one late-dispatch penalty. Posts the opposite entry against the
-// same line; the ledger's unique pair refuses a second waiver outright.
+// Forgive one penalty (late dispatch or seller cancellation). Posts the
+// opposite entry against the same order; its key refuses a second waiver.
 adminSellersRouter.post('/:id/ledger/:entryId/waive', async (req, res, next) => {
   try {
     const { reason } = ledgerWaiveSchema.parse(req.body);
@@ -689,7 +689,7 @@ adminSellersRouter.post('/:id/ledger/:entryId/waive', async (req, res, next) => 
       action: 'Penalty waived',
       entityType: 'SellerLedgerEntry',
       entityId: req.params.entryId,
-      summary: `Waived Rs ${(result.amountPaise / 100).toLocaleString('en-IN')} late-dispatch penalty for seller ${req.params.id}: ${reason}`,
+      summary: `Waived Rs ${(result.amountPaise / 100).toLocaleString('en-IN')} penalty for seller ${req.params.id}: ${reason}`,
       metadata: {
         sellerId: req.params.id,
         orderItemId: result.orderItemId,

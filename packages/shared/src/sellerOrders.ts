@@ -182,6 +182,21 @@ export const sellerOrderActionSchema = z.object({
 });
 export type SellerOrderActionInput = z.infer<typeof sellerOrderActionSchema>;
 
+/** POST /api/seller/orders/:orderId/cancel — the seller can't fulfil their part. */
+export const sellerOrderCancelSchema = z.object({
+  reason: z.string().trim().min(5, 'Say why, in a few words').max(300),
+});
+export type SellerOrderCancelInput = z.infer<typeof sellerOrderCancelSchema>;
+
+/** What a seller's cancellation did. */
+export interface SellerOrderCancelResult {
+  cancelledLines: number;
+  /** The refund to the buyer, when they had paid; null for unpaid / COD. */
+  refund: { id: string; status: string; amountPaise: number } | null;
+  /** The penalty charged, in paise; 0 when none applied. */
+  penaltyPaise: number;
+}
+
 export const sellerOrderBulkSchema = z.object({
   itemIds: z.array(z.string().min(1)).min(1, 'Select at least one item').max(200),
   action: z.enum(['pack', 'ship', 'deliver']),

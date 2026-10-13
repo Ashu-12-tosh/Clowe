@@ -11,6 +11,7 @@ import {
   SELLER_PAYMENT_FILTERS,
   sellerOrderActionSchema,
   sellerOrderBulkSchema,
+  sellerOrderCancelSchema,
   type SellerInvoice,
   type SellerOrderBulkResult,
   type SellerOrderLine,
@@ -41,6 +42,7 @@ import {
   syncOrderStatus,
 } from '../services/orderStatusService';
 import { postDeliveryEntries } from '../services/sellerLedgerService';
+import { cancelSellerPart } from '../services/sellerCancellation';
 import {
   chargeLateDispatchIfDue,
   dispatchClock,
@@ -588,6 +590,23 @@ sellerOrdersRouter.patch('/:itemId/status', async (req, res, next) => {
       );
     }
     res.json({ success: true, data: { id: item.id } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The seller can't fulfil their part: cancel it (anything not yet shipped),
+// refund the buyer for it, and charge the cancellation penalty once.
+sellerOrdersRouter.post('/:orderId/cancel', async (req, res, next) => {
+  try {
+    const { reason } = sellerOrderCancelSchema.parse(req.body);
+    const result = await cancelSellerPart({
+      orderId: req.params.orderId,
+      sellerId: req.seller!.id,
+      actorUserId: req.auth!.userId,
+      reason,
+    });
+    res.json({ success: true, data: result });
   } catch (err) {
     next(err);
   }

@@ -13,6 +13,7 @@ import { formatPaise } from '@/lib/format';
 import { StatusPill } from '@/components/seller/orders/StatusPill';
 import { DispatchCountdown } from '@/components/seller/orders/DispatchCountdown';
 import { PackingVideoPanel } from '@/components/seller/orders/PackingVideoPanel';
+import { CancelOrderPanel } from '@/components/seller/orders/CancelOrderPanel';
 import { ExternalLink } from '@/components/ExternalLink';
 
 type Action = 'pack' | 'ship' | 'deliver';
@@ -369,6 +370,20 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
               </div>
             </div>
           ))}
+
+          <CancelOrderPanel
+            orderId={order.orderId}
+            placedAt={order.placedAt}
+            cancellableLines={order.lines.filter((l) => ['PLACED', 'CONFIRMED', 'PACKED'].includes(l.status)).length}
+            onCancelled={(r) => {
+              flash(
+                `Cancelled ${r.cancelledLines} item(s).` +
+                  (r.refund ? ` Buyer refund: ${formatPaise(r.refund.amountPaise)} (${r.refund.status.toLowerCase()}).` : '') +
+                  (r.penaltyPaise ? ` Penalty charged: ${formatPaise(r.penaltyPaise)}.` : ''),
+              );
+              load();
+            }}
+          />
         </div>
 
         {/* --- Right: customer, shipping, payment ------------------------ */}

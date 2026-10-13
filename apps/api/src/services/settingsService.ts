@@ -34,6 +34,8 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   // Set to the moment it ran by migration 20261010120000; null = every order.
   lateDispatchPenaltyEffectiveFrom: null,
   penaltyEnabled: true,
+  sellerCancelPenaltyPaise: 15000, // ₹150 per order the seller cancels
+  sellerCancelPenaltyEffectiveFrom: null,
   // GST 2.0, Notification 9/2025-Central Tax (Rate), in force 22.09.2025.
   gstMeritPercent: 5,
   gstStandardPercent: 18,
@@ -140,6 +142,12 @@ export async function getSettings(): Promise<PlatformSettings> {
       DEFAULT_SETTINGS.lateDispatchPenaltyPaise,
     penaltyEnabled:
       (byKey.get('penaltyEnabled') as boolean | undefined) ?? DEFAULT_SETTINGS.penaltyEnabled,
+    sellerCancelPenaltyPaise:
+      (byKey.get('sellerCancelPenaltyPaise') as number | undefined) ??
+      DEFAULT_SETTINGS.sellerCancelPenaltyPaise,
+    sellerCancelPenaltyEffectiveFrom:
+      (byKey.get('sellerCancelPenaltyEffectiveFrom') as string | null | undefined) ??
+      DEFAULT_SETTINGS.sellerCancelPenaltyEffectiveFrom,
     gstMeritPercent:
       (byKey.get('gstMeritPercent') as number | undefined) ?? DEFAULT_SETTINGS.gstMeritPercent,
     gstStandardPercent:
@@ -208,6 +216,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     lateDispatchPenaltyAfterHours: s.lateDispatchPenaltyAfterHours,
     lateDispatchPenaltyPaise: s.lateDispatchPenaltyPaise,
     penaltyEnabled: s.penaltyEnabled,
+    sellerCancelPenaltyPaise: s.sellerCancelPenaltyPaise,
     socialLinks: s.socialLinks,
     supportEmails: s.supportEmails,
     codMaxOrderPaise: s.codMaxOrderPaise,

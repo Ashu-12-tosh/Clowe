@@ -786,6 +786,7 @@ adminRouter.put('/settings', async (req, res, next) => {
       'dispatchSlaHours',
       'lateDispatchPenaltyAfterHours',
       'lateDispatchPenaltyPaise',
+      'sellerCancelPenaltyPaise',
       'penaltyEnabled',
       // Listing economics — the pricing calculator's fixed fees and GST rate.
       'gstMeritPercent',

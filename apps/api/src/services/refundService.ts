@@ -92,6 +92,32 @@ export async function processRefund(refundId: string): Promise<void> {
  * order. The refund is recorded either way it goes: PROCESSED, or FAILED for
  * an admin to retry, never silently skipped.
  */
+/**
+ * Refund part of a paid order — the lines one seller cancelled while the rest
+ * of the order goes ahead. Capped at what is left of the payment; recorded
+ * PROCESSED or FAILED like any refund. Nothing on an unpaid or COD order.
+ */
+export async function refundOrderPart(
+  orderId: string,
+  amountPaise: number,
+  reason: string,
+): Promise<{ id: string; status: string; amountPaise: number } | null> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { payment: true, refunds: { where: { status: { in: ['PENDING', 'PROCESSED'] } } } },
+  });
+  if (!order?.payment || order.payment.status !== 'PAID') return null;
+  const alreadyRefunded = order.refunds.reduce((sum, r) => sum + r.amountPaise, 0);
+  const amount = Math.min(amountPaise, order.payment.amountPaise - alreadyRefunded);
+  if (amount <= 0) return null;
+  const refund = await prisma.refund.create({
+    data: { orderId, amountPaise: amount, provider: order.payment.provider, status: 'PENDING', reason },
+  });
+  await processRefund(refund.id);
+  const settled = await prisma.refund.findUniqueOrThrow({ where: { id: refund.id } });
+  return { id: settled.id, status: settled.status, amountPaise: settled.amountPaise };
+}
+
 export async function refundCancelledOrder(
   orderId: string,
   reason: string,

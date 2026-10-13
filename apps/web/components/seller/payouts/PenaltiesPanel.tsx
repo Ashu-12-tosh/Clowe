@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { SellerPenaltiesView } from '@clowe/shared';
+import { PENALTY_KIND_LABELS, type SellerPenaltiesView } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 
@@ -16,10 +16,11 @@ function day(iso: string): string {
 }
 
 /**
- * Late-dispatch penalties, always on the payouts page: the rule as settings
- * run it now, then every penalty with its order, date, amount, reason and
- * whether it was waived. With none, the rule still shows, so a seller learns
- * it before it costs them.
+ * Both penalties — late dispatch and cancelling an order — on the payouts
+ * page and the Penalties page: each rule as settings run it now, then every
+ * penalty with its kind, order, date, amount, reason and whether it was
+ * waived. With none, the rules still show, so a seller learns them before
+ * they cost anything.
  */
 export function PenaltiesPanel({ refreshKey = 0 }: { refreshKey?: number }) {
   const [data, setData] = useState<SellerPenaltiesView | null>(null);
@@ -39,6 +40,9 @@ export function PenaltiesPanel({ refreshKey = 0 }: { refreshKey?: number }) {
   }, [load, refreshKey]);
 
   const rule = data?.rule;
+  const cancelRule = data?.cancelRule;
+  const from = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
 
   return (
     <section className="rounded-2xl border border-gray-100 bg-white" data-penalties>
@@ -46,6 +50,7 @@ export function PenaltiesPanel({ refreshKey = 0 }: { refreshKey?: number }) {
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-bold text-ink-900">Penalties</h2>
           <p className="mt-0.5 break-words text-[11px] text-gray-500" data-penalty-rule>
+            <span className="font-semibold text-gray-700">Late dispatch: </span>
             {!rule
               ? 'Late-dispatch penalties and why they were charged.'
               : rule.enabled
@@ -61,6 +66,16 @@ export function PenaltiesPanel({ refreshKey = 0 }: { refreshKey?: number }) {
                   }`
                 : `Late-dispatch penalties are switched off right now. When on, each order not dispatched within ${rule.afterHours} hours of being placed costs ${formatPaise(rule.penaltyPaise)}.`}
           </p>
+          {cancelRule && (
+            <p className="mt-1 break-words text-[11px] text-gray-500" data-cancel-rule>
+              <span className="font-semibold text-gray-700">Cancelling an order: </span>
+              {cancelRule.enabled
+                ? `${formatPaise(cancelRule.penaltyPaise)} per order you cancel (once per order, however many items). Not charged when the buyer or Clowe support cancels. Support can waive it if the cancellation was not your fault.${
+                    cancelRule.effectiveFrom ? ` It applies to orders placed from ${from(cancelRule.effectiveFrom)}.` : ''
+                  }`
+                : 'Switched off right now.'}
+            </p>
+          )}
         </div>
         {data && (
           <dl className="flex flex-wrap gap-4 text-xs">
@@ -86,7 +101,7 @@ export function PenaltiesPanel({ refreshKey = 0 }: { refreshKey?: number }) {
 
       {data && data.rows.length === 0 && (
         <p className="px-4 py-6 text-center text-xs text-gray-400" data-penalties-empty>
-          No penalties. Every order you have shipped went out on time.
+          No penalties. Every order went out on time, and you haven&apos;t cancelled any.
         </p>
       )}
 
@@ -100,6 +115,13 @@ export function PenaltiesPanel({ refreshKey = 0 }: { refreshKey?: number }) {
             >
               <div className="min-w-0 flex-1">
                 <p className="break-words font-semibold text-ink-900">
+                  <span
+                    className={`mr-1.5 inline-block rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                      row.kind === 'SELLER_CANCEL' ? 'bg-orange-50 text-orange-700' : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    {PENALTY_KIND_LABELS[row.kind]}
+                  </span>
                   {row.orderId && row.orderNumber ? (
                     <Link href={`/seller/orders/${row.orderId}`} className="text-brand-600 hover:underline">
                       {row.orderNumber}

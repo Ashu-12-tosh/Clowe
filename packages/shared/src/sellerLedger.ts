@@ -25,6 +25,7 @@ export const SELLER_LEDGER_TYPES = [
   'CLOSING_FEE',
   'GST_TCS',
   'GT_CHARGE',
+  'SELLER_CANCEL_PENALTY',
 ] as const;
 export type SellerLedgerTypeValue = (typeof SELLER_LEDGER_TYPES)[number];
 
@@ -48,6 +49,20 @@ export const SELLER_LEDGER_TYPE_LABELS: Record<SellerLedgerTypeValue, string> = 
   CLOSING_FEE: 'Closing fee',
   GT_CHARGE: 'GT charge',
   GST_TCS: 'GST TCS (s.52)',
+  SELLER_CANCEL_PENALTY: 'Cancellation penalty',
+};
+
+/** The two penalties a seller can be charged, once per order each. */
+export const PENALTY_KINDS = ['LATE_DISPATCH', 'SELLER_CANCEL'] as const;
+export type PenaltyKind = (typeof PENALTY_KINDS)[number];
+export const PENALTY_KIND_LABELS: Record<PenaltyKind, string> = {
+  LATE_DISPATCH: 'Late dispatch',
+  SELLER_CANCEL: 'Cancelled by seller',
+};
+/** The ledger type that charges each kind. */
+export const PENALTY_LEDGER_TYPE: Record<PenaltyKind, SellerLedgerTypeValue> = {
+  LATE_DISPATCH: 'LATE_DISPATCH_PENALTY',
+  SELLER_CANCEL: 'SELLER_CANCEL_PENALTY',
 };
 
 /** One row of a seller's ledger as the API serves it. */
@@ -69,6 +84,11 @@ export interface SellerLedgerEntryRow {
     adId: string | null;
   };
   createdAt: string;
+  /**
+   * Which penalty a penalty or waiver row is about; null on every other row.
+   * One order can carry both kinds, so a waiver is matched by kind and order.
+   */
+  penaltyKind: PenaltyKind | null;
 }
 
 export interface SellerLedgerPage {
@@ -94,17 +114,27 @@ export interface LateDispatchRule {
   effectiveFrom: string | null;
 }
 
-/** One late-dispatch penalty and whether it was forgiven. */
+/** The seller-cancellation rule as the platform currently runs it. */
+export interface SellerCancelRule {
+  enabled: boolean;
+  /** Charged once per order the seller cancels (not the buyer or an admin). */
+  penaltyPaise: number;
+  /** Orders placed before this (ISO) are never charged; null when every order is. */
+  effectiveFrom: string | null;
+}
+
+/** One penalty and whether it was forgiven. */
 export interface SellerPenaltyRow {
-  /** The LATE_DISPATCH_PENALTY ledger entry. */
+  /** The penalty's ledger entry. */
   entryId: string;
+  kind: PenaltyKind;
   orderId: string | null;
   orderNumber: string | null;
   itemTitle: string | null;
   chargedAt: string;
   /** What was charged, as a positive number. */
   amountPaise: number;
-  /** Why: the dispatch arithmetic written when it was charged. */
+  /** Why: the dispatch arithmetic, or the seller's cancellation reason. */
   reason: string | null;
   waived: boolean;
   waivedAt: string | null;
@@ -115,6 +145,7 @@ export interface SellerPenaltyRow {
 /** GET /api/seller/ledger/penalties. Always answers, even with no penalties. */
 export interface SellerPenaltiesView {
   rule: LateDispatchRule;
+  cancelRule: SellerCancelRule;
   rows: SellerPenaltyRow[];
   /** Penalties in `rows`, newest first, capped; `total` counts them all. */
   total: number;

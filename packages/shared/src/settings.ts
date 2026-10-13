@@ -77,6 +77,13 @@ export interface PlatformSettings {
   /** Off = late lines post nothing; entries already posted are untouched. */
   penaltyEnabled: boolean;
   /**
+   * Charged once per order when the seller cancels their part of it (paise).
+   * Never when the buyer or an admin cancels. Off with penaltyEnabled.
+   */
+  sellerCancelPenaltyPaise: number;
+  /** As lateDispatchPenaltyEffectiveFrom, for the cancellation penalty: set by its migration. */
+  sellerCancelPenaltyEffectiveFrom: string | null;
+  /**
    * GST contained in every listed price, in percent, for the seller's
    * pricing breakdown. One rate for the whole catalog is a simplification:
    * category-wise GST (books 0%, apparel under ₹1,000 at 5%) is a known
@@ -191,6 +198,7 @@ export interface PublicSettings {
   lateDispatchPenaltyAfterHours: number;
   lateDispatchPenaltyPaise: number;
   penaltyEnabled: boolean;
+  sellerCancelPenaltyPaise: number;
   socialLinks: PlatformSettings['socialLinks'];
   supportEmails: PlatformSettings['supportEmails'];
   codMaxOrderPaise: number;
@@ -233,6 +241,7 @@ export const updateSettingsSchema = z.object({
   closingFeePaise: z.number().int().min(0).optional(),
   gtChargePaise: z.number().int().min(0).optional(),
   lateDispatchPenaltyPaise: z.number().int().min(0).optional(),
+  sellerCancelPenaltyPaise: z.number().int().min(0).optional(),
   penaltyEnabled: z.boolean().optional(),
   kycNameMatchMinScore: z.number().int().min(0).max(100).optional(),
   couponsEnabled: z.boolean().optional(),

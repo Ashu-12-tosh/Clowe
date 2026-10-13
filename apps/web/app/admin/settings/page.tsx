@@ -40,7 +40,7 @@ export default function AdminSettingsPage() {
   const [couponsEnabled, setCouponsEnabled] = useState(false);
   const [foodCategoriesEnabled, setFoodCategoriesEnabled] = useState(false);
   const [demoCatalogEnabled, setDemoCatalogEnabled] = useState(false);
-  const [dispatch, setDispatch] = useState({ slaHours: '', afterHours: '', penaltyRupees: '', enabled: true });
+  const [dispatch, setDispatch] = useState({ slaHours: '', afterHours: '', penaltyRupees: '', cancelRupees: '', enabled: true });
   // Read-only: set by the migration that introduced the per-order penalty.
   const [penaltyFrom, setPenaltyFrom] = useState<string | null>(null);
   const [economics, setEconomics] = useState({
@@ -91,6 +91,7 @@ export default function AdminSettingsPage() {
           slaHours: String(s.dispatchSlaHours),
           afterHours: String(s.lateDispatchPenaltyAfterHours),
           penaltyRupees: toRupees(s.lateDispatchPenaltyPaise),
+          cancelRupees: toRupees(s.sellerCancelPenaltyPaise),
           enabled: s.penaltyEnabled,
         });
         setPenaltyFrom(s.lateDispatchPenaltyEffectiveFrom);
@@ -142,6 +143,7 @@ export default function AdminSettingsPage() {
           dispatchSlaHours: Math.max(1, Math.round(Number(dispatch.slaHours) || 0)),
           lateDispatchPenaltyAfterHours: Math.max(1, Math.round(Number(dispatch.afterHours) || 0)),
           lateDispatchPenaltyPaise: toPaise(dispatch.penaltyRupees),
+          sellerCancelPenaltyPaise: toPaise(dispatch.cancelRupees),
           penaltyEnabled: dispatch.enabled,
           gstMeritPercent: Number(economics.gstMerit) || 0,
           gstStandardPercent: Number(economics.gstStandard) || 0,
@@ -445,17 +447,28 @@ export default function AdminSettingsPage() {
               className={field}
             />
           </div>
+          <div>
+            <label className="text-xs text-gray-500">Seller cancels an order (₹, once per order)</label>
+            <input
+              type="number"
+              min={0}
+              value={dispatch.cancelRupees}
+              onChange={(e) => setDispatch((d) => ({ ...d, cancelRupees: e.target.value }))}
+              className={field}
+            />
+          </div>
           <label className="flex items-center gap-2 self-end pb-2 text-sm">
             <input
               type="checkbox"
               checked={dispatch.enabled}
               onChange={(e) => setDispatch((d) => ({ ...d, enabled: e.target.checked }))}
             />
-            <span>Charge the penalty</span>
+            <span>Charge penalties</span>
           </label>
         </div>
         <p className="mt-2 text-xs text-gray-400">
-          Switching it off stops new penalties; entries already on a ledger stay as they are.
+          Switching it off stops new penalties of both kinds; entries already on a ledger stay as they are. The
+          cancellation penalty is never charged when the buyer or an admin cancels.
         </p>
         <p className="mt-1 text-xs text-gray-600" data-penalty-effective-from>
           {penaltyFrom
