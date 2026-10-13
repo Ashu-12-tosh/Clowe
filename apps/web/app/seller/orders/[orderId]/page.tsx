@@ -284,7 +284,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                     </span>
                   </div>
                   <p className="mt-0.5 text-xs text-gray-500">
-                    {line.label ? ` · ` : ''}Qty {line.quantity} ·{' '}
+                    {line.label ? `${line.label} · ` : ''}Qty {line.quantity} ·{' '}
                     {formatPaise(line.pricePaise)} each ·{' '}
                     <span className="font-semibold text-ink-900">
                       {formatPaise(line.pricePaise * line.quantity)}

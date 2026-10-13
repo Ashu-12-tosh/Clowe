@@ -958,7 +958,7 @@ function ReturnRow({
           <div className="min-w-0">
             <p className="break-words text-ink-900">{row.item.title}</p>
             <p className="break-words text-[11px] text-gray-400">
-              {row.item.variantLabel ? ` · ` : ''}×{row.item.quantity}
+              {row.item.variantLabel ? `${row.item.variantLabel} · ` : ''}×{row.item.quantity}
             </p>
           </div>
         </div>
@@ -1120,7 +1120,7 @@ function ReturnDrawer({
           <div className="min-w-0 text-xs">
             <p className="break-words font-medium text-ink-900">{detail.item.title}</p>
             <p className="break-words text-[11px] text-gray-400">
-              {detail.item.variantLabel ? ` · ` : ''}{detail.item.sku} · ×{detail.item.quantity}
+              {detail.item.variantLabel ? `${detail.item.variantLabel} · ` : ''}{detail.item.sku} · ×{detail.item.quantity}
             </p>
             <p className="mt-1 font-semibold text-ink-900">
               {formatPaise(detail.refundAmountPaise)}

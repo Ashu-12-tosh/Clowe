@@ -464,7 +464,7 @@ export default function SellerReturnsPage() {
                         <div className="min-w-0">
                           <p className="max-w-40 break-words text-ink-900">{row.title}</p>
                           <p className="text-[11px] text-gray-400">
-                            {row.variantLabel ? ` · ` : ''}×{row.quantity}
+                            {row.variantLabel ? `${row.variantLabel} · ` : ''}×{row.quantity}
                           </p>
                         </div>
                       </div>

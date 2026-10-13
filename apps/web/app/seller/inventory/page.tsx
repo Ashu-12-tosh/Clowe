@@ -609,7 +609,7 @@ export default function SellerInventoryPage() {
                     <div className="min-w-0">
                       <p className="break-words text-ink-900">{r.title}</p>
                       <p className="text-[11px] text-gray-400">
-                        {r.label ? ` · ` : ''}{r.unitsSold} sold
+                        {r.label ? `${r.label} · ` : ''}{r.unitsSold} sold
                       </p>
                     </div>
                     <span

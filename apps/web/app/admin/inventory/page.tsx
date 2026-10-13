@@ -857,7 +857,7 @@ function OverviewTab({
                       <td className="max-w-56 px-3 py-2.5">
                         <p className="break-words font-medium text-ink-900">{r.title}</p>
                         <p className="break-words text-[11px] text-gray-400">
-                          {r.label ? ` · ` : ''}{r.sellerName}
+                          {r.label ? `${r.label} · ` : ''}{r.sellerName}
                         </p>
                       </td>
                       <td className="px-3 py-2.5 text-gray-600">{r.categoryName}</td>
@@ -1747,7 +1747,7 @@ function AdjustModal({
   return (
     <Modal title={`Adjust ${row.sku}`} onClose={onClose}>
       <p className="text-xs text-gray-500">
-        {row.title}{row.label ? ` · ` : ''} · <strong>{row.warehouseName}</strong>
+        {row.title}{row.label ? ` · ${row.label}` : ''} · <strong>{row.warehouseName}</strong>
       </p>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
