@@ -712,7 +712,7 @@ export default function SellerStoreSettingsPage() {
           {/* --- Shipping ------------------------------------------------ */}
           {tab === 'SHIPPING' && (
             <>
-              <Section title="Pickup address" subtitle="Couriers collect here, and it prints on your labels">
+              <Section title="Pickup address" subtitle="Delhivery collects here, and it prints on your labels">
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"

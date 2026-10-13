@@ -213,7 +213,7 @@ function storeHealth(s: SellerStoreSettings): SellerStoreHealth {
       done: s.pickupSameAsBusiness
         ? !!s.addressLine1 && !!s.pincode
         : !!s.pickupLine1 && !!s.pickupPincode,
-      hint: 'Couriers collect from here and it prints on your labels',
+      hint: 'Delhivery collects from here and it prints on your labels',
       tab: 'SHIPPING',
     },
     {

@@ -38,8 +38,10 @@ function Label({ label }: { label: SellerShippingLabel }) {
         </div>
         <div className="text-right">
           <p className="text-xs font-bold uppercase tracking-wide">
-            {label.courierName ?? 'Courier not assigned'}
+            {label.courierName ?? 'Not booked yet'}
+            {label.mode && ` · ${label.mode === 'EXPRESS' ? 'Express' : 'Surface'}`}
           </p>
+          {label.sortCode && <p className="font-mono text-base font-bold text-ink-900">{label.sortCode}</p>}
           {label.isCod ? (
             <p className="mt-0.5 inline-block rounded bg-ink-900 px-2 py-0.5 text-xs font-bold text-white">
               COD {formatPaise(label.codAmountPaise)}
@@ -81,13 +83,17 @@ function Label({ label }: { label: SellerShippingLabel }) {
       </div>
 
       <div className="border-t-2 border-dashed border-gray-300 py-2">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Contents</p>
-        <p className="text-sm text-ink-900">
-          {label.title}{' '}
-          <span className="text-gray-500">
-            {label.variantLabel ? `·  ` : ''}· Qty {label.quantity}
-          </span>
+        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+          Contents{label.weightGrams ? ` · ${label.weightGrams / 1000} kg` : ''}
         </p>
+        {label.contents.map((c, i) => (
+          <p key={i} className="text-sm text-ink-900">
+            {c.title}{' '}
+            <span className="text-gray-500">
+              {c.variantLabel ? `· ${c.variantLabel} ` : ''}· Qty {c.quantity}
+            </span>
+          </p>
+        ))}
       </div>
 
       <footer className="flex items-end justify-between gap-4 border-t-2 border-dashed border-gray-300 pt-2">
@@ -101,7 +107,7 @@ function Label({ label }: { label: SellerShippingLabel }) {
           </>
         ) : (
           <p className="text-xs font-semibold text-red-600">
-            No AWB yet — ship this item to book a shipment, then reprint.
+            No AWB yet — book it with Delhivery, then reprint.
           </p>
         )}
         </div>
@@ -165,7 +171,7 @@ function LabelsView() {
         </p>
       )}
 
-      {labels?.map((label) => <Label key={label.orderItemId} label={label} />)}
+      {labels?.map((label) => <Label key={label.key} label={label} />)}
       {labels && labels.length === 0 && (
         <p className="text-sm text-gray-500">Nothing to print for this selection.</p>
       )}

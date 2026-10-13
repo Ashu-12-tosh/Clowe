@@ -91,13 +91,15 @@ export interface SellerOrderLine {
   awbNumber: string | null;
   courierName: string | null;
   trackingUrl: string | null;
+  /** The parcel this line is booked in with the courier; null until booked. */
+  shipmentId: string | null;
   packedAt: string | null;
   shippedAt: string | null;
   deliveredAt: string | null;
   returnId: string | null;
   returnStatus: string | null;
   /** True when this line can move to the next stage right now. */
-  /** A courier can be assigned (or changed) — not shipped yet. */
+  /** Can be booked with Delhivery (gets its AWB): not shipped and not booked yet. */
   canAssign: boolean;
   canPack: boolean;
   canShip: boolean;
@@ -166,7 +168,8 @@ export interface SellerOrderSummary {
     returnRate: number;
     cancelRate: number;
   };
-  topCouriers: { courier: string; count: number; share: number }[];
+  /** Parcels booked, by Delhivery service: Surface or Express. */
+  shippingModes: { mode: string; label: string; count: number; share: number }[];
   recentRefunds: {
     returnId: string;
     orderItemId: string;
@@ -176,19 +179,15 @@ export interface SellerOrderSummary {
     status: string;
     requestedAt: string;
   }[];
-  /** Courier options for "Assign courier" (from the shipping provider). */
-  couriers: string[];
 }
 
 export const sellerOrderActionSchema = z.object({
   /**
-   * assign: book the courier and AWB (for the label) without shipping; again
-   * to change courier until it ships. ship: hand it over — reusing the AWB
-   * already assigned, or booking one now.
+   * assign: book the parcel with Delhivery (the AWB, for the label) without
+   * shipping. ship: hand it over — in the parcel already booked, or booking
+   * one now. Delhivery is the only courier, so there is nothing to choose.
    */
   action: z.enum(['assign', 'pack', 'ship', 'deliver']),
-  /** Used by 'assign' and 'ship'; empty lets the provider pick. */
-  courier: z.string().trim().max(60).optional(),
 });
 export type SellerOrderActionInput = z.infer<typeof sellerOrderActionSchema>;
 
@@ -209,8 +208,8 @@ export interface SellerOrderCancelResult {
 
 export const sellerOrderBulkSchema = z.object({
   itemIds: z.array(z.string().min(1)).min(1, 'Select at least one item').max(200),
+  /** assign books one parcel per order for the selected lines of that order. */
   action: z.enum(['assign', 'pack', 'ship', 'deliver']),
-  courier: z.string().trim().max(60).optional(),
 });
 export type SellerOrderBulkInput = z.infer<typeof sellerOrderBulkSchema>;
 
@@ -228,22 +227,24 @@ export interface SellerQr {
   dataUrl: string;
 }
 
-/** Data behind one printable shipping label. */
+/** Data behind one printable shipping label: one per parcel, or per line until it is booked. */
 export interface SellerShippingLabel {
-  orderItemId: string;
+  /** The parcel's id, or the line's while it is not booked. */
+  key: string;
+  orderItemIds: string[];
   orderNumber: string;
   placedAt: string;
   awbNumber: string | null;
   courierName: string | null;
-  status: string;
+  /** The courier's sort / routing code for its hubs, when it gives one. */
+  sortCode: string | null;
+  /** SURFACE or EXPRESS once booked. */
+  mode: string | null;
+  weightGrams: number | null;
   isCod: boolean;
   /** Amount to collect on delivery (0 for prepaid). */
   codAmountPaise: number;
-  title: string;
-  size: string;
-  color: string;
-  variantLabel: string;
-  quantity: number;
+  contents: { title: string; variantLabel: string; quantity: number; status: string }[];
   shipTo: SellerShipTo;
   shipFrom: {
     shopName: string;

@@ -47,6 +47,8 @@ import {
 import { postDeliveryEntries } from '../services/sellerLedgerService';
 import { chargeLateDispatchIfDue } from '../services/lateDispatch';
 import { hasPackingVideo } from '../services/packingVideos';
+import { shippingProvider } from '../services/shipping';
+import { syncShipmentsFromLines } from '../services/shipping/shipments';
 import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
 import { createManualOrder } from '../services/manualOrderService';
 import { returnStock } from '../services/stockService';
@@ -632,12 +634,19 @@ adminOrdersRouter.patch('/:id/status', async (req, res, next) => {
       where: { id: { in: targets.map((t) => t.id) } },
       data: {
         status: input.status,
-        ...(input.trackingNumber ? { awbNumber: input.trackingNumber } : {}),
-        ...(input.courier ? { courierName: input.courier } : {}),
         ...(input.status === 'SHIPPED' ? { shippedAt: new Date() } : {}),
         ...(input.status === 'DELIVERED' ? { deliveredAt: new Date() } : {}),
       },
     });
+    // An AWB typed at the desk is for lines not booked through Clowe; a booked
+    // line keeps its parcel's AWB. Delhivery is the only courier.
+    if (input.trackingNumber) {
+      await prisma.orderItem.updateMany({
+        where: { id: { in: targets.map((t) => t.id) }, shipmentId: null },
+        data: { awbNumber: input.trackingNumber, courierName: shippingProvider.courierName },
+      });
+    }
+    await syncShipmentsFromLines(targets.map((t) => t.shipmentId));
     if (input.note) {
       await prisma.order.update({
         where: { id: order.id },

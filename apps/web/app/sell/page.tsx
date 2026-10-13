@@ -31,7 +31,7 @@ const BENEFITS = [
   {
     icon: '🚚',
     title: 'Effortless shipping',
-    text: 'One click on "Mark shipped" books your courier automatically — AWB number and tracking are generated for you.',
+    text: 'Every order ships with Delhivery: one click books the parcel, and the AWB number and tracking are generated for you.',
   },
   {
     icon: '📊',
@@ -54,7 +54,7 @@ const STEPS = [
   { step: '1', title: 'Register your shop', text: '2-minute application — shop name and basic KYC details.' },
   { step: '2', title: 'Get approved', text: 'Our team reviews and approves your shop, usually within a day.' },
   { step: '3', title: 'List your products', text: 'Add photos and variants; let AI write the descriptions.' },
-  { step: '4', title: 'Ship & get paid', text: 'Ship with auto-booked couriers and watch revenue grow in your dashboard.' },
+  { step: '4', title: 'Ship & get paid', text: 'Ship with Delhivery, booked in one click, and watch revenue grow in your dashboard.' },
 ];
 
 export default function SellLandingPage() {

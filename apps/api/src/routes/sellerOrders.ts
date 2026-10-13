@@ -31,6 +31,8 @@ import { webPublicUrl } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { shippingProvider } from '../services/shipping';
+import { bookShipment, pickupAddress, syncShipmentsFromLines } from '../services/shipping/shipments';
+import { valueOfLines } from '../services/shipping/codAmount';
 import { sendMessageSafe } from '../services/messaging';
 import { checkSellerReferralReward } from '../services/sellerReferralService';
 import { blockSuspendedWrites, requireSeller } from './seller';
@@ -205,12 +207,13 @@ function toLine(item: OrderRecord['items'][number], orderCancelled: boolean): Se
     awbNumber: item.awbNumber,
     courierName: item.courierName,
     trackingUrl: item.trackingUrl,
+    shipmentId: item.shipmentId,
     packedAt: item.packedAt?.toISOString() ?? null,
     shippedAt: item.shippedAt?.toISOString() ?? null,
     deliveredAt: item.deliveredAt?.toISOString() ?? null,
     returnId: item.return?.id ?? null,
     returnStatus: item.return?.status ?? null,
-    canAssign: !orderCancelled && (item.status === 'CONFIRMED' || item.status === 'PACKED'),
+    canAssign: !orderCancelled && (item.status === 'CONFIRMED' || item.status === 'PACKED') && !item.shipmentId,
     canPack: !orderCancelled && item.status === 'CONFIRMED',
     canShip: !orderCancelled && (item.status === 'CONFIRMED' || item.status === 'PACKED'),
     canDeliver: !orderCancelled && item.status === 'SHIPPED',
@@ -349,7 +352,7 @@ function compare(
 }
 
 // ---------------------------------------------------------------------------
-// GET /summary — KPI tiles, shop overview, couriers, refund requests
+// GET /summary — KPI tiles, shop overview, shipping modes, refund requests
 // ---------------------------------------------------------------------------
 
 sellerOrdersRouter.get('/summary', async (req, res, next) => {
@@ -369,8 +372,6 @@ sellerOrdersRouter.get('/summary', async (req, res, next) => {
         status: true,
         pricePaise: true,
         quantity: true,
-        courierName: true,
-        shippedAt: true,
       },
     });
 
@@ -400,11 +401,18 @@ sellerOrdersRouter.get('/summary', async (req, res, next) => {
       .filter((i) => i.status === 'CANCELLED')
       .reduce((sum, i) => sum + i.quantity, 0);
 
-    const shipped = items.filter((i) => i.courierName && i.shippedAt);
-    const courierCounts = new Map<string, number>();
-    for (const i of shipped) {
-      courierCounts.set(i.courierName!, (courierCounts.get(i.courierName!) ?? 0) + 1);
-    }
+    // Parcels booked with Delhivery, by service.
+    const modes = await prisma.shipment.groupBy({
+      by: ['mode'],
+      where: {
+        sellerId,
+        kind: 'FORWARD',
+        status: { not: 'CANCELLED' },
+        ...(created ? { order: { createdAt: created } } : {}),
+      },
+      _count: { _all: true },
+    });
+    const parcels = modes.reduce((sum, m) => sum + m._count._all, 0);
 
     const returns = await prisma.return.findMany({
       where: { orderItem: { sellerId } },
@@ -432,14 +440,14 @@ sellerOrdersRouter.get('/summary', async (req, res, next) => {
         returnRate: units > 0 ? Math.round((returnedUnits / units) * 1000) / 10 : 0,
         cancelRate: units > 0 ? Math.round((cancelledUnits / units) * 1000) / 10 : 0,
       },
-      topCouriers: [...courierCounts.entries()]
-        .map(([courier, count]) => ({
-          courier,
-          count,
-          share: shipped.length > 0 ? Math.round((count / shipped.length) * 1000) / 10 : 0,
+      shippingModes: modes
+        .map((m) => ({
+          mode: m.mode,
+          label: m.mode === 'EXPRESS' ? 'Express' : 'Surface',
+          count: m._count._all,
+          share: parcels > 0 ? Math.round((m._count._all / parcels) * 1000) / 10 : 0,
         }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5),
+        .sort((a, b) => b.count - a.count),
       recentRefunds: returns.map((r) => ({
         returnId: r.id,
         orderItemId: r.orderItemId,
@@ -449,7 +457,6 @@ sellerOrdersRouter.get('/summary', async (req, res, next) => {
         status: r.status,
         requestedAt: r.createdAt.toISOString(),
       })),
-      couriers: [...shippingProvider.couriers],
     };
     res.json({ success: true, data: body });
   } catch (err) {
@@ -461,43 +468,55 @@ sellerOrdersRouter.get('/summary', async (req, res, next) => {
 // Fulfilment transitions
 // ---------------------------------------------------------------------------
 
-type Action = 'assign' | 'pack' | 'ship' | 'deliver';
+type Action = 'pack' | 'ship' | 'deliver';
 
 type ItemForAction = Prisma.OrderItemGetPayload<{
   include: { order: { include: { user: { select: { id: true; phone: true } } } } };
 }>;
 
+const ACTION_INCLUDE = { order: { include: { user: { select: { id: true, phone: true } } } } } as const;
+
+/** Why a line can't be booked with the courier now; null when it can. */
+function bookingProblem(item: ItemForAction): string | null {
+  if (item.order.status === 'CANCELLED') return 'Order was cancelled';
+  if (item.status !== 'CONFIRMED' && item.status !== 'PACKED') {
+    return `Cannot book a shipment for an item in status ${item.status}`;
+  }
+  if (item.shipmentId) return `Already booked with Delhivery — AWB ${item.awbNumber ?? 'pending'}`;
+  return null;
+}
+
+/**
+ * Book lines with Delhivery before they leave, so the label carries the AWB:
+ * one parcel per order for the lines given together. No packing video needed
+ * yet — the label goes on before the clip is filmed. Returns the reason for
+ * each line that was not booked.
+ */
+async function bookLines(items: ItemForAction[]): Promise<Map<string, string>> {
+  const skipped = new Map<string, string>();
+  const byOrder = new Map<string, ItemForAction[]>();
+  for (const item of items) {
+    const problem = bookingProblem(item);
+    if (problem) skipped.set(item.id, problem);
+    else byOrder.set(item.orderId, [...(byOrder.get(item.orderId) ?? []), item]);
+  }
+  for (const [orderId, lines] of byOrder) {
+    try {
+      await bookShipment({ orderId, sellerId: lines[0]!.sellerId, itemIds: lines.map((l) => l.id) });
+    } catch (err) {
+      if (!(err instanceof ApiError)) throw err;
+      for (const l of lines) skipped.set(l.id, err.message);
+    }
+  }
+  return skipped;
+}
+
 /**
  * Moves one line to the next stage. Returns null on success or the reason it
  * was skipped — bulk uses the reason, single-item raises it as an error.
  */
-async function applyAction(
-  item: ItemForAction,
-  action: Action,
-  courier: string | undefined,
-): Promise<string | null> {
+async function applyAction(item: ItemForAction, action: Action): Promise<string | null> {
   if (item.order.status === 'CANCELLED') return 'Order was cancelled';
-
-  // Book the courier and AWB before the parcel leaves, so the label carries
-  // them. No packing video needed yet: the label goes on before the clip is
-  // filmed. Assigning again picks a new courier, until the item ships.
-  if (action === 'assign') {
-    if (item.status !== 'CONFIRMED' && item.status !== 'PACKED') {
-      return `Cannot assign a courier to an item in status ${item.status}`;
-    }
-    const shipment = await shippingProvider.createShipment({
-      orderNumber: item.order.orderNumber,
-      orderItemId: item.id,
-      destinationCity: item.order.shipCity,
-      destinationPincode: item.order.shipPincode,
-      preferredCourier: courier,
-    });
-    await prisma.orderItem.update({
-      where: { id: item.id },
-      data: { awbNumber: shipment.awbNumber, courierName: shipment.courierName, trackingUrl: shipment.trackingUrl },
-    });
-    return null;
-  }
 
   if (action === 'pack') {
     if (item.status !== 'CONFIRMED') return `Cannot pack an item in status ${item.status}`;
@@ -529,35 +548,27 @@ async function applyAction(
       return `Cannot ship an item in status ${item.status}`;
     }
     if (!(await hasPackingVideo(item.orderId, item.sellerId))) return PACKING_VIDEO_REQUIRED_MESSAGE;
-    // The courier assigned earlier (and printed on the label) is the one that
-    // takes it, unless a different one is picked now.
-    const reuse = !!item.awbNumber && !!item.courierName && (!courier || courier === item.courierName);
-    const shipment = reuse
-      ? { awbNumber: item.awbNumber!, courierName: item.courierName!, trackingUrl: item.trackingUrl, etaDays: null as number | null }
-      : await shippingProvider.createShipment({
-          orderNumber: item.order.orderNumber,
-          orderItemId: item.id,
-          destinationCity: item.order.shipCity,
-          destinationPincode: item.order.shipPincode,
-          preferredCourier: courier,
-        });
+    // The parcel booked earlier (and printed on the label) is the one that
+    // goes; a line not booked yet is booked now.
+    if (!item.shipmentId) {
+      const reason = (await bookLines([item])).get(item.id);
+      if (reason) return reason;
+    }
+    const booked = await prisma.orderItem.findUniqueOrThrow({
+      where: { id: item.id },
+      select: { shipmentId: true, awbNumber: true, courierName: true },
+    });
     await prisma.$transaction([
       prisma.orderItem.update({
         where: { id: item.id },
-        data: {
-          status: 'SHIPPED',
-          shippedAt: new Date(),
-          awbNumber: shipment.awbNumber,
-          courierName: shipment.courierName,
-          trackingUrl: shipment.trackingUrl,
-        },
+        data: { status: 'SHIPPED', shippedAt: new Date() },
       }),
       prisma.notification.create({
         data: {
           userId: item.order.user.id,
           type: 'ITEM_SHIPPED',
           title: 'Your order is on its way 🚚',
-          body: `"${item.title}" (${item.order.orderNumber}) shipped via ${shipment.courierName} — AWB ${shipment.awbNumber}.${shipment.etaDays ? ` Expected in ~${shipment.etaDays} days.` : ''}`,
+          body: `"${item.title}" (${item.order.orderNumber}) shipped via ${booked.courierName} — AWB ${booked.awbNumber}.`,
           linkHref: `/account/orders/${item.orderId}`,
         },
       }),
@@ -565,8 +576,9 @@ async function applyAction(
     sendMessageSafe({
       channel: 'whatsapp',
       to: `+91${item.order.user.phone}`,
-      body: `Your Clowe item "${item.title}" has shipped via ${shipment.courierName} (AWB ${shipment.awbNumber}). Track: /track 🚚`,
+      body: `Your Clowe item "${item.title}" has shipped via ${booked.courierName} (AWB ${booked.awbNumber}). Track: /track 🚚`,
     });
+    await syncShipmentsFromLines([booked.shipmentId]);
     await syncOrderStatus(item.orderId);
     // Shipped after the penalty deadline? Charged here if the sweep has not
     // already; once per order either way.
@@ -590,6 +602,7 @@ async function applyAction(
       },
     }),
   ]);
+  await syncShipmentsFromLines([item.shipmentId]);
   await syncOrderStatus(item.orderId);
   await settleCodIfDelivered(item.orderId);
   // Delivery is the moment the money is earned: it goes on the ledger here,
@@ -598,17 +611,17 @@ async function applyAction(
   return null;
 }
 
-// Single line: pack / ship / deliver.
+// Single line: book / pack / ship / deliver.
 sellerOrdersRouter.patch('/:itemId/status', async (req, res, next) => {
   try {
     const input = sellerOrderActionSchema.parse(req.body);
-    const item = await prisma.orderItem.findUnique({
-      where: { id: req.params.itemId },
-      include: { order: { include: { user: { select: { id: true, phone: true } } } } },
-    });
+    const item = await prisma.orderItem.findUnique({ where: { id: req.params.itemId }, include: ACTION_INCLUDE });
     if (!item || item.sellerId !== req.seller!.id) throw ApiError.notFound('Order item not found');
 
-    const skipped = await applyAction(item, input.action, input.courier);
+    const skipped =
+      input.action === 'assign'
+        ? ((await bookLines([item])).get(item.id) ?? null)
+        : await applyAction(item, input.action);
     if (skipped) {
       throw ApiError.badRequest(skipped, skipped === PACKING_VIDEO_REQUIRED_MESSAGE ? 'PACKING_VIDEO_REQUIRED' : undefined);
     }
@@ -645,10 +658,8 @@ sellerOrdersRouter.post('/:orderId/cancel', async (req, res, next) => {
 sellerOrdersRouter.post('/bulk', async (req, res, next) => {
   try {
     const input = sellerOrderBulkSchema.parse(req.body);
-    const items = await prisma.orderItem.findMany({
-      where: { id: { in: input.itemIds }, sellerId: req.seller!.id },
-      include: { order: { include: { user: { select: { id: true, phone: true } } } } },
-    });
+    const where = { id: { in: input.itemIds }, sellerId: req.seller!.id };
+    let items = await prisma.orderItem.findMany({ where, include: ACTION_INCLUDE });
 
     const found = new Set(items.map((i) => i.id));
     const skipped = input.itemIds
@@ -656,10 +667,30 @@ sellerOrdersRouter.post('/bulk', async (req, res, next) => {
       .map((itemId) => ({ itemId, reason: 'Not one of your items' }));
 
     let updated = 0;
-    for (const item of items) {
-      const reason = await applyAction(item, input.action, input.courier);
-      if (reason) skipped.push({ itemId: item.id, reason });
-      else updated += 1;
+    if (input.action === 'assign') {
+      const reasons = await bookLines(items);
+      for (const item of items) {
+        const reason = reasons.get(item.id);
+        if (reason) skipped.push({ itemId: item.id, reason });
+        else updated += 1;
+      }
+    } else {
+      if (input.action === 'ship') {
+        // Lines of one order shipped together go in one parcel: book the ones
+        // not booked yet together, before each is shipped.
+        const toBook: ItemForAction[] = [];
+        for (const item of items) {
+          if (bookingProblem(item) === null && (await hasPackingVideo(item.orderId, item.sellerId))) toBook.push(item);
+        }
+        const refused = await bookLines(toBook);
+        for (const [itemId, reason] of refused) skipped.push({ itemId, reason });
+        items = (await prisma.orderItem.findMany({ where, include: ACTION_INCLUDE })).filter((i) => !refused.has(i.id));
+      }
+      for (const item of items) {
+        const reason = await applyAction(item, input.action);
+        if (reason) skipped.push({ itemId: item.id, reason });
+        else updated += 1;
+      }
     }
 
     if (input.action === 'deliver' && updated > 0) {
@@ -691,43 +722,61 @@ sellerOrdersRouter.get('/labels', async (req, res, next) => {
     const seller = req.seller!;
     const items = await prisma.orderItem.findMany({
       where: { id: { in: ids }, sellerId: seller.id },
-      include: { order: true },
+      include: {
+        order: { include: { items: { select: { id: true, pricePaise: true, quantity: true, promoDiscountPaise: true } } } },
+        shipment: {
+          include: { items: { select: { id: true, title: true, variantLabel: true, quantity: true, status: true } } },
+        },
+      },
     });
+    items.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+
+    // One label per parcel: every line in the box is on it, whichever were
+    // picked. A line not booked yet gets its own, without an AWB.
+    const groups = new Map<string, (typeof items)[number]>();
+    for (const i of items) if (!groups.has(i.shipmentId ?? i.id)) groups.set(i.shipmentId ?? i.id, i);
+    // Delhivery collects from the pickup address when one is set.
+    const from = pickupAddress(seller);
 
     const labels: SellerShippingLabel[] = await Promise.all(
-      items.map(async (i) => ({
-      orderItemId: i.id,
-      orderNumber: i.order.orderNumber,
-      placedAt: i.order.createdAt.toISOString(),
-      awbNumber: i.awbNumber,
-      courierName: i.courierName,
-      status: i.status,
-      isCod: i.order.paymentMethod === 'COD',
-      codAmountPaise: i.order.paymentMethod === 'COD' ? i.pricePaise * i.quantity : 0,
-      title: i.title,
-      size: i.size,
-      color: i.color,
-      variantLabel: i.variantLabel,
-      quantity: i.quantity,
-      shipTo: {
-        name: i.order.shipName,
-        line1: i.order.shipLine1,
-        line2: i.order.shipLine2,
-        city: i.order.shipCity,
-        state: i.order.shipState,
-        pincode: i.order.shipPincode,
-      },
-      // Couriers collect from the pickup address when one is set.
-      shipFrom: {
-        shopName: seller.pickupName || seller.shopName,
-        line1: seller.pickupSameAsBusiness ? seller.addressLine1 : seller.pickupLine1,
-        city: seller.pickupSameAsBusiness ? seller.city : seller.pickupCity,
-        state: seller.pickupSameAsBusiness ? seller.state : seller.pickupState,
-        pincode: seller.pickupSameAsBusiness ? seller.pincode : seller.pickupPincode,
-        gstNumber: seller.gstNumber,
-      },
-      qr: await sellerOrderQr(i.orderId, { item: i.id }),
-      })),
+      [...groups].map(async ([key, i]) => {
+        const shipment = i.shipment;
+        const lines = shipment ? shipment.items : [i];
+        const isCod = i.order.paymentMethod === 'COD';
+        const slip = shipment?.awbNumber ? await shippingProvider.getLabel(shipment.awbNumber).catch(() => null) : null;
+        return {
+          key,
+          orderItemIds: lines.map((l) => l.id),
+          orderNumber: i.order.orderNumber,
+          placedAt: i.order.createdAt.toISOString(),
+          awbNumber: shipment?.awbNumber ?? i.awbNumber,
+          courierName: i.courierName,
+          sortCode: slip?.sortCode ?? null,
+          mode: shipment?.mode ?? null,
+          weightGrams: shipment?.weightGrams ?? null,
+          isCod,
+          codAmountPaise: !isCod
+            ? 0
+            : shipment
+              ? shipment.codAmountPaise
+              : valueOfLines(i.order.totalPaise, i.order.items, [i.id]),
+          contents: lines.map((l) => ({ title: l.title, variantLabel: l.variantLabel, quantity: l.quantity, status: l.status })),
+          shipTo: {
+            name: i.order.shipName,
+            line1: i.order.shipLine1,
+            line2: i.order.shipLine2,
+            city: i.order.shipCity,
+            state: i.order.shipState,
+            pincode: i.order.shipPincode,
+          },
+          shipFrom: {
+            shopName: seller.pickupName || seller.shopName,
+            ...from,
+            gstNumber: seller.gstNumber,
+          },
+          qr: await sellerOrderQr(i.orderId, { item: i.id }),
+        };
+      }),
     );
     res.json({ success: true, data: labels });
   } catch (err) {

@@ -287,8 +287,8 @@ export const adminOrderStatusSchema = z.object({
   status: z.enum(['CONFIRMED', 'PACKED', 'SHIPPED', 'DELIVERED']),
   /** Omit to apply to every live line on the order. */
   itemId: z.string().min(1).optional(),
+  /** The Delhivery AWB, when the parcel was booked outside Clowe. */
   trackingNumber: z.string().trim().max(60).optional().or(z.literal('')),
-  courier: z.string().trim().max(60).optional().or(z.literal('')),
   note: z.string().trim().max(300).optional().or(z.literal('')),
   /**
    * Packing or shipping a line whose seller has not recorded the packing

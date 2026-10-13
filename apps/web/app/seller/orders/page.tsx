@@ -76,7 +76,6 @@ export default function SellerOrdersPage() {
   const [data, setData] = useState<SellerOrderPage | null>(null);
   const [summary, setSummary] = useState<SellerOrderSummary | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [courier, setCourier] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -164,14 +163,14 @@ export default function SellerOrdersPage() {
     try {
       const result = await api<SellerOrderBulkResult>('/api/seller/orders/bulk', {
         method: 'POST',
-        body: { itemIds: selectedItemIds, action, ...(courier ? { courier } : {}) },
+        body: { itemIds: selectedItemIds, action },
         auth: true,
       });
       // Every distinct reason, so "3 skipped" says why for each kind of item.
       const reasons = [...new Set(result.skipped.map((s) => s.reason))];
       setNoticeWarn(result.updated === 0 || result.skipped.length > 0);
       setNotice(
-        `${result.updated} item(s) ${action === 'assign' ? 'given a courier and AWB — labels now carry them' : 'updated'}` +
+        `${result.updated} item(s) ${action === 'assign' ? 'booked with Delhivery — labels now carry the AWB' : 'updated'}` +
           (result.skipped.length > 0 ? ` · ${result.skipped.length} skipped: ${reasons.join('; ')}` : ''),
       );
       setSelected(new Set());
@@ -340,26 +339,13 @@ export default function SellerOrdersPage() {
             <span className="font-semibold text-ink-900">
               {selected.size} order(s) · {selectedItemIds.length} item(s) selected
             </span>
-            <select
-              value={courier}
-              onChange={(e) => setCourier(e.target.value)}
-              disabled={!summary || summary.couriers.length === 0}
-              className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 outline-none disabled:opacity-50"
-            >
-              <option value="">Auto-assign courier</option>
-              {summary?.couriers.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
             <button
               disabled={busy || selectedItemIds.length === 0}
               onClick={() => void runBulk('assign')}
-              title="Book the courier and AWB now, so the labels you print carry them"
+              title="Book with Delhivery now (one parcel per order), so the labels you print carry the AWB"
               className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-semibold hover:bg-gray-50 disabled:opacity-50"
             >
-              🏷 Assign courier
+              🏷 Book with Delhivery
             </button>
             <button
               disabled={busy || selectedItemIds.length === 0}
@@ -648,11 +634,11 @@ export default function SellerOrdersPage() {
                   onClick={() => void runBulk('assign')}
                   className="text-left disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <p className="font-semibold text-ink-900">🚚 Assign courier</p>
+                  <p className="font-semibold text-ink-900">🚚 Book with Delhivery</p>
                   <p className="text-gray-500">
                     {selectedItemIds.length > 0
-                      ? `Book ${courier || 'the best available courier'} + AWB for ${selectedItemIds.length} item(s), then print labels`
-                      : `Select orders first — ${summary?.couriers.length ?? 0} partners available`}
+                      ? `Get the AWB for ${selectedItemIds.length} item(s) — one parcel per order — then print labels`
+                      : 'Select orders first'}
                   </p>
                 </button>
               </li>
@@ -673,20 +659,20 @@ export default function SellerOrdersPage() {
                   className="text-left"
                 >
                   <p className="font-semibold text-ink-900">⬇ Download AWB list</p>
-                  <p className="text-gray-500">Shipped orders with courier + AWB, as CSV</p>
+                  <p className="text-gray-500">Shipped orders with their AWB, as CSV</p>
                 </button>
               </li>
             </ul>
           </section>
 
           <section className="rounded-2xl border border-gray-100 bg-white p-4">
-            <h2 className="text-sm font-bold text-ink-900">Top couriers</h2>
-            {summary && summary.topCouriers.length > 0 ? (
+            <h2 className="text-sm font-bold text-ink-900">Delhivery parcels</h2>
+            {summary && summary.shippingModes.length > 0 ? (
               <ul className="mt-3 space-y-2 text-xs">
-                {summary.topCouriers.map((c) => (
-                  <li key={c.courier}>
+                {summary.shippingModes.map((c) => (
+                  <li key={c.mode}>
                     <div className="flex items-center justify-between">
-                      <span className="text-gray-700">{c.courier}</span>
+                      <span className="text-gray-700">{c.label}</span>
                       <span className="font-semibold text-ink-900">
                         {c.count} <span className="text-gray-400">({c.share}%)</span>
                       </span>

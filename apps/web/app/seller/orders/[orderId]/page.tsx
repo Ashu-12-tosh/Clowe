@@ -6,7 +6,6 @@ import {
   PACKING_VIDEO_REQUIRED_MESSAGE,
   type SellerOrderBulkResult,
   type SellerOrderRow,
-  type SellerOrderSummary,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
@@ -36,8 +35,6 @@ const LABEL = 'text-[11px] uppercase tracking-wide text-gray-400';
 export default function SellerOrderDetailPage({ params: paramsPromise }: { params: Promise<{ orderId: string }> }) {
   const params = use(paramsPromise);
   const [order, setOrder] = useState<SellerOrderRow | null>(null);
-  const [couriers, setCouriers] = useState<string[]>([]);
-  const [courier, setCourier] = useState('');
   const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -63,13 +60,6 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
     document.getElementById(`line-${focusItemId}`)?.scrollIntoView({ block: 'center' });
   }, [order, focusItemId]);
 
-  // Courier choices come from the shipping provider via the summary endpoint.
-  useEffect(() => {
-    api<SellerOrderSummary>('/api/seller/orders/summary', { auth: true })
-      .then((s) => setCouriers(s.couriers))
-      .catch(() => {});
-  }, []);
-
   function flash(message: string) {
     setNotice(message);
     setTimeout(() => setNotice(''), 5000);
@@ -81,10 +71,10 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
     try {
       await api(`/api/seller/orders/${itemId}/status`, {
         method: 'PATCH',
-        body: { action, ...((action === 'ship' || action === 'assign') && courier ? { courier } : {}) },
+        body: { action },
         auth: true,
       });
-      if (action === 'assign') flash('Courier assigned — the label now carries the AWB.');
+      if (action === 'assign') flash('Booked with Delhivery — the label now carries the AWB.');
       load();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Action failed');
@@ -97,7 +87,9 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
   async function actAll(action: Action) {
     if (!order) return;
     const itemIds = order.lines
-      .filter((l) => (action === 'pack' ? l.canPack : action === 'ship' ? l.canShip : l.canDeliver))
+      .filter((l) =>
+        action === 'assign' ? l.canAssign : action === 'pack' ? l.canPack : action === 'ship' ? l.canShip : l.canDeliver,
+      )
       .map((l) => l.id);
     if (itemIds.length === 0) return;
     setBusy('all');
@@ -105,11 +97,11 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
     try {
       const result = await api<SellerOrderBulkResult>('/api/seller/orders/bulk', {
         method: 'POST',
-        body: { itemIds, action, ...(action === 'ship' && courier ? { courier } : {}) },
+        body: { itemIds, action },
         auth: true,
       });
       flash(
-        `${result.updated} item(s) updated` +
+        `${result.updated} item(s) ${action === 'assign' ? 'booked with Delhivery, in one parcel' : 'updated'}` +
           (result.skipped.length > 0
             ? ` · ${result.skipped.length} skipped (${result.skipped[0].reason})`
             : ''),
@@ -134,6 +126,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
   }
   if (!order) return <p className="text-sm text-gray-500">Loading…</p>;
 
+  const bookable = order.lines.filter((l) => l.canAssign).length;
   const packable = order.lines.filter((l) => l.canPack).length;
   const shippable = order.lines.filter((l) => l.canShip).length;
   // No clip, no dispatch: the API refuses it too, this just says why up front.
@@ -214,11 +207,21 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
               {PACKING_VIDEO_REQUIRED_MESSAGE}
             </p>
           )}
-          {(packable > 0 || shippable > 0 || deliverable > 0) && (
+          {(bookable > 1 || packable > 0 || shippable > 0 || deliverable > 0) && (
             <div className={`${CARD} flex flex-wrap items-center gap-2`}>
               <p className="mr-auto text-xs font-semibold text-gray-500">
                 Fulfil every eligible item at once
               </p>
+              {bookable > 1 && (
+                <button
+                  disabled={busy !== null}
+                  onClick={() => void actAll('assign')}
+                  title="Book every item not booked yet in one Delhivery parcel, so the label carries the AWB"
+                  className="rounded-lg border border-gray-300 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide hover:bg-gray-50 disabled:opacity-50"
+                >
+                  🏷 Book all in one parcel ({bookable})
+                </button>
+              )}
               {packable > 0 && (
                 <button
                   disabled={busy !== null || !hasClip}
@@ -236,7 +239,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                   onClick={() => void actAll('ship')}
                   className="rounded-lg bg-ink-900 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                 >
-                  🚚 Ship all ({shippable}){courier ? ` via ${courier}` : ''}
+                  🚚 Ship all ({shippable})
                 </button>
               )}
               {deliverable > 0 && (
@@ -289,7 +292,9 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                   </p>
                   {line.awbNumber && (
                     <p className="mt-1 text-xs text-gray-600">
-                      {line.canAssign && <span className="font-semibold text-amber-700">Assigned, not shipped · </span>}
+                      {line.shipmentId && line.canShip && (
+                        <span className="font-semibold text-amber-700">Booked, not shipped · </span>
+                      )}
                       {line.courierName} · AWB{' '}
                       <span className="font-mono font-semibold">{line.awbNumber}</span>
                       {line.trackingUrl && (
@@ -328,11 +333,10 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                   <button
                     disabled={busy !== null}
                     onClick={() => void act(line.id, 'assign')}
-                    title="Book the courier and AWB now, so the label carries them"
+                    title="Book with Delhivery now, so the label carries the AWB"
                     className="rounded-lg border border-gray-300 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide hover:bg-gray-50 disabled:opacity-50"
                   >
-                    🏷 {line.awbNumber ? 'Change courier' : 'Assign courier'}
-                    {courier ? ` (${courier})` : ''}
+                    🏷 Book with Delhivery
                   </button>
                 )}
                 {line.canPack && (
@@ -352,7 +356,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                     onClick={() => void act(line.id, 'ship')}
                     className="rounded-lg bg-ink-900 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                   >
-                    🚚 Ship{courier ? ` via ${courier}` : ''}
+                    🚚 Ship
                   </button>
                 )}
                 {line.canDeliver && (
@@ -444,25 +448,6 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
             </dl>
           </section>
 
-          {couriers.length > 0 && shippable > 0 && (
-            <section className={CARD}>
-              <label className="text-xs font-semibold text-gray-500">
-                Courier for the next shipment
-              </label>
-              <select
-                value={courier}
-                onChange={(e) => setCourier(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-600"
-              >
-                <option value="">Auto-assign (cheapest available)</option>
-                {couriers.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </section>
-          )}
         </aside>
       </div>
     </div>

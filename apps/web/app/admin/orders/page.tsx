@@ -875,7 +875,6 @@ function OrderDrawer({
   const [busy, setBusy] = useState(false);
   const [shipping, setShipping] = useState(false);
   const [awb, setAwb] = useState('');
-  const [courier, setCourier] = useState('');
 
   const load = useCallback(async () => {
     setDetail(await api<AdminOrderDetail>(`/api/admin/orders/${orderId}`, { auth: true }));
@@ -893,14 +892,13 @@ function OrderDrawer({
         auth: true,
         body: {
           status,
-          ...(status === 'SHIPPED' ? { trackingNumber: awb, courier } : {}),
+          ...(status === 'SHIPPED' ? { trackingNumber: awb } : {}),
           ...(noClipReason ? { noClipReason } : {}),
         },
       });
       flash(`Order moved to ${ADMIN_ORDER_STATUS_LABELS[status]}.`);
       setShipping(false);
       setAwb('');
-      setCourier('');
       await load();
       await onChanged();
     } catch (err) {
@@ -1198,16 +1196,7 @@ function OrderDrawer({
         {shipping && (
           <div className="mt-3 space-y-2 rounded-xl border border-gray-200 bg-cream-50 p-3">
             <div>
-              <label className={labelClass}>Courier</label>
-              <input
-                value={courier}
-                onChange={(e) => setCourier(e.target.value)}
-                placeholder="Delhivery"
-                className={`${inputClass} mt-1`}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>AWB / tracking number</label>
+              <label className={labelClass}>Delhivery AWB</label>
               <input
                 value={awb}
                 onChange={(e) => setAwb(e.target.value)}
