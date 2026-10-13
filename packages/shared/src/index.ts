@@ -62,6 +62,7 @@ export * from './adminReturns';
 export * from './adminSellers';
 export * from './adminSupportDesk';
 export * from './supportInbox';
+export * from './loginChoice';
 export * from './adminTryon';
 export * from './ai';
 export * from './growth';

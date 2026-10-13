@@ -6,7 +6,9 @@ import { useRouter } from 'next/navigation';
 import LoginBackdrop from '@/components/LoginBackdrop';
 import LegalCopyright from '@/components/LegalCopyright';
 import ResendOtp from '@/components/auth/ResendOtp';
-import type { AuthTokensResponse, AuthUser, OtpRequestResult, UserRole } from '@clowe/shared';
+import LoginMethodChoice from '@/components/auth/LoginMethodChoice';
+import { lastLoginMethod, rememberLoginMethod as rememberMethod, type LoginMethod } from '@/lib/loginMethod';
+import { phoneSubmitAction, preselectedLoginMethod, type AuthTokensResponse, type AuthUser, type OtpRequestResult, type UserRole } from '@clowe/shared';
 import {
   api,
   ApiRequestError,
@@ -28,28 +30,6 @@ function dashboardFor(role: UserRole): string {
   return '/';
 }
 
-/**
- * How this device signs in. OTP unless the person picked their PIN here
- * before; the page never asks the server whether a number has a PIN.
- */
-type LoginMethod = 'otp' | 'pin';
-const LOGIN_METHOD_KEY = 'clowe.loginMethod';
-
-function rememberedMethod(): LoginMethod {
-  try {
-    return localStorage.getItem(LOGIN_METHOD_KEY) === 'pin' ? 'pin' : 'otp';
-  } catch {
-    return 'otp';
-  }
-}
-
-function rememberMethod(method: LoginMethod) {
-  try {
-    localStorage.setItem(LOGIN_METHOD_KEY, method);
-  } catch {
-    // Storage blocked (private window): the choice just isn't remembered.
-  }
-}
 
 function maskedPhone(phone: string): string {
   return `+91 ${phone.slice(0, 2)}XXX XX${phone.slice(7)}`;
@@ -146,6 +126,13 @@ export default function LoginPage() {
   const [pinReset, setPinReset] = useState(false);
   /** The new PIN, typed a second time. */
   const [pinConfirm, setPinConfirm] = useState('');
+  /** "Login with PIN" is preselected on a device last signed in with a PIN; nothing else is. */
+  const [preselected, setPreselected] = useState<LoginMethod | null>(null);
+  useEffect(() => setPreselected(preselectedLoginMethod(lastLoginMethod())), []);
+  /** A PIN login failed: offer OTP right there. */
+  const [pinFailed, setPinFailed] = useState(false);
+  /** Which choice is working on the phone step. */
+  const [choosing, setChoosing] = useState<LoginMethod | null>(null);
   const [code, setCode] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -181,8 +168,9 @@ export default function LoginPage() {
   }, [photoFile]);
 
   /** After any successful auth: new user → onboarding; no PIN → offer one; else dashboard. */
-  function finishAuth(data: AuthTokensResponse) {
+  function finishAuth(data: AuthTokensResponse, method: LoginMethod) {
     saveSession(data);
+    if (!data.pinResetRequired) rememberMethod(method);
     setUser(data.user);
     setError('');
     setNotice('');
@@ -219,24 +207,32 @@ export default function LoginPage() {
     }
   }
 
-  /** Step 1 → OTP, or the PIN if that is how this device signs in. */
-  async function continueFromPhone() {
+  /**
+   * Enter in the number field: on a device last signed in with a PIN, that is
+   * the PIN step; otherwise nothing — no OTP goes out until it is chosen. A new
+   * account (sign-up) always starts with an OTP.
+   */
+  async function submitPhone() {
     setNotice('');
-    if (rememberedMethod() === 'pin') choosePin();
-    else await chooseOtp();
+    const action = phoneSubmitAction({ signup: signupMode, phoneComplete: phone.length === 10, preselected });
+    if (action === 'otp') await chooseOtp();
+    else if (action === 'pin') choosePin();
   }
 
   function choosePin() {
-    rememberMethod('pin');
     setError('');
+    setNotice('');
+    setPinFailed(false);
     setPin('');
     setStep('pin');
   }
 
   async function chooseOtp() {
-    rememberMethod('otp');
     setPinReset(false);
+    setPinFailed(false);
+    setChoosing('otp');
     await sendOtp();
+    setChoosing(null);
   }
 
   /** "Forgot PIN?": an OTP, then a new PIN — the old one stops working once the code is verified. */
@@ -249,12 +245,14 @@ export default function LoginPage() {
     setError('');
     setBusy(true);
     try {
+      setPinFailed(false);
       const data = await api<AuthTokensResponse>('/api/auth/pin-login', {
         body: { phone, pin: pinValue },
       });
-      finishAuth(data);
+      finishAuth(data, 'pin');
     } catch (err) {
       setPin('');
+      setPinFailed(true);
       setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
     } finally {
       setBusy(false);
@@ -273,7 +271,7 @@ export default function LoginPage() {
           ...(pinReset ? { purpose: 'PIN_RESET' } : {}),
         },
       });
-      finishAuth(data);
+      finishAuth(data, 'otp');
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
     } finally {
@@ -439,6 +437,11 @@ export default function LoginPage() {
             {error && (
               <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
+                {pinFailed && step === 'pin' && (
+                  <button type="button" onClick={() => void chooseOtp()} className="ml-1 font-semibold underline">
+                    Get OTP instead
+                  </button>
+                )}
               </div>
             )}
 
@@ -448,7 +451,7 @@ export default function LoginPage() {
                 className="mt-6 space-y-4"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  void continueFromPhone();
+                  void submitPhone();
                 }}
               >
                 <div>
@@ -469,21 +472,24 @@ export default function LoginPage() {
                     />
                   </div>
                 </div>
-                <button
-                  type="submit"
-                  disabled={busy || phone.length !== 10}
-                  className="w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:bg-brand-700 disabled:opacity-50"
-                >
-                  {busy ? 'Please wait…' : 'Continue'}
-                </button>
-                <button
-                  type="button"
-                  onClick={choosePin}
-                  disabled={busy || phone.length !== 10}
-                  className="w-full text-center text-sm text-brand-600 hover:underline disabled:text-gray-400 disabled:no-underline"
-                >
-                  Use my PIN instead
-                </button>
+                {signupMode ? (
+                  // A new account starts with an OTP: there is no PIN yet.
+                  <button
+                    type="submit"
+                    disabled={busy || phone.length !== 10}
+                    className="w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:bg-brand-700 disabled:opacity-50"
+                  >
+                    {busy ? 'Please wait…' : 'Get OTP'}
+                  </button>
+                ) : (
+                  <LoginMethodChoice
+                    disabled={busy || phone.length !== 10}
+                    preselected={preselected}
+                    busy={choosing}
+                    onPin={choosePin}
+                    onOtp={() => void chooseOtp()}
+                  />
+                )}
               </form>
             )}
 
@@ -518,7 +524,7 @@ export default function LoginPage() {
                 </button>
                 <div className="flex items-center justify-between text-sm">
                   <button onClick={() => void chooseOtp()} className="text-brand-600 hover:underline">
-                    Use OTP instead
+                    Get OTP instead
                   </button>
                   <button
                     onClick={() => void forgotPin()}
