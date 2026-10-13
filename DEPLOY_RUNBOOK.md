@@ -73,15 +73,59 @@ dig +short yourdomain.com
 — it only has to be right by Step 6 (the certificate). It does not block the
 build.
 
-### 0.3 — Clone the repo
+### 0.3 — Clone the repo (read-only deploy key)
+
+The repository is private, so the server reads it with its own **deploy
+key**: an SSH key that can pull this one repo and nothing else, and cannot
+push. It is separate from the key you log in with.
+
+**1. Make the key on the server** (never copy a private key off it):
+
+```sh
+ssh-keygen -t ed25519 -N "" -C "clowe-prod-deploy (<server IP>, read-only)" \
+  -f ~/.ssh/clowe_deploy_ed25519
+cat ~/.ssh/clowe_deploy_ed25519.pub     # this line goes into GitHub
+```
+
+**2. Trust github.com's host key, after checking it.** Compare the
+fingerprints this prints with the ones GitHub publishes
+(docs.github.com → "GitHub's SSH key fingerprints"); add them only if all
+match (Ed25519 `SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU`):
+
+```sh
+ssh-keyscan -t ed25519,ecdsa,rsa github.com > /tmp/gh && ssh-keygen -lf /tmp/gh
+cat /tmp/gh >> ~/.ssh/known_hosts && rm /tmp/gh
+```
+
+**3. Add the key in GitHub:** the repo → **Settings → Deploy keys → Add
+deploy key**. Title: `clowe-prod (<server IP>)`. Key: the `.pub` line from
+step 1. Leave **Allow write access unticked**. Add key. (Only a repo admin
+sees this page.)
+
+**4. Clone with that key**, and make the repo keep using it:
 
 ```sh
 cd /root
-git clone https://github.com/Ashu-12-tosh/Clowe.git clowe
+GIT_SSH_COMMAND="ssh -i /root/.ssh/clowe_deploy_ed25519 -o IdentitiesOnly=yes" \
+  git clone git@github.com:Ashu-12-tosh/Clowe.git clowe
 cd /root/clowe
+git config core.sshCommand "ssh -i /root/.ssh/clowe_deploy_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
 ```
 
-✅ **Correct result:** `ls` shows `docker-compose.prod.yml`, `apps`, `nginx`.
+`core.sshCommand` is set in this repo only, so nothing else on the server
+uses the key. An existing clone that used `https://` is switched with
+`git remote set-url origin git@github.com:Ashu-12-tosh/Clowe.git` plus the
+`git config` line above.
+
+✅ **Correct result:** `ls` shows `docker-compose.prod.yml`, `apps`, `nginx`,
+and `git fetch` prints nothing (or the new commits) with no password prompt.
+
+❌ **`Permission denied (publickey)`:** the key is not on the repo's Deploy
+keys page (or was added to a different repo or to a user account). ❌
+**`Host key verification failed`:** step 2 was skipped.
+
+To revoke the server's access, delete the key on the Deploy keys page; to
+rotate it, make a new one (step 1), add it, then delete the old one.
 
 > **The directory name matters.** Docker Compose names volumes after it:
 > `/root/clowe` gives you `clowe_db_data`, `clowe_uploads_data`,
@@ -929,12 +973,22 @@ dc down                    # stop, keep data
 
 ```sh
 cd /root/clowe
-git pull
+./scripts/backup-db.sh        # always first
+git pull                      # over SSH with the deploy key (section 0.3)
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+docker compose -f docker-compose.prod.yml --env-file .env.production ps
+curl -sk -H 'Host: cloweshop.com' https://localhost/api/health
 ```
 
 Migrations run automatically when the API container starts. The database and
 uploads live in named volumes, so nothing is lost.
+
+❌ **`git pull` asks for a username, or says `Permission denied
+(publickey)`:** the server is not using its deploy key — the remote is still
+`https://`, or the key was removed from GitHub. Check `git remote get-url
+origin` (must be `git@github.com:…`) and `git config --get core.sshCommand`,
+then section 0.3. A private repo cannot be pulled over `https://` without
+credentials, which is what broke the 13 Oct 2026 deploy.
 
 ### Private files in R2
 
