@@ -1,0 +1,196 @@
+import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { createApp } from '../app';
+import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
+import { shippingProvider } from '../services/shipping';
+import { postForwardFreight } from '../services/shipping/freight';
+import { signAccessToken } from '../utils/jwt';
+
+/**
+ * Sellers pay the courier's actual forward freight for each parcel, not a
+ * flat fee per line: Delhivery's estimate before they confirm a booking,
+ * stored on the parcel, and the final charge posted once, on delivery, at
+ * the charged weight. A later re-weigh posts its own adjustment. With the
+ * mock courier, the estimate is the admin's flat test rate.
+ */
+
+const prisma = new PrismaClient();
+let server: Server;
+let base: string;
+let token: string;
+let sellerId: string;
+let productId: string;
+let variantId: string;
+let buyerId: string;
+let seq = 0;
+const orders: string[] = [];
+const TEST_RATE = 7_000; // the mock's flat estimate for this file
+
+async function call(method: string, path: string, body?: unknown) {
+  const res = await fetch(`${base}${path}`, {
+    method,
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return { status: res.status, json: (await res.json()) as { data: Record<string, unknown>; error?: { message: string } } };
+}
+
+async function paidOrder(lines = 1) {
+  seq += 1;
+  const order = await prisma.order.create({
+    data: {
+      userId: buyerId, orderNumber: `CLW-2026-88${String(seq).padStart(4, '0')}`, status: 'CONFIRMED',
+      subtotalPaise: 50_000 * lines, shippingPaise: 0, totalPaise: 50_000 * lines, paymentMethod: 'UPI',
+      shipName: 'Freight Buyer', shipPhone: '9197700002', shipLine1: '1 Test Street', shipCity: 'Mumbai', shipState: 'Maharashtra', shipPincode: '400001',
+      payment: { create: { provider: 'mock', amountPaise: 50_000 * lines, status: 'PAID' } },
+      items: {
+        create: Array.from({ length: lines }, (_, i) => ({
+          productId, variantId, sellerId, title: `Freight Tee ${i + 1}`, size: '', color: '', pricePaise: 50_000, quantity: 1, status: 'CONFIRMED' as const,
+        })),
+      },
+    },
+    include: { items: true },
+  });
+  orders.push(order.id);
+  await prisma.orderPackingVideo.create({ data: { orderId: order.id, sellerId, fileRef: 'asset:test' } });
+  return { orderId: order.id, ids: order.items.map((i) => i.id) };
+}
+
+const freightRows = (orderId: string) =>
+  prisma.sellerLedgerEntry.findMany({ where: { orderId, type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'DELIVERY_FEE'] } }, orderBy: { createdAt: 'asc' } });
+
+async function shipAndDeliver(ids: string[]) {
+  expect((await call('POST', '/api/seller/orders/bulk', { itemIds: ids, action: 'ship' })).json.data).toMatchObject({ updated: ids.length });
+  expect((await call('POST', '/api/seller/orders/bulk', { itemIds: ids, action: 'deliver' })).json.data).toMatchObject({ updated: ids.length });
+}
+
+beforeAll(async () => {
+  await setSetting('deliveryFeePaise', TEST_RATE);
+  const user = await prisma.user.create({ data: { phone: '9197700001', name: 'Freight Seller', role: Role.SELLER, referralCode: 'FRT-S' } });
+  sellerId = (
+    await prisma.sellerProfile.create({
+      data: {
+        userId: user.id, shopName: 'Freight Shop', status: SellerStatus.APPROVED, approvedAt: new Date(), gstNumber: '27ABCDE1234F1Z5',
+        addressLine1: '5 Seller Road', city: 'Delhi', state: 'Delhi', pincode: '110053',
+      },
+    })
+  ).id;
+  token = signAccessToken({ sub: user.id, role: 'SELLER' });
+  buyerId = (await prisma.user.create({ data: { phone: '9197700002', name: 'Freight Buyer', referralCode: 'FRT-B' } })).id;
+  const category = await prisma.category.create({ data: { name: 'Freight Tees', slug: 'freight-tees', isActive: true } });
+  // 300 g, but a 40 × 30 × 10 cm box: 2.4 kg volumetric.
+  productId = (
+    await prisma.product.create({
+      data: {
+        sellerId, categoryId: category.id, title: 'Freight Tee', slug: 'freight-tee', description: 'For freight tests.', basePricePaise: 50_000,
+        status: ProductStatus.APPROVED, approvedAt: new Date(), weightGrams: 300, lengthMm: 400, widthMm: 300, heightMm: 100,
+      },
+    })
+  ).id;
+  variantId = (await prisma.productVariant.create({ data: { productId, optionValues: {}, optionsKey: '', label: '', sku: 'SKU-FRT', pricePaise: 50_000, stock: 50 } })).id;
+  server = createApp().listen(0);
+  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+});
+
+afterAll(async () => {
+  vi.restoreAllMocks();
+  await setSetting('deliveryFeePaise', DEFAULT_SETTINGS.deliveryFeePaise);
+  await prisma.order.deleteMany({ where: { id: { in: orders } } });
+  await prisma.sellerLedgerEntry.deleteMany({ where: { sellerId } });
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await prisma.$disconnect();
+});
+
+describe('before booking', () => {
+  it('shows each parcel’s estimate, priced on the greater of actual and volumetric weight', async () => {
+    const { ids } = await paidOrder();
+    const quote = vi.spyOn(shippingProvider, 'quote');
+    const r = await call('GET', `/api/seller/orders/booking-quote?ids=${ids.join(',')}`);
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    expect(r.json.data).toMatchObject({
+      provider: 'mock',
+      totalPaise: TEST_RATE,
+      skipped: [],
+      parcels: [{ itemIds: ids, payment: 'PREPAID', chargeableGrams: 2_400, forwardFreightPaise: TEST_RATE, totalPaise: TEST_RATE, error: null }],
+    });
+    expect(quote).toHaveBeenCalledWith(
+      expect.objectContaining({ originPincode: '110053', destinationPincode: '400001', mode: 'SURFACE', weightGrams: 2_400, kind: 'DELIVERED', payment: 'PREPAID' }),
+    );
+    quote.mockRestore();
+  });
+
+  it('says why a line can’t be quoted, and books nothing', async () => {
+    const { ids } = await paidOrder();
+    await call('PATCH', `/api/seller/orders/${ids[0]}/status`, { action: 'assign' });
+    const r = await call('GET', `/api/seller/orders/booking-quote?ids=${ids[0]},nope`);
+    expect(r.json.data).toMatchObject({ parcels: [], totalPaise: 0 });
+    expect((r.json.data.skipped as { reason: string }[]).map((s) => s.reason)).toEqual(['Not one of your items', expect.stringMatching(/^Already booked/)]);
+  });
+
+  it('stores the estimate on the parcel when it is booked, Surface', async () => {
+    const { ids } = await paidOrder();
+    await call('POST', '/api/seller/orders/bulk', { itemIds: ids, action: 'assign' });
+    const s = await prisma.shipment.findFirstOrThrow({ where: { items: { some: { id: ids[0] } } } });
+    expect(s).toMatchObject({ estimatedFreightPaise: TEST_RATE, mode: 'SURFACE', finalFreightPaise: null });
+  });
+});
+
+describe('on delivery', () => {
+  it('posts the parcel’s forward freight once — not a fee per line', async () => {
+    const { orderId, ids } = await paidOrder(2);
+    await shipAndDeliver(ids);
+    const rows = await freightRows(orderId);
+    expect(rows.map((r) => [r.type, r.amountPaise, r.orderItemId])).toEqual([['FORWARD_FREIGHT', -TEST_RATE, null]]);
+    const s = await prisma.shipment.findFirstOrThrow({ where: { orderId } });
+    // Two 300 g tees in one box whose size is confirmed later: 600 g charged.
+    expect(s).toMatchObject({ finalFreightPaise: TEST_RATE, freightWeightGrams: 600 });
+    // Replays post nothing more.
+    expect(await postForwardFreight(s.id)).toBe('UNCHANGED');
+    expect(await freightRows(orderId)).toHaveLength(1);
+    // The sale and its other deductions are still per line, as before.
+    expect(await prisma.sellerLedgerEntry.count({ where: { orderId, type: 'SALE_EARNING' } })).toBe(2);
+  });
+
+  it('posts a separate adjustment when the charged weight changes, never editing the first entry', async () => {
+    const { orderId, ids } = await paidOrder();
+    await shipAndDeliver(ids);
+    const s = await prisma.shipment.findFirstOrThrow({ where: { orderId } });
+    const first = (await freightRows(orderId))[0]!;
+    // Delhivery re-weighs the parcel at 3 kg, and prices it at ₹95.
+    await setSetting('deliveryFeePaise', 9_500);
+    await prisma.shipment.update({ where: { id: s.id }, data: { chargedWeightGrams: 3_000 } });
+    expect(await postForwardFreight(s.id)).toBe('ADJUSTED');
+    expect(await postForwardFreight(s.id)).toBe('UNCHANGED');
+    const rows = await freightRows(orderId);
+    expect(rows.map((r) => [r.type, r.amountPaise])).toEqual([
+      ['FORWARD_FREIGHT', -TEST_RATE],
+      ['FREIGHT_ADJUSTMENT', -2_500],
+    ]);
+    expect(rows[0]).toMatchObject({ id: first.id, amountPaise: first.amountPaise });
+    expect(await prisma.shipment.findUniqueOrThrow({ where: { id: s.id } })).toMatchObject({ finalFreightPaise: 9_500, freightWeightGrams: 3_000 });
+    await setSetting('deliveryFeePaise', TEST_RATE);
+  });
+
+  it('when the charges API is down, delivers anyway and posts the freight before the next payout figures', async () => {
+    const { orderId, ids } = await paidOrder();
+    const down = vi.spyOn(shippingProvider, 'quote').mockRejectedValue(new Error('Delhivery did not answer in time'));
+    await shipAndDeliver(ids);
+    expect(await prisma.orderItem.findUniqueOrThrow({ where: { id: ids[0] } })).toMatchObject({ status: 'DELIVERED' });
+    expect(await freightRows(orderId)).toHaveLength(0);
+    down.mockRestore();
+    expect((await call('GET', '/api/seller/payouts/overview')).status).toBe(200);
+    expect((await freightRows(orderId)).map((r) => r.amountPaise)).toEqual([-TEST_RATE]);
+  });
+
+  it('takes the freight off what can be paid out straight away', async () => {
+    const before = (await call('GET', '/api/seller/payouts/overview')).json.data.kpis as { payablePaise: number };
+    const { orderId, ids } = await paidOrder();
+    await shipAndDeliver(ids);
+    const after = (await call('GET', '/api/seller/payouts/overview')).json.data.kpis as { payablePaise: number };
+    // The sale is still in the return window; the freight is not held.
+    expect(after.payablePaise).toBe(Math.max(0, before.payablePaise - TEST_RATE));
+    expect(await freightRows(orderId)).toHaveLength(1);
+  });
+});

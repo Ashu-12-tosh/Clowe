@@ -22,6 +22,7 @@ import {
   type SellerOrderTab,
   type SellerQr,
   type SellerShippingLabel,
+  type SellerBookingQuote,
   isNotASale,
 } from '@clowe/shared';
 import QRCode from 'qrcode';
@@ -31,7 +32,8 @@ import { webPublicUrl } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { shippingProvider } from '../services/shipping';
-import { bookShipment, pickupAddress, syncShipmentsFromLines } from '../services/shipping/shipments';
+import { bookShipment, pickupAddress, planParcel, syncShipmentsFromLines } from '../services/shipping/shipments';
+import { chargeableGrams, forwardFreightPaise } from '../services/shipping/freight';
 import { valueOfLines } from '../services/shipping/codAmount';
 import { sendMessageSafe } from '../services/messaging';
 import { checkSellerReferralReward } from '../services/sellerReferralService';
@@ -700,6 +702,73 @@ sellerOrdersRouter.post('/bulk', async (req, res, next) => {
     }
 
     const body: SellerOrderBulkResult = { updated, skipped };
+    res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// What booking will cost: Delhivery's estimate, shown before the seller confirms
+// ---------------------------------------------------------------------------
+
+sellerOrdersRouter.get('/booking-quote', async (req, res, next) => {
+  try {
+    const ids = String(req.query.ids ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 200);
+    if (ids.length === 0) throw ApiError.badRequest('Select at least one item');
+    const seller = req.seller!;
+    const items = await prisma.orderItem.findMany({ where: { id: { in: ids }, sellerId: seller.id }, include: ACTION_INCLUDE });
+
+    const found = new Set(items.map((i) => i.id));
+    const skipped = ids.filter((id) => !found.has(id)).map((itemId) => ({ itemId, reason: 'Not one of your items' }));
+    const byOrder = new Map<string, string[]>();
+    for (const item of items) {
+      const problem = bookingProblem(item);
+      if (problem) skipped.push({ itemId: item.id, reason: problem });
+      else byOrder.set(item.orderId, [...(byOrder.get(item.orderId) ?? []), item.id]);
+    }
+
+    const origin = pickupAddress(seller).pincode;
+    const parcels: SellerBookingQuote['parcels'] = [];
+    for (const [orderId, itemIds] of byOrder) {
+      const order = await prisma.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: { items: { include: { product: { select: { weightGrams: true, lengthMm: true, widthMm: true, heightMm: true } } } } },
+      });
+      const plan = planParcel(order, order.items.filter((i) => itemIds.includes(i.id)));
+      const chargeable = chargeableGrams(plan);
+      let forward: number | null = null;
+      let error: string | null = null;
+      if (!origin) error = 'Add your pickup pincode in Store Settings to get an estimate';
+      else {
+        try {
+          forward = await forwardFreightPaise({ originPincode: origin, destinationPincode: order.shipPincode, mode: plan.mode, weightGrams: chargeable });
+        } catch (err) {
+          error = `No estimate from Delhivery right now${err instanceof Error ? ` (${err.message})` : ''}`;
+        }
+      }
+      parcels.push({
+        orderId,
+        orderNumber: order.orderNumber,
+        itemIds,
+        payment: plan.isCod ? 'COD' : 'PREPAID',
+        codAmountPaise: plan.codAmountPaise,
+        chargeableGrams: chargeable,
+        forwardFreightPaise: forward,
+        totalPaise: forward,
+        error,
+      });
+    }
+    const body: SellerBookingQuote = {
+      parcels,
+      skipped,
+      totalPaise: parcels.reduce((sum, p) => sum + (p.totalPaise ?? 0), 0),
+      provider: shippingProvider.name,
+    };
     res.json({ success: true, data: body });
   } catch (err) {
     next(err);

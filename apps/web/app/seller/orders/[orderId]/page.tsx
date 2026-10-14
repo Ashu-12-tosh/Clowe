@@ -13,6 +13,7 @@ import { StatusPill } from '@/components/seller/orders/StatusPill';
 import { DispatchCountdown } from '@/components/seller/orders/DispatchCountdown';
 import { PackingVideoPanel } from '@/components/seller/orders/PackingVideoPanel';
 import { CancelOrderPanel } from '@/components/seller/orders/CancelOrderPanel';
+import { BookingConfirm } from '@/components/seller/orders/BookingConfirm';
 import { ExternalLink } from '@/components/ExternalLink';
 
 type Action = 'assign' | 'pack' | 'ship' | 'deliver';
@@ -40,6 +41,8 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
   const [notice, setNotice] = useState('');
   /** Line id while a single line is updating, or 'all' during a bulk action. */
   const [busy, setBusy] = useState<string | null>(null);
+  /** Lines waiting on the seller to confirm Delhivery's estimate. */
+  const [booking, setBooking] = useState<string[] | null>(null);
   /** Line to highlight - a scanned label QR lands here with ?item=<lineId>. */
   const [focusItemId, setFocusItemId] = useState<string | null>(null);
 
@@ -215,7 +218,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
               {bookable > 1 && (
                 <button
                   disabled={busy !== null}
-                  onClick={() => void actAll('assign')}
+                  onClick={() => setBooking(order.lines.filter((l) => l.canAssign).map((l) => l.id))}
                   title="Book every item not booked yet in one Delhivery parcel, so the label carries the AWB"
                   className="rounded-lg border border-gray-300 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide hover:bg-gray-50 disabled:opacity-50"
                 >
@@ -332,7 +335,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                 {line.canAssign && (
                   <button
                     disabled={busy !== null}
-                    onClick={() => void act(line.id, 'assign')}
+                    onClick={() => setBooking([line.id])}
                     title="Book with Delhivery now, so the label carries the AWB"
                     className="rounded-lg border border-gray-300 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide hover:bg-gray-50 disabled:opacity-50"
                   >
@@ -387,6 +390,21 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
               </div>
             </div>
           ))}
+
+          {booking && (
+            <BookingConfirm
+              itemIds={booking}
+              onClose={() => setBooking(null)}
+              onBooked={(r) => {
+                setBooking(null);
+                flash(
+                  `${r.updated} item(s) booked with Delhivery — the label now carries the AWB` +
+                    (r.skipped.length > 0 ? ` · ${r.skipped.length} skipped (${r.skipped[0]!.reason})` : ''),
+                );
+                load();
+              }}
+            />
+          )}
 
           <CancelOrderPanel
             orderId={order.orderId}

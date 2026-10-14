@@ -28,26 +28,22 @@ import {
 //
 // - Pincodes: six digits, not starting with 0. 999999 is not served at all;
 //   888888 is served prepaid only (no COD). COD is capped at ₹50,000.
-// - Freight: zone from the two pincodes (A same city … E remote), per 500 g
-//   slab, Express 1.6×, COD charge ₹40 or 2 %, 18 % GST. Indicative only.
+// - Freight: a flat rate per parcel, GST included (the admin's test rate, ₹60
+//   by default) — the mock's estimate, not Delhivery's. As with Delhivery, an
+//   RTO quote is the forward and return legs together and a customer return
+//   (DTO) costs 1.2×. COD adds ₹40 or 2 % of the amount, plus 18 % GST.
 // - Warehouse names may not contain an underscore (Delhivery refuses them).
 // - Each shipment reference books once; a second booking is refused.
 // - simulate() moves a booked parcel along, as courier scans would.
 // ---------------------------------------------------------------------------
 
 const COURIER = 'Delhivery';
+/** The flat rate when none is given: the default test rate. */
+const DEFAULT_FLAT_PAISE = 6_000;
 const COD_LIMIT_PAISE = 5_000_000;
 const NOT_SERVED = '999999';
 const PREPAID_ONLY = '888888';
 
-/** First-500 g and each further 500 g, in paise, per zone (surface). */
-const ZONE_RATES: Record<string, [number, number]> = {
-  A: [3_800, 3_200],
-  B: [4_500, 3_800],
-  C: [5_500, 4_800],
-  D: [6_500, 5_600],
-  E: [8_700, 7_500],
-};
 /** Jammu & Kashmir, Himachal, the North East, Andaman: Delhivery's special zone. */
 const REMOTE_PREFIXES = ['17', '18', '19', '74', '78', '79'];
 
@@ -99,6 +95,8 @@ export class MockShippingProvider implements ShippingProvider {
   readonly environment = 'mock';
   readonly courierName = COURIER;
 
+  constructor(private readonly options: { flatParcelPaise?: () => Promise<number> } = {}) {}
+
   private readonly parcels = new Map<string, MockParcel>();
   private readonly references = new Set<string>();
   private readonly warehouses = new Map<string, WarehouseInput>();
@@ -129,22 +127,23 @@ export class MockShippingProvider implements ShippingProvider {
     if (request.weightGrams <= 0) throw new ShippingProviderError('Weight must be more than 0 g', 'INVALID_WEIGHT');
     const zone = mockZone(request.originPincode, request.destinationPincode);
     const slabs = Math.ceil(request.weightGrams / 500);
-    const [first, extra] = ZONE_RATES[zone]!;
-    let freight = first + (slabs - 1) * extra;
-    if (request.mode === 'EXPRESS') freight = Math.round(freight * 1.6);
-    if (request.kind === 'DTO') freight = Math.round(freight * 1.2);
+    const flat = Math.max(0, Math.round((await this.options.flatParcelPaise?.()) ?? DEFAULT_FLAT_PAISE));
+    // Totals include GST; the freight figure is before it, as Delhivery reports.
+    const legTotal = request.kind === 'DTO' ? Math.round(flat * 1.2) : flat;
+    const freightTotal = request.kind === 'RTO' ? legTotal * 2 : legTotal;
+    const freight = Math.round(legTotal / 1.18);
     const codCharge =
       request.kind === 'DELIVERED' && request.payment === 'COD'
         ? Math.max(4_000, Math.round((request.codAmountPaise ?? 0) * 0.02))
         : 0;
-    const tax = Math.round((freight + codCharge) * 0.18);
+    const codTotal = codCharge + Math.round(codCharge * 0.18);
     return {
       zone,
       chargedWeightGrams: slabs * 500,
       freightPaise: freight,
       codChargePaise: codCharge,
-      taxPaise: tax,
-      totalPaise: freight + codCharge + tax,
+      taxPaise: freightTotal + codTotal - (request.kind === 'RTO' ? freight * 2 : freight) - codCharge,
+      totalPaise: freightTotal + codTotal,
     };
   }
 

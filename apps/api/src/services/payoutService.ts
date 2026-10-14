@@ -12,6 +12,7 @@ import { ApiError } from '../utils/ApiError';
 import { getSettings } from './settingsService';
 import { payoutProvider } from './payouts';
 import { ensureLedgerCoversDeliveries, settlementPosition } from './sellerLedgerService';
+import { ensureFreightPosted } from './shipping/freight';
 import { economicsRates } from './economicsRates';
 import { categoryRulesMap } from './categoryRules';
 import { getSellerKycSummary } from './kyc/sellerKyc';
@@ -89,7 +90,7 @@ export function feesFor(line: FeeLine, settings: PlatformSettings, rules: TaxRul
     rates: economicsRates(settings),
     taxRules: rules.get(line.product.categoryId),
   });
-  const fixedFeesPaise = e.platformFeePaise + e.deliveryFeePaise + e.closingFeePaise + e.gtChargePaise;
+  const fixedFeesPaise = e.platformFeePaise + e.closingFeePaise + e.gtChargePaise;
   return {
     grossPaise: e.grossPaise,
     commissionPaise: e.commissionPaise,
@@ -199,8 +200,10 @@ export interface AvailableBalance {
 
 export async function availableBalance(sellerId: string): Promise<AvailableBalance> {
   const settings = await getSettings();
-  // Lines delivered before the ledger existed get their entries on first read.
+  // Lines delivered before the ledger existed get their entries on first read,
+  // and delivered parcels their freight, before anything is worked out.
   await ensureLedgerCoversDeliveries(sellerId);
+  await ensureFreightPosted(sellerId);
   const [position, eligible, clearing, ads] = await Promise.all([
     settlementPosition(sellerId, settings.payoutHoldDays),
     eligibleItems(sellerId, settings.payoutHoldDays),

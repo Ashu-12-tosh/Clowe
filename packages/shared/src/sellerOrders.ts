@@ -219,6 +219,30 @@ export interface SellerOrderBulkResult {
   skipped: { itemId: string; reason: string }[];
 }
 
+/** GET /api/seller/orders/booking-quote — what booking these lines will cost, before confirming. */
+export interface SellerBookingQuote {
+  parcels: {
+    orderId: string;
+    orderNumber: string;
+    /** The lines that go in this parcel (one per order). */
+    itemIds: string[];
+    payment: 'PREPAID' | 'COD';
+    codAmountPaise: number;
+    /** What Delhivery charges for: the greater of actual and volumetric weight. */
+    chargeableGrams: number;
+    /** Delhivery's forward freight estimate, GST included; null when it could not be priced. */
+    forwardFreightPaise: number | null;
+    /** Everything this parcel is estimated to cost the seller. */
+    totalPaise: number | null;
+    error: string | null;
+  }[];
+  /** Lines that can't be booked now, and why. */
+  skipped: { itemId: string; reason: string }[];
+  totalPaise: number;
+  /** 'mock' while the test courier is in use: its estimate is a flat test rate. */
+  provider: string;
+}
+
 /** QR printed on labels and invoices - scanning opens the order in the seller panel. */
 export interface SellerQr {
   /** What the code encodes: the seller-panel URL for this order, unique per document. */

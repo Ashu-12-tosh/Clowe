@@ -18,6 +18,7 @@ import {
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { StatusPill } from '@/components/seller/orders/StatusPill';
+import { BookingConfirm } from '@/components/seller/orders/BookingConfirm';
 import { DispatchCountdown } from '@/components/seller/orders/DispatchCountdown';
 
 const TILE_ICONS: Record<string, string> = {
@@ -77,6 +78,8 @@ export default function SellerOrdersPage() {
   const [summary, setSummary] = useState<SellerOrderSummary | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  /** Lines waiting on the seller to confirm Delhivery's estimate. */
+  const [booking, setBooking] = useState<string[] | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   /** Whether the last bulk action left items undone (shown amber, not green). */
@@ -155,7 +158,19 @@ export default function SellerOrdersPage() {
     );
   }
 
-  async function runBulk(action: 'assign' | 'pack' | 'ship' | 'deliver') {
+  async function reportBulk(action: 'assign' | 'pack' | 'ship' | 'deliver', result: SellerOrderBulkResult) {
+    // Every distinct reason, so "3 skipped" says why for each kind of item.
+    const reasons = [...new Set(result.skipped.map((s) => s.reason))];
+    setNoticeWarn(result.updated === 0 || result.skipped.length > 0);
+    setNotice(
+      `${result.updated} item(s) ${action === 'assign' ? 'booked with Delhivery — labels now carry the AWB' : 'updated'}` +
+        (result.skipped.length > 0 ? ` · ${result.skipped.length} skipped: ${reasons.join('; ')}` : ''),
+    );
+    setSelected(new Set());
+    await Promise.all([loadOrders(), loadSummary()]);
+  }
+
+  async function runBulk(action: 'pack' | 'ship' | 'deliver') {
     if (selectedItemIds.length === 0) return;
     setBusy(true);
     setError('');
@@ -166,15 +181,7 @@ export default function SellerOrdersPage() {
         body: { itemIds: selectedItemIds, action },
         auth: true,
       });
-      // Every distinct reason, so "3 skipped" says why for each kind of item.
-      const reasons = [...new Set(result.skipped.map((s) => s.reason))];
-      setNoticeWarn(result.updated === 0 || result.skipped.length > 0);
-      setNotice(
-        `${result.updated} item(s) ${action === 'assign' ? 'booked with Delhivery — labels now carry the AWB' : 'updated'}` +
-          (result.skipped.length > 0 ? ` · ${result.skipped.length} skipped: ${reasons.join('; ')}` : ''),
-      );
-      setSelected(new Set());
-      await Promise.all([loadOrders(), loadSummary()]);
+      await reportBulk(action, result);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Bulk action failed');
     } finally {
@@ -186,6 +193,17 @@ export default function SellerOrdersPage() {
 
   return (
     <div className="pb-10">
+      {booking && (
+        <BookingConfirm
+          itemIds={booking}
+          onClose={() => setBooking(null)}
+          onBooked={(r) => {
+            setBooking(null);
+            setError('');
+            void reportBulk('assign', r);
+          }}
+        />
+      )}
       {/* --- Header --------------------------------------------------- */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -341,7 +359,7 @@ export default function SellerOrdersPage() {
             </span>
             <button
               disabled={busy || selectedItemIds.length === 0}
-              onClick={() => void runBulk('assign')}
+              onClick={() => setBooking(selectedItemIds)}
               title="Book with Delhivery now (one parcel per order), so the labels you print carry the AWB"
               className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-semibold hover:bg-gray-50 disabled:opacity-50"
             >
@@ -631,7 +649,7 @@ export default function SellerOrdersPage() {
                 <button
                   type="button"
                   disabled={busy || selectedItemIds.length === 0}
-                  onClick={() => void runBulk('assign')}
+                  onClick={() => setBooking(selectedItemIds)}
                   className="text-left disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <p className="font-semibold text-ink-900">🚚 Book with Delhivery</p>

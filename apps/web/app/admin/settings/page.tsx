@@ -631,7 +631,9 @@ export default function AdminSettingsPage() {
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500">Delivery fee (₹, per shipment)</label>
+            <label className="text-xs text-gray-500" title="Sellers pay Delhivery's actual freight; this is only the test courier's flat estimate">
+              Test courier estimate (₹ per parcel, mock only)
+            </label>
             <input
               type="number"
               min={0}

@@ -2,6 +2,7 @@ import { env } from '../../env';
 import type { ShippingProvider } from './ShippingProvider';
 import { DelhiveryShippingProvider } from './DelhiveryShippingProvider';
 import { MockShippingProvider } from './MockShippingProvider';
+import { getSettings } from '../settingsService';
 
 // Delhivery is the only courier. The mock stands in for it unless
 // SHIPPING_PROVIDER=delhivery; then staging, unless DELHIVERY_ENV=production,
@@ -16,7 +17,8 @@ function createShippingProvider(): ShippingProvider {
       });
     case 'mock':
     default:
-      return new MockShippingProvider();
+      // The mock prices every parcel at the admin's flat test rate.
+      return new MockShippingProvider({ flatParcelPaise: async () => (await getSettings()).deliveryFeePaise });
   }
 }
 

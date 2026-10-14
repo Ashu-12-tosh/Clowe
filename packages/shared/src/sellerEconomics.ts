@@ -15,8 +15,9 @@ import type { SellerLedgerTypeValue } from './sellerLedger';
 // category's rate (buyerPriceFor), and the catalog, checkout and the tax
 // invoice show and charge that GST-inclusive price. The product form prices
 // from the seller's number; an order line, which records what the buyer was
-// charged, prices from that. Shipping is charged per order at checkout and
-// is not part of a line. GST is the seller's to remit, not a Clowe deduction.
+// charged, prices from that. Delivery is free for buyers; the seller pays
+// Delhivery's freight per parcel, posted on delivery (not part of a line, so
+// not here). GST is the seller's to remit, not a Clowe deduction.
 //
 // Money is in paise throughout and every component is rounded to a whole
 // paisa on its own, so the parts always add up to the whole exactly.
@@ -44,8 +45,6 @@ export interface SellerEconomicsRates {
   gst: GstSettings;
   /** Fixed platform fee, per order line. */
   platformFeePaise: number;
-  /** Fixed delivery fee charged to the seller, per shipment (one per line). */
-  deliveryFeePaise: number;
   /** Fixed closing fee, per unit. */
   closingFeePaise: number;
   /** Goods transfer (GT) charge, per unit. */
@@ -94,7 +93,6 @@ export interface SellerEconomics {
   commissionPaise: number;
   gatewayFeePaise: number;
   platformFeePaise: number;
-  deliveryFeePaise: number;
   closingFeePaise: number;
   gtChargePaise: number;
   tdsPaise: number;
@@ -151,7 +149,6 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
   // (or a zero price, for the preview) owes nothing.
   const sold = grossPaise > 0;
   const platformFeePaise = sold ? Math.max(0, Math.round(rates.platformFeePaise)) : 0;
-  const deliveryFeePaise = sold ? Math.max(0, Math.round(rates.deliveryFeePaise)) : 0;
   const closingFeePaise = sold ? Math.max(0, Math.round(rates.closingFeePaise)) * quantity : 0;
   const gtChargePaise = sold ? Math.max(0, Math.round(rates.gtChargePaise)) * quantity : 0;
 
@@ -170,7 +167,6 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
       ledgerType: 'GATEWAY_FEE',
     },
     { key: 'platform', label: 'Platform fee', amountPaise: -platformFeePaise, ledgerType: 'PLATFORM_FEE' },
-    { key: 'delivery', label: 'Delivery fee', amountPaise: -deliveryFeePaise, ledgerType: 'DELIVERY_FEE' },
     {
       key: 'closing',
       label: quantity > 1 ? `Closing fee (${quantity} units)` : 'Closing fee',
@@ -201,7 +197,6 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
     commissionPaise,
     gatewayFeePaise,
     platformFeePaise,
-    deliveryFeePaise,
     closingFeePaise,
     gtChargePaise,
     tdsPaise,

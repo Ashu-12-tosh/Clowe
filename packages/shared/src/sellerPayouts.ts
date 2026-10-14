@@ -93,7 +93,6 @@ export interface SellerPayoutOverview {
     gatewayPercent: number;
     tdsPercent: number;
     platformFeePaise: number;
-    deliveryFeePaise: number;
     closingFeePaise: number;
     gtChargePaise: number;
     minPayoutPaise: number;

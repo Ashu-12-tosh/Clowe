@@ -105,7 +105,7 @@ export interface PlatformSettings {
   gstUniformPercent: number | null;
   /** Fixed platform fee charged to the seller per delivered order line (paise). */
   platformFeePaise: number;
-  /** Fixed delivery fee charged to the seller per shipment (paise). */
+  /** The mock courier's freight estimate per parcel (paise). Real freight comes from Delhivery. */
   deliveryFeePaise: number;
   /** Fixed closing fee per unit (paise). A placeholder until real logistics costs are known. */
   closingFeePaise: number;

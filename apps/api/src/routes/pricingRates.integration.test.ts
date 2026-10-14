@@ -71,7 +71,6 @@ describe('GET /api/seller/pricing-rates', () => {
         uniformPercent: DEFAULT_SETTINGS.gstUniformPercent,
       },
       platformFeePaise: DEFAULT_SETTINGS.platformFeePaise,
-      deliveryFeePaise: DEFAULT_SETTINGS.deliveryFeePaise,
       closingFeePaise: DEFAULT_SETTINGS.closingFeePaise,
       gtChargePaise: DEFAULT_SETTINGS.gtChargePaise,
     });

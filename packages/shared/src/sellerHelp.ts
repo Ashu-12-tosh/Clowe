@@ -164,7 +164,8 @@ If all of that checks out, raise a ticket under Payouts & payments with the payo
 
 • Commission — the marketplace fee, a percentage of your price (before GST) for the units sold.
 • Payment gateway / collection charge — a percentage of what the buyer pays (GST included), covering online payment or COD collection.
-• Fixed fees — a platform fee per order line, a delivery fee per shipment, and a closing fee and a GT (goods transfer) charge per unit. The amounts in force are on your Payouts page and in the pricing calculator.
+• Fixed fees — a platform fee per order line, and a closing fee and a GT (goods transfer) charge per unit. The amounts in force are on your Payouts page and in the pricing calculator.
+• Delhivery freight — delivery is free for your buyers, and you pay Delhivery's actual freight for each parcel. You see its estimate before you confirm a booking; the final charge is posted when the parcel is delivered, at the weight Delhivery measured (billed per 0.5 kg, on the greater of actual and volumetric weight). If Delhivery re-weighs a parcel later, the difference is posted as its own adjustment.
 • TDS under section 194-O — withheld against your PAN and deposited with the payout that carried it. Download the TDS report from the Payouts page for your accountant.
 
 You enter your price before GST. The customer pays it plus GST at the rate Clowe applies (shown on your product form and in the pricing calculator), and that GST reaches your bank with the sale for you to file in your return. You issue the tax invoice for your own lines from the Orders page.`,

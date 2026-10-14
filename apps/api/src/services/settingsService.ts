@@ -44,7 +44,10 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   // prisma/applyFlatGst.ts (after its dry run), which stores it as a setting.
   gstUniformPercent: null,
   platformFeePaise: 900, // ₹9 per line
-  deliveryFeePaise: 6000, // ₹60 per shipment
+  // The mock courier's estimate per parcel, GST included. Sellers pay
+  // Delhivery's actual freight; this number is only used while
+  // SHIPPING_PROVIDER=mock.
+  deliveryFeePaise: 6000, // ₹60 per parcel
   closingFeePaise: 2000, // ₹20 per unit — placeholder
   gtChargePaise: 3000, // ₹30 per unit — goods transfer
   // The platform return window, in days from delivery. The one source every

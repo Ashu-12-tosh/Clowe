@@ -1391,6 +1391,9 @@ model Shipment {
   labelSize   String?
   /// Freight in paise: the quote at booking, then the courier's final charge.
   estimatedFreightPaise Int?
+  // The charged weight finalFreightPaise was priced at; a different one later
+  // posts a FREIGHT_ADJUSTMENT.
+  freightWeightGrams    Int?
   finalFreightPaise     Int?
   rtoFreightPaise       Int?
   /// COD lines are payable only once the courier's remittance for this AWB is matched.
@@ -2102,6 +2105,8 @@ enum SellerLedgerType {
   GST_TCS // - GST TCS the marketplace collects under s.52 CGST Act
   GT_CHARGE // - goods transfer charge, per unit
   SELLER_CANCEL_PENALTY // - the seller cancelled their part of an order
+  FORWARD_FREIGHT // - Delhivery's forward freight for a delivered parcel (GST included)
+  FREIGHT_ADJUSTMENT // +/- the freight re-priced after Delhivery's charged weight changed
 }
 
 /// Settlement money can be paid out; promotion credits never can. Keeping them

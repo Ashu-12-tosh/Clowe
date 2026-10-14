@@ -10,7 +10,6 @@ const RATES = {
   tcsPercent: 0.5,
   gst: { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 250_000, uniformPercent: null },
   platformFeePaise: 900,
-  deliveryFeePaise: 6000,
   closingFeePaise: 2000,
   gtChargePaise: 3000,
 };
@@ -23,13 +22,14 @@ describe('computeListingEconomics', () => {
     expect(e.commissionPaise).toBe(8_475);
     expect(e.gatewayFeePaise).toBe(2_000);
     expect(e.platformFeePaise).toBe(900);
-    expect(e.deliveryFeePaise).toBe(6_000);
+    // No delivery fee per line: the seller pays Delhivery's freight per parcel, on delivery.
+    expect(e.lines.some((l) => l.ledgerType === 'DELIVERY_FEE')).toBe(false);
     expect(e.closingFeePaise).toBe(2_000);
     expect(e.gtChargePaise).toBe(3_000);
     // ₹1,000 at 18% is ₹847.46 ex-GST: TDS 0.1% = ₹0.85, TCS 0.5% = ₹4.24.
     expect(e.tdsPaise).toBe(85);
     expect(e.tcsPaise).toBe(424);
-    expect(e.sellerReceivesPaise).toBe(100_000 - 8_475 - 2_000 - 900 - 6_000 - 2_000 - 3_000 - 85 - 424);
+    expect(e.sellerReceivesPaise).toBe(100_000 - 8_475 - 2_000 - 900 - 2_000 - 3_000 - 85 - 424);
   });
 
   it('shows the GST inside the price without deducting it', () => {
@@ -44,7 +44,6 @@ describe('computeListingEconomics', () => {
     const e = computeListingEconomics({ buyerPricePaise: 0, rates: RATES });
     expect(e.buyerPaysPaise).toBe(0);
     expect(e.platformFeePaise).toBe(0);
-    expect(e.deliveryFeePaise).toBe(0);
     expect(e.closingFeePaise).toBe(0);
     expect(e.sellerReceivesPaise).toBe(0);
     expect(e.lines.every((l) => l.amountPaise === 0)).toBe(true);
@@ -62,7 +61,7 @@ describe('computeListingEconomics', () => {
     for (const l of e.lines) expect(Number.isInteger(l.amountPaise)).toBe(true);
     const sum = e.lines.reduce((s, l) => s + l.amountPaise, 0);
     expect(sum).toBe(e.sellerReceivesPaise);
-    expect(e.sellerReceivesPaise).toBe(33_333 - 2_825 - 667 - 28 - 141 - 900 - 6_000 - 2_000 - 3_000);
+    expect(e.sellerReceivesPaise).toBe(33_333 - 2_825 - 667 - 28 - 141 - 900 - 2_000 - 3_000);
   });
 
   it('takes percentages on the line total, fixed fees per line, closing per unit', () => {
@@ -75,7 +74,6 @@ describe('computeListingEconomics', () => {
     expect(three.gatewayFeePaise).not.toBe(one.gatewayFeePaise * 3);
     expect(three.commissionPaise).toBe(percentOf(three.exGstPaise, 10));
     expect(three.platformFeePaise).toBe(900);
-    expect(three.deliveryFeePaise).toBe(6_000);
     expect(three.closingFeePaise).toBe(6_000);
     expect(three.gtChargePaise).toBe(9_000);
   });
@@ -88,7 +86,6 @@ describe('computeListingEconomics', () => {
       ['COMMISSION', -4_237],
       ['GATEWAY_FEE', -1_000],
       ['PLATFORM_FEE', -900],
-      ['DELIVERY_FEE', -6_000],
       ['CLOSING_FEE', -2_000],
       ['GT_CHARGE', -3_000],
       // ₹500 at 18% is ₹423.73 ex-GST.
@@ -106,8 +103,7 @@ describe('computeListingEconomics', () => {
         tdsPercent: 0,
         tcsPercent: 0,
         gst: { meritPercent: 5, standardPercent: 18, valueSlabThresholdPaise: 250_000, uniformPercent: null },
-        platformFeePaise: 0,
-        deliveryFeePaise: 4_500,
+        platformFeePaise: 4_500,
         closingFeePaise: 0,
         gtChargePaise: 0,
       },
@@ -117,7 +113,7 @@ describe('computeListingEconomics', () => {
     // 15% of ₹952.38, the seller's price before 5% GST.
     expect(e.commissionPaise).toBe(14_286);
     expect(e.gatewayFeePaise).toBe(0);
-    expect(e.deliveryFeePaise).toBe(4_500);
+    expect(e.platformFeePaise).toBe(4_500);
     expect(e.gstPaise).toBe(100_000 - 95_238);
     expect(e.sellerReceivesPaise).toBe(100_000 - 14_286 - 4_500);
   });
@@ -220,7 +216,6 @@ describe('breakdownRows', () => {
       ['deduction', 'Commission (10% of your price)'],
       ['deduction', 'Payment gateway (2% of what the buyer pays)'],
       ['deduction', 'Platform fee'],
-      ['deduction', 'Delivery fee'],
       ['deduction', 'Closing fee'],
       ['deduction', 'GT charge'],
       ['deduction', 'TDS (0.1% of your price)'],
@@ -248,8 +243,8 @@ describe('breakdownRows', () => {
   });
 
   it('goes negative when the fees outweigh a low price', () => {
-    // ₹100 cannot carry ₹119 of fixed fees.
-    const e = computeListingEconomics({ sellerPricePaise: 10_000, rates: RATES });
+    // ₹40 cannot carry ₹59 of fixed fees.
+    const e = computeListingEconomics({ sellerPricePaise: 4_000, rates: RATES });
     expect(e.sellerKeepsAfterGstPaise).toBeLessThan(0);
     expect(breakdownRows(e).at(-1)?.amountPaise).toBe(e.sellerKeepsAfterGstPaise);
   });

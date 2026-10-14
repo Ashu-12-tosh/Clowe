@@ -41,13 +41,13 @@ const GATEWAY = 6_000;
 const TDS = 254;
 const TCS = 1_271;
 const PLATFORM = DEFAULT_SETTINGS.platformFeePaise;
-const DELIVERY = DEFAULT_SETTINGS.deliveryFeePaise;
 const CLOSING = DEFAULT_SETTINGS.closingFeePaise;
 const GT = DEFAULT_SETTINGS.gtChargePaise;
-const FIXED = PLATFORM + DELIVERY + CLOSING + GT;
+// No delivery fee per line: the seller pays Delhivery's freight per parcel (sellerFreight tests).
+const FIXED = PLATFORM + CLOSING + GT;
 const NET = PRICE - COMMISSION - GATEWAY - TDS - TCS - FIXED;
 /** Entries one delivered unit posts. */
-const ENTRIES_PER_DELIVERY = 9;
+const ENTRIES_PER_DELIVERY = 8;
 
 beforeAll(async () => {
   await seedFixture(prisma);
@@ -62,7 +62,7 @@ afterEach(async () => {
   await setSetting('payoutHoldDays', DEFAULT_SETTINGS.payoutHoldDays);
   await setSetting('payoutCommissionPercent', DEFAULT_SETTINGS.payoutCommissionPercent);
   await setSetting('platformFeePaise', DEFAULT_SETTINGS.platformFeePaise);
-  await setSetting('deliveryFeePaise', DEFAULT_SETTINGS.deliveryFeePaise);
+  await setSetting('closingFeePaise', DEFAULT_SETTINGS.closingFeePaise);
 });
 
 afterAll(async () => {
@@ -218,7 +218,6 @@ describe('delivery', () => {
       ['PLATFORM_FEE', -PLATFORM, 'SETTLEMENT'],
       ['GATEWAY_FEE', -GATEWAY, 'SETTLEMENT'],
       ['TDS', -TDS, 'SETTLEMENT'],
-      ['DELIVERY_FEE', -DELIVERY, 'SETTLEMENT'],
       ['CLOSING_FEE', -CLOSING, 'SETTLEMENT'],
       ['GST_TCS', -TCS, 'SETTLEMENT'],
       ['GT_CHARGE', -GT, 'SETTLEMENT'],
@@ -253,7 +252,7 @@ describe('delivery', () => {
     expect(of('CLOSING_FEE')).toBe(-CLOSING * 3);
     expect(of('GT_CHARGE')).toBe(-GT * 3);
     expect(of('PLATFORM_FEE')).toBe(-PLATFORM);
-    expect(of('DELIVERY_FEE')).toBe(-DELIVERY);
+    expect(of('DELIVERY_FEE')).toBeUndefined();
   });
 
   it('posts the GT charge per unit at the setting, and the payouts page states it', async () => {
@@ -273,14 +272,14 @@ describe('delivery', () => {
 
   it('follows the fixed-fee settings, not compiled-in numbers', async () => {
     await setSetting('platformFeePaise', 1_500);
-    await setSetting('deliveryFeePaise', 0);
+    await setSetting('closingFeePaise', 0);
     const s = await makeSeller();
     const line = await makeLine(s, 'SHIPPED');
     await call('PATCH', `/api/seller/orders/${line.id}/status`, s.token, { action: 'deliver' });
     const rows = await entriesFor(line.id);
     expect(rows.find((r) => r.type === 'PLATFORM_FEE')?.amountPaise).toBe(-1_500);
     // A fee set to zero posts no row — an empty line explains nothing.
-    expect(rows.find((r) => r.type === 'DELIVERY_FEE')).toBeUndefined();
+    expect(rows.find((r) => r.type === 'CLOSING_FEE')).toBeUndefined();
   });
 
   it('follows the commission setting, not a compiled-in rate', async () => {

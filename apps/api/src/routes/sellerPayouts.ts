@@ -284,7 +284,6 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         gatewayPercent: settings.payoutGatewayPercent,
         tdsPercent: settings.payoutTdsPercent,
         platformFeePaise: settings.platformFeePaise,
-        deliveryFeePaise: settings.deliveryFeePaise,
         closingFeePaise: settings.closingFeePaise,
         gtChargePaise: settings.gtChargePaise,
         minPayoutPaise: settings.payoutMinPaise,

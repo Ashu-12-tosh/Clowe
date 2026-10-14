@@ -28,7 +28,6 @@ export function economicsRates(settings: PlatformSettings): SellerEconomicsRates
     tcsPercent: settings.gstTcsPercent,
     gst: gstSettings(settings),
     platformFeePaise: settings.platformFeePaise,
-    deliveryFeePaise: settings.deliveryFeePaise,
     closingFeePaise: settings.closingFeePaise,
     gtChargePaise: settings.gtChargePaise,
   };

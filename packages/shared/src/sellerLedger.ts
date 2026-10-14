@@ -26,6 +26,8 @@ export const SELLER_LEDGER_TYPES = [
   'GST_TCS',
   'GT_CHARGE',
   'SELLER_CANCEL_PENALTY',
+  'FORWARD_FREIGHT',
+  'FREIGHT_ADJUSTMENT',
 ] as const;
 export type SellerLedgerTypeValue = (typeof SELLER_LEDGER_TYPES)[number];
 
@@ -50,6 +52,8 @@ export const SELLER_LEDGER_TYPE_LABELS: Record<SellerLedgerTypeValue, string> = 
   GT_CHARGE: 'GT charge',
   GST_TCS: 'GST TCS (s.52)',
   SELLER_CANCEL_PENALTY: 'Cancellation penalty',
+  FORWARD_FREIGHT: 'Delhivery freight',
+  FREIGHT_ADJUSTMENT: 'Freight adjustment',
 };
 
 /** The two penalties a seller can be charged, once per order each. */

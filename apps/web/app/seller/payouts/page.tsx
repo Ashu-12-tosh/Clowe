@@ -631,8 +631,7 @@ export default function SellerPayoutsPage() {
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-gray-500">
-                      Fixed fees (platform {money(overview.rates.platformFeePaise)} · delivery{' '}
-                      {money(overview.rates.deliveryFeePaise)} · closing{' '}
+                      Fixed fees (platform {money(overview.rates.platformFeePaise)} · closing{' '}
                       {money(overview.rates.closingFeePaise)}/unit · GT {money(overview.rates.gtChargePaise)}/unit)
                     </dt>
                     <dd className="font-semibold">{money(overview.fees.fixedFeesPaise)}</dd>

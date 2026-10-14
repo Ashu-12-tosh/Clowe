@@ -1,7 +1,8 @@
 import type { Shipment } from '@prisma/client';
 import { prisma } from '../../db';
 import { ApiError } from '../../utils/ApiError';
-import { valueOfLines } from './codAmount';
+import { valueOfLines, type LineValue } from './codAmount';
+import { chargeableGrams, forwardFreightPaise, postForwardFreight } from './freight';
 import { shippingProvider } from './index';
 import { ShippingProviderError, type ShippingMode } from './ShippingProvider';
 
@@ -34,6 +35,40 @@ export function pickupAddress(seller: {
     : { line1: seller.pickupLine1, city: seller.pickupCity, state: seller.pickupState, pincode: seller.pickupPincode };
 }
 
+export interface ParcelPlan {
+  isCod: boolean;
+  /** The lines' share of what the buyer owes. */
+  valuePaise: number;
+  codAmountPaise: number;
+  weightGrams: number;
+  lengthMm: number | null;
+  widthMm: number | null;
+  heightMm: number | null;
+  /** Surface: Express is not offered for now. */
+  mode: ShippingMode;
+}
+
+/** One parcel for these lines of an order: what it weighs, measures and collects. */
+export function planParcel(
+  order: { paymentMethod: string; totalPaise: number; items: LineValue[] },
+  lines: { id: string; quantity: number; product: { weightGrams: number | null; lengthMm: number | null; widthMm: number | null; heightMm: number | null } }[],
+): ParcelPlan {
+  const isCod = order.paymentMethod === 'COD';
+  const valuePaise = valueOfLines(order.totalPaise, order.items, lines.map((l) => l.id));
+  // One unit of one product: its own box size. Several go in a box the seller confirms later.
+  const single = lines.length === 1 && lines[0]!.quantity === 1 ? lines[0]!.product : null;
+  return {
+    isCod,
+    valuePaise,
+    codAmountPaise: isCod ? valuePaise : 0,
+    weightGrams: lines.reduce((sum, l) => sum + (l.product.weightGrams ?? FALLBACK_UNIT_GRAMS) * l.quantity, 0),
+    lengthMm: single?.lengthMm ?? null,
+    widthMm: single?.widthMm ?? null,
+    heightMm: single?.heightMm ?? null,
+    mode: 'SURFACE',
+  };
+}
+
 export async function bookShipment(input: { orderId: string; sellerId: string; itemIds: string[] }): Promise<Shipment> {
   const order = await prisma.order.findUnique({
     where: { id: input.orderId },
@@ -45,15 +80,8 @@ export async function bookShipment(input: { orderId: string; sellerId: string; i
   if (!order || lines.length !== input.itemIds.length || lines.length === 0) throw ApiError.notFound('Order item not found');
   const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: input.sellerId } });
 
-  const isCod = order.paymentMethod === 'COD';
-  const valuePaise = valueOfLines(order.totalPaise, order.items, input.itemIds);
-  const weightGrams = lines.reduce((sum, l) => sum + (l.product.weightGrams ?? FALLBACK_UNIT_GRAMS) * l.quantity, 0);
-  // One unit of one product: its own box size. Several go in a box the seller confirms later.
-  const single = lines.length === 1 && lines[0]!.quantity === 1 ? lines[0]!.product : null;
-  const mode: ShippingMode =
-    order.deliveryMethod !== 'STANDARD' || lines.some((l) => l.product.shippingTemplate === 'EXPRESS')
-      ? 'EXPRESS'
-      : 'SURFACE';
+  const plan = planParcel(order, lines);
+  const { isCod, valuePaise, weightGrams, mode } = plan;
 
   const shipment = await prisma.$transaction(async (tx) => {
     const row = await tx.shipment.create({
@@ -64,11 +92,11 @@ export async function bookShipment(input: { orderId: string; sellerId: string; i
         environment: shippingProvider.environment,
         mode,
         paymentType: isCod ? 'COD' : 'PREPAID',
-        codAmountPaise: isCod ? valuePaise : 0,
+        codAmountPaise: plan.codAmountPaise,
         weightGrams,
-        lengthMm: single?.lengthMm ?? null,
-        widthMm: single?.widthMm ?? null,
-        heightMm: single?.heightMm ?? null,
+        lengthMm: plan.lengthMm,
+        widthMm: plan.widthMm,
+        heightMm: plan.heightMm,
       },
     });
     const claimed = await tx.orderItem.updateMany({
@@ -115,11 +143,20 @@ export async function bookShipment(input: { orderId: string; sellerId: string; i
     if (err instanceof ShippingProviderError) throw ApiError.badRequest(`Delhivery: ${err.message}`, err.code);
     throw err;
   }
-  // Booked: from here on the parcel row stays, whatever happens.
+  // Booked: from here on the parcel row stays, whatever happens. The
+  // estimate is what the seller saw before confirming, from the charges API.
+  const estimate = pickup.pincode
+    ? await forwardFreightPaise({
+        originPincode: pickup.pincode,
+        destinationPincode: order.shipPincode,
+        mode,
+        weightGrams: chargeableGrams(plan),
+      }).catch(() => booked.estimatedFreightPaise)
+    : booked.estimatedFreightPaise;
   const [saved] = await prisma.$transaction([
     prisma.shipment.update({
       where: { id: shipment.id },
-      data: { awbNumber: booked.awbNumber, estimatedFreightPaise: booked.estimatedFreightPaise },
+      data: { awbNumber: booked.awbNumber, estimatedFreightPaise: estimate },
     }),
     prisma.orderItem.updateMany({
       where: { shipmentId: shipment.id },
@@ -149,6 +186,11 @@ export async function syncShipmentsFromLines(shipmentIds: Iterable<string | null
         where: { id: s.id },
         data: { status: 'DELIVERED', deliveredAt: now, pickedUpAt: s.pickedUpAt ?? now },
       });
+      // Delivered: the seller pays its freight. If the charges API is down
+      // it is posted later, before any payout is worked out.
+      await postForwardFreight(s.id).catch((err) =>
+        console.error('[clowe-api] freight not posted yet for shipment', s.id, err instanceof Error ? err.message : err),
+      );
     } else if (
       live.some((i) => i.status === 'SHIPPED' || i.status === 'DELIVERED') &&
       (s.status === 'CREATED' || s.status === 'PICKUP_REQUESTED')

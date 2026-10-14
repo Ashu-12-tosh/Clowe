@@ -42,16 +42,25 @@ describe('the mock courier', () => {
     expect((await mock.checkPincode('012345')).serviceable).toBe(false);
   });
 
-  it('quotes by zone and 500 g slab, with COD charge and GST', async () => {
-    const mock = new MockShippingProvider();
+  it('prices a parcel at the flat test rate, GST included, and adds COD and return legs as Delhivery does', async () => {
+    const mock = new MockShippingProvider({ flatParcelPaise: async () => 6_000 });
     expect(mockZone('110001', '110016')).toBe('A');
     expect(mockZone('110001', '400001')).toBe('D');
     expect(mockZone('110001', '781001')).toBe('E');
-    const q = await mock.quote({
-      originPincode: '110001', destinationPincode: '110016', mode: 'SURFACE', weightGrams: 700, kind: 'DELIVERED', payment: 'COD', codAmountPaise: 100_000,
-    });
-    // Zone A: 38 + 32 for the second slab; COD ₹40 (2 % of ₹1,000 is less); 18 % GST.
-    expect(q).toEqual({ zone: 'A', chargedWeightGrams: 1000, freightPaise: 7_000, codChargePaise: 4_000, taxPaise: 1_980, totalPaise: 12_980 });
+    const route = { originPincode: '110001', destinationPincode: '110016', mode: 'SURFACE' as const, weightGrams: 700 };
+    const prepaid = await mock.quote({ ...route, kind: 'DELIVERED', payment: 'PREPAID' });
+    expect(prepaid).toMatchObject({ zone: 'A', chargedWeightGrams: 1000, codChargePaise: 0, totalPaise: 6_000 });
+    expect(prepaid.freightPaise + prepaid.taxPaise).toBe(6_000);
+    // COD: ₹40 on ₹1,000 (2 % is less), 2 % on ₹5,000; plus 18 % GST.
+    const small = await mock.quote({ ...route, kind: 'DELIVERED', payment: 'COD', codAmountPaise: 100_000 });
+    expect(small.totalPaise - prepaid.totalPaise).toBe(4_720);
+    const large = await mock.quote({ ...route, kind: 'DELIVERED', payment: 'COD', codAmountPaise: 500_000 });
+    expect(large.totalPaise - prepaid.totalPaise).toBe(11_800);
+    // An RTO quote is both legs, as Delhivery's is; a customer return 1.2×.
+    expect((await mock.quote({ ...route, kind: 'RTO', payment: 'PREPAID' })).totalPaise).toBe(12_000);
+    expect((await mock.quote({ ...route, kind: 'DTO', payment: 'PREPAID' })).totalPaise).toBe(7_200);
+    // Without a rate given, the default test rate.
+    expect((await new MockShippingProvider().quote({ ...route, kind: 'DELIVERED', payment: 'PREPAID' })).totalPaise).toBe(6_000);
   });
 
   it('books once per reference, refuses unserved pincodes and COD it can’t collect', async () => {
