@@ -140,7 +140,8 @@ export class DelhiveryShippingProvider implements ShippingProvider {
       // customer returns is to be confirmed.
       pickup: yes(pc.pickup),
       reversePickup: yes(pc.pickup),
-      codLimitPaise: cod && pc.max_amount != null ? paise(pc.max_amount) : null,
+      // Live replies carry max_amount 0 where no COD limit is set (e.g. 110001).
+      codLimitPaise: cod && Number(pc.max_amount) > 0 ? paise(pc.max_amount) : null,
       city: str(pc.district) || str(pc.city) || null,
       state: str(pc.state_code) || null,
     };
@@ -153,11 +154,16 @@ export class DelhiveryShippingProvider implements ShippingProvider {
       ss: request.kind === 'DELIVERED' ? 'Delivered' : request.kind,
       o_pin: request.originPincode,
       d_pin: request.destinationPincode,
+      // Not in the public docs, but the live API honours both: with them it
+      // adds the COD charge (2 % of the amount, at least ₹40).
+      pt: request.payment === 'COD' ? 'COD' : 'Pre-paid',
+      ...(request.payment === 'COD' && request.codAmountPaise ? { cod: String(rupees(request.codAmountPaise)) } : {}),
     });
     const row = (Array.isArray(reply) ? reply[0] : reply) as Json | undefined;
     if (!row || (row.total_amount == null && row.gross_amount == null)) {
       throw new ShippingProviderError(`Delhivery gave no rate: ${remarks(row?.error, row?.message) || 'no data'}`, 'NO_RATE');
     }
+    // For RTO the totals are the forward charge and the RTO charge together.
     const charge = { DELIVERED: row.charge_DL, RTO: row.charge_RTO, DTO: row.charge_DTO }[request.kind];
     const gross = paise(row.gross_amount);
     const total = paise(row.total_amount ?? row.gross_amount);

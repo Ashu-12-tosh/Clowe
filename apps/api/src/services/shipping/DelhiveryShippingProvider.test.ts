@@ -153,6 +153,11 @@ describe('serviceability and rates', () => {
       pincode: '411001', serviceable: true, prepaid: true, cod: true, pickup: true, reversePickup: true,
       codLimitPaise: 2_500_000, city: 'Pune', state: 'MH',
     });
+    // As the live API answers for 110001: COD allowed, max_amount 0 — no limit set.
+    const unlimited = stub({
+      body: { delivery_codes: [{ postal_code: { pin: 110001, district: 'New Delhi', state_code: 'DL', pre_paid: 'Y', cod: 'Y', cash: 'Y', pickup: 'Y', repl: 'Y', max_amount: 0 } }] },
+    });
+    expect(await provider(unlimited.fetchImpl).p.checkPincode('110001')).toMatchObject({ cod: true, codLimitPaise: null });
     const none = stub({ body: { delivery_codes: [] } });
     expect(await provider(none.fetchImpl).p.checkPincode('999999')).toMatchObject({ serviceable: false, cod: false, codLimitPaise: null });
   });
@@ -166,8 +171,23 @@ describe('serviceability and rates', () => {
     });
     const url = new URL(calls[0]!.url);
     expect(url.pathname).toBe('/api/kinko/v1/invoice/charges/.json');
-    expect(Object.fromEntries(url.searchParams)).toEqual({ md: 'E', cgm: '900', ss: 'RTO', o_pin: '110001', d_pin: '411001' });
+    expect(Object.fromEntries(url.searchParams)).toEqual({ md: 'E', cgm: '900', ss: 'RTO', o_pin: '110001', d_pin: '411001', pt: 'Pre-paid' });
     expect(q).toEqual({ zone: 'D', chargedWeightGrams: 1000, freightPaise: 6_500, codChargePaise: 4_000, taxPaise: 2_025, totalPaise: 13_275 });
+  });
+});
+
+describe('the COD charge', () => {
+  it('is asked for with the payment type and amount', async () => {
+    // Shaped like the live reply for 110053 → 110001, 0.5 kg surface, COD ₹5,000.
+    const { fetchImpl, calls } = stub({
+      body: [{ zone: 'A', charged_weight: 500, charge_DL: 30, charge_RTO: 0, charge_DTO: 0, charge_COD: 100, gross_amount: 135.61, total_amount: 160.01 }],
+    });
+    const q = await provider(fetchImpl).p.quote({
+      originPincode: '110053', destinationPincode: '110001', mode: 'SURFACE', weightGrams: 500, kind: 'DELIVERED', payment: 'COD', codAmountPaise: 500_000,
+    });
+    const params = Object.fromEntries(new URL(calls[0]!.url).searchParams);
+    expect(params).toMatchObject({ md: 'S', ss: 'Delivered', pt: 'COD', cod: '5000' });
+    expect(q).toEqual({ zone: 'A', chargedWeightGrams: 500, freightPaise: 3_000, codChargePaise: 10_000, taxPaise: 2_440, totalPaise: 16_001 });
   });
 });
 
