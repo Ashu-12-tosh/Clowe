@@ -70,6 +70,20 @@ export default function SellerDetailPanel({
     void load();
   }, [load]);
 
+  /** Send the seller's pickup address to Delhivery again. */
+  async function retryWarehouse() {
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/api/admin/sellers/${sellerId}/courier-warehouse`, { method: 'POST', auth: true });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Could not register the pickup address');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -269,6 +283,39 @@ export default function SellerDetailPanel({
                         </option>
                       ))}
                     </select>
+                  }
+                />
+                <Row
+                  label="Delhivery pickup address"
+                  value={
+                    <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                      <span
+                        className={
+                          detail.courierWarehouse.status === 'ACTIVE'
+                            ? 'font-semibold text-green-700'
+                            : detail.courierWarehouse.status === 'FAILED'
+                              ? 'font-semibold text-red-600'
+                              : 'text-gray-500'
+                        }
+                        title={detail.courierWarehouse.error ?? detail.courierWarehouse.name ?? undefined}
+                      >
+                        {detail.courierWarehouse.status === 'ACTIVE'
+                          ? `Registered (${detail.courierWarehouse.name})`
+                          : detail.courierWarehouse.status === 'FAILED'
+                            ? `Failed — ${detail.courierWarehouse.error ?? 'see the address'}`
+                            : 'Not registered yet'}
+                      </span>
+                      {detail.courierWarehouse.status !== 'ACTIVE' && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void retryWarehouse()}
+                          className="rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] font-semibold hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </span>
                   }
                 />
                 <Row label="GSTIN" value={detail.gstNumber ?? '— not provided'} />

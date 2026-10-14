@@ -68,7 +68,7 @@ async function makeSeller() {
     data: { phone: `96000${String(seq).padStart(5, '0')}`, name: `Late Seller ${seq}`, role: Role.SELLER, referralCode: `LATE-S-${seq}` },
   });
   const seller = await prisma.sellerProfile.create({
-    data: { userId: user.id, shopName: `Late Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date() },
+    data: { userId: user.id, shopName: `Late Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date(), addressLine1: '1 Test Godown', city: 'Delhi', state: 'Delhi', pincode: '110053', },
   });
   const product = await prisma.product.create({
     data: {

@@ -13,6 +13,7 @@ import {
   storeReturnsSchema,
   storeShippingSchema,
   type CategoryNode,
+  type CourierWarehouseView,
   type SellerStoreOverview,
   type SellerStoreSettings,
   type StoreHighlight,
@@ -777,6 +778,8 @@ export default function SellerStoreSettingsPage() {
                 )}
               </Section>
 
+              {form?.courierWarehouse && <CourierWarehouseStatus warehouse={form.courierWarehouse} />}
+
               <Section title="Fulfilment preferences">
                 <div className="grid gap-4 sm:grid-cols-2">
                   {/* The dispatch promise is a platform setting now; a store's own
@@ -1028,6 +1031,34 @@ export default function SellerStoreSettingsPage() {
           </section>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Whether Delhivery has the pickup address: booking waits for it. */
+function CourierWarehouseStatus({ warehouse }: { warehouse: CourierWarehouseView }) {
+  const tone =
+    warehouse.status === 'ACTIVE'
+      ? 'border-green-200 bg-green-50 text-green-800'
+      : warehouse.status === 'FAILED'
+        ? 'border-red-200 bg-red-50 text-red-700'
+        : 'border-amber-200 bg-amber-50 text-amber-800';
+  return (
+    <div className={`mt-3 rounded-xl border px-3 py-2.5 text-xs ${tone}`} data-courier-warehouse={warehouse.status}>
+      <p className="font-semibold">
+        {warehouse.status === 'ACTIVE'
+          ? '✓ Registered with Delhivery — your orders can be booked'
+          : warehouse.status === 'FAILED'
+            ? 'Delhivery could not register this pickup address'
+            : 'Not registered with Delhivery yet'}
+      </p>
+      <p className="mt-0.5">
+        {warehouse.status === 'ACTIVE'
+          ? `Delhivery collects from this address, and brings undelivered parcels and returns back to it.${warehouse.syncedAt ? ` Last updated ${new Date(warehouse.syncedAt).toLocaleDateString('en-IN')}.` : ''}`
+          : warehouse.status === 'FAILED'
+            ? `${warehouse.error ?? 'Check the address above.'} Fix the address and save, and it is sent again.`
+            : 'It is registered when your shop is approved, or with your first booking. Saving the address sends it again.'}
+      </p>
     </div>
   );
 }

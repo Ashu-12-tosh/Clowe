@@ -28,6 +28,7 @@ import {
   periodWindow,
   isNotASale,
 } from '@clowe/shared';
+import { syncWarehouse, syncWarehouseSafe } from '../services/shipping/warehouses';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -536,6 +537,10 @@ adminSellersRouter.patch('/:id/status', async (req, res, next) => {
       });
     });
 
+    // Approved: register their pickup address with Delhivery now, so the first
+    // order can be booked. A failure is recorded on the seller, never raised.
+    if (step.status === 'APPROVED') await syncWarehouseSafe(seller.id);
+
     if (blocking || input.action === 'reinstate') {
       sendToUserSafe(
         seller.user.id,
@@ -768,6 +773,19 @@ adminSellersRouter.get('/export', async (req, res, next) => {
 // GET /:id — the detail panel
 // ---------------------------------------------------------------------------
 
+// Register (again) the seller's pickup address with Delhivery — the retry
+// for a failed registration, or after fixing the address.
+adminSellersRouter.post('/:id/courier-warehouse', async (req, res, next) => {
+  try {
+    const seller = await prisma.sellerProfile.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    if (!seller) throw ApiError.notFound('Seller not found');
+    const result = await syncWarehouse(seller.id, { force: true });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 adminSellersRouter.get('/:id', async (req, res, next) => {
   try {
     const seller = await prisma.sellerProfile.findUnique({
@@ -840,6 +858,12 @@ adminSellersRouter.get('/:id', async (req, res, next) => {
       panName: seller.panName,
       kyc,
       kycApprovalWarnings: kycApprovalWarnings(kyc),
+      courierWarehouse: {
+        status: seller.courierWarehouseStatus,
+        name: seller.courierWarehouseName,
+        error: seller.courierWarehouseError,
+        syncedAt: seller.courierWarehouseSyncedAt?.toISOString() ?? null,
+      },
       performance: {
         unitsSold: roll?.unitsSold ?? 0,
         returnRate:

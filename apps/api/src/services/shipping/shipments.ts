@@ -4,6 +4,7 @@ import { ApiError } from '../../utils/ApiError';
 import { valueOfLines, type LineValue } from './codAmount';
 import { chargeableGrams, codFeePaise, forwardFreightPaise, postCodFee, postForwardFreight, postRtoFreight } from './freight';
 import { shippingProvider } from './index';
+import { syncWarehouse } from './warehouses';
 import { ShippingProviderError, type ShippingMode } from './ShippingProvider';
 
 // ---------------------------------------------------------------------------
@@ -79,6 +80,19 @@ export async function bookShipment(input: { orderId: string; sellerId: string; i
   const lines = order?.items.filter((i) => input.itemIds.includes(i.id) && i.sellerId === input.sellerId) ?? [];
   if (!order || lines.length !== input.itemIds.length || lines.length === 0) throw ApiError.notFound('Order item not found');
   const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: input.sellerId } });
+  // Delhivery collects from the seller's registered pickup address. Not
+  // registered yet (or changed since): register it now, or refuse with why.
+  let warehouseName = seller.courierWarehouseStatus === 'ACTIVE' ? seller.courierWarehouseName : null;
+  if (!warehouseName) {
+    const sync = await syncWarehouse(seller.id);
+    if (sync.status !== 'ACTIVE' || !sync.name) {
+      throw ApiError.badRequest(
+        `Your pickup address isn't registered with Delhivery yet — ${sync.error ?? 'try again shortly'}`,
+        'PICKUP_ADDRESS_NOT_READY',
+      );
+    }
+    warehouseName = sync.name;
+  }
 
   const plan = planParcel(order, lines);
   const { isCod, valuePaise, weightGrams, mode } = plan;
@@ -115,7 +129,7 @@ export async function bookShipment(input: { orderId: string; sellerId: string; i
     booked = await shippingProvider.createShipment({
       reference: shipment.id,
       orderNumber: order.orderNumber,
-      pickup: { warehouseName: seller.courierWarehouseName, pincode: pickup.pincode },
+      pickup: { warehouseName, pincode: pickup.pincode },
       consignee: {
         name: order.shipName,
         phone: order.shipPhone,

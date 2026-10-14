@@ -1,3 +1,4 @@
+import type { CourierWarehouseView } from './sellerStore';
 import { z } from 'zod';
 import type { PeriodWindow } from './istPeriods';
 import type { SellerKycSummary } from './kyc';
@@ -112,6 +113,8 @@ export interface AdminSellerDetail extends AdminSellerListRow {
   kyc: SellerKycSummary;
   /** What the approval confirmation must say. Empty = nothing to warn about. */
   kycApprovalWarnings: string[];
+  /** The pickup address as registered with Delhivery. */
+  courierWarehouse: CourierWarehouseView;
   /** Performance the admin judges the shop on. */
   performance: {
     unitsSold: number;

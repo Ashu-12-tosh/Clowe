@@ -13,6 +13,7 @@ import {
   type StoreHealthItem,
   type StoreHighlight,
 } from '@clowe/shared';
+import { syncWarehouseSafe } from '../services/shipping/warehouses';
 import { prisma } from '../db';
 import { getSettings } from '../services/settingsService';
 import { requireAuth } from '../middleware/auth';
@@ -120,6 +121,12 @@ async function toSettings(seller: SellerProfile): Promise<SellerStoreSettings> {
     pickupPincode: seller.pickupPincode,
     dispatchDays: seller.dispatchDays,
     codEnabled: seller.codEnabled,
+    courierWarehouse: {
+      status: seller.courierWarehouseStatus,
+      name: seller.courierWarehouseName,
+      error: seller.courierWarehouseError,
+      syncedAt: seller.courierWarehouseSyncedAt?.toISOString() ?? null,
+    },
 
     returnWindowDays: seller.returnWindowDays,
     effectiveReturnWindowDays: seller.returnWindowDays ?? platformWindowDays,
@@ -394,6 +401,9 @@ sellerStoreRouter.put('/shipping', async (req, res, next) => {
         codEnabled: input.codEnabled,
       },
     });
+    // An approved shop's new pickup address goes to Delhivery straight away
+    // (a no-op when nothing it uses changed); the outcome shows on the page.
+    if (seller.status === 'APPROVED') await syncWarehouseSafe(seller.id);
     await respond(seller.id, res);
   } catch (err) {
     next(err);

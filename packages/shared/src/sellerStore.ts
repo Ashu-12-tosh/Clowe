@@ -111,6 +111,8 @@ export interface SellerStoreSettings {
   pickupPincode: string | null;
   dispatchDays: number;
   codEnabled: boolean;
+  /** The pickup address as registered with Delhivery: booking waits for ACTIVE. */
+  courierWarehouse: CourierWarehouseView;
 
   /** Returns. */
   returnWindowDays: number | null;
@@ -305,4 +307,13 @@ export interface PublicStore {
   productCount: number;
   memberSince: string;
   returnWindowDays: number;
+}
+
+/** A seller's pickup address as registered with the courier (Delhivery). */
+export interface CourierWarehouseView {
+  /** NONE: not registered yet · PENDING · ACTIVE: booking works · FAILED: see error. */
+  status: 'NONE' | 'PENDING' | 'ACTIVE' | 'FAILED';
+  name: string | null;
+  error: string | null;
+  syncedAt: string | null;
 }
