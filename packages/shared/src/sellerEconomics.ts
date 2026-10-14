@@ -208,6 +208,26 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
   };
 }
 
+/**
+ * GET /api/seller/pricing-rates/delivery-estimate — what sending one parcel
+ * of a product costs the seller, from their pickup pincode. Delhivery bills
+ * per 0.5 kg slab, on the greater of actual and volumetric weight.
+ */
+export interface SellerDeliveryEstimate {
+  originPincode: string | null;
+  /** The greater of actual and volumetric weight. */
+  chargeableGrams: number;
+  /** Rounded up to Delhivery's 0.5 kg slab: what is priced. */
+  slabGrams: number;
+  /** Same city, a metro, somewhere far: the freight for each, GST included. */
+  cases: { key: string; label: string; destinationPincode: string; zone: string; freightPaise: number }[];
+  /** What a COD order adds: Delhivery's COD fee at this price, GST included. */
+  codFeePaise: number | null;
+  /** 'mock' while the test courier is in use. */
+  provider: string;
+  error: string | null;
+}
+
 /** How a breakdown row reads: where the money starts, what comes off it, what is left. */
 export type BreakdownRowKind = 'start' | 'deduction' | 'total';
 

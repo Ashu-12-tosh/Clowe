@@ -6,6 +6,7 @@ import {
   computeListingEconomics,
   type BreakdownRowKind,
   type CategoryRules,
+  type SellerDeliveryEstimate,
   type SellerEconomicsRates,
 } from '@clowe/shared';
 import { api } from '@/lib/api';
@@ -51,13 +52,19 @@ const ROW: Record<BreakdownRowKind, { cell: string; label: string; amount: strin
 export function PricingBreakdown({
   listingPricePaise,
   taxRules,
+  categoryId,
+  parcel,
 }: {
   listingPricePaise: number | null;
   /** The chosen category's GST rule; null until a category is picked. */
   taxRules: Pick<CategoryRules, 'taxRule' | 'defaultTaxRatePercent'> | null;
+  categoryId?: string | null;
+  /** The product's parcel: what delivery is estimated on. */
+  parcel?: { weightGrams: number | null; lengthMm: number | null; widthMm: number | null; heightMm: number | null };
 }) {
   const [rates, setRates] = useState<SellerEconomicsRates | null>(null);
   const [typed, setTyped] = useState<string | null>(null);
+  const [delivery, setDelivery] = useState<SellerDeliveryEstimate | null>(null);
 
   useEffect(() => {
     loadRates().then(setRates).catch(() => {});
@@ -76,6 +83,30 @@ export function PricingBreakdown({
     () => (rates ? computeListingEconomics({ sellerPricePaise: pricePaise, rates, taxRules }) : null),
     [rates, pricePaise, taxRules],
   );
+
+  // Delivery for this parcel, once the seller stops typing. Answers are cached
+  // per weight slab and route on the server, so this rarely reaches Delhivery.
+  const weightGrams = parcel?.weightGrams ?? null;
+  const { lengthMm = null, widthMm = null, heightMm = null } = parcel ?? {};
+  useEffect(() => {
+    if (!weightGrams) {
+      setDelivery(null);
+      return;
+    }
+    const query = new URLSearchParams({ weightGrams: String(weightGrams), pricePaise: String(pricePaise) });
+    if (lengthMm && widthMm && heightMm) {
+      query.set('lengthMm', String(lengthMm));
+      query.set('widthMm', String(widthMm));
+      query.set('heightMm', String(heightMm));
+    }
+    if (categoryId) query.set('categoryId', categoryId);
+    const timer = setTimeout(() => {
+      api<SellerDeliveryEstimate>(`/api/seller/pricing-rates/delivery-estimate?${query}`, { auth: true })
+        .then(setDelivery)
+        .catch(() => setDelivery(null));
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [weightGrams, lengthMm, widthMm, heightMm, pricePaise, categoryId]);
 
   return (
     <div className="mt-4 rounded-xl border border-gray-100 bg-cream-50 p-3 text-xs">
@@ -133,9 +164,47 @@ export function PricingBreakdown({
         </p>
       )}
 
+      <div className="mt-3 border-t border-gray-200 pt-2" data-delivery>
+        <p className="font-semibold text-ink-900">Delivery — you pay Delhivery, buyers pay nothing</p>
+        {!weightGrams && <p className="mt-1 text-gray-400">Enter the weight below to see what a parcel costs.</p>}
+        {weightGrams && !delivery && <p className="mt-1 text-gray-400">Getting Delhivery&rsquo;s estimate…</p>}
+        {delivery?.error && <p className="mt-1 text-amber-700">{delivery.error}</p>}
+        {delivery && delivery.cases.length > 0 && (
+          <dl className="mt-1.5 grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-4 tabular-nums">
+            <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+              From {delivery.originPincode}, {delivery.slabGrams / 1000} kg
+            </dt>
+            <dd className="text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Freight</dd>
+            <dd className="text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">You keep</dd>
+            {delivery.cases.map((c) => (
+              <div key={c.key} className="contents" data-case={c.key}>
+                <dt className="py-0.5 text-gray-600">
+                  {c.label} <span className="text-gray-400">({c.destinationPincode})</span>
+                </dt>
+                <dd className="py-0.5 text-right text-red-600">− {money(c.freightPaise)}</dd>
+                <dd className="py-0.5 text-right font-semibold text-ink-900">
+                  {economics ? signed(economics.sellerKeepsAfterGstPaise - c.freightPaise, 'total') : '—'}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {delivery?.codFeePaise != null && delivery.codFeePaise > 0 && (
+          <p className="mt-1 text-gray-600" data-cod>
+            COD orders: <span className="font-semibold text-red-600">+{money(delivery.codFeePaise)}</span> Delhivery COD fee
+          </p>
+        )}
+        <p className="mt-1.5 text-[11px] text-gray-500">
+          Delhivery bills every 0.5 kg, on the greater of actual and volumetric weight (L × W × H in cm ÷ 5000).
+          {delivery && ` This product is charged as ${delivery.slabGrams / 1000} kg.`} One estimate per parcel; the final
+          charge is posted when it is delivered.
+          {delivery?.provider === 'mock' && ' Test courier: these are flat test rates, not Delhivery’s.'}
+        </p>
+      </div>
+
       <p className="mt-2 text-[11px] text-gray-400">
         Per unit, at today&rsquo;s rates. Posted to your ledger on delivery with exactly this
-        arithmetic. Shipping is charged to the buyer per order and is not part of this.
+        arithmetic. Delivery is free for buyers; the freight above comes off per parcel.
       </p>
     </div>
   );

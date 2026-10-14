@@ -1570,7 +1570,12 @@ export default function ProductForm({ initial }: Props) {
               </p>
             </div>
 
-            <PricingBreakdown listingPricePaise={cheapest ? cheapest.sellerPricePaise : null} taxRules={selectedNode ? rules : null} />
+            <PricingBreakdown
+              listingPricePaise={cheapest ? cheapest.sellerPricePaise : null}
+              taxRules={selectedNode ? rules : null}
+              categoryId={selectedNode?.id ?? null}
+              parcel={parcel}
+            />
           </section>
         )}
 
