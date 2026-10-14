@@ -97,6 +97,8 @@ beforeAll(async () => {
 afterAll(async () => {
   Object.defineProperty(shippingProvider, 'name', { value: 'mock', configurable: true, writable: true });
   vi.restoreAllMocks();
+  // RTO refunds point at their order.
+  await prisma.refund.deleteMany({ where: { orderId: { in: orders } } });
   await prisma.order.deleteMany({ where: { id: { in: orders } } });
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await prisma.$disconnect();
@@ -219,5 +221,91 @@ describe('who sees the scans', () => {
     expect(r.status, JSON.stringify(r.json)).toBe(200);
     expect(r.json.data).toMatchObject({ known: true, status: 'IN_TRANSIT' });
     expect((await line(p.itemId)).status).toBe('SHIPPED');
+  });
+});
+
+describe('when delivery goes wrong', () => {
+  it('tells the seller and buyer about a failed attempt, and lets the seller ask Delhivery to try again', async () => {
+    const p = await awaitingPickup();
+    mock.simulate(p.awb, 'PICKED_UP');
+    mock.simulate(p.awb, 'DELIVERY_FAILED');
+    await pollOpenShipments();
+    expect(await prisma.notification.count({ where: { type: { in: ['SELLER_NDR', 'ORDER_NDR'] }, linkHref: { contains: p.orderId } } })).toBe(2);
+    // Not too far ahead.
+    const far = new Date(Date.now() + 9 * 86_400_000).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    expect((await call('POST', `/api/seller/orders/parcels/${p.shipmentId}/ndr`, { action: 'DEFER_DELIVERY', deferTo: far })).status).toBe(400);
+    const r = await call('POST', `/api/seller/orders/parcels/${p.shipmentId}/ndr`, { action: 'RE_ATTEMPT' });
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    expect(r.json.data.requestId).toMatch(/^MOCK-NDR-/);
+    expect(await parcel(p.shipmentId)).toMatchObject({ ndrAction: 'RE_ATTEMPT' });
+    const detail = await call('GET', `/api/seller/orders/${p.orderId}`);
+    expect((detail.json.data.parcels as unknown[])[0]).toMatchObject({ status: 'DELIVERY_FAILED', ndrAction: 'RE_ATTEMPT' });
+  });
+
+  it('refuses an NDR action on a parcel whose delivery didn’t fail', async () => {
+    const p = await awaitingPickup();
+    const r = await call('POST', `/api/seller/orders/parcels/${p.shipmentId}/ndr`, { action: 'RE_ATTEMPT' });
+    expect(r.status).toBe(400);
+  });
+
+  it('when a prepaid parcel starts back: refunds the buyer, counts it once, and tells both', async () => {
+    const before = (await prisma.user.findUniqueOrThrow({ where: { id: buyerId } })).rtoCount;
+    const p = await awaitingPickup();
+    mock.simulate(p.awb, 'PICKED_UP');
+    mock.simulate(p.awb, 'RTO');
+    await pollOpenShipments();
+    await pollOpenShipments();
+    const [again] = await mock.track([p.awb]);
+    await applyTracking(again!, 'WEBHOOK');
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: buyerId } })).rtoCount).toBe(before + 1);
+    const refunds = await prisma.refund.findMany({ where: { orderId: p.orderId } });
+    expect(refunds.map((r) => r.amountPaise)).toEqual([50_000]);
+    expect(await prisma.notification.count({ where: { type: { in: ['ORDER_RTO', 'SELLER_RTO'] }, linkHref: { contains: p.orderId } } })).toBe(2);
+    // Sellers and admins see the count; it blocks nothing.
+    expect((await call('GET', `/api/seller/orders/${p.orderId}`)).json.data.buyerRtoCount).toBe(before + 1);
+    expect(((await call('GET', `/api/admin/orders/${p.orderId}`, undefined, adminToken)).json.data.customer as { rtoCount: number }).rtoCount).toBe(before + 1);
+  });
+
+  it('refunds nothing on a COD parcel that comes back', async () => {
+    const p = await awaitingPickup(true);
+    mock.simulate(p.awb, 'PICKED_UP');
+    mock.simulate(p.awb, 'RTO');
+    await pollOpenShipments();
+    expect(await prisma.refund.count({ where: { orderId: p.orderId } })).toBe(0);
+  });
+
+  it('puts stock back when the seller finds it in good condition, and tells an admin when it came back damaged', async () => {
+    const stock = async () => (await prisma.productVariant.findUniqueOrThrow({ where: { id: variantId } })).stock;
+    const good = await awaitingPickup();
+    mock.simulate(good.awb, 'PICKED_UP');
+    mock.simulate(good.awb, 'RTO');
+    mock.simulate(good.awb, 'RTO_DELIVERED');
+    await pollOpenShipments();
+    expect(await prisma.notification.count({ where: { type: 'SELLER_RTO_BACK', linkHref: { contains: good.orderId } } })).toBe(1);
+    const s0 = await stock();
+    expect((await call('POST', `/api/seller/orders/parcels/${good.shipmentId}/rto-received`, { condition: 'GOOD' })).status).toBe(200);
+    expect(await stock()).toBe(s0 + 1);
+    expect((await call('POST', `/api/seller/orders/parcels/${good.shipmentId}/rto-received`, { condition: 'GOOD' })).status).toBe(400);
+    expect(await stock()).toBe(s0 + 1);
+
+    const bad = await awaitingPickup();
+    mock.simulate(bad.awb, 'PICKED_UP');
+    mock.simulate(bad.awb, 'RTO');
+    mock.simulate(bad.awb, 'RTO_DELIVERED');
+    await pollOpenShipments();
+    const s1 = await stock();
+    expect((await call('POST', `/api/seller/orders/parcels/${bad.shipmentId}/rto-received`, { condition: 'DAMAGED' })).status).toBe(200);
+    expect(await stock()).toBe(s1);
+    expect(await parcel(bad.shipmentId)).toMatchObject({ rtoReceivedCondition: 'DAMAGED' });
+    expect(await prisma.notification.count({ where: { type: 'RTO_DAMAGED', body: { contains: bad.awb } } })).toBeGreaterThan(0);
+  });
+
+  it('lets an admin ask Delhivery to try again too', async () => {
+    const p = await awaitingPickup();
+    mock.simulate(p.awb, 'PICKED_UP');
+    mock.simulate(p.awb, 'DELIVERY_FAILED');
+    await pollOpenShipments();
+    const r = await call('POST', `/api/admin/orders/shipments/${p.shipmentId}/ndr`, { action: 'RE_ATTEMPT' }, adminToken);
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
   });
 });

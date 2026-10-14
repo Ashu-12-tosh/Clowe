@@ -11,6 +11,8 @@ import {
   SELLER_PAYMENT_FILTERS,
   sellerOrderActionSchema,
   sellerOrderBulkSchema,
+  parcelNdrSchema,
+  parcelRtoReceivedSchema,
   sellerBookingQuoteSchema,
   type ParcelBox,
   sellerOrderCancelSchema,
@@ -37,6 +39,7 @@ import { shippingProvider } from '../services/shipping';
 import { bookShipment, pickupAddress, planParcel } from '../services/shipping/shipments';
 import { markLineDelivered, markLineShipped } from '../services/shipping/lineTransitions';
 import { requestPickup } from '../services/shipping/pickups';
+import { receiveRto, requestNdrAction } from '../services/shipping/rto';
 import { chargeableGrams, codFeePaise, forwardFreightPaise } from '../services/shipping/freight';
 import { valueOfLines } from '../services/shipping/codAmount';
 import { checkSellerReferralReward } from '../services/sellerReferralService';
@@ -165,8 +168,16 @@ function buildOrderWhere(
 
 const ORDER_INCLUDE = (sellerId: string) =>
   ({
-    user: { select: { name: true } },
+    user: { select: { name: true, rtoCount: true } },
     payment: { select: { status: true } },
+    shipments: {
+      where: { sellerId, kind: 'FORWARD' },
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true, awbNumber: true, status: true, statusText: true, ndrAction: true, ndrActionAt: true, rtoReceivedCondition: true,
+        items: { select: { id: true } },
+      },
+    },
     items: {
       where: { sellerId },
       include: {
@@ -269,6 +280,17 @@ function toRow(order: OrderRecord, dispatch?: DispatchContext): SellerOrderRow {
             penaltyCharged: dispatch.penalized.has(order.id),
           })
         : null,
+    parcels: order.shipments.map((p) => ({
+      id: p.id,
+      awbNumber: p.awbNumber,
+      status: p.status,
+      statusText: p.statusText,
+      itemIds: p.items.map((x) => x.id),
+      ndrAction: p.ndrAction,
+      ndrActionAt: p.ndrActionAt?.toISOString() ?? null,
+      rtoReceivedCondition: p.rtoReceivedCondition,
+    })),
+    buyerRtoCount: order.user.rtoCount,
   };
 }
 
@@ -601,6 +623,35 @@ sellerOrdersRouter.patch('/:itemId/status', async (req, res, next) => {
       );
     }
     res.json({ success: true, data: { id: item.id } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// After a failed delivery attempt: ask Delhivery to try again, or to deliver
+// on a later day.
+sellerOrdersRouter.post('/parcels/:shipmentId/ndr', async (req, res, next) => {
+  try {
+    const input = parcelNdrSchema.parse(req.body);
+    const result = await requestNdrAction({
+      shipmentId: req.params.shipmentId,
+      sellerId: req.seller!.id,
+      action: input.action,
+      deferTo: input.deferTo ? new Date(`${input.deferTo}T12:00:00+05:30`) : undefined,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The parcel is back with the seller (RTO): in good condition its stock goes
+// back on sale; damaged, an admin is told.
+sellerOrdersRouter.post('/parcels/:shipmentId/rto-received', async (req, res, next) => {
+  try {
+    const { condition } = parcelRtoReceivedSchema.parse(req.body);
+    await receiveRto({ shipmentId: req.params.shipmentId, sellerId: req.seller!.id, condition, actorId: req.auth!.userId });
+    res.json({ success: true, data: { condition } });
   } catch (err) {
     next(err);
   }

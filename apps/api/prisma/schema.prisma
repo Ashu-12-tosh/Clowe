@@ -1383,6 +1383,13 @@ model Shipment {
   pickupRequestId String?
   // When Delhivery is asked to come (one request per pickup address and day).
   pickupScheduledFor DateTime?
+  // The last thing asked of Delhivery after a failed attempt (NDR).
+  ndrAction    String?
+  ndrRequestId String?
+  ndrActionAt  DateTime?
+  // A parcel back with the seller (RTO), as they found it: GOOD (restocked) or DAMAGED.
+  rtoReceivedAt        DateTime?
+  rtoReceivedCondition String?
   pickupRequestedAt DateTime?
   pickedUpAt  DateTime?
   deliveredAt DateTime?

@@ -14,6 +14,7 @@ import { DispatchCountdown } from '@/components/seller/orders/DispatchCountdown'
 import { PackingVideoPanel } from '@/components/seller/orders/PackingVideoPanel';
 import { CancelOrderPanel } from '@/components/seller/orders/CancelOrderPanel';
 import { BookingConfirm } from '@/components/seller/orders/BookingConfirm';
+import { ParcelIssues } from '@/components/seller/orders/ParcelIssues';
 import { ExternalLink } from '@/components/ExternalLink';
 
 type Action = 'assign' | 'pack' | 'ship' | 'deliver';
@@ -390,6 +391,8 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
               </div>
             </div>
           ))}
+
+          <ParcelIssues parcels={order.parcels} buyerRtoCount={order.buyerRtoCount} onChanged={load} flash={flash} />
 
           {booking && (
             <BookingConfirm

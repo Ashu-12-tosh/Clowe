@@ -141,7 +141,34 @@ export interface SellerOrderRow {
   packingVideo: PackingVideoView | null;
   /** The dispatch promise and penalty clocks while anything is left to dispatch. */
   dispatch: SellerDispatchClock | null;
+  /** This order's parcels with Delhivery, for the seller's actions on them. */
+  parcels: SellerParcelView[];
+  /** How many of this buyer's parcels came back undelivered before (shown, never blocking). */
+  buyerRtoCount: number;
 }
+
+/** A parcel as the seller acts on it: failed attempts (NDR) and parcels back with them (RTO). */
+export interface SellerParcelView {
+  id: string;
+  awbNumber: string | null;
+  status: string;
+  /** Delhivery's latest words on it, e.g. why an attempt failed. */
+  statusText: string | null;
+  itemIds: string[];
+  ndrAction: string | null;
+  ndrActionAt: string | null;
+  rtoReceivedCondition: string | null;
+}
+
+/** POST /api/seller/orders/parcels/:id/ndr — after a failed delivery attempt. */
+export const parcelNdrSchema = z.object({
+  action: z.enum(['RE_ATTEMPT', 'DEFER_DELIVERY']),
+  /** DEFER_DELIVERY: the day to deliver, YYYY-MM-DD, within six days. */
+  deferTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+/** POST /api/seller/orders/parcels/:id/rto-received — the parcel is back; how it came back. */
+export const parcelRtoReceivedSchema = z.object({ condition: z.enum(['GOOD', 'DAMAGED']) });
 
 export interface SellerOrderPage {
   rows: SellerOrderRow[];

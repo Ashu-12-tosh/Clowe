@@ -1016,6 +1016,11 @@ function OrderDrawer({
         <p className="mt-2 text-[11px] text-gray-500">
           {num(detail.customer.orderCount)} order(s) ·{' '}
           {formatPaise(detail.customer.lifetimeValuePaise)} lifetime
+          {detail.customer.rtoCount > 0 && (
+            <span className="ml-1 font-semibold text-amber-700">
+              · {detail.customer.rtoCount} returned undelivered (RTO)
+            </span>
+          )}
         </p>
       </Panel>
 

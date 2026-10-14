@@ -186,6 +186,8 @@ export interface AdminOrderDetail {
     /** Everything this shopper has ever ordered. */
     orderCount: number;
     lifetimeValuePaise: number;
+    /** Parcels of theirs that came back undelivered (RTO). Shown, never blocking. */
+    rtoCount: number;
   };
 
   shipping: {

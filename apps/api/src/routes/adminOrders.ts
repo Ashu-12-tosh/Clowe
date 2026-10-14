@@ -30,6 +30,7 @@ import {
   istStartOfDay,
   NOT_A_SALE_STATUSES,
   isNotASale,
+  parcelNdrSchema,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { refundCancelledOrder } from '../services/refundService';
@@ -50,6 +51,7 @@ import { hasPackingVideo } from '../services/packingVideos';
 import { shippingProvider } from '../services/shipping';
 import { syncShipmentsFromLines } from '../services/shipping/shipments';
 import { refreshShipments } from '../services/shipping/tracking';
+import { requestNdrAction } from '../services/shipping/rto';
 import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
 import { createManualOrder } from '../services/manualOrderService';
 import { returnStock } from '../services/stockService';
@@ -421,7 +423,7 @@ adminOrdersRouter.get('/:id', async (req, res, next) => {
     const order = await prisma.order.findUnique({
       where: { id: req.params.id },
       include: {
-        user: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true } },
+        user: { select: { id: true, name: true, email: true, phone: true, avatarUrl: true, rtoCount: true } },
         payment: true,
         placedByAdmin: { select: { name: true } },
         refunds: { select: { amountPaise: true, status: true } },
@@ -487,6 +489,7 @@ adminOrdersRouter.get('/:id', async (req, res, next) => {
         avatarUrl: order.user.avatarUrl,
         orderCount,
         lifetimeValuePaise: lifetime._sum.totalPaise ?? 0,
+        rtoCount: order.user.rtoCount,
       },
 
       shipping: {
@@ -574,6 +577,21 @@ const FORWARD: Record<string, number> = {
   SHIPPED: 3,
   DELIVERED: 4,
 };
+
+// After a failed delivery attempt, an admin can ask Delhivery too.
+adminOrdersRouter.post('/shipments/:shipmentId/ndr', async (req, res, next) => {
+  try {
+    const input = parcelNdrSchema.parse(req.body);
+    const result = await requestNdrAction({
+      shipmentId: req.params.shipmentId,
+      action: input.action,
+      deferTo: input.deferTo ? new Date(`${input.deferTo}T12:00:00+05:30`) : undefined,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Ask the courier about one parcel now, instead of waiting for the next poll.
 adminOrdersRouter.post('/shipments/:shipmentId/refresh', async (req, res, next) => {

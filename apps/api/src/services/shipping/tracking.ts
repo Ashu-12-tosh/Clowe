@@ -4,6 +4,7 @@ import { shippingProvider } from './index';
 import { postForwardFreight } from './freight';
 import { syncOrderStatus } from '../orderStatusService';
 import { markLineDelivered, markLineShipped } from './lineTransitions';
+import { notifyFailedAttempt, notifyRtoArrived, startRto } from './rto';
 import { syncShipmentsFromLines } from './shipments';
 import { TRACK_BATCH, type TrackingResult } from './ShippingProvider';
 
@@ -90,7 +91,6 @@ export async function applyTracking(result: TrackingResult, source: TrackingSour
       ...(weightChanged ? { chargedWeightGrams: result.chargedWeightGrams } : {}),
       ...(moves && next !== 'DELIVERED' && next !== 'RTO_DELIVERED' ? { status: next } : {}),
       ...(moves && next === 'CANCELLED' ? { cancelledAt: new Date() } : {}),
-      ...(moves && next === 'RTO_IN_TRANSIT' ? { rtoInitiatedAt: shipment.rtoInitiatedAt ?? scanTime(result, (t) => t === 'RT') } : {}),
     },
   });
 
@@ -107,13 +107,19 @@ export async function applyTracking(result: TrackingResult, source: TrackingSour
       for (const line of live) await markLineDelivered(line.id, at);
       await prisma.shipment.update({ where: { id: shipment.id }, data: { deliveredAt: at } });
     }
+    if (next === 'DELIVERY_FAILED') {
+      await notifyFailedAttempt(shipment, result.statusText || 'Delivery attempt failed');
+    }
     if (next === 'RTO_IN_TRANSIT' || next === 'RTO_DELIVERED') {
+      // The first sign it is coming back: count it, refund a prepaid buyer, tell both.
+      if (!shipment.rtoInitiatedAt) await startRto(shipment, scanTime(result, (t) => t === 'RT'));
       await prisma.orderItem.updateMany({
         where: { shipmentId: shipment.id, status: { in: ['SHIPPED', 'RTO_IN_TRANSIT'] } },
         data: { status: next === 'RTO_DELIVERED' ? 'RTO_DELIVERED' : 'RTO_IN_TRANSIT' },
       });
       await syncShipmentsFromLines([shipment.id]);
       await syncOrderStatus(shipment.orderId);
+      if (next === 'RTO_DELIVERED') await notifyRtoArrived(shipment);
     }
     if (next === 'LOST') {
       const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
