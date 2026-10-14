@@ -33,6 +33,18 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
   }, [params.id]);
   useEffect(load, [load]);
 
+  async function bookPickup() {
+    setError('');
+    setBusy(true);
+    try {
+      setRow(await api<SellerReturnRow>(`/api/seller/returns/${params.id}/pickup`, { method: 'POST', auth: true }));
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Could not book the pickup');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function act(body: Record<string, string>) {
     setError('');
     setBusy(true);
@@ -222,6 +234,34 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
               Cancel
             </button>
           </div>
+        </div>
+      )}
+
+      {row.status === 'APPROVED' && (
+        <div className="mt-5 rounded-xl border border-gray-200 bg-white px-4 py-3 text-xs" data-return-pickup>
+          {row.pickup ? (
+            <p className="text-gray-700">
+              <span className="font-semibold text-ink-900">Delhivery pickup booked</span> — AWB{' '}
+              <span className="font-mono">{row.pickup.awbNumber ?? '—'}</span>
+              {row.pickup.status === 'DELIVERED'
+                ? ' · delivered back to you: inspect it and mark it received.'
+                : row.pickup.status === 'IN_TRANSIT'
+                  ? ' · collected from the buyer, on its way to you.'
+                  : ' · Delhivery will collect it from the buyer.'}
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-amber-800">No Delhivery pickup is booked for this return yet.</p>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void bookPickup()}
+                className="rounded-lg bg-ink-900 px-3 py-1.5 font-bold uppercase tracking-wide text-white disabled:opacity-50"
+              >
+                Book pickup
+              </button>
+            </div>
+          )}
         </div>
       )}
 

@@ -1,3 +1,4 @@
+import { bookReversePickupSafe } from './shipping/reversePickup';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 import { sendToUserSafe } from './messaging';
@@ -29,6 +30,7 @@ export function findSellerReturn(sellerId: string, id: string) {
     where: { id, orderItem: { sellerId } },
     include: {
       refund: true,
+      reverseShipment: { select: { awbNumber: true, status: true } },
       orderItem: {
         include: {
           order: { select: { orderNumber: true, shipName: true } },
@@ -88,6 +90,8 @@ export async function applyReturnDecision(
       },
       { critical: true },
     );
+    // Delhivery collects it from the buyer and brings it to the seller.
+    await bookReversePickupSafe(r.id);
   } else if (input.action === 'reject') {
     if (r.status !== 'REQUESTED') {
       throw ApiError.badRequest(`Cannot reject a return in status ${r.status}`);

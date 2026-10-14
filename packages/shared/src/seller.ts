@@ -274,6 +274,8 @@ export interface SellerReturnRow {
   receivedCondition: string | null;
   adminOverrideAt: string | null;
   refund: { status: string; amountPaise: number; providerRefundId: string | null } | null;
+  /** Delhivery's collection from the buyer, once booked. */
+  pickup: { awbNumber: string | null; status: string } | null;
   requestedAt: string;
   /** On the return's own page: the seller's packing clip for the order (never sent to the buyer). */
   packingVideo?: PackingVideoView | null;

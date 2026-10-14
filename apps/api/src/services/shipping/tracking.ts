@@ -5,6 +5,7 @@ import { postForwardFreight } from './freight';
 import { syncOrderStatus } from '../orderStatusService';
 import { markLineDelivered, markLineShipped } from './lineTransitions';
 import { notifyFailedAttempt, notifyRtoArrived, startRto } from './rto';
+import { applyReverseScan } from './reversePickup';
 import { syncShipmentsFromLines } from './shipments';
 import { TRACK_BATCH, type TrackingResult } from './ShippingProvider';
 
@@ -93,6 +94,23 @@ export async function applyTracking(result: TrackingResult, source: TrackingSour
       ...(moves && next === 'CANCELLED' ? { cancelledAt: new Date() } : {}),
     },
   });
+
+  // A return coming back: its scans move the return, never the order's lines.
+  if (shipment.kind === 'REVERSE') {
+    if (moves && (next === 'IN_TRANSIT' || next === 'DELIVERED')) {
+      const at = scanTime(result, (t) => (next === 'DELIVERED' ? t === 'DL' : t === 'PU'));
+      await applyReverseScan(shipment, next, at);
+      await prisma.shipment.update({
+        where: { id: shipment.id },
+        data:
+          next === 'DELIVERED'
+            ? { status: 'DELIVERED', deliveredAt: at, pickedUpAt: shipment.pickedUpAt ?? at }
+            : { pickedUpAt: shipment.pickedUpAt ?? at },
+      });
+    }
+    const after = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id }, select: { status: true } });
+    return { awbNumber: result.awbNumber, known: true, newScans, status: after.status };
+  }
 
   if (moves) {
     const live = shipment.items.filter((i) => i.status !== 'CANCELLED');

@@ -592,6 +592,7 @@ adminRouter.get('/returns', async (req, res, next) => {
       take: 200,
       include: {
         refund: true,
+        reverseShipment: { select: { awbNumber: true, status: true } },
         user: { select: { phone: true } },
         orderItem: {
           include: {
@@ -604,6 +605,7 @@ adminRouter.get('/returns', async (req, res, next) => {
     });
     const rows: AdminReturnRow[] = returns.map((r) => ({
       id: r.id,
+      pickup: r.reverseShipment ? { awbNumber: r.reverseShipment.awbNumber, status: r.reverseShipment.status } : null,
       orderItemId: r.orderItemId,
       orderNumber: r.orderItem.order.orderNumber,
       title: r.orderItem.title,

@@ -30,6 +30,7 @@ import {
   istDayKey,
   istStartOfDay,
 } from '@clowe/shared';
+import { bookReversePickup, bookReversePickupSafe } from '../services/shipping/reversePickup';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -710,6 +711,7 @@ async function applyAdminAction(
           `Your return for ${label} is approved. Pickup will be scheduled shortly — please keep the item packed.`,
         ),
       ]);
+      await bookReversePickupSafe(r.id);
       break;
     }
 
@@ -904,6 +906,17 @@ adminReturnsRouter.post('/:id/action', async (req, res, next) => {
   try {
     const input = adminReturnActionSchema.parse(req.body);
     const result = await applyAdminAction(req.params.id, input, req.auth!.userId);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Book (again) the Delhivery pickup for an approved return.
+adminReturnsRouter.post('/:id/pickup', async (req, res, next) => {
+  try {
+    const result = await bookReversePickup(req.params.id);
+    if (!result.booked) throw ApiError.badRequest(result.reason, 'PICKUP_NOT_BOOKED');
     res.json({ success: true, data: result });
   } catch (err) {
     next(err);

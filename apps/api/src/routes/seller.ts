@@ -28,6 +28,7 @@ import {
   type SellerStats,
   NOT_A_SALE_STATUSES,
 } from '@clowe/shared';
+import { bookReversePickup } from '../services/shipping/reversePickup';
 import { prisma } from '../db';
 import { isHiddenCategory } from '../services/shopperVisibility';
 import { categoryRulesFor, categoryRulesMap } from '../services/categoryRules';
@@ -1052,6 +1053,7 @@ function toReturnRow(r: NonNullable<ReturnWithRelations>): SellerReturnRow {
           providerRefundId: r.refund.providerRefundId,
         }
       : null,
+    pickup: r.reverseShipment ? { awbNumber: r.reverseShipment.awbNumber, status: r.reverseShipment.status } : null,
     requestedAt: r.createdAt.toISOString(),
   };
 }
@@ -1080,6 +1082,7 @@ sellerRouter.get('/returns', requireSeller, async (req, res, next) => {
       take: 100,
       include: {
         refund: true,
+        reverseShipment: { select: { awbNumber: true, status: true } },
         orderItem: {
           include: {
             order: { select: { orderNumber: true, shipName: true } },
@@ -1110,6 +1113,20 @@ sellerRouter.get('/returns/:id', requireSeller, async (req, res, next) => {
 //   approve:  REQUESTED → APPROVED (pickup gets scheduled)
 //   reject:   REQUESTED → REJECTED (reason shown to customer; item back to DELIVERED)
 //   received: APPROVED  → RECEIVED (+ auto refund when condition is OK)
+// Book (again) the Delhivery pickup for an approved return.
+sellerRouter.post('/returns/:id/pickup', requireSeller, blockSuspendedWrites, async (req, res, next) => {
+  try {
+    const r = await findSellerReturn(req.seller!.id, req.params.id);
+    if (!r) throw ApiError.notFound('Return not found');
+    const result = await bookReversePickup(r.id);
+    if (!result.booked) throw ApiError.badRequest(result.reason, 'PICKUP_NOT_BOOKED');
+    const fresh = await findSellerReturn(req.seller!.id, req.params.id);
+    res.json({ success: true, data: (await withPhotoUrls([toReturnRow(fresh!)]))[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
 sellerRouter.patch('/returns/:id', requireSeller, blockSuspendedWrites, async (req, res, next) => {
   try {
     const input = sellerReturnActionSchema.parse(req.body);
