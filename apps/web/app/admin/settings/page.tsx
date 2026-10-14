@@ -27,7 +27,6 @@ export default function AdminSettingsPage() {
   const [supportEmails, setSupportEmails] = useState({ customer: '', vendor: '' });
   const [legal, setLegal] = useState<LegalEntity>(DEFAULT_LEGAL_ENTITY);
   const [codMaxRupees, setCodMaxRupees] = useState('');
-  const [freeShippingRupees, setFreeShippingRupees] = useState('');
   const [adPrices, setAdPrices] = useState<Record<string, string>>({});
   const [payout, setPayout] = useState({
     commission: '',
@@ -71,7 +70,6 @@ export default function AdminSettingsPage() {
         setSupportEmails(s.supportEmails);
         setLegal(s.legalEntity);
         setCodMaxRupees(toRupees(s.codMaxOrderPaise));
-        setFreeShippingRupees(toRupees(s.freeShippingThresholdPaise));
         const prices: Record<string, string> = {};
         for (const pl of AD_PLACEMENTS)
           for (const d of AD_DURATIONS)
@@ -128,7 +126,6 @@ export default function AdminSettingsPage() {
           supportEmails,
           legalEntity: legal,
           codMaxOrderPaise: toPaise(codMaxRupees),
-          freeShippingThresholdPaise: toPaise(freeShippingRupees),
           adPricing,
           payoutCommissionPercent: Number(payout.commission) || 0,
           payoutGatewayPercent: Number(payout.gateway) || 0,
@@ -378,26 +375,6 @@ export default function AdminSettingsPage() {
             min={0}
             value={codMaxRupees}
             onChange={(e) => setCodMaxRupees(e.target.value)}
-            className={field}
-          />
-        </div>
-      </div>
-
-      {/* Free shipping */}
-      <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
-        <h2 className="text-sm font-bold">🚚 Free standard delivery</h2>
-        <p className="mt-1 text-xs text-gray-400">
-          Standard delivery is free on orders of this amount or more; below it the standard fee is
-          charged. The delivery charge, the policy pages, the home page and every &ldquo;free
-          delivery&rdquo; line read this one number.
-        </p>
-        <div className="mt-3">
-          <label className="text-xs text-gray-500">Free from order total (₹)</label>
-          <input
-            type="number"
-            min={0}
-            value={freeShippingRupees}
-            onChange={(e) => setFreeShippingRupees(e.target.value)}
             className={field}
           />
         </div>

@@ -476,7 +476,7 @@ export async function seedFashion(prisma: PrismaClient) {
           title,
           slug,
           description:
-            `${title}. Easy returns, secure payments and free delivery on eligible orders. ` +
+            `${title}. Easy returns, secure payments and free delivery on every order. ` +
             `Seeded demo product — imagery is neutral stock photography.`,
           highlights: plan.highlights ?? [],
           attributes: demoAttributesFor(

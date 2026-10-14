@@ -327,7 +327,8 @@ export const manualOrderSchema = z.object({
   userId: z.string().min(1, 'Pick a customer'),
   addressId: z.string().min(1, 'Pick a delivery address'),
   paymentMethod: z.enum(MANUAL_PAYMENT_METHODS),
-  deliveryMethod: z.enum(['STANDARD', 'EXPRESS']).default('STANDARD'),
+  /** Standard only, and free: buyers never pay for delivery. */
+  deliveryMethod: z.enum(['STANDARD']).default('STANDARD'),
   adminNote: z.string().trim().max(500).optional().or(z.literal('')),
   items: z
     .array(

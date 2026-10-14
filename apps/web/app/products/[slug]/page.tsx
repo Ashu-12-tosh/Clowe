@@ -248,13 +248,13 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
     { Icon: BoxIcon, title: 'Approved', text: 'Sellers' },
     { Icon: ReturnIcon, title: 'Easy Returns', text: returnsText },
     { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
-    { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
+    { Icon: TruckIcon, title: 'Free Delivery', text: 'On all orders' },
   ];
   const trustStrip = [
     { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
     { Icon: ReturnIcon, title: 'Easy Returns', text: `Hassle-free returns ${returnsText.toLowerCase()}` },
     { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
-    { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
+    { Icon: TruckIcon, title: 'Free Delivery', text: 'On all orders' },
     { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
   ];
 

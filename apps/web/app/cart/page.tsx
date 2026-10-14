@@ -28,7 +28,7 @@ const TRUST_STRIP = [
   { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
   { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
-  { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
+  { Icon: TruckIcon, title: 'Free Delivery', text: 'On all orders' },
   { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
 ];
 
@@ -136,12 +136,6 @@ export default function CartPage() {
   const lines = useMemo(() => cart?.lines ?? [], [cart]);
   const selectedLines = useMemo(() => lines.filter((l) => l.selected), [lines]);
   const allSelected = lines.length > 0 && selectedLines.length === lines.length;
-  const shortOfFreeShipping = cart
-    ? Math.max(0, cart.freeShippingThresholdPaise - cart.subtotalPaise)
-    : 0;
-  const freeShippingProgress = cart
-    ? Math.min(100, Math.round((cart.subtotalPaise / cart.freeShippingThresholdPaise) * 100))
-    : 0;
 
   // --- Empty / logged-out states -------------------------------------------
 
@@ -179,8 +173,7 @@ export default function CartPage() {
         <span className="text-5xl">🛍</span>
         <h1 className="mt-4 font-display text-2xl font-bold text-ink-900">Your cart is empty</h1>
         <p className="mt-2 text-sm text-gray-500">
-          Add something you love — free delivery on orders above{' '}
-          {formatPaise(cart.freeShippingThresholdPaise)}.
+          Add something you love — delivery is free on every order.
         </p>
         <Link
           href="/products"
@@ -454,30 +447,10 @@ export default function CartPage() {
               </button>
 
               <div className="lg:max-w-md lg:flex-1">
-                {shortOfFreeShipping === 0 ? (
-                  <p className="flex items-center gap-2 text-xs font-semibold text-green-700">
-                    <ShieldCheckIcon className="h-4 w-4 shrink-0" />
-                    Yay! You get FREE delivery on this order.
-                  </p>
-                ) : (
-                  <p className="text-xs font-medium text-gray-600">
-                    Add items worth{' '}
-                    <span className="font-bold text-ink-900">
-                      {formatPaise(shortOfFreeShipping)}
-                    </span>{' '}
-                    to get FREE delivery.
-                  </p>
-                )}
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200">
-                  <div
-                    className="h-full rounded-full bg-brand-600 transition-all"
-                    style={{ width: `${freeShippingProgress}%` }}
-                  />
-                </div>
-                <div className="mt-1 flex justify-between text-[10px] text-gray-400">
-                  <span>₹0</span>
-                  <span>{formatPaise(cart!.freeShippingThresholdPaise)}</span>
-                </div>
+                <p className="flex items-center gap-2 text-xs font-semibold text-green-700">
+                  <ShieldCheckIcon className="h-4 w-4 shrink-0" />
+                  FREE delivery on every order.
+                </p>
               </div>
             </div>
           </div>
@@ -537,8 +510,8 @@ export default function CartPage() {
 
               <div className="flex justify-between">
                 <dt className="flex items-center gap-1 text-gray-600">
-                  Shipping
-                  <span title={`Free above ${formatPaise(cart!.freeShippingThresholdPaise)}`}>
+                  Delivery
+                  <span title="Free on every order">
                     <InfoIcon className="h-3.5 w-3.5 text-gray-400" />
                   </span>
                 </dt>

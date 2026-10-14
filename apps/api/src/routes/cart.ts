@@ -17,14 +17,10 @@ import { getSettings } from '../services/settingsService';
 import { applyPromotions } from '../services/promotionService';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { deliveryOptionsFor, SHIPPING_FEE_PAISE, shippingFor } from '../services/deliveryService';
+import { deliveryOptionsFor, deliveryPriceFor } from '../services/deliveryService';
 
 export const cartRouter = Router();
 cartRouter.use(requireAuth);
-
-// Shipping rules live in the delivery service (it also prices the faster
-// speeds); re-exported here because orders/cart both reach for them.
-export { SHIPPING_FEE_PAISE, shippingFor };
 
 async function getOrCreateCart(userId: string) {
   const existing = await prisma.cart.findUnique({ where: { userId } });
@@ -202,11 +198,8 @@ export async function buildCartView(userId: string): Promise<CartView> {
     (sum, l) => sum + Math.max(l.mrpPaise ?? l.pricePaise, l.pricePaise) * l.quantity,
     0,
   );
-  const [member, { freeShippingThresholdPaise }] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId }, select: { isPremium: true } }),
-    getSettings(),
-  ]);
-  const shippingPaise = shippingFor(subtotalPaise, freeShippingThresholdPaise, member?.isPremium ?? false);
+  // Delivery is free on every order: the seller pays the courier.
+  const shippingPaise = deliveryPriceFor();
 
   // Re-check the applied coupon on every read; if it no longer qualifies
   // (cart shrank, code expired) it silently falls off the cart.
@@ -256,7 +249,6 @@ export async function buildCartView(userId: string): Promise<CartView> {
     promotions: [...appliedPromotions.values()],
     totalPaise: subtotalPaise + shippingPaise - couponDiscountPaise,
     savingsPaise: discountPaise + promoDiscountPaise + couponDiscountPaise,
-    freeShippingThresholdPaise,
   };
 }
 
@@ -484,15 +476,7 @@ cartRouter.delete('/coupon', async (req, res, next) => {
 // Delivery speeds priced for the current cart — the checkout's step 2.
 cartRouter.get('/delivery-options', async (req, res, next) => {
   try {
-    const userId = req.auth!.userId;
-    const [{ subtotalPaise, freeShippingThresholdPaise }, member] = await Promise.all([
-      buildCartView(userId),
-      prisma.user.findUnique({ where: { id: userId }, select: { isPremium: true } }),
-    ]);
-    res.json({
-      success: true,
-      data: deliveryOptionsFor(subtotalPaise, freeShippingThresholdPaise, new Date(), member?.isPremium ?? false),
-    });
+    res.json({ success: true, data: deliveryOptionsFor() });
   } catch (err) {
     next(err);
   }

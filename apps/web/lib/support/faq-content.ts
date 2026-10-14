@@ -96,7 +96,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     label: 'Shipping & delivery times',
     keywords: ['shipping', 'delivery', 'kitne din', 'deliver', 'courier', 'kab aayega', 'time'],
     answer:
-      'Shipping on Clowe:\n\n• FREE standard shipping on orders {{freeShippingFrom}}; a small delivery fee below that\n• Sellers are asked to dispatch within {{dispatchSla}} of your order\n• Delivery takes 3–7 days depending on your pincode\n\nOnce shipped, you get the courier name + AWB number and can track without login on the Track page.',
+      'Shipping on Clowe:\n\n• FREE delivery on every order — no minimum, no delivery fee\n• Sellers are asked to dispatch within {{dispatchSla}} of your order\n• Delivery takes 3–7 days depending on your pincode\n\nOnce shipped, you get the courier name + AWB number and can track without login on the Track page.',
     links: [{ label: 'Track my order', href: '/track' }],
     followUps: ['order-status', 'helped', 'menu'],
   },

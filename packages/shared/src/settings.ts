@@ -136,12 +136,8 @@ export interface PlatformSettings {
    * anyone tries. Sellers can still switch COD off for their own goods.
    */
   codMaxOrderPaise: number;
-  /**
-   * Standard delivery is free on orders at or above this subtotal; below it
-   * the standard fee applies. The one number behind the delivery charge and
-   * every page that mentions free shipping (FREE_SHIPPING_TOKEN).
-   */
-  freeShippingThresholdPaise: number;
+  // Delivery is free on every order. The old freeShippingThresholdPaise row
+  // stays in the database, unread.
   adPricing: AdPricing;
   /** Bank/EMI offers shown on every product page. */
   pdpOffers: PdpOffer[];
@@ -202,7 +198,6 @@ export interface PublicSettings {
   socialLinks: PlatformSettings['socialLinks'];
   supportEmails: PlatformSettings['supportEmails'];
   codMaxOrderPaise: number;
-  freeShippingThresholdPaise: number;
   pdpOffers: PdpOffer[];
   couponsEnabled: boolean;
   /** Public by nature: every page that names the business reads it. */
@@ -291,7 +286,6 @@ export const updateSettingsSchema = z.object({
     })
     .optional(),
   codMaxOrderPaise: z.number().int().min(0).optional(),
-  freeShippingThresholdPaise: z.number().int().min(0).max(10_000_000).optional(),
   adPricing: z.object({ HOME_BANNER: adPriceRow, CATEGORY_SPONSORED: adPriceRow }).optional(),
   pdpOffers: z
     .array(

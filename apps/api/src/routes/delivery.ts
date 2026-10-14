@@ -1,12 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { deliveryOptionsFor } from '../services/deliveryService';
-import { getSettings } from '../services/settingsService';
 
 export const deliveryRouter = Router();
 
 const querySchema = z.object({
-  /** Order value the options are priced against (free-shipping threshold). */
+  /** Ignored: delivery is free at any order value. Accepted for older pages. */
   subtotalPaise: z.coerce.number().int().min(0).default(0),
   pincode: z
     .string()
@@ -16,10 +15,10 @@ const querySchema = z.object({
 });
 
 /**
- * Serviceability + delivery speeds for a pincode. Public, so the product page
- * can quote delivery before login. Coverage is a stand-in until a real courier
- * serviceability API is wired in: every valid 6-digit pincode is served, and
- * remote ones (starting 19x/79x/9xx) lose the same-day option.
+ * Serviceability + delivery for a pincode. Public, so the product page can
+ * quote delivery before login. Delivery is always free. Coverage is a
+ * stand-in until checkout reads Delhivery's serviceability: every valid
+ * 6-digit pincode is served.
  */
 deliveryRouter.get('/options', async (req, res, next) => {
   try {
@@ -36,18 +35,8 @@ deliveryRouter.get('/options', async (req, res, next) => {
       });
       return;
     }
-    const { subtotalPaise, pincode } = parsed.data;
-    const remote = pincode ? /^(19|79|9)/.test(pincode) : false;
-    const { freeShippingThresholdPaise } = await getSettings();
-    const options = deliveryOptionsFor(subtotalPaise, freeShippingThresholdPaise).map((option) =>
-      remote && option.method === 'SAME_DAY'
-        ? {
-            ...option,
-            available: false,
-            unavailableReason: 'Same-day delivery is not available at this pincode',
-          }
-        : option,
-    );
+    const { pincode } = parsed.data;
+    const options = deliveryOptionsFor();
 
     res.json({
       success: true,

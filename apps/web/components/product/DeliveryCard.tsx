@@ -9,7 +9,7 @@ import { MapPinIcon } from '@/components/cart/CartIcons';
 const PINCODE_KEY = 'clowe.pincode';
 
 interface Props {
-  /** Item price the free-shipping rule is checked against. */
+  /** Item price; delivery is free at any price, the API ignores it. */
   subtotalPaise: number;
 }
 

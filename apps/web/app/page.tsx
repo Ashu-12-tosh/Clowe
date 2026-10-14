@@ -18,7 +18,7 @@ import {
 import PolicyText from '@/components/PolicyText';
 
 const TRUST_ITEMS = [
-  { icon: '🚚', title: 'Free Shipping', text: 'On orders {{freeShippingFrom}}' },
+  { icon: '🚚', title: 'Free Shipping', text: 'On all orders' },
   { icon: '↩️', title: 'Easy Returns', text: 'Hassle-free returns' },
   { icon: '🔒', title: 'Secure Payments', text: 'Safe & secure checkout' },
   { icon: '🤖', title: 'AI Shopping Assistant', text: 'Get smart help' },

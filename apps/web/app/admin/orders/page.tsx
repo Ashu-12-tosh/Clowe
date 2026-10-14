@@ -1285,7 +1285,6 @@ function CreateOrderModal({
   const [customer, setCustomer] = useState<AdminOrderCustomerHit | null>(null);
   const [addressId, setAddressId] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<ManualPaymentMethod>('COD');
-  const [deliveryMethod, setDeliveryMethod] = useState<'STANDARD' | 'EXPRESS'>('STANDARD');
   const [adminNote, setAdminNote] = useState('');
   const [productQuery, setProductQuery] = useState('');
   const [productHits, setProductHits] = useState<VariantHit[]>([]);
@@ -1348,7 +1347,7 @@ function CreateOrderModal({
             userId: customer!.id,
             addressId,
             paymentMethod,
-            deliveryMethod,
+            deliveryMethod: 'STANDARD',
             adminNote,
             items: lines.map((l) => ({ variantId: l.variant.id, quantity: l.quantity })),
           },
@@ -1571,14 +1570,7 @@ function CreateOrderModal({
         </div>
         <div>
           <label className={labelClass}>Delivery</label>
-          <select
-            value={deliveryMethod}
-            onChange={(e) => setDeliveryMethod(e.target.value as 'STANDARD' | 'EXPRESS')}
-            className={`${inputClass} mt-1`}
-          >
-            <option value="STANDARD">Standard</option>
-            <option value="EXPRESS">Express</option>
-          </select>
+          <p className={`${inputClass} mt-1 bg-gray-50 text-gray-600`}>Standard — free</p>
         </div>
       </div>
 

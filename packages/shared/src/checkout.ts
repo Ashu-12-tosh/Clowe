@@ -133,6 +133,7 @@ export interface CartView {
   subtotalPaise: number;
   /** mrpSubtotalPaise − subtotalPaise, i.e. the catalogue discount. */
   discountPaise: number;
+  /** Always 0: delivery is free on every order. */
   shippingPaise: number;
   coupon: AppliedCoupon | null;
   couponDiscountPaise: number;
@@ -143,8 +144,6 @@ export interface CartView {
   totalPaise: number;
   /** discountPaise + promoDiscountPaise + couponDiscountPaise — "you saved". */
   savingsPaise: number;
-  /** Orders at/above this subtotal ship free. */
-  freeShippingThresholdPaise: number;
 }
 
 // ---------------------------------------------------------------------------

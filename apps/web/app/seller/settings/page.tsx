@@ -802,8 +802,8 @@ export default function SellerStoreSettingsPage() {
                   </div>
                 </div>
                 <p className="mt-3 rounded-lg bg-cream-50 px-3 py-2 text-[11px] text-gray-600">
-                  Shipping charges and free-shipping thresholds are set by the marketplace, not per
-                  shop, so they are the same for every seller.
+                  Delivery is free for buyers on every order, from every shop. You pay Delhivery&apos;s
+                  freight for each parcel you send — you see its estimate before you book.
                 </p>
               </Section>
             </>

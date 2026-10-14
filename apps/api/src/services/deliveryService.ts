@@ -1,31 +1,14 @@
-import {
-  DELIVERY_METHODS,
-  type DeliveryMethod,
-  type DeliveryOption,
-} from '@clowe/shared';
+import { type DeliveryMethod, type DeliveryOption } from '@clowe/shared';
 
-// Standard shipping: free at or above the platform's free-shipping threshold
-// (PlatformSettings.freeShippingThresholdPaise), else this fee.
-export const SHIPPING_FEE_PAISE = 4900;
+// ---------------------------------------------------------------------------
+// Delivery as the buyer sees it: always free. Buyers never pay a delivery
+// fee — the seller pays Delhivery's freight — and only standard delivery
+// (Delhivery Surface) is offered. Express and same-day stay in the enum for
+// orders placed before, and are refused for new ones.
+// ---------------------------------------------------------------------------
 
-/**
- * Standard-speed shipping for a subtotal. The threshold is the platform
- * setting, passed in so this stays a pure function. Premium members get it
- * free with no minimum — that is the membership's headline benefit.
- */
-export function shippingFor(subtotalPaise: number, freeShippingThresholdPaise: number, isPremium = false): number {
-  if (subtotalPaise === 0) return 0;
-  if (isPremium) return 0;
-  return subtotalPaise >= freeShippingThresholdPaise ? 0 : SHIPPING_FEE_PAISE;
-}
-
-/** Same-day orders must be placed before this hour (IST) to go out today. */
-export const SAME_DAY_CUTOFF_HOUR = 14;
-
-const EXPRESS_FEE_PAISE = 7900;
-const EXPRESS_LIST_PAISE = 12900;
-const SAME_DAY_FEE_PAISE = 14900;
-const SAME_DAY_LIST_PAISE = 19900;
+/** The speeds a buyer can choose now. */
+export const OFFERED_DELIVERY_METHODS: readonly DeliveryMethod[] = ['STANDARD'];
 
 /** Business days each speed takes, as an inclusive [from, to] day offset. */
 const WINDOW_DAYS: Record<DeliveryMethod, [number, number]> = {
@@ -51,45 +34,14 @@ function shortDate(date: Date): string {
   return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
 }
 
-function etaLabel(method: DeliveryMethod, from: Date, to: Date): string {
-  if (method === 'SAME_DAY') return 'Delivered Today by 9 PM';
+function etaLabel(from: Date, to: Date): string {
   if (shortDate(from) === shortDate(to)) return `Delivered by ${shortDate(from)}`;
   return `Delivered by ${shortDate(from)} – ${shortDate(to)}`;
 }
 
-/** Hour of day in IST, regardless of where the server runs. */
-function istHour(now: Date): number {
-  return Number(
-    now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false }),
-  );
-}
-
-/**
- * What a delivery speed costs for this cart. Standard rides the site-wide
- * free-shipping rule; the faster speeds are flat fees.
- */
-export function deliveryPriceFor(
-  method: DeliveryMethod,
-  subtotalPaise: number,
-  freeShippingThresholdPaise: number,
-  isPremium = false,
-): number {
-  switch (method) {
-    case 'EXPRESS':
-      return EXPRESS_FEE_PAISE;
-    case 'SAME_DAY':
-      return SAME_DAY_FEE_PAISE;
-    case 'STANDARD':
-    default:
-      return shippingFor(subtotalPaise, freeShippingThresholdPaise, isPremium);
-  }
-}
-
-function listPriceFor(method: DeliveryMethod, pricePaise: number): number | null {
-  if (method === 'EXPRESS') return EXPRESS_LIST_PAISE;
-  if (method === 'SAME_DAY') return SAME_DAY_LIST_PAISE;
-  // Standard shows its usual fee struck through only when it came out free.
-  return pricePaise === 0 ? SHIPPING_FEE_PAISE : null;
+/** What the buyer pays for delivery: nothing, at any speed or order value. */
+export function deliveryPriceFor(): number {
+  return 0;
 }
 
 export function etaWindowFor(method: DeliveryMethod, now = new Date()): { from: Date; to: Date } {
@@ -97,39 +49,25 @@ export function etaWindowFor(method: DeliveryMethod, now = new Date()): { from: 
   return { from: addDays(now, minDays), to: addDays(now, maxDays) };
 }
 
-/** Every speed, priced and dated for this cart — the checkout's step 2. */
-export function deliveryOptionsFor(
-  subtotalPaise: number,
-  freeShippingThresholdPaise: number,
-  now = new Date(),
-  isPremium = false,
-): DeliveryOption[] {
-  const pastCutoff = istHour(now) >= SAME_DAY_CUTOFF_HOUR;
-
-  return DELIVERY_METHODS.map((method) => {
-    const pricePaise = deliveryPriceFor(method, subtotalPaise, freeShippingThresholdPaise, isPremium);
+/** The checkout's delivery step: the offered speeds, free and dated. */
+export function deliveryOptionsFor(now = new Date()): DeliveryOption[] {
+  return OFFERED_DELIVERY_METHODS.map((method) => {
     const { from, to } = etaWindowFor(method, now);
-    const available = method !== 'SAME_DAY' || !pastCutoff;
     return {
       method,
       label: LABELS[method],
-      etaLabel: available
-        ? etaLabel(method, from, to)
-        : `Order before ${SAME_DAY_CUTOFF_HOUR}:00 for same-day`,
-      pricePaise,
-      strikePaise: listPriceFor(method, pricePaise),
-      available,
-      unavailableReason: available
-        ? null
-        : `Same-day cut-off is ${SAME_DAY_CUTOFF_HOUR}:00 — try Express instead`,
+      etaLabel: etaLabel(from, to),
+      pricePaise: 0,
+      strikePaise: null,
+      available: true,
+      unavailableReason: null,
       etaFrom: from.toISOString(),
       etaTo: to.toISOString(),
     };
   });
 }
 
-/** Throws-free availability check used by checkout before charging. */
-export function isDeliveryMethodAvailable(method: DeliveryMethod, now = new Date()): boolean {
-  // Availability does not depend on price, so the threshold here is immaterial.
-  return deliveryOptionsFor(0, 0, now).find((o) => o.method === method)?.available ?? false;
+/** Whether checkout may take this speed. */
+export function isDeliveryMethodAvailable(method: DeliveryMethod): boolean {
+  return OFFERED_DELIVERY_METHODS.includes(method);
 }

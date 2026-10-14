@@ -83,8 +83,8 @@ export async function createManualOrder(input: {
   });
 
   const subtotalPaise = lines.reduce((sum, l) => sum + l.pricePaise * l.quantity, 0);
-  const { freeShippingThresholdPaise } = await getSettings();
-  const shippingPaise = deliveryPriceFor(input.deliveryMethod, subtotalPaise, freeShippingThresholdPaise, user.isPremium);
+  // Delivery is free on every order: the seller pays the courier.
+  const shippingPaise = deliveryPriceFor();
   const totalPaise = subtotalPaise + shippingPaise;
   const eta = etaWindowFor(input.deliveryMethod);
   const orderNumber = await generateOrderNumber();

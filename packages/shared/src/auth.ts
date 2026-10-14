@@ -150,7 +150,7 @@ export interface AuthUser {
   favouriteBrands: string[];
   preferredCategories: string[];
   emailVerified: boolean;
-  /** Premium membership — free standard delivery with no minimum. */
+  /** Premium membership. (Delivery is free for everyone now.) */
   isPremium: boolean;
   prefs: { email: boolean; sms: boolean; whatsapp: boolean; recommendations: boolean };
 }

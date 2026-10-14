@@ -6,6 +6,7 @@ Quick answers to common questions. For anything else, the **Support chat** (gold
 
 - **Where is my order?** — My Orders → open the order → live status and courier tracking
 - **Cancel an order** — possible until any item ships, from the order page
+- **Delivery charge** — none: delivery is free on all orders
 - **Delivery time** — typically 3–7 days depending on your pincode
 
 ## Returns & refunds

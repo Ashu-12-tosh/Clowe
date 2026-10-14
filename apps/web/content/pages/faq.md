@@ -4,6 +4,7 @@
 
 - **How do I track my order?** Use [Track Order](/track) with your order number and phone.
 - **Can I cancel?** Yes, before the item ships — see [Cancellation](/pages/cancellation).
+- **Is there a delivery charge?** No. Delivery is free on all orders, with no minimum order value.
 
 ## Returns
 

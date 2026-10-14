@@ -49,7 +49,7 @@ const TRUST_STRIP = [
   { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
   { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
-  { Icon: TruckIcon, title: 'Free Delivery', text: 'On orders {{freeShippingFrom}}' },
+  { Icon: TruckIcon, title: 'Free Delivery', text: 'On all orders' },
   { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
 ];
 
