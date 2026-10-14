@@ -17,6 +17,7 @@ import {
   type TaxInvoice,
 } from '@clowe/shared';
 import { scanViews } from './track';
+import { cancelShipmentsForLinesSafe } from '../services/shipping/cancellations';
 import { prisma } from '../db';
 import { refundCancelledOrder } from '../services/refundService';
 import { buildTaxInvoice } from '../services/taxInvoice';
@@ -864,6 +865,9 @@ ordersRouter.post('/:id/cancel', async (req, res, next) => {
         });
       }
     });
+
+    // Booked with Delhivery already: cancel the booking too.
+    await cancelShipmentsForLinesSafe(order.items.map((i) => i.id));
 
     // A paid order is refunded through the gateway, the same path returns use;
     // the refund is recorded whether it goes through or fails.

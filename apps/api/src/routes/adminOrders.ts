@@ -32,6 +32,7 @@ import {
   isNotASale,
   parcelNdrSchema,
 } from '@clowe/shared';
+import { cancelShipmentsForLinesSafe } from '../services/shipping/cancellations';
 import { prisma } from '../db';
 import { refundCancelledOrder } from '../services/refundService';
 import { settleEarnedCredits } from '../services/purchaseCredits';
@@ -805,6 +806,9 @@ adminOrdersRouter.post('/:id/cancel', async (req, res, next) => {
     });
 
     await syncOrderStatus(order.id);
+    // Booked with Delhivery already: cancel the booking too (after pickup,
+    // Delhivery brings the parcel back to the seller).
+    await cancelShipmentsForLinesSafe(live.map((i) => i.id));
     await prisma.notification.create({
       data: {
         userId: order.userId,

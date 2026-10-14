@@ -1,4 +1,5 @@
 import { NOT_A_SALE_STATUSES, type SellerOrderCancelResult } from '@clowe/shared';
+import { cancelShipmentsForLinesSafe } from './shipping/cancellations';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 import { syncOrderStatus } from './orderStatusService';
@@ -125,6 +126,8 @@ export async function cancelSellerPart(input: {
   });
 
   await syncOrderStatus(order.id);
+  // Booked with Delhivery already: cancel the booking too.
+  await cancelShipmentsForLinesSafe([...lineIds]);
   const refund = emptiesOrder
     ? await refundCancelledOrder(order.id, note)
     : await refundOrderPart(
