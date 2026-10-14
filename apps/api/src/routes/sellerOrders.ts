@@ -34,10 +34,11 @@ import { webPublicUrl } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { shippingProvider } from '../services/shipping';
-import { bookShipment, pickupAddress, planParcel, syncShipmentsFromLines } from '../services/shipping/shipments';
+import { bookShipment, pickupAddress, planParcel } from '../services/shipping/shipments';
+import { markLineDelivered, markLineShipped } from '../services/shipping/lineTransitions';
+import { requestPickup } from '../services/shipping/pickups';
 import { chargeableGrams, codFeePaise, forwardFreightPaise } from '../services/shipping/freight';
 import { valueOfLines } from '../services/shipping/codAmount';
-import { sendMessageSafe } from '../services/messaging';
 import { checkSellerReferralReward } from '../services/sellerReferralService';
 import { blockSuspendedWrites, requireSeller } from './seller';
 import { removeStoredFile } from './uploads';
@@ -45,13 +46,10 @@ import { assertOwnAssets } from '../services/assets';
 import { hasPackingVideo, packingVideoView } from '../services/packingVideos';
 import {
   aggregateStatus,
-  settleCodIfDelivered,
   syncOrderStatus,
 } from '../services/orderStatusService';
-import { postDeliveryEntries } from '../services/sellerLedgerService';
 import { cancelSellerPart } from '../services/sellerCancellation';
 import {
-  chargeLateDispatchIfDue,
   dispatchClock,
   dispatchContext,
   type DispatchContext,
@@ -558,60 +556,27 @@ async function applyAction(item: ItemForAction, action: Action): Promise<string 
       const reason = (await bookLines([item])).get(item.id);
       if (reason) return reason;
     }
-    const booked = await prisma.orderItem.findUniqueOrThrow({
-      where: { id: item.id },
-      select: { shipmentId: true, awbNumber: true, courierName: true },
-    });
-    await prisma.$transaction([
-      prisma.orderItem.update({
-        where: { id: item.id },
-        data: { status: 'SHIPPED', shippedAt: new Date() },
-      }),
-      prisma.notification.create({
-        data: {
-          userId: item.order.user.id,
-          type: 'ITEM_SHIPPED',
-          title: 'Your order is on its way 🚚',
-          body: `"${item.title}" (${item.order.orderNumber}) shipped via ${booked.courierName} — AWB ${booked.awbNumber}.`,
-          linkHref: `/account/orders/${item.orderId}`,
-        },
-      }),
-    ]);
-    sendMessageSafe({
-      channel: 'whatsapp',
-      to: `+91${item.order.user.phone}`,
-      body: `Your Clowe item "${item.title}" has shipped via ${booked.courierName} (AWB ${booked.awbNumber}). Track: /track 🚚`,
-    });
-    await syncShipmentsFromLines([booked.shipmentId]);
-    await syncOrderStatus(item.orderId);
-    // Shipped after the penalty deadline? Charged here if the sweep has not
-    // already; once per order either way.
-    await chargeLateDispatchIfDue(item.orderId, item.sellerId);
+    const { shipmentId } = await prisma.orderItem.findUniqueOrThrow({ where: { id: item.id }, select: { shipmentId: true } });
+    const shipment = await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId! } });
+    // Shipping is handing the parcel to Delhivery: ask it to collect. The line
+    // is Shipped once Delhivery's pickup scan says so (the mock collects at
+    // once). A parcel already asked for — or already collected with another
+    // line of its box — is fine as it is.
+    if (shipment.status === 'CREATED') {
+      try {
+        await requestPickup({ sellerId: item.sellerId, shipmentIds: [shipment.id] });
+      } catch (err) {
+        if (err instanceof ApiError) return err.message;
+        throw err;
+      }
+    } else if (shippingProvider.name === 'mock') {
+      await markLineShipped(item.id);
+    }
     return null;
   }
 
   if (item.status !== 'SHIPPED') return `Cannot deliver an item in status ${item.status}`;
-  await prisma.$transaction([
-    prisma.orderItem.update({
-      where: { id: item.id },
-      data: { status: 'DELIVERED', deliveredAt: new Date() },
-    }),
-    prisma.notification.create({
-      data: {
-        userId: item.order.user.id,
-        type: 'ITEM_DELIVERED',
-        title: 'Delivered! 📦',
-        body: `"${item.title}" (${item.order.orderNumber}) has been delivered. We'd love a review!`,
-        linkHref: `/account/orders/${item.orderId}`,
-      },
-    }),
-  ]);
-  await syncShipmentsFromLines([item.shipmentId]);
-  await syncOrderStatus(item.orderId);
-  await settleCodIfDelivered(item.orderId);
-  // Delivery is the moment the money is earned: it goes on the ledger here,
-  // once, however many times this line is replayed.
-  await postDeliveryEntries(item.id);
+  await markLineDelivered(item.id);
   return null;
 }
 

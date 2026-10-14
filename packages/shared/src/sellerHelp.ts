@@ -94,7 +94,7 @@ Low stock alert is per product — a variant at or below that number is flagged 
 
 The packing video is not optional. On the order's page, record or upload a short clip of the items going into the box; Mark packed and Ship are both refused until there is one. It is private to you and Clowe's team — the buyer never sees it — and it is what settles a disputed return. It is kept until ${PACKING_VIDEO_RETENTION_DAYS} days after delivery, and for as long as a return on the order is open.
 
-Clowe ships with Delhivery. "Book with Delhivery" creates the shipment and its AWB before you ship, so the label you print carries it; the items of one order you book together go in one parcel. Shipping books one then if you haven't. Each line moves independently, so a multi-item order can be part shipped.
+Clowe ships with Delhivery. "Book with Delhivery" creates the shipment and its AWB before you ship, so the label you print carries it; the items of one order you book together go in one parcel. Shipping asks Delhivery to collect the parcel from your pickup address (booking it first if you haven't): one pickup request per day covers every parcel you ship that day. The item shows as Shipped when Delhivery scans it at pickup. Each line moves independently, so a multi-item order can be part shipped.
 
 Dispatch promise: ship within {{dispatchSla}} of the order being placed; each unshipped order counts it down. If your part of an order has still not left {{penaltyAfter}} after it was placed, a late-dispatch penalty of {{penaltyAmount}} comes off your settlement balance, once per order — charged when that time runs out, whether or not you ship later. Vacation mode stops the penalty clock. Shipping after the promise counts against your account health.
 

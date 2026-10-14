@@ -1381,6 +1381,8 @@ model Shipment {
   statusText  String?
   lastScanAt  DateTime?
   pickupRequestId String?
+  // When Delhivery is asked to come (one request per pickup address and day).
+  pickupScheduledFor DateTime?
   pickupRequestedAt DateTime?
   pickedUpAt  DateTime?
   deliveredAt DateTime?
