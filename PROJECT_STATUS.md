@@ -1,6 +1,6 @@
 # Clowe — Project Status
 
-_Last updated: 2026-10-01 · commit `c32f093` · live at **cloweshop.com**_
+_Last updated: 2026-10-14 (delivery money decisions; commit `fe7988e`) · live at **cloweshop.com**_
 
 This file is meant to stand on its own. Someone who reads only this should know
 what Clowe is, what works, what is deliberately switched off, what is blocking a
@@ -178,9 +178,15 @@ docker compose -f docker-compose.prod.yml --env-file .env.production logs -f api
 ```
 
 **2. Shipping — Delhivery One, replacing Shiprocket.**
-The decision is Delhivery One; the integration is not written. The mock in
-`apps/api/src/services/shipping/` fabricates AWB numbers, so tracking pages work
-and no courier is booked. Orders can be shipped manually at low volume.
+Delhivery is the only courier; sellers choose none. The integration is being
+built on the mock (`SHIPPING_PROVIDER=mock`, the default): a Shipment per
+seller per order with its scans, the full provider interface, and a Delhivery
+client that defaults to staging and refuses bookings, pickups and
+cancellations on production unless `DELHIVERY_PRODUCTION_WRITES=true`. A
+staging token has been requested from Delhivery; the token from the
+Delhivery One dashboard is a **production** token, used only for read-only
+rate and pincode checks (2026-10-14). Nothing real is booked until the owner
+says so for that specific action (CLAUDE.md).
 
 *RTO (courier returns an undelivered parcel to the seller) is designed, not
 built; it lands with this integration. Decided on 2026-10-02: RTO is a set of
@@ -210,14 +216,47 @@ wallet brands, so nothing on the site has to change when it goes in.
 
 ---
 
+**Delivery money — decided 2026-10-14, after seeing Delhivery's real rates.**
+- **Buyers never pay a delivery fee**, at any order value. The free-shipping
+  threshold and the buyer delivery charge are gone from every page and from
+  checkout; only standard delivery (Delhivery Surface) is offered. The old
+  `freeShippingThresholdPaise` setting stays in the database, unread. Orders
+  placed before keep what they were charged.
+- **Sellers pay Delhivery's actual forward freight**, per parcel, not the flat
+  ₹60 per line: estimated from the charges API when they book (shown before
+  they confirm, stored on the shipment), posted on delivery at the charged
+  weight (greater of actual and volumetric, 0.5 kg slabs) as
+  `FORWARD_FREIGHT`; a later re-weigh posts a separate `FREIGHT_ADJUSTMENT`.
+  Surface only for now. The ₹60 `deliveryFeePaise` setting survives only as
+  the mock courier's flat estimate.
+- **The COD fee is the seller's**: Delhivery's charge (₹40 or 2 % of the
+  amount collected, whichever is higher, plus GST — read from the charges
+  API, never hard-coded) posted as `COD_FEE` when a COD parcel is delivered.
+  Sellers can turn COD off in Store Settings, where the fee is explained.
+- **RTO freight is the seller's**: a parcel brought back undelivered costs
+  its forward freight plus Delhivery's RTO charge, posted as `RTO_FREIGHT`;
+  no COD fee (nothing was collected).
+- **Returns go to each seller's own pickup address** (not a central one).
+- **COD lines become payable only after Delhivery's remittance for the AWB is
+  matched**, not on delivery (remittance import and matching are still to
+  build).
+- All courier charges include GST (what Clowe pays Delhivery). They count
+  against the payable balance at once, are each their own line on the
+  payouts page and in the monthly statement, and are retried before payout
+  figures if the charges API was down at delivery. Live rates for a 0.5 kg
+  surface parcel from 110053: ₹42 (Delhi), ₹59 (Mumbai/Bengaluru), ₹94 (J&K,
+  Andaman), GST included; RTO adds ₹37–92; COD adds ₹47.20 up to ₹2,000.
+
 **Tax invoices: a CA should confirm the format before launch.** The buyer's
 invoice is now the seller's (supplier: the seller's legal name — the name on
 their PAN — GSTIN and address), naming Clowe Partners LLP as the marketplace,
 one per seller on an order, with HSN and CGST + SGST or IGST at each line's
 recorded rate (`apps/api/src/services/taxInvoice.ts`; the seller's copy is the
 same document). Delivery charges, coupons and credits sit in an order summary
-outside the invoices. Open questions for the CA: who invoices the delivery
-charge and at what rate; credit notes for returned lines; whether the legal
+outside the invoices. Open questions for the CA: how Clowe invoices the
+Delhivery freight, COD and RTO charges it recovers from sellers (GST on the
+recovery, and input credit on Delhivery's invoice) — buyers pay no delivery
+charge since 2026-10-14; credit notes for returned lines; whether the legal
 name should come from the GSTIN registration rather than the PAN; and the
 marketplace's TCS details on the invoice. A seller cannot be approved without
 a GSTIN; sellers approved before that see a banner and get no payouts until
@@ -272,12 +311,13 @@ the marketplace's. Approval does warn "PAN has not been provided", but the admin
 can acknowledge it and approve. Either payouts should require a verified PAN,
 or TDS should switch to 5% when none is on file.
 
-**The shipping template is hidden until Delhivery.** Standard / Express / Heavy
-did nothing, so the field is gone from the seller's product form (2026-10-03),
+**The shipping template stays hidden.** Standard / Express / Heavy did
+nothing, so the field is gone from the seller's product form (2026-10-03),
 and the API no longer accepts or writes it: values already stored stay in
-`products.shippingTemplate`, untouched, and new listings have none. It comes
-back with the Delhivery integration, which gives it meaning (service type and
-rate card). Weight and dimensions, by contrast, are checked: required in
+`products.shippingTemplate`, untouched, and new listings have none. Every
+parcel ships Delhivery Surface; Express is not offered for now (2026-10-14).
+The product form's pricing calculator estimates delivery from the product's
+weight and size to three destinations, plus what COD adds. Weight and dimensions, by contrast, are checked: required in
 range before anything goes to review (10 g–100 kg, each side 1–300 cm), with a
 live volumetric-weight hint (L × W × H ÷ 5000) and a warning when the box weighs
 more than twice the item by size.
