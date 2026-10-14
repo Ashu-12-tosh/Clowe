@@ -126,7 +126,10 @@ export interface SellerPayoutOverview {
   summary: {
     openingBalancePaise: number;
     earningsPaise: number;
+    /** Marketplace fees on the month's sales. */
     feesPaise: number;
+    /** Delhivery's charges posted in the month: freight, COD fees and RTO freight. */
+    courierChargesPaise: number;
     tdsPaise: number;
     tcsPaise: number;
     adjustmentsPaise: number;
@@ -136,8 +139,14 @@ export interface SellerPayoutOverview {
   fees: {
     commissionPaise: number;
     gatewayPaise: number;
-    /** Platform, delivery and closing fees on the month's delivered lines. */
+    /** Platform, closing and GT fees on the month's delivered lines (and the old flat delivery fee, before it ended). */
     fixedFeesPaise: number;
+    /** Delhivery's forward freight on the month's parcels, re-weigh adjustments included. */
+    forwardFreightPaise: number;
+    /** Delhivery's COD fees on the month's delivered COD parcels. */
+    codFeePaise: number;
+    /** Delhivery's charges for bringing undelivered parcels back. */
+    rtoFreightPaise: number;
     adjustmentsPaise: number;
     totalPaise: number;
   };

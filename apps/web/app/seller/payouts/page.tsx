@@ -636,6 +636,18 @@ export default function SellerPayoutsPage() {
                     </dt>
                     <dd className="font-semibold">{money(overview.fees.fixedFeesPaise)}</dd>
                   </div>
+                  <div className="flex justify-between" data-fee="forward-freight">
+                    <dt className="text-gray-500">Delhivery freight (per parcel, at the charged weight)</dt>
+                    <dd className="font-semibold">{money(overview.fees.forwardFreightPaise)}</dd>
+                  </div>
+                  <div className="flex justify-between" data-fee="cod-fee">
+                    <dt className="text-gray-500">COD fees (Delhivery: ₹40 or 2%, plus GST)</dt>
+                    <dd className="font-semibold">{money(overview.fees.codFeePaise)}</dd>
+                  </div>
+                  <div className="flex justify-between" data-fee="rto-freight">
+                    <dt className="text-gray-500">RTO freight (parcels brought back undelivered)</dt>
+                    <dd className="font-semibold">{money(overview.fees.rtoFreightPaise)}</dd>
+                  </div>
                   <div className="flex justify-between">
                     <dt className="text-gray-500">Ad spend recovery</dt>
                     <dd className="font-semibold">{money(overview.fees.adjustmentsPaise)}</dd>
@@ -716,6 +728,12 @@ export default function SellerPayoutsPage() {
                     <dt className="text-gray-500">Fees &amp; charges</dt>
                     <dd className="font-semibold text-red-600">
                       − {money(overview.summary.feesPaise)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">Delhivery charges</dt>
+                    <dd className="font-semibold text-red-600">
+                      − {money(overview.summary.courierChargesPaise)}
                     </dd>
                   </div>
                   <div className="flex justify-between">

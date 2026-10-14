@@ -17,6 +17,8 @@ import {
   istFinancialYear,
   monthPeriodIST,
   periodWindow,
+  SELLER_LEDGER_TYPE_LABELS,
+  type SellerLedgerTypeValue,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -160,6 +162,41 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       ]);
     const gstinBlock = await gstinBlockFor(sellerId);
 
+    // Delhivery's charges are per parcel, posted to the ledger on delivery (or
+    // on return): read from there, each kind its own line. The old flat
+    // delivery fee per line, from before, still counts in its months.
+    const courier = async (from: Date, to: Date) => {
+      const rows = await prisma.sellerLedgerEntry.groupBy({
+        by: ['type'],
+        where: {
+          sellerId,
+          bucket: 'SETTLEMENT',
+          type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'COD_FEE', 'RTO_FREIGHT', 'DELIVERY_FEE'] },
+          createdAt: { gte: from, lt: to },
+        },
+        _sum: { amountPaise: true },
+      });
+      const of = (...types: string[]) =>
+        -rows.filter((r) => types.includes(r.type)).reduce((sum, r) => sum + (r._sum.amountPaise ?? 0), 0);
+      const forward = of('FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT');
+      const cod = of('COD_FEE');
+      const rto = of('RTO_FREIGHT');
+      return { forward, cod, rto, legacyDelivery: of('DELIVERY_FEE'), total: forward + cod + rto };
+    };
+    const [monthCourier, prevCourier] = await Promise.all([
+      courier(range.from, range.to),
+      courier(range.previousFrom, range.previousTo),
+    ]);
+    const courierByDay = await prisma.sellerLedgerEntry.findMany({
+      where: {
+        sellerId,
+        bucket: 'SETTLEMENT',
+        type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'COD_FEE', 'RTO_FREIGHT'] },
+        createdAt: { gte: range.from, lt: range.to },
+      },
+      select: { amountPaise: true, createdAt: true },
+    });
+
     // Returned lines were earned then reversed — they don't count as income.
     const earning = monthItems.filter((i) => i.status === 'DELIVERED');
     const prevEarning = prevItems.filter((i) => i.status === 'DELIVERED');
@@ -204,6 +241,15 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       bucket.netPaise += line.netPaise;
       bucket.feesPaise += line.feesPaise + line.tdsPaise + line.tcsPaise;
     }
+    for (const charge of courierByDay) {
+      const bucket = days.get(dayKey(charge.createdAt));
+      if (!bucket) continue;
+      bucket.netPaise += charge.amountPaise;
+      bucket.feesPaise -= charge.amountPaise;
+    }
+    // Net of the courier's charges, which the line-by-line fees don't carry.
+    const monthNetPaise = monthFees.netPaise - monthCourier.total;
+    const prevNetPaise = prevFees.netPaise - prevCourier.total;
 
     // Where the month's gross came from. Shipping is what buyers paid for
     // delivery on these orders; the marketplace keeps it, so it is shown
@@ -230,8 +276,8 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         : 100;
 
     const insights: SellerPayoutOverview['insights'] = [];
-    if (monthFees.netPaise > 0 && prevFees.netPaise > 0) {
-      const change = changePercent(monthFees.netPaise, prevFees.netPaise) ?? 0;
+    if (monthNetPaise > 0 && prevNetPaise > 0) {
+      const change = changePercent(monthNetPaise, prevNetPaise) ?? 0;
       insights.push({
         key: 'trend',
         tone: change >= 0 ? 'GOOD' : 'WARN',
@@ -292,8 +338,8 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       kpis: {
         monthGrossPaise: monthFees.grossPaise,
         monthGrossChangePercent: changePercent(monthFees.grossPaise, prevFees.grossPaise),
-        monthNetPaise: monthFees.netPaise,
-        monthNetChangePercent: changePercent(monthFees.netPaise, prevFees.netPaise),
+        monthNetPaise,
+        monthNetChangePercent: changePercent(monthNetPaise, prevNetPaise),
         payablePaise: balance.payablePaise,
         inClearingPaise: balance.inClearingPaise,
         nextClearingAt: balance.nextClearingAt,
@@ -308,7 +354,8 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       summary: {
         openingBalancePaise,
         earningsPaise: monthFees.grossPaise,
-        feesPaise: monthFees.feesPaise,
+        feesPaise: monthFees.feesPaise + monthCourier.legacyDelivery,
+        courierChargesPaise: monthCourier.total,
         tdsPaise: monthFees.tdsPaise,
         tcsPaise: monthFees.tcsPaise,
         adjustmentsPaise: balance.adjustmentsPaise,
@@ -318,9 +365,12 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       fees: {
         commissionPaise: monthFees.commissionPaise,
         gatewayPaise: monthFees.gatewayPaise,
-        fixedFeesPaise: monthFees.fixedFeesPaise,
+        fixedFeesPaise: monthFees.fixedFeesPaise + monthCourier.legacyDelivery,
+        forwardFreightPaise: monthCourier.forward,
+        codFeePaise: monthCourier.cod,
+        rtoFreightPaise: monthCourier.rto,
         adjustmentsPaise: balance.adjustmentsPaise,
-        totalPaise: monthFees.feesPaise + balance.adjustmentsPaise,
+        totalPaise: monthFees.feesPaise + monthCourier.legacyDelivery + monthCourier.total + balance.adjustmentsPaise,
       },
       tds: {
         financialYear: fy.label,
@@ -551,7 +601,27 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
     });
     const rules = await taxRulesFor(items);
 
+    // Delhivery's charges, per parcel: their own rows after the sales.
+    const charges = await prisma.sellerLedgerEntry.findMany({
+      where: {
+        sellerId,
+        bucket: 'SETTLEMENT',
+        type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'COD_FEE', 'RTO_FREIGHT'] },
+        createdAt: { gte: range.from, lt: range.to },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    const orderNumbers = new Map(
+      (
+        await prisma.order.findMany({
+          where: { id: { in: charges.map((c) => c.orderId).filter((id): id is string => !!id) } },
+          select: { id: true, orderNumber: true },
+        })
+      ).map((o) => [o.id, o.orderNumber]),
+    );
+
     const header = [
+      'Type',
       'Delivered on',
       'Order number',
       'Item',
@@ -571,6 +641,7 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
       const fee = feesFor(item, settings, rules);
       lines.push(
         [
+          'Sale',
           item.deliveredAt?.toISOString() ?? '',
           item.order.orderNumber,
           item.title,
@@ -584,6 +655,29 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
           item.order.paymentMethod,
           item.payout?.reference ?? 'Unsettled',
           item.payout?.status ?? '',
+        ]
+          .map(csvCell)
+          .join(','),
+      );
+    }
+
+    for (const c of charges) {
+      lines.push(
+        [
+          SELLER_LEDGER_TYPE_LABELS[c.type as SellerLedgerTypeValue] ?? c.type,
+          c.createdAt.toISOString(),
+          c.orderId ? (orderNumbers.get(c.orderId) ?? '') : '',
+          c.note ?? '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          (c.amountPaise / 100).toFixed(2),
+          '',
+          '',
+          '',
         ]
           .map(csvCell)
           .join(','),

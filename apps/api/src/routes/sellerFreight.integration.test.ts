@@ -283,3 +283,36 @@ describe('a parcel that comes back undelivered (RTO)', () => {
     expect((await courierRows(orderId)).map((r) => r.type)).toEqual(['FORWARD_FREIGHT', 'RTO_FREIGHT']);
   });
 });
+
+describe('the payouts page and the statement', () => {
+  it('show forward freight, COD fees and RTO freight each as their own line', async () => {
+    const sum = async (types: ('FORWARD_FREIGHT' | 'FREIGHT_ADJUSTMENT' | 'COD_FEE' | 'RTO_FREIGHT')[]) =>
+      -((await prisma.sellerLedgerEntry.aggregate({ where: { sellerId, type: { in: types } }, _sum: { amountPaise: true } }))._sum.amountPaise ?? 0);
+    const forward = await sum(['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT']);
+    const cod = await sum(['COD_FEE']);
+    const rto = await sum(['RTO_FREIGHT']);
+    // Earlier tests in this file delivered, charged COD on, and brought back parcels.
+    expect([forward > 0, cod > 0, rto > 0]).toEqual([true, true, true]);
+
+    const overview = (await call('GET', '/api/seller/payouts/overview')).json.data as {
+      fees: { forwardFreightPaise: number; codFeePaise: number; rtoFreightPaise: number; totalPaise: number; commissionPaise: number; gatewayPaise: number; fixedFeesPaise: number; adjustmentsPaise: number };
+      summary: { courierChargesPaise: number };
+    };
+    expect(overview.fees).toMatchObject({ forwardFreightPaise: forward, codFeePaise: cod, rtoFreightPaise: rto });
+    expect(overview.summary.courierChargesPaise).toBe(forward + cod + rto);
+    const f = overview.fees;
+    expect(f.totalPaise).toBe(f.commissionPaise + f.gatewayPaise + f.fixedFeesPaise + forward + cod + rto + f.adjustmentsPaise);
+
+    const res = await fetch(`${base}/api/seller/payouts/statement`, { headers: { authorization: `Bearer ${token}` } });
+    const csv = await res.text();
+    const rows = csv.split('\n').map((l) => l.split(',')[0]);
+    expect(rows[0]).toBe('Type');
+    expect(rows).toContain('Sale');
+    expect(rows).toContain('Delhivery freight');
+    expect(rows).toContain('COD fee (Delhivery)');
+    expect(rows).toContain('RTO freight (Delhivery)');
+    // The charges' rows carry their amount in the Net column, signed as the ledger has it.
+    const freightRow = csv.split('\n').find((l) => l.startsWith('Delhivery freight,'))!;
+    expect(freightRow).toContain(`,${(-TEST_RATE / 100).toFixed(2)},`);
+  });
+});
