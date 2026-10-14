@@ -20,6 +20,7 @@ const NAV: DashNavItem[] = [
   { href: '/admin/search', label: 'Search', icon: '⌕' },
   { href: '/admin/users', label: 'Users', icon: '👥' },
   { href: '/admin/orders', label: 'Orders', icon: '📦' },
+  { href: '/admin/shipments', label: 'Parcels', icon: '🚚' },
   { href: '/admin/payments', label: 'Payments', icon: '💳' },
   { href: '/admin/cod-remittance', label: 'COD remittance', icon: '₹' },
   { href: '/admin/returns', label: 'Returns', icon: '↩' },

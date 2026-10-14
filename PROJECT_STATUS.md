@@ -188,6 +188,20 @@ Delhivery One dashboard is a **production** token, used only for read-only
 rate and pincode checks (2026-10-14). Nothing real is booked until the owner
 says so for that specific action (CLAUDE.md).
 
+Built on the mock (2026-10-14/15), all steps of the plan: seller pickup
+addresses registered with Delhivery; checkout serviceability and COD limits;
+booking with the seller's box and Delhivery's estimate; 4×6 / A4 labels;
+pickup requests (the line ships at the pickup scan); tracking by webhook, a
+30-minute poll and admin refresh, with scans shown to buyers; failed
+deliveries (re-attempt / defer) and RTO (refund, RTO count, the seller's
+condition check); courier charges on the seller ledger; COD held until
+Delhivery's remittance is matched (admin → COD remittance); reverse pickups
+for approved returns; Delhivery cancellations when an order is cancelled; an
+admin Parcels desk. **Go-live:** DEPLOY_RUNBOOK.md, "Turning on Delhivery" —
+staging UAT, then production read-only, then live on the owner's yes. Still
+unconfirmed until staging: the packing-slip fields, warehouse-edit fields, the
+webhook's exact payload, and the remittance report's column names.
+
 *RTO (courier returns an undelivered parcel to the seller) is designed, not
 built; it lands with this integration. Decided on 2026-10-02: RTO is a set of
 line statuses on the existing enum (RTO_INITIATED → RTO_IN_TRANSIT →

@@ -817,7 +817,7 @@ starting.
 | **AI try-on** | Composites the photo and garment into a watermarked SVG preview | No | Yes |
 | **AI features** (descriptions, review summaries, support chat) | Canned text | No | Yes |
 | **WhatsApp / SMS / email** | Printed to the API log | No | Nothing is delivered |
-| **Shipping** | Fabricates an AWB number | No | Tracking pages work, no courier is booked |
+| **Shipping** | A mock that imitates Delhivery: AWBs, labels, pickups and scans are simulated; freight is the flat test rate (admin → Settings, "Test courier estimate") | No | Yes — no courier is booked. See [Turning on Delhivery](#turning-on-delhivery-shipping) |
 | **Payouts** | Mock only | No | No money moves |
 
 The API says which providers are live at boot:
@@ -1138,3 +1138,92 @@ dc exec api npx tsx prisma/backfillPrivateFiles.ts --apply
 dc exec api npx tsx prisma/replaceLoremflickr.ts
 dc exec api npx tsx prisma/replaceLoremflickr.ts --apply
 ```
+
+### Turning on Delhivery (shipping)
+
+Delhivery is the only courier. Until it is switched on, the API uses a mock
+that imitates it (`SHIPPING_PROVIDER=mock`), and the boot log says:
+
+```
+[clowe-api] Shipping: mock Delhivery — no real parcels are booked
+```
+
+**The rule (CLAUDE.md):** nothing books a real shipment, requests a real
+pickup, cancels a real shipment or spends Delhivery wallet money without the
+owner's explicit yes for that action. Staging is fine. `.env.production` is
+edited by the owner only.
+
+Turning it on is three stages. Each is a change to `.env.production` followed
+by `dc up -d api`, and each has its own boot line.
+
+**Stage 1 — staging (testing, free).** Needs the *staging* token from the
+Delhivery account manager; the token in the Delhivery One dashboard is a
+production one.
+
+```
+SHIPPING_PROVIDER=delhivery
+DELHIVERY_ENV=staging
+DELHIVERY_API_TOKEN=<staging token>
+```
+
+```
+[clowe-api] Shipping: Delhivery staging
+```
+
+Walk through, on a test seller and test orders:
+
+1. Approve the seller (or save its pickup address): Store Settings shows
+   "Registered with Delhivery". A failure shows why; admin → Sellers → Retry.
+2. Book an order: the dialog shows Delhivery's estimate; booking gives an AWB.
+3. Print the label: the sort code and destination hub come from Delhivery.
+4. Ship: a pickup request is made for the next 11:00 IST slot.
+5. Admin → Parcels → Refresh: Delhivery's scans appear on the order.
+6. Cancel a booked order before pickup: the parcel shows Cancelled.
+7. Book a COD order: its estimate includes the COD fee.
+8. Approve a test return: a reverse pickup is booked.
+
+**Webhook (optional, needs Delhivery to set it up, 5–6 working days).** Choose
+a long random secret, set `DELHIVERY_WEBHOOK_TOKEN=<secret>`, and give
+Delhivery the URL `https://cloweshop.com/api/webhooks/delhivery` with the
+header `Authorization: Bearer <secret>`. Without it, scans arrive by the
+30-minute poll and admin refreshes.
+
+**Stage 2 — production, read-only.** Production token, writes still off:
+rates, pincode checks and tracking are live; booking, pickups and
+cancellations are refused by the code.
+
+```
+DELHIVERY_ENV=production
+DELHIVERY_API_TOKEN=<production token>
+DELHIVERY_PRODUCTION_WRITES=false
+```
+
+```
+[clowe-api] Shipping: Delhivery production — read-only: bookings, pickups and cancellations are refused
+```
+
+**Stage 3 — live.** Only after the owner's explicit yes, and with at least
+₹500 in the Delhivery wallet (or postpaid terms):
+
+```
+DELHIVERY_PRODUCTION_WRITES=true
+```
+
+```
+[clowe-api] Shipping: Delhivery production — LIVE: bookings, pickups and cancellations are real
+```
+
+**Back off at any time:** `DELHIVERY_PRODUCTION_WRITES=false` stops new
+bookings and keeps tracking. `SHIPPING_PROVIDER=mock` also stops polling
+parcels booked with Delhivery — use it only with nothing in transit.
+
+**Day to day:**
+
+- Admin → **Parcels** → "Needs attention": failed attempts (Try again),
+  lost parcels, parcels coming back or back and not yet checked, and bookings
+  not collected in two days.
+- Admin → **COD remittance**: import each Delhivery remittance report (Delhivery
+  One → Finances → Remittance, as CSV). COD sales become payable to sellers
+  only once their parcel's remittance is matched; mismatches are listed.
+- A seller whose pickup address failed to register can't book: admin →
+  Sellers → the seller → Delhivery pickup address → Retry.
