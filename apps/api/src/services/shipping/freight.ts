@@ -42,7 +42,22 @@ export async function forwardFreightPaise(route: ParcelRoute): Promise<number> {
   return q.totalPaise;
 }
 
+/**
+ * Delhivery's COD charge for collecting `codAmountPaise`, GST included: what a
+ * COD quote costs over the same parcel prepaid. Read from the charges API —
+ * ₹40 or 2 % today, whichever is higher — never worked out here.
+ */
+export async function codFeePaise(route: ParcelRoute, codAmountPaise: number): Promise<number> {
+  if (codAmountPaise <= 0) return 0;
+  const [prepaid, cod] = await Promise.all([
+    shippingProvider.quote({ ...route, kind: 'DELIVERED', payment: 'PREPAID' }),
+    shippingProvider.quote({ ...route, kind: 'DELIVERED', payment: 'COD', codAmountPaise }),
+  ]);
+  return Math.max(0, cod.totalPaise - prepaid.totalPaise);
+}
+
 const forwardKey = (shipmentId: string) => `forward-freight:${shipmentId}`;
+const codFeeKey = (shipmentId: string) => `cod-fee:${shipmentId}`;
 /** Each re-pricing is its own entry: the nth adjustment of a parcel. */
 const adjustmentKey = (shipmentId: string, n: number) => `freight-adjustment:${shipmentId}:${n}`;
 
@@ -124,13 +139,43 @@ export async function postForwardFreight(shipmentId: string): Promise<FreightOut
 }
 
 /**
+ * Charge the seller Delhivery's COD fee once a COD parcel is delivered (the
+ * cash was collected). Prepaid parcels owe none. Once, however often called.
+ */
+export async function postCodFee(shipmentId: string): Promise<FreightOutcome> {
+  const found = await routeOf(shipmentId);
+  if (!found) return 'NOT_DELIVERED';
+  const { shipment: s, route } = found;
+  if (s.kind !== 'FORWARD' || s.status !== 'DELIVERED') return 'NOT_DELIVERED';
+  if (s.paymentType !== 'COD' || s.codAmountPaise <= 0 || s.codFeePaise !== null) return 'UNCHANGED';
+  if (!route) return 'NO_ROUTE';
+  const fee = await codFeePaise(route, s.codAmountPaise);
+  const posted = await postEntry({
+    sellerId: s.sellerId,
+    type: 'COD_FEE',
+    bucket: 'SETTLEMENT',
+    amountPaise: -fee,
+    orderId: s.orderId,
+    idempotencyKey: codFeeKey(s.id),
+    note: `Delhivery COD fee, ${s.order.orderNumber}: ₹${(s.codAmountPaise / 100).toFixed(2)} collected`,
+  });
+  await prisma.shipment.update({ where: { id: s.id }, data: { codFeePaise: fee } });
+  return posted ? 'POSTED' : 'UNCHANGED';
+}
+
+/**
  * Delivered parcels whose freight is not on the ledger yet — the charges API
  * was down when they were delivered. Posted before any payout is worked out,
  * so money never leaves before the freight it owes.
  */
 export async function ensureFreightPosted(sellerId: string): Promise<number> {
   const pending = await prisma.shipment.findMany({
-    where: { sellerId, kind: 'FORWARD', status: 'DELIVERED', finalFreightPaise: null },
+    where: {
+      sellerId,
+      kind: 'FORWARD',
+      status: 'DELIVERED',
+      OR: [{ finalFreightPaise: null }, { paymentType: 'COD', codAmountPaise: { gt: 0 }, codFeePaise: null }],
+    },
     select: { id: true },
     take: 200,
   });
@@ -138,6 +183,7 @@ export async function ensureFreightPosted(sellerId: string): Promise<number> {
   for (const s of pending) {
     try {
       if ((await postForwardFreight(s.id)) === 'POSTED') posted += 1;
+      if ((await postCodFee(s.id)) === 'POSTED') posted += 1;
     } catch (err) {
       console.error('[clowe-api] freight not posted yet for shipment', s.id, err instanceof Error ? err.message : err);
     }

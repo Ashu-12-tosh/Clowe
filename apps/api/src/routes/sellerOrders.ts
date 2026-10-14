@@ -33,7 +33,7 @@ import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { shippingProvider } from '../services/shipping';
 import { bookShipment, pickupAddress, planParcel, syncShipmentsFromLines } from '../services/shipping/shipments';
-import { chargeableGrams, forwardFreightPaise } from '../services/shipping/freight';
+import { chargeableGrams, codFeePaise, forwardFreightPaise } from '../services/shipping/freight';
 import { valueOfLines } from '../services/shipping/codAmount';
 import { sendMessageSafe } from '../services/messaging';
 import { checkSellerReferralReward } from '../services/sellerReferralService';
@@ -742,11 +742,14 @@ sellerOrdersRouter.get('/booking-quote', async (req, res, next) => {
       const plan = planParcel(order, order.items.filter((i) => itemIds.includes(i.id)));
       const chargeable = chargeableGrams(plan);
       let forward: number | null = null;
+      let codFee: number | null = plan.isCod ? null : 0;
       let error: string | null = null;
       if (!origin) error = 'Add your pickup pincode in Store Settings to get an estimate';
       else {
         try {
-          forward = await forwardFreightPaise({ originPincode: origin, destinationPincode: order.shipPincode, mode: plan.mode, weightGrams: chargeable });
+          const route = { originPincode: origin, destinationPincode: order.shipPincode, mode: plan.mode, weightGrams: chargeable };
+          forward = await forwardFreightPaise(route);
+          if (plan.isCod) codFee = await codFeePaise(route, plan.codAmountPaise);
         } catch (err) {
           error = `No estimate from Delhivery right now${err instanceof Error ? ` (${err.message})` : ''}`;
         }
@@ -759,7 +762,8 @@ sellerOrdersRouter.get('/booking-quote', async (req, res, next) => {
         codAmountPaise: plan.codAmountPaise,
         chargeableGrams: chargeable,
         forwardFreightPaise: forward,
-        totalPaise: forward,
+        codFeePaise: codFee,
+        totalPaise: forward === null || codFee === null ? null : forward + codFee,
         error,
       });
     }

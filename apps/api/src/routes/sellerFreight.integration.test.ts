@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app';
 import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
 import { shippingProvider } from '../services/shipping';
-import { postForwardFreight } from '../services/shipping/freight';
+import { postCodFee, postForwardFreight } from '../services/shipping/freight';
 import { signAccessToken } from '../utils/jwt';
 
 /**
@@ -37,14 +37,14 @@ async function call(method: string, path: string, body?: unknown) {
   return { status: res.status, json: (await res.json()) as { data: Record<string, unknown>; error?: { message: string } } };
 }
 
-async function paidOrder(lines = 1) {
+async function paidOrder(lines = 1, cod = false) {
   seq += 1;
   const order = await prisma.order.create({
     data: {
       userId: buyerId, orderNumber: `CLW-2026-88${String(seq).padStart(4, '0')}`, status: 'CONFIRMED',
-      subtotalPaise: 50_000 * lines, shippingPaise: 0, totalPaise: 50_000 * lines, paymentMethod: 'UPI',
+      subtotalPaise: 50_000 * lines, shippingPaise: 0, totalPaise: 50_000 * lines, paymentMethod: cod ? 'COD' : 'UPI',
       shipName: 'Freight Buyer', shipPhone: '9197700002', shipLine1: '1 Test Street', shipCity: 'Mumbai', shipState: 'Maharashtra', shipPincode: '400001',
-      payment: { create: { provider: 'mock', amountPaise: 50_000 * lines, status: 'PAID' } },
+      payment: { create: { provider: 'mock', amountPaise: 50_000 * lines, status: cod ? 'CREATED' : 'PAID' } },
       items: {
         create: Array.from({ length: lines }, (_, i) => ({
           productId, variantId, sellerId, title: `Freight Tee ${i + 1}`, size: '', color: '', pricePaise: 50_000, quantity: 1, status: 'CONFIRMED' as const,
@@ -60,6 +60,13 @@ async function paidOrder(lines = 1) {
 
 const freightRows = (orderId: string) =>
   prisma.sellerLedgerEntry.findMany({ where: { orderId, type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'DELIVERY_FEE'] } }, orderBy: { createdAt: 'asc' } });
+const courierRows = (orderId: string) =>
+  prisma.sellerLedgerEntry.findMany({
+    where: { orderId, type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'COD_FEE'] } },
+    orderBy: { createdAt: 'asc' },
+  });
+/** Delhivery's COD fee on ₹500: 2 % is ₹10, so the ₹40 minimum, plus 18 % GST. */
+const COD_FEE_500 = 4_720;
 
 async function shipAndDeliver(ids: string[]) {
   expect((await call('POST', '/api/seller/orders/bulk', { itemIds: ids, action: 'ship' })).json.data).toMatchObject({ updated: ids.length });
@@ -192,5 +199,45 @@ describe('on delivery', () => {
     // The sale is still in the return window; the freight is not held.
     expect(after.payablePaise).toBe(Math.max(0, before.payablePaise - TEST_RATE));
     expect(await freightRows(orderId)).toHaveLength(1);
+  });
+});
+
+describe('the COD fee', () => {
+  it('is in the estimate before a COD parcel is booked, and stored when it is', async () => {
+    const { ids } = await paidOrder(1, true);
+    const r = await call('GET', `/api/seller/orders/booking-quote?ids=${ids.join(',')}`);
+    expect(r.json.data).toMatchObject({
+      totalPaise: TEST_RATE + COD_FEE_500,
+      parcels: [{ payment: 'COD', codAmountPaise: 50_000, forwardFreightPaise: TEST_RATE, codFeePaise: COD_FEE_500, totalPaise: TEST_RATE + COD_FEE_500 }],
+    });
+    await call('POST', '/api/seller/orders/bulk', { itemIds: ids, action: 'assign' });
+    const s = await prisma.shipment.findFirstOrThrow({ where: { items: { some: { id: ids[0] } } } });
+    expect(s).toMatchObject({ estimatedFreightPaise: TEST_RATE, estimatedCodFeePaise: COD_FEE_500, codFeePaise: null });
+  });
+
+  it('is posted as its own entry when a COD parcel is delivered, once, and read from the charges API', async () => {
+    const quote = vi.spyOn(shippingProvider, 'quote');
+    const { orderId, ids } = await paidOrder(1, true);
+    await shipAndDeliver(ids);
+    expect((await courierRows(orderId)).map((r) => [r.type, r.amountPaise])).toEqual([
+      ['FORWARD_FREIGHT', -TEST_RATE],
+      ['COD_FEE', -COD_FEE_500],
+    ]);
+    // Priced by asking for the parcel as COD, with the amount collected.
+    expect(quote).toHaveBeenCalledWith(expect.objectContaining({ payment: 'COD', codAmountPaise: 50_000, kind: 'DELIVERED' }));
+    quote.mockRestore();
+    const s = await prisma.shipment.findFirstOrThrow({ where: { orderId } });
+    expect(s.codFeePaise).toBe(COD_FEE_500);
+    expect(await postCodFee(s.id)).toBe('UNCHANGED');
+    expect(await courierRows(orderId)).toHaveLength(2);
+  });
+
+  it('is 2 % above ₹2,000, and nothing on a prepaid parcel', async () => {
+    const big = await paidOrder(5, true); // ₹2,500 collected: 2 % is ₹50, plus GST
+    await shipAndDeliver(big.ids);
+    expect((await courierRows(big.orderId)).find((r) => r.type === 'COD_FEE')?.amountPaise).toBe(-5_900);
+    const prepaid = await paidOrder();
+    await shipAndDeliver(prepaid.ids);
+    expect((await courierRows(prepaid.orderId)).map((r) => r.type)).toEqual(['FORWARD_FREIGHT']);
   });
 });

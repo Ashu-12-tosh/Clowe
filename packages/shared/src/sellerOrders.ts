@@ -232,6 +232,8 @@ export interface SellerBookingQuote {
     chargeableGrams: number;
     /** Delhivery's forward freight estimate, GST included; null when it could not be priced. */
     forwardFreightPaise: number | null;
+    /** COD parcels: Delhivery's COD charge (₹40 or 2 % of the amount, plus GST); 0 for prepaid. */
+    codFeePaise: number | null;
     /** Everything this parcel is estimated to cost the seller. */
     totalPaise: number | null;
     error: string | null;

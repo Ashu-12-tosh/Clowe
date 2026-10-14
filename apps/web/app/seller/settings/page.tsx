@@ -784,22 +784,33 @@ export default function SellerStoreSettingsPage() {
                   <Field label="Dispatch promise">
                     <DispatchRulesNote className="mt-1" />
                   </Field>
-                  <div className="flex items-end">
-                    <label className="flex items-start gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={form.codEnabled}
-                        onChange={(e) => patch({ codEnabled: e.target.checked })}
-                        className="mt-0.5 h-4 w-4 accent-[#B8860B]"
-                      />
-                      <span>
-                        Accept Cash on Delivery
-                        <span className="block text-[11px] text-gray-400">
-                          Unticking it blocks COD checkout for carts containing your items.
-                        </span>
+                </div>
+                <div
+                  className={`mt-4 rounded-xl border p-3 ${form.codEnabled ? 'border-amber-200 bg-amber-50/60' : 'border-gray-200 bg-gray-50'}`}
+                  data-cod-setting
+                >
+                  <label className="flex items-start gap-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.codEnabled}
+                      onChange={(e) => patch({ codEnabled: e.target.checked })}
+                      className="mt-0.5 h-4 w-4 accent-[#B8860B]"
+                    />
+                    <span>
+                      <span className="font-semibold text-ink-900">
+                        Accept Cash on Delivery {form.codEnabled ? '(on)' : '(off)'}
                       </span>
-                    </label>
-                  </div>
+                      <span className="mt-1 block text-xs text-gray-600">
+                        On a COD order Delhivery collects the cash at the door and charges a COD fee:{' '}
+                        <strong>₹40 or 2% of the amount collected, whichever is higher, plus GST</strong>. That fee
+                        is yours, and comes off your settlement as its own line when the parcel is delivered —
+                        on top of the freight you pay on every parcel.
+                      </span>
+                      <span className="mt-1 block text-[11px] text-gray-500">
+                        Untick it to stop offering COD: buyers then pay online for carts with your items.
+                      </span>
+                    </span>
+                  </label>
                 </div>
                 <p className="mt-3 rounded-lg bg-cream-50 px-3 py-2 text-[11px] text-gray-600">
                   Delivery is free for buyers on every order, from every shop. You pay Delhivery&apos;s

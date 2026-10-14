@@ -2,7 +2,7 @@ import type { Shipment } from '@prisma/client';
 import { prisma } from '../../db';
 import { ApiError } from '../../utils/ApiError';
 import { valueOfLines, type LineValue } from './codAmount';
-import { chargeableGrams, forwardFreightPaise, postForwardFreight } from './freight';
+import { chargeableGrams, codFeePaise, forwardFreightPaise, postCodFee, postForwardFreight } from './freight';
 import { shippingProvider } from './index';
 import { ShippingProviderError, type ShippingMode } from './ShippingProvider';
 
@@ -145,18 +145,15 @@ export async function bookShipment(input: { orderId: string; sellerId: string; i
   }
   // Booked: from here on the parcel row stays, whatever happens. The
   // estimate is what the seller saw before confirming, from the charges API.
-  const estimate = pickup.pincode
-    ? await forwardFreightPaise({
-        originPincode: pickup.pincode,
-        destinationPincode: order.shipPincode,
-        mode,
-        weightGrams: chargeableGrams(plan),
-      }).catch(() => booked.estimatedFreightPaise)
-    : booked.estimatedFreightPaise;
+  const route = pickup.pincode
+    ? { originPincode: pickup.pincode, destinationPincode: order.shipPincode, mode, weightGrams: chargeableGrams(plan) }
+    : null;
+  const estimate = route ? await forwardFreightPaise(route).catch(() => booked.estimatedFreightPaise) : booked.estimatedFreightPaise;
+  const codEstimate = route && isCod ? await codFeePaise(route, plan.codAmountPaise).catch(() => null) : isCod ? null : 0;
   const [saved] = await prisma.$transaction([
     prisma.shipment.update({
       where: { id: shipment.id },
-      data: { awbNumber: booked.awbNumber, estimatedFreightPaise: estimate },
+      data: { awbNumber: booked.awbNumber, estimatedFreightPaise: estimate, estimatedCodFeePaise: codEstimate },
     }),
     prisma.orderItem.updateMany({
       where: { shipmentId: shipment.id },
@@ -190,6 +187,9 @@ export async function syncShipmentsFromLines(shipmentIds: Iterable<string | null
       // it is posted later, before any payout is worked out.
       await postForwardFreight(s.id).catch((err) =>
         console.error('[clowe-api] freight not posted yet for shipment', s.id, err instanceof Error ? err.message : err),
+      );
+      await postCodFee(s.id).catch((err) =>
+        console.error('[clowe-api] COD fee not posted yet for shipment', s.id, err instanceof Error ? err.message : err),
       );
     } else if (
       live.some((i) => i.status === 'SHIPPED' || i.status === 'DELIVERED') &&

@@ -106,7 +106,7 @@ Print labels from the row action or in bulk from the selection bar, and generate
     title: 'How Cash on Delivery is settled',
     summary: 'When COD money is marked collected and how it reaches you.',
     tags: ['cod', 'cash on delivery', 'payment', 'collect'],
-    body: `On a COD order Delhivery collects the cash at the door, so the payment stays pending until then. When you mark the last live line of that order Delivered, Clowe marks the payment Paid.
+    body: `On a COD order Delhivery collects the cash at the door, for its COD fee (₹40 or 2 % of the amount, whichever is higher, plus GST), which comes off your settlement as its own line, so the payment stays pending until then. When you mark the last live line of that order Delivered, Clowe marks the payment Paid.
 
 From that point the money follows the normal payout path: it clears after the return window and is included in your next payout, net of commission, gateway/collection charges and TDS.`,
   },
@@ -166,6 +166,7 @@ If all of that checks out, raise a ticket under Payouts & payments with the payo
 • Payment gateway / collection charge — a percentage of what the buyer pays (GST included), covering online payment or COD collection.
 • Fixed fees — a platform fee per order line, and a closing fee and a GT (goods transfer) charge per unit. The amounts in force are on your Payouts page and in the pricing calculator.
 • Delhivery freight — delivery is free for your buyers, and you pay Delhivery's actual freight for each parcel. You see its estimate before you confirm a booking; the final charge is posted when the parcel is delivered, at the weight Delhivery measured (billed per 0.5 kg, on the greater of actual and volumetric weight). If Delhivery re-weighs a parcel later, the difference is posted as its own adjustment.
+• COD fee — on a Cash on Delivery parcel, Delhivery's collection charge (₹40 or 2 % of the amount collected, whichever is higher, plus GST) is yours too, posted as its own line when the parcel is delivered. You can stop accepting COD in Store Settings.
 • TDS under section 194-O — withheld against your PAN and deposited with the payout that carried it. Download the TDS report from the Payouts page for your accountant.
 
 You enter your price before GST. The customer pays it plus GST at the rate Clowe applies (shown on your product form and in the pricing calculator), and that GST reaches your bank with the sale for you to file in your return. You issue the tax invoice for your own lines from the Orders page.`,

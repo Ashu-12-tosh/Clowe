@@ -28,6 +28,7 @@ export const SELLER_LEDGER_TYPES = [
   'SELLER_CANCEL_PENALTY',
   'FORWARD_FREIGHT',
   'FREIGHT_ADJUSTMENT',
+  'COD_FEE',
 ] as const;
 export type SellerLedgerTypeValue = (typeof SELLER_LEDGER_TYPES)[number];
 
@@ -54,6 +55,7 @@ export const SELLER_LEDGER_TYPE_LABELS: Record<SellerLedgerTypeValue, string> = 
   SELLER_CANCEL_PENALTY: 'Cancellation penalty',
   FORWARD_FREIGHT: 'Delhivery freight',
   FREIGHT_ADJUSTMENT: 'Freight adjustment',
+  COD_FEE: 'COD fee (Delhivery)',
 };
 
 /** The two penalties a seller can be charged, once per order each. */

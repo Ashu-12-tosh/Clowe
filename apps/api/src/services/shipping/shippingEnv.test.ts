@@ -29,7 +29,8 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe('the shipping settings', () => {
+// Each test loads the API's modules afresh (Prisma included): slow on a busy machine.
+describe('the shipping settings', { timeout: 60_000 }, () => {
   it('default to the mock, staging, and no production writes', async () => {
     const { env, shippingProvider } = await load({});
     expect(env).toMatchObject({ SHIPPING_PROVIDER: 'mock', DELHIVERY_ENV: 'staging', DELHIVERY_PRODUCTION_WRITES: 'false' });

@@ -73,6 +73,11 @@ export function BookingConfirm({
                     <p className="text-gray-500">
                       {p.chargeableGrams / 1000} kg charged · Surface · {p.payment === 'COD' ? `COD ${formatPaise(p.codAmountPaise)}` : 'Prepaid'}
                     </p>
+                    {p.payment === 'COD' && p.codFeePaise !== null && p.forwardFreightPaise !== null && (
+                      <p className="text-gray-500">
+                        Freight {formatPaise(p.forwardFreightPaise)} + COD fee {formatPaise(p.codFeePaise)}
+                      </p>
+                    )}
                     {p.error && <p className="mt-0.5 text-amber-700">{p.error}</p>}
                   </div>
                   <div className="shrink-0 text-right">

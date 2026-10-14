@@ -1394,6 +1394,10 @@ model Shipment {
   // The charged weight finalFreightPaise was priced at; a different one later
   // posts a FREIGHT_ADJUSTMENT.
   freightWeightGrams    Int?
+  // Delhivery's COD charge (₹40 or 2 %, plus GST): estimated at booking,
+  // posted to the seller's ledger on delivery.
+  estimatedCodFeePaise  Int?
+  codFeePaise           Int?
   finalFreightPaise     Int?
   rtoFreightPaise       Int?
   /// COD lines are payable only once the courier's remittance for this AWB is matched.
@@ -2107,6 +2111,7 @@ enum SellerLedgerType {
   SELLER_CANCEL_PENALTY // - the seller cancelled their part of an order
   FORWARD_FREIGHT // - Delhivery's forward freight for a delivered parcel (GST included)
   FREIGHT_ADJUSTMENT // +/- the freight re-priced after Delhivery's charged weight changed
+  COD_FEE // - Delhivery's COD collection charge on a delivered COD parcel (GST included)
 }
 
 /// Settlement money can be paid out; promotion credits never can. Keeping them
