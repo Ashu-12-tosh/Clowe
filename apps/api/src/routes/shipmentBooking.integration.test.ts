@@ -275,3 +275,33 @@ describe('parcels and money', () => {
     expect(after.shipment!.status).toBe('IN_TRANSIT');
   });
 });
+
+describe('the box, as the seller confirms it', () => {
+  it('is priced as typed, on the greater of its weight and volumetric weight', async () => {
+    const { orderId, ids } = await confirmedOrder({ lines: [{ pricePaise: 30_000 }, { pricePaise: 20_000 }] });
+    const suggested = await call('POST', '/api/seller/orders/booking-quote', { itemIds: ids });
+    // Two products in one box: the weight is theirs, the box size is the seller's to give.
+    expect((suggested.json.data.parcels as unknown[])[0]).toMatchObject({ weightGrams: 600, lengthMm: null, widthMm: null, heightMm: null, chargeableGrams: 600 });
+    const box = { weightGrams: 900, lengthMm: 400, widthMm: 300, heightMm: 200 }; // 4.8 kg volumetric
+    const typed = await call('POST', '/api/seller/orders/booking-quote', { itemIds: ids, boxes: { [orderId]: box } });
+    expect((typed.json.data.parcels as unknown[])[0]).toMatchObject({ ...box, chargeableGrams: 4_800 });
+  });
+
+  it('is what gets booked, and a box that makes no sense is refused', async () => {
+    const { orderId, ids } = await confirmedOrder({ lines: [{ pricePaise: 30_000 }, { pricePaise: 20_000 }] });
+    const bad = await call('POST', '/api/seller/orders/bulk', { itemIds: ids, action: 'assign', boxes: { [orderId]: { weightGrams: 0, lengthMm: 300, widthMm: 200, heightMm: 100 } } });
+    expect(bad.status).toBe(400);
+    expect(await prisma.shipment.count({ where: { orderId } })).toBe(0);
+    const box = { weightGrams: 1_250, lengthMm: 350, widthMm: 250, heightMm: 120 };
+    const r = await call('POST', '/api/seller/orders/bulk', { itemIds: ids, action: 'assign', boxes: { [orderId]: box } });
+    expect(r.json.data).toMatchObject({ updated: 2, skipped: [] });
+    expect(await prisma.shipment.findFirstOrThrow({ where: { orderId } })).toMatchObject(box);
+  });
+
+  it('puts the courier’s destination hub on the label', async () => {
+    const { ids } = await confirmedOrder();
+    await call('POST', '/api/seller/orders/bulk', { itemIds: ids, action: 'assign' });
+    const labels = (await call('GET', `/api/seller/orders/labels?ids=${ids[0]}`)).json.data as unknown as Array<Record<string, unknown>>;
+    expect(labels[0]).toMatchObject({ destinationHub: 'Pune (mock hub)', sortCode: expect.stringMatching(/^MOCK\//) });
+  });
+});

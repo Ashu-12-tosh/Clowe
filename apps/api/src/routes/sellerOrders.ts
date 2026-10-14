@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, SellerProfile } from '@prisma/client';
 import {
   packingVideoAttachSchema,
   PACKING_VIDEO_REQUIRED_MESSAGE,
@@ -11,6 +11,8 @@ import {
   SELLER_PAYMENT_FILTERS,
   sellerOrderActionSchema,
   sellerOrderBulkSchema,
+  sellerBookingQuoteSchema,
+  type ParcelBox,
   sellerOrderCancelSchema,
   type SellerInvoice,
   type SellerOrderBulkResult,
@@ -494,7 +496,7 @@ function bookingProblem(item: ItemForAction): string | null {
  * yet — the label goes on before the clip is filmed. Returns the reason for
  * each line that was not booked.
  */
-async function bookLines(items: ItemForAction[]): Promise<Map<string, string>> {
+async function bookLines(items: ItemForAction[], boxes?: Record<string, ParcelBox>): Promise<Map<string, string>> {
   const skipped = new Map<string, string>();
   const byOrder = new Map<string, ItemForAction[]>();
   for (const item of items) {
@@ -504,7 +506,7 @@ async function bookLines(items: ItemForAction[]): Promise<Map<string, string>> {
   }
   for (const [orderId, lines] of byOrder) {
     try {
-      await bookShipment({ orderId, sellerId: lines[0]!.sellerId, itemIds: lines.map((l) => l.id) });
+      await bookShipment({ orderId, sellerId: lines[0]!.sellerId, itemIds: lines.map((l) => l.id), box: boxes?.[orderId] });
     } catch (err) {
       if (!(err instanceof ApiError)) throw err;
       for (const l of lines) skipped.set(l.id, err.message);
@@ -670,7 +672,7 @@ sellerOrdersRouter.post('/bulk', async (req, res, next) => {
 
     let updated = 0;
     if (input.action === 'assign') {
-      const reasons = await bookLines(items);
+      const reasons = await bookLines(items, input.boxes);
       for (const item of items) {
         const reason = reasons.get(item.id);
         if (reason) skipped.push({ itemId: item.id, reason });
@@ -720,7 +722,28 @@ sellerOrdersRouter.get('/booking-quote', async (req, res, next) => {
       .filter(Boolean)
       .slice(0, 200);
     if (ids.length === 0) throw ApiError.badRequest('Select at least one item');
-    const seller = req.seller!;
+    res.json({ success: true, data: await bookingQuote(req.seller!, ids) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The same, for boxes the seller has corrected.
+sellerOrdersRouter.post('/booking-quote', async (req, res, next) => {
+  try {
+    const input = sellerBookingQuoteSchema.parse(req.body);
+    res.json({ success: true, data: await bookingQuote(req.seller!, input.itemIds, input.boxes) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+async function bookingQuote(
+  seller: SellerProfile,
+  ids: string[],
+  boxes?: Record<string, ParcelBox>,
+): Promise<SellerBookingQuote> {
+  {
     const items = await prisma.orderItem.findMany({ where: { id: { in: ids }, sellerId: seller.id }, include: ACTION_INCLUDE });
 
     const found = new Set(items.map((i) => i.id));
@@ -739,7 +762,7 @@ sellerOrdersRouter.get('/booking-quote', async (req, res, next) => {
         where: { id: orderId },
         include: { items: { include: { product: { select: { weightGrams: true, lengthMm: true, widthMm: true, heightMm: true } } } } },
       });
-      const plan = planParcel(order, order.items.filter((i) => itemIds.includes(i.id)));
+      const plan = { ...planParcel(order, order.items.filter((i) => itemIds.includes(i.id))), ...(boxes?.[orderId] ?? {}) };
       const chargeable = chargeableGrams(plan);
       let forward: number | null = null;
       let codFee: number | null = plan.isCod ? null : 0;
@@ -760,6 +783,10 @@ sellerOrdersRouter.get('/booking-quote', async (req, res, next) => {
         itemIds,
         payment: plan.isCod ? 'COD' : 'PREPAID',
         codAmountPaise: plan.codAmountPaise,
+        weightGrams: plan.weightGrams,
+        lengthMm: plan.lengthMm,
+        widthMm: plan.widthMm,
+        heightMm: plan.heightMm,
         chargeableGrams: chargeable,
         forwardFreightPaise: forward,
         codFeePaise: codFee,
@@ -767,17 +794,14 @@ sellerOrdersRouter.get('/booking-quote', async (req, res, next) => {
         error,
       });
     }
-    const body: SellerBookingQuote = {
+    return {
       parcels,
       skipped,
       totalPaise: parcels.reduce((sum, p) => sum + (p.totalPaise ?? 0), 0),
       provider: shippingProvider.name,
     };
-    res.json({ success: true, data: body });
-  } catch (err) {
-    next(err);
   }
-});
+}
 
 // ---------------------------------------------------------------------------
 // Shipping labels
@@ -825,6 +849,7 @@ sellerOrdersRouter.get('/labels', async (req, res, next) => {
           awbNumber: shipment?.awbNumber ?? i.awbNumber,
           courierName: i.courierName,
           sortCode: slip?.sortCode ?? null,
+          destinationHub: slip?.destinationHub ?? null,
           mode: shipment?.mode ?? null,
           weightGrams: shipment?.weightGrams ?? null,
           isCod,

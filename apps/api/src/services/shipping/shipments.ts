@@ -70,7 +70,13 @@ export function planParcel(
   };
 }
 
-export async function bookShipment(input: { orderId: string; sellerId: string; itemIds: string[] }): Promise<Shipment> {
+export async function bookShipment(input: {
+  orderId: string;
+  sellerId: string;
+  itemIds: string[];
+  /** The box as the seller confirmed it; the products' figures when absent. */
+  box?: { weightGrams: number; lengthMm: number; widthMm: number; heightMm: number };
+}): Promise<Shipment> {
   const order = await prisma.order.findUnique({
     where: { id: input.orderId },
     include: {
@@ -94,7 +100,7 @@ export async function bookShipment(input: { orderId: string; sellerId: string; i
     warehouseName = sync.name;
   }
 
-  const plan = planParcel(order, lines);
+  const plan = { ...planParcel(order, lines), ...(input.box ?? {}) };
   const { isCod, valuePaise, weightGrams, mode } = plan;
 
   const shipment = await prisma.$transaction(async (tx) => {

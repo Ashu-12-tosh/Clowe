@@ -42,6 +42,7 @@ function Label({ label }: { label: SellerShippingLabel }) {
             {label.mode && ` · ${label.mode === 'EXPRESS' ? 'Express' : 'Surface'}`}
           </p>
           {label.sortCode && <p className="font-mono text-base font-bold text-ink-900">{label.sortCode}</p>}
+          {label.destinationHub && <p className="text-[10px] text-gray-500">{label.destinationHub}</p>}
           {label.isCod ? (
             <p className="mt-0.5 inline-block rounded bg-ink-900 px-2 py-0.5 text-xs font-bold text-white">
               COD {formatPaise(label.codAmountPaise)}
@@ -127,11 +128,40 @@ function Label({ label }: { label: SellerShippingLabel }) {
   );
 }
 
+type LabelSize = 'THERMAL_4X6' | 'A4_4UP';
+const SIZE_KEY = 'clowe.labelSize';
+
+/** The page the printer gets: one 4×6 label per page, or four to an A4 sheet. */
+const PAGE_CSS: Record<LabelSize, string> = {
+  THERMAL_4X6: '@media print { @page { size: 4in 6in; margin: 0.1in; } .label-grid { display: block; } .label-grid .print-sheet { break-after: page; margin: 0; } }',
+  A4_4UP:
+    '@media print { @page { size: A4; margin: 8mm; } .label-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; } .label-grid .print-sheet { margin: 0; font-size: 0.85em; } .label-grid .print-sheet:nth-child(4n) { break-after: page; } }',
+};
+
 function LabelsView() {
   const params = useSearchParams();
   const ids = params.get('ids') ?? '';
   const [labels, setLabels] = useState<SellerShippingLabel[] | null>(null);
   const [error, setError] = useState('');
+  const [size, setSize] = useState<LabelSize>('THERMAL_4X6');
+
+  // The seller's printer doesn't change between visits: remember the choice.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SIZE_KEY);
+      if (saved === 'THERMAL_4X6' || saved === 'A4_4UP') setSize(saved);
+    } catch {
+      // Storage unavailable: start from 4×6.
+    }
+  }, []);
+  function pick(next: LabelSize) {
+    setSize(next);
+    try {
+      localStorage.setItem(SIZE_KEY, next);
+    } catch {
+      // Not remembered; still used for this print.
+    }
+  }
 
   useEffect(() => {
     if (!ids) {
@@ -153,8 +183,27 @@ function LabelsView() {
         <div>
           <h1 className="font-display text-xl font-bold text-ink-900">Shipping labels</h1>
           <p className="text-xs text-gray-500">
-            {labels ? `${labels.length} label(s) ready` : 'Loading…'} — print on A4 or a 4×6 roll.
+            {labels ? `${labels.length} label(s) ready` : 'Loading…'} — one per parcel.
           </p>
+        </div>
+        <div className="flex items-center gap-1 rounded-lg border border-gray-200 p-0.5 text-xs" role="radiogroup" aria-label="Label size">
+          {(
+            [
+              ['THERMAL_4X6', '4×6 thermal'],
+              ['A4_4UP', 'A4 · 4 per sheet'],
+            ] as const
+          ).map(([value, text]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={size === value}
+              onClick={() => pick(value)}
+              className={`rounded-md px-2.5 py-1 font-semibold ${size === value ? 'bg-ink-900 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+            >
+              {text}
+            </button>
+          ))}
         </div>
         <button
           onClick={() => window.print()}
@@ -171,7 +220,10 @@ function LabelsView() {
         </p>
       )}
 
-      {labels?.map((label) => <Label key={label.key} label={label} />)}
+      <style>{PAGE_CSS[size]}</style>
+      <div className="label-grid" data-label-size={size}>
+        {labels?.map((label) => <Label key={label.key} label={label} />)}
+      </div>
       {labels && labels.length === 0 && (
         <p className="text-sm text-gray-500">Nothing to print for this selection.</p>
       )}

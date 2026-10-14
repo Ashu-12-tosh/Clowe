@@ -206,10 +206,27 @@ export interface SellerOrderCancelResult {
   penaltyPaise: number;
 }
 
+/** A parcel's box as the seller confirms it at booking: grams and millimetres. */
+export const parcelBoxSchema = z.object({
+  weightGrams: z.number().int().min(10, 'A parcel weighs at least 10 g').max(100_000, 'Up to 100 kg per parcel'),
+  lengthMm: z.number().int().min(10, 'Each side is at least 1 cm').max(3_000, 'Each side is at most 300 cm'),
+  widthMm: z.number().int().min(10, 'Each side is at least 1 cm').max(3_000, 'Each side is at most 300 cm'),
+  heightMm: z.number().int().min(10, 'Each side is at least 1 cm').max(3_000, 'Each side is at most 300 cm'),
+});
+export type ParcelBox = z.infer<typeof parcelBoxSchema>;
+
 export const sellerOrderBulkSchema = z.object({
   itemIds: z.array(z.string().min(1)).min(1, 'Select at least one item').max(200),
   /** assign books one parcel per order for the selected lines of that order. */
   action: z.enum(['assign', 'pack', 'ship', 'deliver']),
+  /** assign: each order's box as the seller confirmed it, keyed by order id. */
+  boxes: z.record(z.string(), parcelBoxSchema).optional(),
+});
+
+/** POST /api/seller/orders/booking-quote — the estimate, for the products' boxes or the seller's. */
+export const sellerBookingQuoteSchema = z.object({
+  itemIds: z.array(z.string().min(1)).min(1, 'Select at least one item').max(200),
+  boxes: z.record(z.string(), parcelBoxSchema).optional(),
 });
 export type SellerOrderBulkInput = z.infer<typeof sellerOrderBulkSchema>;
 
@@ -228,6 +245,11 @@ export interface SellerBookingQuote {
     itemIds: string[];
     payment: 'PREPAID' | 'COD';
     codAmountPaise: number;
+    /** The box priced: the seller's, or what the products suggest (sides null when unknown). */
+    weightGrams: number;
+    lengthMm: number | null;
+    widthMm: number | null;
+    heightMm: number | null;
     /** What Delhivery charges for: the greater of actual and volumetric weight. */
     chargeableGrams: number;
     /** Delhivery's forward freight estimate, GST included; null when it could not be priced. */
@@ -264,6 +286,8 @@ export interface SellerShippingLabel {
   courierName: string | null;
   /** The courier's sort / routing code for its hubs, when it gives one. */
   sortCode: string | null;
+  /** The courier's destination hub, from its packing slip. */
+  destinationHub: string | null;
   /** SURFACE or EXPRESS once booked. */
   mode: string | null;
   weightGrams: number | null;
