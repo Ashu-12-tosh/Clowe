@@ -4,6 +4,7 @@ import { getSettings } from './settingsService';
 import { saleReturnWindows } from './categoryRules';
 import { saleGstRates } from './sellerPricing';
 import { ApiError } from '../utils/ApiError';
+import { codRefusal, deliveryRefusal, pincodeServiceability } from './shipping/serviceability';
 import { deliveryPriceFor, etaWindowFor } from './deliveryService';
 import { confirmCodOrder, generateOrderNumber, settlePaymentSuccess } from './orderService';
 import { allocateForDispatch } from './stockService';
@@ -43,6 +44,9 @@ export async function createManualOrder(input: {
   if (!address || address.userId !== user.id) {
     throw ApiError.badRequest('That address does not belong to the customer');
   }
+  const pincodeCheck = await pincodeServiceability(address.pincode);
+  const undeliverable = deliveryRefusal(address.pincode, pincodeCheck);
+  if (undeliverable) throw ApiError.badRequest(undeliverable, 'PINCODE_NOT_SERVICEABLE');
 
   const variants = await prisma.productVariant.findMany({
     where: { id: { in: input.items.map((i) => i.variantId) }, retiredAt: null },
@@ -99,6 +103,8 @@ export async function createManualOrder(input: {
         'COD_NOT_ELIGIBLE',
       );
     }
+    const noCodHere = codRefusal(address.pincode, totalPaise, pincodeCheck);
+    if (noCodHere) throw ApiError.badRequest(noCodHere.replace('please pay online', 'take payment another way'), 'COD_NOT_ELIGIBLE');
     const noCod = await prisma.sellerProfile.findFirst({
       where: { id: { in: [...new Set(lines.map((l) => l.sellerId))] }, codEnabled: false },
       select: { shopName: true },

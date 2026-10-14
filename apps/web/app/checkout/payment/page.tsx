@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
+  type CodAvailability,
   ADDRESS_LABEL_TEXT,
   CREDIT_VALUE_PAISE,
   creditsToPaise,
@@ -106,6 +107,15 @@ function PaymentPageInner() {
       .catch(() => {});
   }, []);
 
+  // Whether Delhivery collects cash at this address.
+  const [codHere, setCodHere] = useState<CodAvailability | null>(null);
+  useEffect(() => {
+    if (!addressId) return;
+    api<CodAvailability>(`/api/cart/cod-availability?addressId=${encodeURIComponent(addressId)}`, { auth: true })
+      .then(setCodHere)
+      .catch(() => {});
+  }, [addressId]);
+
   const [placing, setPlacing] = useState(false);
   const [mockOrder, setMockOrder] = useState<CheckoutResult | null>(null);
   const [error, setError] = useState('');
@@ -160,6 +170,7 @@ function PaymentPageInner() {
     if (m === 'COD' && codMaxPaise !== null && totalPaise > codMaxPaise) {
       return `Not available above ${formatPaise(codMaxPaise)}`;
     }
+    if (m === 'COD' && codHere && !codHere.available) return codHere.reason;
     return null;
   }
 

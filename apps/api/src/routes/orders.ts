@@ -30,6 +30,7 @@ import { ApiError } from '../utils/ApiError';
 import { paymentProvider } from '../services/payments';
 import { buildCartView } from './cart';
 import { deliveryPriceFor, etaWindowFor, isDeliveryMethodAvailable } from '../services/deliveryService';
+import { codRefusal, deliveryRefusal, pincodeServiceability } from '../services/shipping/serviceability';
 import { confirmCodOrder, generateOrderNumber } from '../services/orderService';
 import { nextRmaNumber } from '../services/returnService';
 import { allocateForDispatch, returnStock } from '../services/stockService';
@@ -73,6 +74,10 @@ ordersRouter.post('/checkout', async (req, res, next) => {
 
     const address = await prisma.address.findUnique({ where: { id: addressId } });
     if (!address || address.userId !== userId) throw ApiError.badRequest('Address not found');
+    // Delhivery has to deliver there (and, for COD, collect cash there).
+    const pincodeCheck = await pincodeServiceability(address.pincode);
+    const undeliverable = deliveryRefusal(address.pincode, pincodeCheck);
+    if (undeliverable) throw ApiError.badRequest(undeliverable, 'PINCODE_NOT_SERVICEABLE');
 
     // Billing defaults to the shipping address unless another saved one is picked.
     let billing = address;
@@ -188,6 +193,10 @@ ordersRouter.post('/checkout', async (req, res, next) => {
           'COD_NOT_ELIGIBLE',
         );
       }
+    }
+    if (paymentMethod === 'COD') {
+      const noCodHere = codRefusal(address.pincode, totalPaise, pincodeCheck);
+      if (noCodHere) throw ApiError.badRequest(noCodHere, 'COD_NOT_ELIGIBLE');
     }
     // Sellers may switch COD off for their own goods in Store Settings.
     if (paymentMethod === 'COD') {

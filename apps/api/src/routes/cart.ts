@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { Prisma } from '@prisma/client';
-import {
+import { type CodAvailability,
   cartBulkDeleteSchema,
   cartItemAddSchema,
   cartItemUpdateSchema,
@@ -17,6 +17,7 @@ import { getSettings } from '../services/settingsService';
 import { applyPromotions } from '../services/promotionService';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
+import { codRefusal, deliveryRefusal, pincodeServiceability } from '../services/shipping/serviceability';
 import { deliveryOptionsFor, deliveryPriceFor } from '../services/deliveryService';
 
 export const cartRouter = Router();
@@ -468,6 +469,23 @@ cartRouter.delete('/coupon', async (req, res, next) => {
     const cart = await getOrCreateCart(req.auth!.userId);
     await prisma.cart.update({ where: { id: cart.id }, data: { couponCode: null } });
     await respondWithCart(req.auth!.userId, res);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Whether Delhivery collects cash at this address, so the payment step can
+// grey COD out with the reason. Checkout enforces it regardless.
+cartRouter.get('/cod-availability', async (req, res, next) => {
+  try {
+    const addressId = typeof req.query.addressId === 'string' ? req.query.addressId : '';
+    const address = await prisma.address.findUnique({ where: { id: addressId } });
+    if (!address || address.userId !== req.auth!.userId) throw ApiError.badRequest('Address not found');
+    const { totalPaise } = await buildCartView(req.auth!.userId);
+    const check = await pincodeServiceability(address.pincode);
+    const reason = deliveryRefusal(address.pincode, check) ?? codRefusal(address.pincode, totalPaise, check);
+    const body: CodAvailability = { available: reason === null, reason };
+    res.json({ success: true, data: body });
   } catch (err) {
     next(err);
   }

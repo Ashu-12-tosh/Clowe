@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { deliveryOptionsFor } from '../services/deliveryService';
+import { deliveryRefusal, pincodeServiceability } from '../services/shipping/serviceability';
 
 export const deliveryRouter = Router();
 
@@ -16,9 +17,9 @@ const querySchema = z.object({
 
 /**
  * Serviceability + delivery for a pincode. Public, so the product page can
- * quote delivery before login. Delivery is always free. Coverage is a
- * stand-in until checkout reads Delhivery's serviceability: every valid
- * 6-digit pincode is served.
+ * quote delivery before login. Delivery is always free. Coverage is
+ * Delhivery's (cached per pincode); if it can't be asked, the pincode is
+ * treated as served — checkout and booking ask again.
  */
 deliveryRouter.get('/options', async (req, res, next) => {
   try {
@@ -36,6 +37,12 @@ deliveryRouter.get('/options', async (req, res, next) => {
       return;
     }
     const { pincode } = parsed.data;
+    const check = pincode ? await pincodeServiceability(pincode) : null;
+    const refused = pincode ? deliveryRefusal(pincode, check) : null;
+    if (refused) {
+      res.json({ success: true, data: { pincode, serviceable: false, message: refused, options: [], codAvailable: false } });
+      return;
+    }
     const options = deliveryOptionsFor();
 
     res.json({
@@ -45,6 +52,7 @@ deliveryRouter.get('/options', async (req, res, next) => {
         serviceable: true,
         message: null,
         options,
+        codAvailable: check ? check.cod : null,
       },
     });
   } catch (err) {

@@ -460,4 +460,6 @@ export interface DeliveryQuote {
   /** Why the pincode was rejected, when serviceable is false. */
   message: string | null;
   options: import('./checkout').DeliveryOption[];
+  /** Whether Delhivery collects cash here; null when it could not be asked. */
+  codAvailable?: boolean | null;
 }

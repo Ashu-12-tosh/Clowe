@@ -603,3 +603,10 @@ export const sellerReturnActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('received'), condition: z.enum(['OK', 'DAMAGED']) }),
 ]);
 export type SellerReturnActionInput = z.infer<typeof sellerReturnActionSchema>;
+
+/** GET /api/cart/cod-availability — whether the courier collects cash at this address. */
+export interface CodAvailability {
+  available: boolean;
+  /** Why not, in words for the shopper; null when available. */
+  reason: string | null;
+}
