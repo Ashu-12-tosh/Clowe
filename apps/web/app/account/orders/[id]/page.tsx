@@ -1,5 +1,6 @@
 'use client';
 
+import { ScanTimeline } from '@/components/orders/ScanTimeline';
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -338,6 +339,7 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
                         {item.courierName} · AWB {item.awbNumber}
                       </p>
                     )}
+                    <ScanTimeline scans={item.scans} />
                     {item.returnInfo && <ReturnTimeline info={item.returnInfo} />}
                   </div>
 

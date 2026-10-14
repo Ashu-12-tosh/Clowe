@@ -49,6 +49,7 @@ import { chargeLateDispatchIfDue } from '../services/lateDispatch';
 import { hasPackingVideo } from '../services/packingVideos';
 import { shippingProvider } from '../services/shipping';
 import { syncShipmentsFromLines } from '../services/shipping/shipments';
+import { refreshShipments } from '../services/shipping/tracking';
 import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
 import { createManualOrder } from '../services/manualOrderService';
 import { returnStock } from '../services/stockService';
@@ -573,6 +574,18 @@ const FORWARD: Record<string, number> = {
   SHIPPED: 3,
   DELIVERED: 4,
 };
+
+// Ask the courier about one parcel now, instead of waiting for the next poll.
+adminOrdersRouter.post('/shipments/:shipmentId/refresh', async (req, res, next) => {
+  try {
+    const shipment = await prisma.shipment.findUnique({ where: { id: req.params.shipmentId }, select: { awbNumber: true } });
+    if (!shipment?.awbNumber) throw ApiError.notFound('Parcel not found, or not booked');
+    const [result] = await refreshShipments([shipment.awbNumber], 'ADMIN');
+    res.json({ success: true, data: result ?? { awbNumber: shipment.awbNumber, known: true, newScans: 0, status: null } });
+  } catch (err) {
+    next(err);
+  }
+});
 
 adminOrdersRouter.patch('/:id/status', async (req, res, next) => {
   try {

@@ -107,6 +107,10 @@ const envSchema = z.object({
   // cancellations and warehouse registration — anything that moves a real
   // parcel or spends wallet money. Without it live Delhivery is read-only.
   DELHIVERY_PRODUCTION_WRITES: blankAsUnset(z.enum(['true', 'false']).default('false')),
+  // The secret Delhivery sends with each pushed scan (we choose it and give it
+  // to them): "Authorization: Bearer <it>" or ?token=<it>. Unset: the webhook
+  // is off and scans come by polling only.
+  DELHIVERY_WEBHOOK_TOKEN: optionalSecret,
 
   // --- Seller KYC verification (PAN, GSTIN, bank account) ---
   // 'auto': Cashfree when its verification credentials are set, otherwise the

@@ -7,6 +7,7 @@ import { logStorageStatus } from './services/storage';
 import { logTryOnProviderStatus } from './services/tryon';
 import { logKycProviderStatus } from './services/kyc';
 import { logShippingProviderStatus } from './services/shipping';
+import { startTrackingPoll } from './services/shipping/tracking';
 import { logOtpProviderStatus } from './services/otp';
 import { startSearchLogCleanup } from './services/searchAnalytics';
 import { startQuerySuggestionRefresh } from './services/querySuggestions';
@@ -29,6 +30,8 @@ startPackingVideoCleanup();
 
 // Late-dispatch penalties are charged when the deadline passes, shipped or not - at boot and every 5 minutes.
 startLateDispatchJob();
+// Courier scans for every parcel still moving, every 30 minutes.
+startTrackingPoll();
 
 // Shoppers' try-on photos expire after 30 days unless saved - same schedule.
 startTryOnPhotoRetention();

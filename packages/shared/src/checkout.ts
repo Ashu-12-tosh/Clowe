@@ -505,6 +505,8 @@ export interface OrderDetailItem {
   returnInfo: ReturnInfo | null;
   /** True while the item is DELIVERED and inside the return window. */
   canReturn: boolean;
+  /** The courier's scans for this line's parcel, newest first. */
+  scans: import('./growth').TrackingScanView[];
   courierName: string | null;
   awbNumber: string | null;
   trackingUrl: string | null;

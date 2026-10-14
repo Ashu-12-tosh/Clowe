@@ -1,3 +1,4 @@
+import { courierWebhookRouter } from './routes/courierWebhook';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -138,6 +139,7 @@ export function createApp() {
   app.use('/api/seller/ledger', sellerLedgerRouter);
   app.use('/api/seller/promotion-credits', sellerPromotionCreditsRouter);
   app.use('/api/seller/pricing-rates', sellerPricingRouter);
+  app.use('/api/webhooks', courierWebhookRouter);
   // Only the dashboard endpoints live here; product CRUD falls through below.
   app.use('/api/seller/products', sellerProductsRouter);
   app.use('/api/seller/promotions', sellerPromotionsRouter);

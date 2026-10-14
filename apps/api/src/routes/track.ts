@@ -8,6 +8,11 @@ import { ApiError } from '../utils/ApiError';
 // and link stay on the signed-in buyer's order page (GET /api/orders/:id).
 export const trackRouter = Router();
 
+/** Scans as buyers see them: status, place, time — never the AWB. */
+export function scanViews(events: { at: Date; status: string; location: string | null }[] | undefined) {
+  return (events ?? []).map((e) => ({ at: e.at.toISOString(), status: e.status, location: e.location }));
+}
+
 trackRouter.get('/', async (req, res, next) => {
   try {
     const input = trackOrderSchema.parse({
@@ -22,6 +27,7 @@ trackRouter.get('/', async (req, res, next) => {
         items: {
           include: {
             product: { include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } } },
+            shipment: { select: { events: { orderBy: { at: 'desc' as const }, take: 30, select: { at: true, status: true, location: true } } } },
           },
         },
       },
@@ -53,6 +59,7 @@ trackRouter.get('/', async (req, res, next) => {
         shippedAt: i.shippedAt?.toISOString() ?? null,
         deliveredAt: i.deliveredAt?.toISOString() ?? null,
         courierName: i.courierName,
+        scans: scanViews(i.shipment?.events),
       })),
     };
     res.json({ success: true, data: body });

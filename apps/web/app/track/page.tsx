@@ -1,5 +1,6 @@
 'use client';
 
+import { ScanTimeline } from '@/components/orders/ScanTimeline';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -120,6 +121,7 @@ function TrackPageInner() {
                         </Link>
                       </p>
                     )}
+                    <ScanTimeline scans={item.scans} />
                   </div>
                 </div>
                 {item.status === 'CANCELLED' ? (

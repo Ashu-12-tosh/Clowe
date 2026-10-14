@@ -105,6 +105,47 @@ function remarks(...values: unknown[]): string {
   return [...new Set(out)].join('; ');
 }
 
+/**
+ * One shipment as Delhivery describes it — in a tracking reply or a pushed
+ * webhook — as our tracking result. A push may carry only the current status,
+ * without the scan history: that status is then its one scan.
+ */
+export function parseDelhiveryShipment(raw: unknown): TrackingResult | null {
+  const s = raw as Json | undefined;
+  if (!s || typeof s !== 'object' || !s.AWB) return null;
+  const now = (s.Status ?? {}) as Json;
+  const current = { statusType: str(now.StatusType), status: str(now.Status), code: str(now.StatusCode) };
+  const history: TrackingScan[] = (Array.isArray(s.Scans) ? s.Scans : [])
+    .map((x) => (x as Json).ScanDetail as Json | undefined)
+    .filter((d): d is Json => !!d)
+    .map((d) => ({
+      at: delhiveryTime(d.ScanDateTime ?? d.StatusDateTime),
+      statusType: str(d.ScanType),
+      status: str(d.Scan),
+      code: str(d.StatusCode),
+      location: str(d.ScannedLocation) || null,
+      instructions: str(d.Instructions) || null,
+    }));
+  const scans =
+    history.length > 0 || !current.status
+      ? history
+      : [
+          {
+            at: delhiveryTime(now.StatusDateTime),
+            ...current,
+            location: str(now.StatusLocation) || null,
+            instructions: str(now.Instructions) || null,
+          },
+        ];
+  return {
+    awbNumber: str(s.AWB),
+    status: shipmentStatusFromScan(current),
+    statusText: str(now.Instructions) || current.status,
+    chargedWeightGrams: Number(s.ChargedWeight) || null,
+    scans,
+  };
+}
+
 export class DelhiveryShippingProvider implements ShippingProvider {
   readonly name = 'delhivery';
   readonly courierName = 'Delhivery';
@@ -197,30 +238,8 @@ export class DelhiveryShippingProvider implements ShippingProvider {
     const body = await this.get('/api/v1/packages/json/', { waybill: awbNumbers.join(',') });
     const data = Array.isArray(body.ShipmentData) ? body.ShipmentData : [];
     return data.flatMap((entry) => {
-      const s = (entry as Json).Shipment as Json | undefined;
-      if (!s?.AWB) return [];
-      const scans: TrackingScan[] = (Array.isArray(s.Scans) ? s.Scans : [])
-        .map((x) => (x as Json).ScanDetail as Json | undefined)
-        .filter((d): d is Json => !!d)
-        .map((d) => ({
-          at: delhiveryTime(d.ScanDateTime ?? d.StatusDateTime),
-          statusType: str(d.ScanType),
-          status: str(d.Scan),
-          code: str(d.StatusCode),
-          location: str(d.ScannedLocation) || null,
-          instructions: str(d.Instructions) || null,
-        }));
-      const now = (s.Status ?? {}) as Json;
-      const current = { statusType: str(now.StatusType), status: str(now.Status), code: str(now.StatusCode) };
-      return [
-        {
-          awbNumber: str(s.AWB),
-          status: shipmentStatusFromScan(current),
-          statusText: str(now.Instructions) || current.status,
-          chargedWeightGrams: Number(s.ChargedWeight) || null,
-          scans,
-        },
-      ];
+      const parsed = parseDelhiveryShipment((entry as Json).Shipment);
+      return parsed ? [parsed] : [];
     });
   }
 

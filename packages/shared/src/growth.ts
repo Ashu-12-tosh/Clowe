@@ -119,6 +119,13 @@ export const trackOrderSchema = z.object({
 });
 export type TrackOrderInput = z.infer<typeof trackOrderSchema>;
 
+/** One courier scan, as buyers see it: what happened, where, when. */
+export interface TrackingScanView {
+  at: string;
+  status: string;
+  location: string | null;
+}
+
 export interface TrackOrderItem {
   title: string;
   imageUrl: string | null;
@@ -134,6 +141,8 @@ export interface TrackOrderItem {
    * part of public tracking: they are on the buyer's order page, signed in.
    */
   courierName: string | null;
+  /** The courier's scans for this line's parcel, newest first. */
+  scans: TrackingScanView[];
 }
 
 export interface TrackOrderView {

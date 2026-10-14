@@ -16,6 +16,7 @@ import {
   type OrderListRow,
   type TaxInvoice,
 } from '@clowe/shared';
+import { scanViews } from './track';
 import { prisma } from '../db';
 import { refundCancelledOrder } from '../services/refundService';
 import { buildTaxInvoice } from '../services/taxInvoice';
@@ -615,6 +616,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
             variant: { include: { product: { select: { status: true, categoryId: true, sellerId: true } } } },
             seller: { select: { shopName: true, returnWindowDays: true } },
             return: { include: { refund: true } },
+            shipment: { select: { events: { orderBy: { at: 'desc' as const }, take: 30, select: { at: true, status: true, location: true } } } },
           },
         },
       },
@@ -737,6 +739,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
           !i.return &&
           !!i.deliveredAt &&
           Date.now() - i.deliveredAt.getTime() <= windowMsFor(i.id),
+        scans: scanViews(i.shipment?.events),
         courierName: i.courierName,
         awbNumber: i.awbNumber,
         trackingUrl: i.trackingUrl,
