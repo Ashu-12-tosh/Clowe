@@ -127,6 +127,11 @@ export function clearedBefore(holdDays: number): Date {
 }
 
 /** Delivered lines that have cleared the hold and haven't been paid yet. */
+/** A COD line is payable only once Delhivery's remittance for its parcel is matched. */
+const remittedOrPrepaid = {
+  OR: [{ shipmentId: null }, { shipment: { OR: [{ paymentType: { not: 'COD' } }, { codRemittedAt: { not: null } }] } }],
+};
+
 export async function eligibleItems(sellerId: string, holdDays: number) {
   return prisma.orderItem.findMany({
     where: {
@@ -134,6 +139,7 @@ export async function eligibleItems(sellerId: string, holdDays: number) {
       status: 'DELIVERED',
       payoutId: null,
       deliveredAt: { lte: clearedBefore(holdDays) },
+      ...remittedOrPrepaid,
     },
     orderBy: { deliveredAt: 'asc' },
     select: {
@@ -196,6 +202,8 @@ export interface AvailableBalance {
   inClearingCount: number;
   /** When the oldest clearing line becomes payable. */
   nextClearingAt: string | null;
+  /** COD sales waiting for Delhivery's remittance. */
+  codAwaitingPaise: number;
 }
 
 export async function availableBalance(sellerId: string): Promise<AvailableBalance> {
@@ -231,6 +239,7 @@ export async function availableBalance(sellerId: string): Promise<AvailableBalan
     inClearingPaise: position.clearingPaise,
     inClearingCount: clearing.length,
     nextClearingAt: releaseAt?.toISOString() ?? null,
+    codAwaitingPaise: position.codAwaitingPaise,
   };
 }
 

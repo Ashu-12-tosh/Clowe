@@ -63,6 +63,6 @@ describe('the settlement position', () => {
   it('shows nothing clearing — and nothing taken off — once that sale is returned inside the hold', async () => {
     await prisma.orderItem.update({ where: { id: itemId }, data: { status: 'RETURNED' } });
     await postReturnReversal(itemId);
-    expect(await settlementPosition(sellerId, 7)).toEqual({ balancePaise: 0, availablePaise: 0, clearingPaise: 0 });
+    expect(await settlementPosition(sellerId, 7)).toEqual({ balancePaise: 0, availablePaise: 0, clearingPaise: 0, codAwaitingPaise: 0 });
   });
 });

@@ -21,6 +21,7 @@ const NAV: DashNavItem[] = [
   { href: '/admin/users', label: 'Users', icon: '👥' },
   { href: '/admin/orders', label: 'Orders', icon: '📦' },
   { href: '/admin/payments', label: 'Payments', icon: '💳' },
+  { href: '/admin/cod-remittance', label: 'COD remittance', icon: '₹' },
   { href: '/admin/returns', label: 'Returns', icon: '↩' },
   { href: '/admin/support', label: 'Support inbox', icon: '📮' },
   { href: '/admin/inventory', label: 'Inventory & Warehouse', icon: '🏭' },

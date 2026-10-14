@@ -94,3 +94,4 @@ export * from './ifscBanks';
 export * from './facets';
 export * from './railParams';
 export * from './legal';
+export * from './codRemittance';

@@ -45,6 +45,7 @@ import { adminOverviewRouter } from './routes/adminOverview';
 import { adminInventoryRouter } from './routes/adminInventory';
 import { adminOrdersRouter } from './routes/adminOrders';
 import { adminPaymentsRouter } from './routes/adminPayments';
+import { adminCodRemittanceRouter } from './routes/adminCodRemittance';
 import { adminReturnsRouter } from './routes/adminReturns';
 import { sellerDashboardRouter } from './routes/sellerDashboard';
 import { sellerOrdersRouter } from './routes/sellerOrders';
@@ -164,6 +165,7 @@ export function createApp() {
   app.use('/api/admin/inventory', adminInventoryRouter);
   app.use('/api/admin/orders', adminOrdersRouter);
   app.use('/api/admin/payments', adminPaymentsRouter);
+  app.use('/api/admin/cod-remittances', adminCodRemittanceRouter);
   app.use('/api/admin/returns', adminReturnsRouter);
   app.use('/api/admin/support', adminSupportRouter);
   app.use('/api/admin', adminRouter);

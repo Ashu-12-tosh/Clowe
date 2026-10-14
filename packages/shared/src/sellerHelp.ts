@@ -108,7 +108,7 @@ Print labels from the row action or in bulk from the selection bar, and generate
     tags: ['cod', 'cash on delivery', 'payment', 'collect'],
     body: `On a COD order Delhivery collects the cash at the door, for its COD fee (₹40 or 2 % of the amount, whichever is higher, plus GST), which comes off your settlement as its own line, so the payment stays pending until then. When you mark the last live line of that order Delivered, Clowe marks the payment Paid.
 
-From that point the money follows the normal payout path: it clears after the return window and is included in your next payout, net of commission, gateway/collection charges and TDS.`,
+It becomes payable once Delhivery has paid that cash to Clowe — usually within a few days — and we have matched its remittance to your parcel; the Payouts page shows what is waiting. From that point the money follows the normal payout path: it clears after the return window and is included in your next payout, net of commission, gateway/collection charges and TDS.`,
   },
   {
     id: 'returns-policy',

@@ -296,6 +296,14 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         body: `Deliveries clear ${settings.payoutHoldDays} days after the buyer receives them (return window).`,
       });
     }
+    if (balance.codAwaitingPaise > 0) {
+      insights.push({
+        key: 'cod-remittance',
+        tone: 'INFO',
+        title: `₹${(balance.codAwaitingPaise / 100).toLocaleString('en-IN')} of COD sales waits for Delhivery`,
+        body: 'Cash on Delivery money becomes payable once Delhivery has paid it to Clowe and we have matched its remittance.',
+      });
+    }
     if (gstinBlock) {
       insights.push({ key: 'gstin', tone: 'WARN', title: 'Payouts need your GSTIN', body: gstinBlock.reason });
     } else if (panBlock) {

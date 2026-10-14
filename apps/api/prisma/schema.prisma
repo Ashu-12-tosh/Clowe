@@ -2341,3 +2341,43 @@ model ProductRevision {
   @@index([status, submittedAt])
   @@map("product_revisions")
 }
+
+/// A Delhivery COD remittance report an admin uploaded: each row matched to a
+/// parcel by AWB and amount. A matched row marks the parcel remitted, which is
+/// what makes its COD lines payable to the seller.
+model CodRemittanceImport {
+  id           String   @id @default(cuid())
+  /// The admin who uploaded it (kept as an id: the report outlives accounts).
+  uploadedById String?
+  fileName     String?
+  rowCount     Int
+  matched      Int      @default(0)
+  mismatched   Int      @default(0)
+  unknown      Int      @default(0)
+  duplicate    Int      @default(0)
+  createdAt    DateTime @default(now())
+  rows         CodRemittanceRow[]
+
+  @@index([createdAt])
+  @@map("cod_remittance_imports")
+}
+
+model CodRemittanceRow {
+  id          String              @id @default(cuid())
+  importId    String
+  import      CodRemittanceImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  awbNumber   String
+  amountPaise Int
+  reference   String?
+  /// As the report wrote it.
+  remittedOn  String?
+  shipmentId  String?
+  /// MATCHED | MISMATCH | UNKNOWN | DUPLICATE
+  status      String
+  note        String?
+  createdAt   DateTime            @default(now())
+
+  @@index([awbNumber])
+  @@index([importId])
+  @@map("cod_remittance_rows")
+}

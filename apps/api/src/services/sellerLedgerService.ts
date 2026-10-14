@@ -476,8 +476,10 @@ export interface SettlementPosition {
   balancePaise: number;
   /** What a payout could transfer right now. */
   availablePaise: number;
-  /** Delivery entries still inside the return window. */
+  /** Delivery entries still inside the return window, or waiting for COD remittance. */
   clearingPaise: number;
+  /** Of which: COD sales whose cash Delhivery hasn't remitted yet. */
+  codAwaitingPaise: number;
 }
 
 /**
@@ -497,26 +499,38 @@ export async function settlementPosition(
 ): Promise<SettlementPosition> {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - holdDays);
-  const rows = await db.$queryRaw<{ balance: number; available: number }[]>(Prisma.sql`
+  // A COD line's money is Delhivery's until it remits it: held until the
+  // parcel's remittance is matched, as well as through the return window.
+  const rows = await db.$queryRaw<{ balance: number; available: number; codAwaiting: number }[]>(Prisma.sql`
     SELECT
       COALESCE(SUM(e."amountPaise"), 0)::int AS balance,
       COALESCE(SUM(
         CASE
           WHEN e.type::text IN (${Prisma.join([...DELIVERY_ENTRY_TYPES, 'RETURN_REVERSAL'])})
-           AND i."deliveredAt" > ${cutoff}
+           AND (i."deliveredAt" > ${cutoff} OR (s."paymentType" = 'COD' AND s."codRemittedAt" IS NULL))
           THEN 0
           ELSE e."amountPaise"
         END
-      ), 0)::int AS available
+      ), 0)::int AS available,
+      COALESCE(SUM(
+        CASE
+          WHEN e.type::text IN (${Prisma.join([...DELIVERY_ENTRY_TYPES, 'RETURN_REVERSAL'])})
+           AND s."paymentType" = 'COD' AND s."codRemittedAt" IS NULL
+          THEN e."amountPaise"
+          ELSE 0
+        END
+      ), 0)::int AS "codAwaiting"
     FROM seller_ledger_entries e
     LEFT JOIN order_items i ON i.id = e."orderItemId"
+    LEFT JOIN shipments s ON s.id = i."shipmentId"
     WHERE e."sellerId" = ${sellerId} AND e.bucket = 'SETTLEMENT'::"SellerLedgerBucket"
   `);
-  const row = rows[0] ?? { balance: 0, available: 0 };
+  const row = rows[0] ?? { balance: 0, available: 0, codAwaiting: 0 };
   return {
     balancePaise: row.balance,
     availablePaise: row.available,
     clearingPaise: row.balance - row.available,
+    codAwaitingPaise: row.codAwaiting,
   };
 }
 
