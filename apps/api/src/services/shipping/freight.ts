@@ -58,6 +58,20 @@ export async function codFeePaise(route: ParcelRoute, codAmountPaise: number): P
 
 const forwardKey = (shipmentId: string) => `forward-freight:${shipmentId}`;
 const codFeeKey = (shipmentId: string) => `cod-fee:${shipmentId}`;
+const rtoKey = (shipmentId: string) => `rto-freight:${shipmentId}`;
+
+/**
+ * Delhivery's charge for bringing a parcel back, GST included. Its RTO quote
+ * is the forward and return legs together, so the return is that less the
+ * forward charge for the same parcel.
+ */
+export async function rtoFreightPaise(route: ParcelRoute): Promise<number> {
+  const [forward, both] = await Promise.all([
+    shippingProvider.quote({ ...route, kind: 'DELIVERED', payment: 'PREPAID' }),
+    shippingProvider.quote({ ...route, kind: 'RTO', payment: 'PREPAID' }),
+  ]);
+  return Math.max(0, both.totalPaise - forward.totalPaise);
+}
 /** Each re-pricing is its own entry: the nth adjustment of a parcel. */
 const adjustmentKey = (shipmentId: string, n: number) => `freight-adjustment:${shipmentId}:${n}`;
 
@@ -91,7 +105,8 @@ export async function postForwardFreight(shipmentId: string): Promise<FreightOut
   const found = await routeOf(shipmentId);
   if (!found) return 'NOT_DELIVERED';
   const { shipment: s, route } = found;
-  if (s.kind !== 'FORWARD' || s.status !== 'DELIVERED') return 'NOT_DELIVERED';
+  // Delivered, or brought back undelivered: either way it made the trip out.
+  if (s.kind !== 'FORWARD' || (s.status !== 'DELIVERED' && s.status !== 'RTO_DELIVERED')) return 'NOT_DELIVERED';
   if (!route) return 'NO_ROUTE';
 
   const amount = await forwardFreightPaise(route);
@@ -164,6 +179,33 @@ export async function postCodFee(shipmentId: string): Promise<FreightOutcome> {
 }
 
 /**
+ * A parcel Delhivery brought back undelivered (RTO): the seller pays its
+ * forward freight and, as its own entry, the return trip — Delhivery's actual
+ * charge. No COD fee: nothing was collected. Once, however often called.
+ */
+export async function postRtoFreight(shipmentId: string): Promise<FreightOutcome> {
+  const found = await routeOf(shipmentId);
+  if (!found) return 'NOT_DELIVERED';
+  const { shipment: s, route } = found;
+  if (s.kind !== 'FORWARD' || s.status !== 'RTO_DELIVERED') return 'NOT_DELIVERED';
+  if (!route) return 'NO_ROUTE';
+  await postForwardFreight(s.id);
+  if (s.rtoFreightPaise !== null) return 'UNCHANGED';
+  const amount = await rtoFreightPaise(route);
+  const posted = await postEntry({
+    sellerId: s.sellerId,
+    type: 'RTO_FREIGHT',
+    bucket: 'SETTLEMENT',
+    amountPaise: -amount,
+    orderId: s.orderId,
+    idempotencyKey: rtoKey(s.id),
+    note: `Delhivery RTO freight, ${s.order.orderNumber} (AWB ${s.awbNumber ?? '—'}): returned undelivered`,
+  });
+  await prisma.shipment.update({ where: { id: s.id }, data: { rtoFreightPaise: amount } });
+  return posted ? 'POSTED' : 'UNCHANGED';
+}
+
+/**
  * Delivered parcels whose freight is not on the ledger yet — the charges API
  * was down when they were delivered. Posted before any payout is worked out,
  * so money never leaves before the freight it owes.
@@ -173,15 +215,22 @@ export async function ensureFreightPosted(sellerId: string): Promise<number> {
     where: {
       sellerId,
       kind: 'FORWARD',
-      status: 'DELIVERED',
-      OR: [{ finalFreightPaise: null }, { paymentType: 'COD', codAmountPaise: { gt: 0 }, codFeePaise: null }],
+      OR: [
+        { status: 'DELIVERED', finalFreightPaise: null },
+        { status: 'DELIVERED', paymentType: 'COD', codAmountPaise: { gt: 0 }, codFeePaise: null },
+        { status: 'RTO_DELIVERED', OR: [{ finalFreightPaise: null }, { rtoFreightPaise: null }] },
+      ],
     },
-    select: { id: true },
+    select: { id: true, status: true },
     take: 200,
   });
   let posted = 0;
   for (const s of pending) {
     try {
+      if (s.status === 'RTO_DELIVERED') {
+        if ((await postRtoFreight(s.id)) === 'POSTED') posted += 1;
+        continue;
+      }
       if ((await postForwardFreight(s.id)) === 'POSTED') posted += 1;
       if ((await postCodFee(s.id)) === 'POSTED') posted += 1;
     } catch (err) {

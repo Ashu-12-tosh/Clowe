@@ -29,6 +29,7 @@ export const SELLER_LEDGER_TYPES = [
   'FORWARD_FREIGHT',
   'FREIGHT_ADJUSTMENT',
   'COD_FEE',
+  'RTO_FREIGHT',
 ] as const;
 export type SellerLedgerTypeValue = (typeof SELLER_LEDGER_TYPES)[number];
 
@@ -56,6 +57,7 @@ export const SELLER_LEDGER_TYPE_LABELS: Record<SellerLedgerTypeValue, string> = 
   FORWARD_FREIGHT: 'Delhivery freight',
   FREIGHT_ADJUSTMENT: 'Freight adjustment',
   COD_FEE: 'COD fee (Delhivery)',
+  RTO_FREIGHT: 'RTO freight (Delhivery)',
 };
 
 /** The two penalties a seller can be charged, once per order each. */

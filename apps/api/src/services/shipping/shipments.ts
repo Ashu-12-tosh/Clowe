@@ -2,7 +2,7 @@ import type { Shipment } from '@prisma/client';
 import { prisma } from '../../db';
 import { ApiError } from '../../utils/ApiError';
 import { valueOfLines, type LineValue } from './codAmount';
-import { chargeableGrams, codFeePaise, forwardFreightPaise, postCodFee, postForwardFreight } from './freight';
+import { chargeableGrams, codFeePaise, forwardFreightPaise, postCodFee, postForwardFreight, postRtoFreight } from './freight';
 import { shippingProvider } from './index';
 import { ShippingProviderError, type ShippingMode } from './ShippingProvider';
 
@@ -190,6 +190,15 @@ export async function syncShipmentsFromLines(shipmentIds: Iterable<string | null
       );
       await postCodFee(s.id).catch((err) =>
         console.error('[clowe-api] COD fee not posted yet for shipment', s.id, err instanceof Error ? err.message : err),
+      );
+    } else if (live.length > 0 && live.every((i) => i.status === 'RTO_DELIVERED') && s.status !== 'RTO_DELIVERED') {
+      // Back with the seller, undelivered: the trip out and the trip back are theirs.
+      await prisma.shipment.update({
+        where: { id: s.id },
+        data: { status: 'RTO_DELIVERED', rtoDeliveredAt: now, rtoInitiatedAt: s.rtoInitiatedAt ?? now },
+      });
+      await postRtoFreight(s.id).catch((err) =>
+        console.error('[clowe-api] RTO freight not posted yet for shipment', s.id, err instanceof Error ? err.message : err),
       );
     } else if (
       live.some((i) => i.status === 'SHIPPED' || i.status === 'DELIVERED') &&

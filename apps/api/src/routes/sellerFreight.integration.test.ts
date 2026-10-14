@@ -5,7 +5,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app';
 import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
 import { shippingProvider } from '../services/shipping';
-import { postCodFee, postForwardFreight } from '../services/shipping/freight';
+import { postCodFee, postForwardFreight, postRtoFreight } from '../services/shipping/freight';
+import { syncShipmentsFromLines } from '../services/shipping/shipments';
 import { signAccessToken } from '../utils/jwt';
 
 /**
@@ -62,7 +63,7 @@ const freightRows = (orderId: string) =>
   prisma.sellerLedgerEntry.findMany({ where: { orderId, type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'DELIVERY_FEE'] } }, orderBy: { createdAt: 'asc' } });
 const courierRows = (orderId: string) =>
   prisma.sellerLedgerEntry.findMany({
-    where: { orderId, type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'COD_FEE'] } },
+    where: { orderId, type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'COD_FEE', 'RTO_FREIGHT'] } },
     orderBy: { createdAt: 'asc' },
   });
 /** Delhivery's COD fee on ₹500: 2 % is ₹10, so the ₹40 minimum, plus 18 % GST. */
@@ -239,5 +240,46 @@ describe('the COD fee', () => {
     const prepaid = await paidOrder();
     await shipAndDeliver(prepaid.ids);
     expect((await courierRows(prepaid.orderId)).map((r) => r.type)).toEqual(['FORWARD_FREIGHT']);
+  });
+});
+
+describe('a parcel that comes back undelivered (RTO)', () => {
+  /** Shipped, then brought back to the seller: what tracking will record. */
+  async function cameBack(cod: boolean) {
+    const o = await paidOrder(1, cod);
+    expect((await call('POST', '/api/seller/orders/bulk', { itemIds: o.ids, action: 'ship' })).json.data).toMatchObject({ updated: 1 });
+    await prisma.orderItem.updateMany({ where: { id: { in: o.ids } }, data: { status: 'RTO_DELIVERED' } });
+    const s = await prisma.shipment.findFirstOrThrow({ where: { orderId: o.orderId } });
+    await syncShipmentsFromLines([s.id]);
+    return { ...o, shipmentId: s.id };
+  }
+
+  it('charges the trip out and the trip back, each its own entry at Delhivery’s charge, and no COD fee', async () => {
+    const { orderId, shipmentId } = await cameBack(true);
+    // The mock's RTO quote is both legs (₹70 + ₹70), as Delhivery's is: the return is ₹70.
+    expect((await courierRows(orderId)).map((r) => [r.type, r.amountPaise])).toEqual([
+      ['FORWARD_FREIGHT', -TEST_RATE],
+      ['RTO_FREIGHT', -TEST_RATE],
+    ]);
+    expect(await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId } })).toMatchObject({
+      status: 'RTO_DELIVERED',
+      finalFreightPaise: TEST_RATE,
+      rtoFreightPaise: TEST_RATE,
+      codFeePaise: null,
+    });
+    expect(await postRtoFreight(shipmentId)).toBe('UNCHANGED');
+    expect(await postCodFee(shipmentId)).toBe('NOT_DELIVERED');
+    expect(await courierRows(orderId)).toHaveLength(2);
+    // Nothing was sold: no sale is posted for a line that came back.
+    expect(await prisma.sellerLedgerEntry.count({ where: { orderId, type: 'SALE_EARNING' } })).toBe(0);
+  });
+
+  it('is caught up before the payout figures if the charges API was down', async () => {
+    const down = vi.spyOn(shippingProvider, 'quote').mockRejectedValue(new Error('Delhivery did not answer in time'));
+    const { orderId } = await cameBack(false);
+    expect(await courierRows(orderId)).toHaveLength(0);
+    down.mockRestore();
+    expect((await call('GET', '/api/seller/payouts/overview')).status).toBe(200);
+    expect((await courierRows(orderId)).map((r) => r.type)).toEqual(['FORWARD_FREIGHT', 'RTO_FREIGHT']);
   });
 });
