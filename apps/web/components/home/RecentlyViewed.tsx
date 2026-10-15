@@ -13,6 +13,7 @@ import { api, getStoredUser } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { getRecentlyViewedIds } from '@/lib/recentlyViewed';
 import { Scroller, SectionHeader } from './HomeBits';
+import { responsiveImage } from '@clowe/shared';
 
 const MAX_CARDS = 12;
 
@@ -65,7 +66,7 @@ export default function RecentlyViewed() {
                 {product.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={product.imageUrl}
+                    {...responsiveImage(product.imageUrl, '(max-width: 640px) 45vw, 220px')}
                     alt={product.title}
                     loading="lazy"
                     className="aspect-square w-full object-cover transition duration-300 group-hover/card:scale-105"

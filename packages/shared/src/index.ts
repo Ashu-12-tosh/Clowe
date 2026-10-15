@@ -73,6 +73,7 @@ export * from './complaints';
 export * from './settings';
 export * from './home';
 export * from './imageSlots';
+export * from './imageVariants';
 export * from './account';
 
 export const healthResponseSchema = z.object({

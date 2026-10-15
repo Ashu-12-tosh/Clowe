@@ -9,6 +9,7 @@ import { discountPercent, formatPaise } from '@/lib/format';
 import { BADGES_EVENT } from '@/components/Header';
 import WishlistButton from '@/components/WishlistButton';
 import { BoltIcon } from '@/components/cart/CartIcons';
+import { responsiveImage } from '@clowe/shared';
 
 interface Props {
   product: ProductListItem;
@@ -87,7 +88,7 @@ export default function CategoryProductCard({
         {product.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={product.imageUrl}
+            {...responsiveImage(product.imageUrl, '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 300px')}
             alt={product.title}
             loading="lazy"
             className="h-full w-full object-cover transition duration-300 group-hover:scale-105"

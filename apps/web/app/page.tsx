@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { newsletterSubscribeSchema, returnWindowPhrase, type HomePayload, safeHref } from '@clowe/shared';
+import { newsletterSubscribeSchema, returnWindowPhrase, type HomePayload, safeHref, imageAt } from '@clowe/shared';
 import { useReturnWindowDays } from '@/lib/returnWindow';
 import { api, ApiRequestError } from '@/lib/api';
 import HeroCarousel from '@/components/home/HeroCarousel';
@@ -223,7 +223,7 @@ export default function HomePage() {
                 <span className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-cream-100 transition group-hover:bg-brand-100">
                   {cat.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={cat.imageUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                    <img src={imageAt(cat.imageUrl, 320)} alt="" loading="lazy" className="h-full w-full object-cover" />
                   ) : (
                     <CategoryGlyph icon={cat.icon} name={cat.name} />
                   )}
@@ -350,7 +350,7 @@ export default function HomePage() {
                 >
                   {brand.logoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={brand.logoUrl} alt={brand.name} loading="lazy" className="max-h-10 object-contain" />
+                    <img src={imageAt(brand.logoUrl, 320)} alt={brand.name} loading="lazy" className="max-h-10 object-contain" />
                   ) : (
                     <span className="font-display text-base font-bold tracking-wide text-ink-900">
                       {brand.name}

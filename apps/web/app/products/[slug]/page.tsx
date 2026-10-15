@@ -25,6 +25,7 @@ import {
   TruckIcon,
 } from '@/components/cart/CartIcons';
 import PolicyText from '@/components/PolicyText';
+import { responsiveImage, imageAt } from '@clowe/shared';
 
 /** "12K+ Sold" / "845 Sold". */
 function compactCount(n: number): string {
@@ -54,7 +55,7 @@ function ZoomImage({ src, alt }: { src: string; alt: string }) {
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={src}
+        {...responsiveImage(src, '(max-width: 1024px) 100vw, 640px', 1600)}
         alt={alt}
         className="h-full w-full object-cover transition-transform duration-150"
         style={{ transformOrigin: origin, transform: zoomed ? 'scale(2)' : 'scale(1)' }}
@@ -303,7 +304,7 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
                   }`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={img.url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  <img src={imageAt(img.url, 320)} alt="" loading="lazy" className="h-full w-full object-cover" />
                 </button>
               ))}
             </div>
@@ -508,7 +509,7 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
                 {gallery[0] && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={gallery[0].url}
+                    src={imageAt(gallery[0].url, 320)}
                     alt=""
                     loading="lazy"
                     className="h-24 w-20 shrink-0 rounded-lg border border-brand-200 object-cover"

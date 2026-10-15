@@ -9,6 +9,7 @@ import type { HomeProductCard } from '@clowe/shared';
 import { api, getStoredUser } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { BADGES_EVENT } from '@/components/Header';
+import { responsiveImage } from '@clowe/shared';
 
 // ---------------------------------------------------------------------------
 
@@ -138,7 +139,7 @@ export function DealCard({ product }: { product: HomeProductCard }) {
         {product.imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={product.imageUrl}
+            {...responsiveImage(product.imageUrl, '(max-width: 640px) 45vw, 220px')}
             alt={product.title}
             loading="lazy"
             className="aspect-square w-full object-cover transition duration-300 group-hover/card:scale-105"
@@ -187,7 +188,7 @@ export function TrendingCard({ product }: { product: HomeProductCard }) {
         {product.imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={product.imageUrl}
+            {...responsiveImage(product.imageUrl, '(max-width: 640px) 45vw, 220px')}
             alt={product.title}
             loading="lazy"
             className="aspect-square w-full object-cover transition duration-300 group-hover/card:scale-105"

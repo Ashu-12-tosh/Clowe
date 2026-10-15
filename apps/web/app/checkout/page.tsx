@@ -14,7 +14,7 @@ import {
   type CartView,
   type CreditsInfo,
   type DeliveryMethod,
-  type DeliveryOption,
+  type DeliveryOption, imageAt
 } from '@clowe/shared';
 import { useCouponsEnabled } from '@/lib/coupons';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
@@ -543,7 +543,7 @@ export default function CheckoutPage() {
                   {line.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={line.imageUrl}
+                      src={imageAt(line.imageUrl, 320)}
                       alt=""
                       loading="lazy"
                       className="h-28 w-full rounded-lg bg-cream-100 object-cover"
@@ -582,7 +582,7 @@ export default function CheckoutPage() {
                   {line.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={line.imageUrl}
+                      src={imageAt(line.imageUrl, 320)}
                       alt=""
                       loading="lazy"
                       className="h-12 w-10 shrink-0 rounded bg-cream-100 object-cover"

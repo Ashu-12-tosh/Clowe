@@ -15,7 +15,7 @@ import {
   type CategoryDetail,
   type ProductListResponse,
   type ProductSort,
-  type RailFacet,
+  type RailFacet, imageAt
 } from '@clowe/shared';
 import { api } from '@/lib/api';
 import { fetchWishlistIds } from '@/lib/wishlist';
@@ -114,7 +114,7 @@ function SubcategoryRail({
                 {child.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={child.imageUrl}
+                    src={imageAt(child.imageUrl, 320)}
                     alt=""
                     loading="lazy"
                     className="h-full w-full object-cover"

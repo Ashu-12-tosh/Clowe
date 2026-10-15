@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { type PublicStore, safeHref } from '@clowe/shared';
+import { type PublicStore, safeHref, responsiveImage, imageAt } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { ExternalLink } from '@/components/ExternalLink';
@@ -77,7 +77,7 @@ export default function StorePage({ params: paramsPromise }: { params: Promise<{
       <div className="h-40 w-full bg-ink-900 sm:h-56">
         {store.bannerUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={store.bannerUrl} alt="" className="h-full w-full object-cover" />
+          <img {...responsiveImage(store.bannerUrl, '100vw', 1600)} alt="" className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full items-center justify-center">
             <p className="font-display text-xl font-bold uppercase tracking-[0.2em] text-brand-400">
@@ -95,7 +95,7 @@ export default function StorePage({ params: paramsPromise }: { params: Promise<{
           <span className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-ink-900 font-display text-xl font-bold text-white">
             {store.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={store.logoUrl} alt="" className="h-full w-full object-cover" />
+              <img src={imageAt(store.logoUrl, 320)} alt="" className="h-full w-full object-cover" />
             ) : (
               store.shopName.slice(0, 2).toUpperCase()
             )}
@@ -172,7 +172,7 @@ export default function StorePage({ params: paramsPromise }: { params: Promise<{
                         {p.imageUrl && (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={p.imageUrl}
+                            {...responsiveImage(p.imageUrl, '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 300px')}
                             alt={p.title}
                             className="h-full w-full object-cover transition group-hover:scale-[1.02]"
                           />

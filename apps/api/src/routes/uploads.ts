@@ -9,6 +9,7 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { uploadLimiter } from '../middleware/rateLimits';
 import { deleteFileRef, resolveFileUrl, storePrivateFile } from '../services/assets';
+import { storeImageVariants } from '../services/imageVariants';
 
 export const uploadDir = path.resolve(env.UPLOAD_DIR);
 fs.mkdirSync(uploadDir, { recursive: true });
@@ -63,21 +64,32 @@ function readHeader(filePath: string): Buffer {
 
 // Upload up to 6 public images (catalog, store logo/banner, avatar); returns
 // their public URLs. Anything personal goes through /private instead.
-uploadsRouter.post('/', requireAuth, uploadLimiter, upload.array('images', 6), (req, res) => {
+uploadsRouter.post('/', requireAuth, uploadLimiter, upload.array('images', 6), async (req, res, next) => {
   const files = (req.files ?? []) as Express.Multer.File[];
-  if (files.length === 0) {
-    throw ApiError.badRequest('No images uploaded. Use multipart field name "images".');
-  }
-  // Reject files whose bytes don't match a real image format.
-  const fakes = files.filter((f) => !imageTypeOf(readHeader(f.path)));
-  if (fakes.length > 0) {
+  try {
+    if (files.length === 0) {
+      throw ApiError.badRequest('No images uploaded. Use multipart field name "images".');
+    }
+    // Reject files whose bytes don't match a real image format.
+    const fakes = files.filter((f) => !imageTypeOf(readHeader(f.path)));
+    if (fakes.length > 0) {
+      throw ApiError.badRequest('One or more files are not valid images', 'INVALID_FILE_CONTENT');
+    }
+    // Stored as WebP copies at a few widths (the original is not kept): the
+    // URL names the largest, and the storefront picks a smaller one per slot.
+    const urls: string[] = [];
+    for (const f of files) {
+      const base = path.parse(f.filename).name;
+      const name = await storeImageVariants(f.path, uploadDir, base).catch(() => {
+        throw ApiError.badRequest('One or more images could not be read — try another file', 'INVALID_FILE_CONTENT');
+      });
+      urls.push(`${env.API_PUBLIC_URL}/uploads/${name}`);
+    }
+    res.json({ success: true, data: { urls } });
+  } catch (err) {
     for (const f of files) fs.unlink(f.path, () => {});
-    throw ApiError.badRequest('One or more files are not valid images', 'INVALID_FILE_CONTENT');
+    next(err);
   }
-  res.json({
-    success: true,
-    data: { urls: files.map((f) => `${env.API_PUBLIC_URL}/uploads/${f.filename}`) },
-  });
 });
 
 // ---------------------------------------------------------------------------

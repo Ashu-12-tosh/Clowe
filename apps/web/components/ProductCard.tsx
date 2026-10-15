@@ -4,6 +4,7 @@ import Link from 'next/link';
 import type { ProductListItem } from '@clowe/shared';
 import { discountPercent, formatPaise } from '@/lib/format';
 import WishlistButton from './WishlistButton';
+import { responsiveImage } from '@clowe/shared';
 
 interface Props {
   product: ProductListItem;
@@ -34,7 +35,7 @@ export default function ProductCard({
         {product.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={product.imageUrl}
+            {...responsiveImage(product.imageUrl, '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 300px')}
             alt={product.title}
             className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
             loading="lazy"

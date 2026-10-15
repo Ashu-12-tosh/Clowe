@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { splitCompletion, type SuggestResponse } from '@clowe/shared';
+import { splitCompletion, type SuggestResponse, imageAt } from '@clowe/shared';
 import { api } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { clearRecentSearches, getRecentSearches, recordRecentSearch } from '@/lib/recentSearches';
@@ -651,7 +651,7 @@ export default function SearchBar({
                       {option.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={option.imageUrl}
+                          src={imageAt(option.imageUrl, 320)}
                           alt=""
                           loading="lazy"
                           className="h-10 w-10 shrink-0 rounded-md bg-cream-100 object-cover"

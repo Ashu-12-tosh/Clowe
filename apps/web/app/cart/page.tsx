@@ -21,6 +21,7 @@ import {
   TruckIcon,
 } from '@/components/cart/CartIcons';
 import PolicyText from '@/components/PolicyText';
+import { imageAt } from '@clowe/shared';
 
 const MAX_QTY = 10;
 
@@ -313,7 +314,7 @@ export default function CartPage() {
                       {line.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={line.imageUrl}
+                          src={imageAt(line.imageUrl, 320)}
                           alt=""
                           loading="lazy"
                           className="h-20 w-16 rounded-lg bg-cream-100 object-cover sm:h-24 sm:w-20"

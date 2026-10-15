@@ -6,6 +6,7 @@ import type { AddonProduct, CartView } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { BADGES_EVENT } from '@/components/Header';
+import { imageAt } from '@clowe/shared';
 
 interface Props {
   /** Products already in the cart — never offered as an add-on. */
@@ -59,7 +60,7 @@ export default function FrequentlyBought({ excludeIds, onCartChange }: Props) {
                 {addon.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={addon.imageUrl}
+                    src={imageAt(addon.imageUrl, 320)}
                     alt=""
                     loading="lazy"
                     className="h-14 w-14 rounded-lg bg-cream-100 object-cover"
