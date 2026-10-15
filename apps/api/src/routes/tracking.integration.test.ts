@@ -334,3 +334,38 @@ describe('a parcel cancelled after pickup', () => {
     expect(types).toEqual(['FORWARD_FREIGHT', 'RTO_FREIGHT']);
   });
 });
+
+describe('an order that was never delivered at all', () => {
+  it('gives the buyer back their coupon and shopping credits, as a cancellation does', async () => {
+    const coupon = await prisma.coupon.create({
+      data: { code: `RTOBACK${Date.now() % 100000}`, description: 'RTO test', type: 'FLAT', value: 5_000, usedCount: 1, isActive: true },
+    });
+    const p = await awaitingPickup();
+    // The order used the coupon and 100 credits (₹50).
+    await prisma.order.update({ where: { id: p.orderId }, data: { couponCode: coupon.code, couponDiscountPaise: 5_000, creditsUsed: 100 } });
+    const balance = async () => (await prisma.user.findUniqueOrThrow({ where: { id: buyerId } })).creditsBalance;
+    const before = await balance();
+    mock.simulate(p.awb, 'PICKED_UP');
+    mock.simulate(p.awb, 'RTO');
+    await pollOpenShipments();
+    await pollOpenShipments();
+    expect(await balance()).toBe(before + 100);
+    expect(await prisma.creditLedger.count({ where: { orderId: p.orderId, reason: 'REFUND_CREDITS' } })).toBe(1);
+    expect((await prisma.coupon.findUniqueOrThrow({ where: { id: coupon.id } })).usedCount).toBe(0);
+    await prisma.creditLedger.deleteMany({ where: { orderId: p.orderId } });
+    await prisma.coupon.delete({ where: { id: coupon.id } });
+  });
+
+  it('gives nothing back when another line of the order was delivered', async () => {
+    const p = await awaitingPickup();
+    await prisma.orderItem.create({
+      data: { orderId: p.orderId, productId, variantId, sellerId, title: 'Kept Tee', size: '', color: '', pricePaise: 10_000, quantity: 1, status: 'DELIVERED' },
+    });
+    await prisma.order.update({ where: { id: p.orderId }, data: { creditsUsed: 40 } });
+    const before = (await prisma.user.findUniqueOrThrow({ where: { id: buyerId } })).creditsBalance;
+    mock.simulate(p.awb, 'PICKED_UP');
+    mock.simulate(p.awb, 'RTO');
+    await pollOpenShipments();
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: buyerId } })).creditsBalance).toBe(before);
+  });
+});

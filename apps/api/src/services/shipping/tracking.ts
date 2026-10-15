@@ -3,6 +3,7 @@ import { prisma } from '../../db';
 import { shippingProvider } from './index';
 import { postForwardFreight, postRtoFreight } from './freight';
 import { syncOrderStatus } from '../orderStatusService';
+import { settleEarnedCredits } from '../purchaseCredits';
 import { markLineDelivered, markLineShipped } from './lineTransitions';
 import { notifyFailedAttempt, notifyRtoArrived, startRto } from './rto';
 import { applyReverseScan } from './reversePickup';
@@ -152,6 +153,8 @@ export async function applyTracking(result: TrackingResult, source: TrackingSour
       });
       await syncShipmentsFromLines([shipment.id]);
       await syncOrderStatus(shipment.orderId);
+      // Credits earned on the order shrink to what was actually bought.
+      await settleEarnedCredits(shipment.orderId);
       if (next === 'RTO_DELIVERED') await notifyRtoArrived(shipment);
     }
     if (next === 'LOST') {

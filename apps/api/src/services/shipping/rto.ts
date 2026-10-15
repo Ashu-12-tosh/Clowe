@@ -1,5 +1,6 @@
 import { prisma } from '../../db';
 import { ApiError } from '../../utils/ApiError';
+import { creditExpiryFrom } from '../../routes/credits';
 import { refundOrderPart } from '../refundService';
 import { returnStock } from '../stockService';
 import { valueOfLines } from './codAmount';
@@ -33,7 +34,7 @@ export async function startRto(shipment: ShipmentForRto, at: Date = new Date()):
 
   const order = await prisma.order.findUniqueOrThrow({
     where: { id: shipment.orderId },
-    include: { items: { select: { id: true, pricePaise: true, quantity: true, promoDiscountPaise: true } } },
+    include: { items: { select: { id: true, pricePaise: true, quantity: true, promoDiscountPaise: true, status: true } } },
   });
   await prisma.user.update({ where: { id: order.userId }, data: { rtoCount: { increment: 1 } } });
 
@@ -46,6 +47,28 @@ export async function startRto(shipment: ShipmentForRto, at: Date = new Date()):
           valueOfLines(order.totalPaise, order.items, lineIds),
           `Couldn't be delivered — returned to the seller (AWB ${shipment.awbNumber ?? '—'})`,
         );
+  // Nothing on the order was bought after all (every other line cancelled or
+  // undelivered too): the coupon and the shopping credits come back, as they
+  // do when an order is cancelled.
+  const emptied = order.items
+    .filter((i) => !lineIds.includes(i.id))
+    .every((i) => i.status === 'CANCELLED' || i.status === 'RTO_IN_TRANSIT' || i.status === 'RTO_DELIVERED');
+  if (emptied) {
+    await prisma.$transaction([
+      ...(order.couponCode && order.couponDiscountPaise > 0
+        ? [prisma.coupon.updateMany({ where: { code: order.couponCode, usedCount: { gt: 0 } }, data: { usedCount: { decrement: 1 } } })]
+        : []),
+      ...(order.creditsUsed > 0
+        ? [
+            prisma.user.update({ where: { id: order.userId }, data: { creditsBalance: { increment: order.creditsUsed } } }),
+            prisma.creditLedger.create({
+              data: { userId: order.userId, delta: order.creditsUsed, reason: 'REFUND_CREDITS', orderId: order.id, expiresAt: creditExpiryFrom() },
+            }),
+          ]
+        : []),
+    ]);
+  }
+
   const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: shipment.sellerId }, select: { userId: true } });
   await prisma.notification.createMany({
     data: [
