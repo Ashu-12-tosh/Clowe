@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminSellerReferralRow } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { usePending } from '@/lib/usePending';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
 export default function AdminSellerReferralsPage() {
@@ -10,6 +12,7 @@ export default function AdminSellerReferralsPage() {
   const [error, setError] = useState('');
   const [voiding, setVoiding] = useState<string | null>(null);
   const [reason, setReason] = useState('');
+  const { run, isPending } = usePending();
 
   const load = useCallback(() => {
     api<AdminSellerReferralRow[]>('/api/admin/seller-referrals', { auth: true })
@@ -20,18 +23,21 @@ export default function AdminSellerReferralsPage() {
 
   async function voidReferral(id: string) {
     setError('');
-    try {
-      await api(`/api/admin/seller-referrals/${id}/void`, {
-        method: 'PATCH',
-        body: { reason: reason.trim() },
-        auth: true,
-      });
-      setVoiding(null);
-      setReason('');
-      load();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
-    }
+    await run(id, async () => {
+      try {
+        await api(`/api/admin/seller-referrals/${id}/void`, {
+          method: 'PATCH',
+          body: { reason: reason.trim() },
+          auth: true,
+          success: 'Referral voided',
+        });
+        setVoiding(null);
+        setReason('');
+        load();
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
+      }
+    });
   }
 
   return (
@@ -124,10 +130,11 @@ export default function AdminSellerReferralsPage() {
                     <div className="mt-2 flex gap-2">
                       <button
                         onClick={() => void voidReferral(r.id)}
-                        disabled={reason.trim().length < 5}
+                        disabled={reason.trim().length < 5 || isPending(r.id)}
+                        aria-busy={isPending(r.id)}
                         className="rounded-lg bg-red-600 px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-red-700 disabled:opacity-50"
                       >
-                        Confirm void
+                        {isPending(r.id) ? <><Spinner className="mr-1" />Voiding…</> : 'Confirm void'}
                       </button>
                       <button
                         onClick={() => setVoiding(null)}

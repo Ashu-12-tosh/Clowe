@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { AdminProductDetail, AdminProductRevision, AdminProductRow } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { usePending } from '@/lib/usePending';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
 // REVISION: live listings with an edit waiting for review.
@@ -232,6 +234,7 @@ export default function AdminProductsPage() {
   const [rows, setRows] = useState<AdminProductRow[] | null>(null);
   const [error, setError] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
+  const { run, isPending } = usePending();
 
   const load = useCallback(() => {
     setRows(null);
@@ -256,16 +259,25 @@ export default function AdminProductsPage() {
         ) ?? undefined;
       if (reason === undefined) return;
     }
-    try {
-      await api(`/api/admin/products/${id}${edit ? '/revision' : ''}`, {
-        method: 'PATCH',
-        body: { action, reason },
-        auth: true,
-      });
-      load();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
-    }
+    await run(id, async () => {
+      try {
+        await api(`/api/admin/products/${id}${edit ? '/revision' : ''}`, {
+          method: 'PATCH',
+          body: { action, reason },
+          auth: true,
+          success: edit
+            ? action === 'approve'
+              ? 'Changes approved — the listing now shows them'
+              : 'Changes rejected — the live listing is unchanged'
+            : action === 'approve'
+              ? 'Product approved — it is live'
+              : 'Product rejected',
+        });
+        load();
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
+      }
+    });
   }
 
   return (
@@ -340,13 +352,19 @@ export default function AdminProductsPage() {
                   <>
                     <button
                       onClick={() => void decide(p.id, 'approve')}
-                      className="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                      disabled={isPending(p.id)}
+                      aria-busy={isPending(p.id)}
+                      data-action="approve-revision"
+                      className="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
                     >
+                      {isPending(p.id) && <Spinner className="mr-1" />}
                       Approve changes
                     </button>
                     <button
                       onClick={() => void decide(p.id, 'reject')}
-                      className="rounded-lg border border-red-300 px-4 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                      disabled={isPending(p.id)}
+                      data-action="reject-revision"
+                      className="rounded-lg border border-red-300 px-4 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
                     >
                       Reject changes
                     </button>
@@ -355,15 +373,21 @@ export default function AdminProductsPage() {
                 {tab !== 'REVISION' && p.status !== 'APPROVED' && (
                   <button
                     onClick={() => void decide(p.id, 'approve')}
-                    className="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
+                    disabled={isPending(p.id)}
+                    aria-busy={isPending(p.id)}
+                    data-action="approve-product"
+                    className="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
                   >
+                    {isPending(p.id) && <Spinner className="mr-1" />}
                     Approve
                   </button>
                 )}
                 {tab !== 'REVISION' && p.status !== 'REJECTED' && (
                   <button
                     onClick={() => void decide(p.id, 'reject')}
-                    className="rounded-lg border border-red-300 px-4 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                    disabled={isPending(p.id)}
+                    data-action="reject-product"
+                    className="rounded-lg border border-red-300 px-4 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
                   >
                     Reject
                   </button>

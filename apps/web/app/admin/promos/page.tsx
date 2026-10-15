@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminPromoTileRow, PromoPlacementValue } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { usePending } from '@/lib/usePending';
+import Spinner from '@/components/Spinner';
 
 const field =
   'rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -16,6 +18,7 @@ export default function AdminPromosPage() {
   const [imageUrl, setImageUrl] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const { run, isPending } = usePending();
 
   const load = useCallback(() => {
     api<AdminPromoTileRow[]>('/api/admin/promos', { auth: true })
@@ -26,6 +29,7 @@ export default function AdminPromosPage() {
 
   async function addTile(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setError('');
     setBusy(true);
     try {
@@ -39,6 +43,7 @@ export default function AdminPromosPage() {
           sortOrder: rows?.filter((r) => r.placement === placement).length ?? 0,
         },
         auth: true,
+        success: 'Promo tile added',
       });
       setTitle('');
       setSubtitle('');
@@ -52,22 +57,31 @@ export default function AdminPromosPage() {
   }
 
   async function patch(id: string, body: Record<string, unknown>) {
-    try {
-      await api(`/api/admin/promos/${id}`, { method: 'PATCH', body, auth: true });
-      load();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
-    }
+    await run(id, async () => {
+      try {
+        await api(`/api/admin/promos/${id}`, {
+          method: 'PATCH',
+          body,
+          auth: true,
+          success: 'isActive' in body ? `Promo tile ${body.isActive ? 'activated' : 'deactivated'}` : 'Promo tile saved',
+        });
+        load();
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
+      }
+    });
   }
 
   async function remove(id: string) {
     if (!window.confirm('Delete this promo tile?')) return;
-    try {
-      await api(`/api/admin/promos/${id}`, { method: 'DELETE', auth: true });
-      load();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
-    }
+    await run(id, async () => {
+      try {
+        await api(`/api/admin/promos/${id}`, { method: 'DELETE', auth: true, success: 'Promo tile deleted' });
+        load();
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
+      }
+    });
   }
 
   function Group({ kind, label }: { kind: PromoPlacementValue; label: string }) {
@@ -92,11 +106,18 @@ export default function AdminPromosPage() {
               <div className="flex items-center gap-3 text-xs font-semibold">
                 <button
                   onClick={() => void patch(row.id, { isActive: !row.isActive })}
-                  className={row.isActive ? 'text-gray-500 hover:underline' : 'text-green-600 hover:underline'}
+                  disabled={isPending(row.id)}
+                  aria-busy={isPending(row.id)}
+                  className={`disabled:opacity-50 ${row.isActive ? 'text-gray-500 hover:underline' : 'text-green-600 hover:underline'}`}
                 >
+                  {isPending(row.id) && <Spinner className="mr-1" />}
                   {row.isActive ? 'Deactivate' : 'Activate'}
                 </button>
-                <button onClick={() => void remove(row.id)} className="text-red-500 hover:underline">
+                <button
+                  onClick={() => void remove(row.id)}
+                  disabled={isPending(row.id)}
+                  className="text-red-500 hover:underline disabled:opacity-50"
+                >
                   Delete
                 </button>
                 <span className={`rounded-full px-2 py-0.5 ${row.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -133,9 +154,10 @@ export default function AdminPromosPage() {
         <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="Image URL" className={`${field} w-64`} />
         <button
           disabled={busy || title.trim().length < 2}
+          aria-busy={busy}
           className="rounded-lg bg-ink-900 px-5 py-2 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
         >
-          Add
+          {busy ? <><Spinner className="mr-1" />Adding…</> : 'Add'}
         </button>
       </form>
 

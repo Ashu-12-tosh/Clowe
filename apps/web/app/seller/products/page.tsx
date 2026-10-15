@@ -14,6 +14,7 @@ import {
   type SellerProductSort,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 import { formatPaise, istDay, istRange } from '@/lib/format';
 import { DonutChart } from '@/components/charts/Charts';
 
@@ -154,6 +155,7 @@ export default function SellerProductsPage() {
   useEffect(() => setPage(1), [query, pageSize]);
 
   async function toggleVisibility(row: SellerProductRow) {
+    if (busyId) return;
     setBusyId(row.id);
     setMenuId(null);
     try {
@@ -161,6 +163,7 @@ export default function SellerProductsPage() {
         method: 'PATCH',
         body: { isVisible: !row.isVisible },
         auth: true,
+        success: row.isVisible ? `"${row.title}" hidden from the store` : `"${row.title}" visible in the store`,
       });
       setData((prev) =>
         prev ? { ...prev, rows: prev.rows.map((r) => (r.id === row.id ? updated : r)) } : prev,
@@ -175,10 +178,11 @@ export default function SellerProductsPage() {
 
   async function archive(row: SellerProductRow) {
     if (!confirm(`Archive "${row.title}"? It is removed from the store and your list.`)) return;
+    if (busyId) return;
     setBusyId(row.id);
     setMenuId(null);
     try {
-      await api(`/api/seller/products/${row.id}`, { method: 'DELETE', auth: true });
+      await api(`/api/seller/products/${row.id}`, { method: 'DELETE', auth: true, success: `"${row.title}" archived` });
       await Promise.all([loadList(), loadSummary()]);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not archive the product');
@@ -219,10 +223,11 @@ export default function SellerProductsPage() {
       <button
         onClick={() => setMenuId(menuId === row.id ? null : row.id)}
         disabled={busyId === row.id}
+        aria-busy={busyId === row.id}
         title="More"
         className="rounded-lg border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
       >
-        ⋮
+        {busyId === row.id ? <Spinner /> : '⋮'}
       </button>
       {menuId === row.id && (
         <>

@@ -30,6 +30,8 @@ import {
   type OrderTab,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import { BarList, DonutChart, LineChart } from '@/components/charts/Charts';
 
@@ -327,7 +329,7 @@ export default function AdminOrdersPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => downloadFile(`/api/admin/orders/meta/export?${query}`, 'orders.csv')}
+            onClick={() => void downloadFile(`/api/admin/orders/meta/export?${query}`, 'orders.csv').catch(() => undefined)}
             className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
           >
             ⭳ Export Orders
@@ -885,6 +887,7 @@ function OrderDrawer({
   }, [load]);
 
   async function advance(status: AdminOrderStatus, noClipReason?: string) {
+    if (busy && !noClipReason) return;
     setBusy(true);
     try {
       await api(`/api/admin/orders/${orderId}/status`, {
@@ -895,6 +898,9 @@ function OrderDrawer({
           ...(status === 'SHIPPED' ? { trackingNumber: awb } : {}),
           ...(noClipReason ? { noClipReason } : {}),
         },
+        success: `Order moved to ${ADMIN_ORDER_STATUS_LABELS[status]}`,
+        // A missing packing video is a question for the desk (below), not a failure.
+        quiet: true,
       });
       flash(`Order moved to ${ADMIN_ORDER_STATUS_LABELS[status]}.`);
       setShipping(false);
@@ -914,7 +920,9 @@ function OrderDrawer({
         await advance(status, reason.trim());
         return;
       }
-      flash(err instanceof ApiRequestError ? err.message : 'Could not update that order.');
+      const message = err instanceof ApiRequestError ? err.message : 'Could not update that order.';
+      flash(message);
+      toast.error(`Not updated: ${message}`);
     } finally {
       setBusy(false);
     }
@@ -927,12 +935,14 @@ function OrderDrawer({
       flash('Give a reason of at least 3 characters.');
       return;
     }
+    if (busy) return;
     setBusy(true);
     try {
       await api(`/api/admin/orders/${orderId}/cancel`, {
         method: 'POST',
         auth: true,
         body: { reason: reason.trim() },
+        success: 'Order cancelled — stock returned and the customer notified',
       });
       flash('Order cancelled — stock returned and the customer notified.');
       await load();
@@ -1222,8 +1232,10 @@ function OrderDrawer({
                 }
                 void advance(next);
               }}
+              aria-busy={busy}
               className="col-span-2 rounded-lg bg-brand-600 py-2 text-white disabled:opacity-50 min-w-0"
             >
+              {busy && <Spinner className="mr-1" />}
               {next === 'SHIPPED' && !shipping
                 ? 'Mark shipped…'
                 : `Move to ${ADMIN_ORDER_STATUS_LABELS[next]}`}
@@ -1340,6 +1352,7 @@ function CreateOrderModal({
   const subtotal = lines.reduce((sum, l) => sum + l.variant.pricePaise * l.quantity, 0);
 
   async function submit() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -1358,6 +1371,7 @@ function CreateOrderModal({
           },
         },
       );
+      toast.success(`Order ${created.orderNumber} placed`);
       await onDone(
         `${created.orderNumber} placed for ${customer!.name ?? customer!.phone} — ${formatPaise(created.totalPaise)}.`,
       );
@@ -1613,7 +1627,7 @@ function CreateOrderModal({
           onClick={() => void submit()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? 'Placing…' : 'Place order'}
+          {busy ? <><Spinner className="mr-1" />Placing…</> : 'Place order'}
         </button>
       </div>
     </Modal>
@@ -1759,6 +1773,7 @@ function ImportOrdersModal({
   const invalid = (rows ?? []).filter((r) => r.error);
 
   async function submit() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -1776,6 +1791,10 @@ function ImportOrdersModal({
         },
       });
       setResult(body);
+      (body.skipped.length === 0 ? toast.success : toast.error)(
+        `${num(body.created.length)} order(s) placed` +
+          (body.skipped.length > 0 ? `, ${num(body.skipped.length)} skipped — see the list` : ''),
+      );
       if (body.skipped.length === 0) {
         await onDone(`${num(body.created.length)} order(s) placed.`);
       }
@@ -1910,7 +1929,7 @@ function ImportOrdersModal({
           onClick={() => void submit()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? 'Placing…' : `Place ${num(valid.length)} order(s)`}
+          {busy ? <><Spinner className="mr-1" />Placing…</> : `Place ${num(valid.length)} order(s)`}
         </button>
       </div>
     </Modal>

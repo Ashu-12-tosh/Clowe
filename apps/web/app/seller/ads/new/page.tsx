@@ -13,6 +13,7 @@ import {
   type SellerProductRow,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
 export default function NewAdPage() {
@@ -41,12 +42,14 @@ export default function NewAdPage() {
   const price = pricing?.[placement]?.[String(duration) as '7' | '15' | '30'] ?? null;
 
   async function submit() {
+    if (busy) return;
     setError('');
     setBusy(true);
     try {
       await api('/api/seller/ads', {
         body: { productId, placement, durationDays: duration },
         auth: true,
+        success: 'Ad submitted — it goes live once an admin approves it',
       });
       router.push('/seller/ads');
     } catch (err) {
@@ -169,9 +172,11 @@ export default function NewAdPage() {
         <button
           onClick={() => void submit()}
           disabled={busy || !productId || (price !== null && balance !== null && balance < price)}
+          aria-busy={busy}
+          data-action="submit-ad"
           className="mt-3 w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white hover:bg-brand-700 disabled:opacity-50"
         >
-          {busy ? 'Submitting…' : 'Submit for review'}
+          {busy ? <><Spinner className="mr-1" />Submitting…</> : 'Submit for review'}
         </button>
       </div>
     </div>

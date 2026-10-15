@@ -15,6 +15,8 @@ import {
   type StockUpdateResult,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import { DonutChart } from '@/components/charts/Charts';
 
@@ -135,7 +137,7 @@ export default function SellerInventoryPage() {
 
   /** Push a set of stock changes and merge the fresh rows back into the table. */
   async function pushUpdates(updates: { variantId: string; stock?: number; delta?: number }[]) {
-    if (updates.length === 0) return;
+    if (updates.length === 0 || busy) return;
     setBusy(true);
     setError('');
     setNotice('');
@@ -151,10 +153,11 @@ export default function SellerInventoryPage() {
           ? { ...prev, rows: prev.rows.map((r) => byId.get(r.variantId) ?? r) }
           : prev,
       );
-      setNotice(
-        `${result.updated} variant(s) updated` +
-          (result.skipped.length > 0 ? ` · ${result.skipped.length} skipped` : ''),
-      );
+      const message =
+        `Stock saved: ${result.updated} variant(s) updated` +
+        (result.skipped.length > 0 ? ` · ${result.skipped.length} skipped` : '');
+      setNotice(message);
+      (result.skipped.length > 0 ? toast.error : toast.success)(message);
       void loadSummary();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not update stock');
@@ -363,8 +366,10 @@ export default function SellerInventoryPage() {
             <button
               disabled={busy || selected.size === 0 || bulkValue === ''}
               onClick={() => void bulkSet('SET')}
+              aria-busy={busy}
               className="rounded-lg bg-ink-900 px-3 py-1.5 font-semibold text-white hover:bg-ink-800 disabled:opacity-50"
             >
+              {busy && <Spinner className="mr-1" />}
               Set to
             </button>
             <button
@@ -491,9 +496,10 @@ export default function SellerInventoryPage() {
                             <button
                               disabled={busy}
                               onClick={() => void saveRow(row)}
+                              aria-busy={busy}
                               className="rounded-lg bg-ink-900 px-2 py-1 font-semibold text-white hover:bg-ink-800 disabled:opacity-50"
                             >
-                              Save
+                              {busy ? <Spinner /> : 'Save'}
                             </button>
                           )}
                         </div>

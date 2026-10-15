@@ -11,8 +11,14 @@ import {
   type AttributeDef,
   type CategoryRulesInput,
   type VariantAxis,
+  categoryRulesInputSchema,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { fieldError, issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
+import { toast } from '@/lib/toast';
+import { usePending } from '@/lib/usePending';
+import FieldError from '@/components/FieldError';
+import Spinner from '@/components/Spinner';
 
 // The GST settings describeTaxDefault needs, read once from the admin settings.
 let gstCache: Promise<GstSettings> | null = null;
@@ -132,12 +138,13 @@ function RulesEditor({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const { errors: fieldErrors, show: showFieldErrors, fromError } = useFieldErrors();
 
   const inherited = row.rules;
   const bool = (v: string): boolean | null => (v === '' ? null : v === 'true');
 
   async function save() {
-    setBusy(true);
+    if (busy) return;
     setError('');
     const body: CategoryRulesInput = {
       variantAxes: axesText.trim() ? axesFromText(axesText) : null,
@@ -149,10 +156,17 @@ function RulesEditor({
       hsnCode: hsn.trim() || null,
       returnWindowDays: returnDays.trim() === '' ? null : Number(returnDays),
     };
+    const checked = categoryRulesInputSchema.safeParse(body);
+    if (showFieldErrors(checked.success ? {} : issuesToFieldErrors(checked.error.issues))) {
+      toast.error('Not saved: fix the fields marked in red');
+      return;
+    }
+    setBusy(true);
     try {
-      await api(`/api/admin/categories/${row.id}`, { method: 'PATCH', body, auth: true });
+      await api(`/api/admin/categories/${row.id}`, { method: 'PATCH', body, auth: true, success: `${row.name}: rules saved` });
       onSaved();
     } catch (err) {
+      fromError(err);
       setError(err instanceof ApiRequestError ? err.message : 'Could not save rules');
     } finally {
       setBusy(false);
@@ -187,6 +201,7 @@ function RulesEditor({
           </label>
           <input
             value={axesText}
+            name="variantAxes"
             onChange={(e) => setAxesText(e.target.value)}
             placeholder={
               inherited.variantAxes.length
@@ -195,6 +210,7 @@ function RulesEditor({
             }
             className={`mt-1 w-full ${field}`}
           />
+          <FieldError message={fieldError(fieldErrors, 'variantAxes')} />
         </div>
 
         <div>
@@ -220,7 +236,7 @@ function RulesEditor({
 
         <div>
           <label className="text-xs font-semibold text-gray-700">GST default</label>
-          <select value={tax} onChange={(e) => setTax(e.target.value)} className={`mt-1 w-full ${field}`}>
+          <select value={tax} name="defaultTaxRatePercent" onChange={(e) => setTax(e.target.value)} className={`mt-1 w-full ${field}`}>
             <option value="">Inherit ({gst ? describeTaxDefault(inherited, gst) : '…'})</option>
             <option value="VALUE_SLAB">
               Value slab — apparel, made-up textiles, footwear ({gst ? describeTaxDefault({ taxRule: 'VALUE_SLAB', defaultTaxRatePercent: null }, gst) : '…'})
@@ -231,16 +247,19 @@ function RulesEditor({
               </option>
             ))}
           </select>
+          <FieldError message={fieldErrors.defaultTaxRatePercent} />
         </div>
         <div>
           <label className="text-xs font-semibold text-gray-700">HSN code</label>
           <input
             value={hsn}
+            name="hsnCode"
             onChange={(e) => setHsn(e.target.value)}
             placeholder={inherited.hsnCode ? `Inherited: ${inherited.hsnCode}` : 'e.g. 8471'}
             maxLength={12}
             className={`mt-1 w-full ${field}`}
           />
+          <FieldError message={fieldErrors.hsnCode} />
         </div>
         <div>
           <label className="text-xs font-semibold text-gray-700">Return window (days)</label>
@@ -249,6 +268,7 @@ function RulesEditor({
             min={0}
             max={90}
             value={returnDays}
+            name="returnWindowDays"
             onChange={(e) => setReturnDays(e.target.value)}
             placeholder={
               inherited.returnWindowDays !== null
@@ -257,6 +277,7 @@ function RulesEditor({
             }
             className={`mt-1 w-full ${field}`}
           />
+          <FieldError message={fieldErrors.returnWindowDays} />
         </div>
       </div>
 
@@ -283,6 +304,7 @@ function RulesEditor({
             )}
             <button
               type="button"
+              data-field="attributeSchema"
               onClick={() => setAttrs((prev) => [...prev, { ...emptyAttr }])}
               className="rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold hover:bg-gray-50"
             >
@@ -290,6 +312,7 @@ function RulesEditor({
             </button>
           </div>
         </div>
+        <FieldError message={fieldError(fieldErrors, 'attributeSchema')} />
         <div className="mt-2 space-y-2">
           {attrs.map((a, i) => (
             <div key={i} className="flex flex-wrap items-center gap-2">
@@ -359,10 +382,11 @@ function RulesEditor({
         </button>
         <button
           disabled={busy}
+          aria-busy={busy}
           onClick={() => void save()}
           className="rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
         >
-          {busy ? 'Saving…' : 'Save rules'}
+          {busy ? <><Spinner className="mr-1" />Saving…</> : 'Save rules'}
         </button>
       </div>
     </div>
@@ -381,6 +405,7 @@ export default function AdminCategoriesPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const { run, isPending } = usePending();
 
   const load = useCallback(() => {
     api<AdminCategoryRow[]>('/api/admin/categories', { auth: true })
@@ -405,12 +430,14 @@ export default function AdminCategoriesPage() {
 
   async function addCategory(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setError('');
     setBusy(true);
     try {
       await api('/api/admin/categories', {
         body: { name: name.trim(), parentId: parentId || null, icon: icon.trim() || null },
         auth: true,
+        success: `Category “${name.trim()}” added`,
       });
       setName('');
       setIcon('');
@@ -423,16 +450,19 @@ export default function AdminCategoriesPage() {
   }
 
   async function toggleActive(row: AdminCategoryRow) {
-    try {
-      await api(`/api/admin/categories/${row.id}`, {
-        method: 'PATCH',
-        body: { isActive: !row.isActive },
-        auth: true,
-      });
-      load();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
-    }
+    await run(row.id, async () => {
+      try {
+        await api(`/api/admin/categories/${row.id}`, {
+          method: 'PATCH',
+          body: { isActive: !row.isActive },
+          auth: true,
+          success: `${row.name} ${row.isActive ? 'deactivated' : 'activated'}`,
+        });
+        load();
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
+      }
+    });
   }
 
   function summary(row: AdminCategoryRow): string {
@@ -477,12 +507,15 @@ export default function AdminCategoriesPage() {
             </button>
             <button
               onClick={() => void toggleActive(row)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              disabled={isPending(row.id)}
+              aria-busy={isPending(row.id)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-50 ${
                 row.isActive
                   ? 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   : 'bg-green-100 text-green-700 hover:bg-green-200'
               }`}
             >
+              {isPending(row.id) && <Spinner className="mr-1" />}
               {row.isActive ? 'Deactivate' : 'Activate'}
             </button>
           </div>
@@ -542,9 +575,10 @@ export default function AdminCategoriesPage() {
         </select>
         <button
           disabled={busy || name.trim().length < 2}
+          aria-busy={busy}
           className="rounded-lg bg-ink-900 px-5 py-2 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
         >
-          Add
+          {busy ? <><Spinner className="mr-1" />Adding…</> : 'Add'}
         </button>
       </form>
 

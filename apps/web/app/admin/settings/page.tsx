@@ -8,8 +8,13 @@ import {
   DEFAULT_LEGAL_ENTITY,
   type LegalEntity,
   type PlatformSettings,
+  updateSettingsSchema,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
+import { toast } from '@/lib/toast';
+import FieldError from '@/components/FieldError';
+import Spinner from '@/components/Spinner';
 import { publicSettingsChanged } from '@/lib/settings';
 
 const field =
@@ -54,8 +59,8 @@ export default function AdminSettingsPage() {
     gtRupees: '',
   });
   const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { errors: fieldErrors, show: showFieldErrors, fromError } = useFieldErrors();
 
   useEffect(() => {
     api<PlatformSettings>('/api/admin/settings', { auth: true })
@@ -106,8 +111,9 @@ export default function AdminSettingsPage() {
   }, []);
 
   async function save() {
+    if (busy) return;
     setError('');
-    setSaved(false);
+    showFieldErrors({});
     setBusy(true);
     try {
       const adPricing = {
@@ -118,9 +124,7 @@ export default function AdminSettingsPage() {
         for (const d of AD_DURATIONS)
           adPricing[pl][String(d) as '7' | '15' | '30'] = toPaise(adPrices[`${pl}:${d}`]);
 
-      const fresh = await api<PlatformSettings>('/api/admin/settings', {
-        method: 'PUT',
-        body: {
+      const body = {
           tryonMinPricePaise: toPaise(tryonMin),
           socialLinks: social,
           supportEmails,
@@ -150,15 +154,31 @@ export default function AdminSettingsPage() {
           deliveryFeePaise: toPaise(economics.deliveryRupees),
           closingFeePaise: toPaise(economics.closingRupees),
           gtChargePaise: toPaise(economics.gtRupees),
-        },
+      };
+      // The API's own rules, checked here first, so each mistake is shown by its field.
+      const checked = updateSettingsSchema.safeParse(body);
+      const problems = checked.success ? {} : issuesToFieldErrors(checked.error.issues);
+      if (body.lateDispatchPenaltyAfterHours < body.dispatchSlaHours && !problems.lateDispatchPenaltyAfterHours) {
+        problems.lateDispatchPenaltyAfterHours = `Can't fall due before the dispatch promise (${body.dispatchSlaHours}h)`;
+      }
+      if (showFieldErrors(problems)) {
+        const count = Object.keys(problems).length;
+        toast.error(`Not saved: ${count === 1 ? '1 field needs' : `${count} fields need`} fixing — marked in red`);
+        return;
+      }
+
+      const fresh = await api<PlatformSettings>('/api/admin/settings', {
+        method: 'PUT',
+        body,
         auth: true,
+        success: 'Settings saved',
       });
       setSettings(fresh);
-      setSaved(true);
       publicSettingsChanged();
-      setTimeout(() => setSaved(false), 2500);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not save settings');
+      // The client already said why (a toast); a field the API names is marked too.
+      fromError(err);
+      if (!(err instanceof ApiRequestError)) toast.error('Could not save settings');
     } finally {
       setBusy(false);
     }
@@ -174,11 +194,6 @@ export default function AdminSettingsPage() {
       {error && (
         <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       )}
-      {saved && (
-        <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-          ✓ Settings saved
-        </div>
-      )}
 
       {/* Try-On */}
       <div className="mt-5 rounded-2xl border border-gray-100 bg-white p-4">
@@ -190,7 +205,9 @@ export default function AdminSettingsPage() {
           value={tryonMin}
           onChange={(e) => setTryonMin(e.target.value)}
           className={`mt-1 ${field}`}
+          name={'tryonMinPricePaise'}
         />
+        <FieldError message={fieldErrors['tryonMinPricePaise']} />
         <p className="mt-1 text-xs text-gray-400">
           The Try On Me button appears only on products at or above this price. Enforced server-side too.
         </p>
@@ -207,7 +224,9 @@ export default function AdminSettingsPage() {
           value={kycMinScore}
           onChange={(e) => setKycMinScore(e.target.value)}
           className={`mt-1 ${field}`}
+          name={'kycNameMatchMinScore'}
         />
+        <FieldError message={fieldErrors['kycNameMatchMinScore']} />
         <p className="mt-1 text-xs text-gray-400">
           PAN and bank-account names scoring below this are flagged before approval. Bands: 100 direct
           match, 85–99 good partial, 60–84 moderate partial, 34–59 poor partial, 0–33 no match. Changing
@@ -270,7 +289,9 @@ export default function AdminSettingsPage() {
               onChange={(e) => setSocial((s) => ({ ...s, [key]: e.target.value }))}
               placeholder={`https://${key}.com/clowe`}
               className={`mt-1 ${field}`}
+              name={`socialLinks.${key}`}
             />
+            <FieldError message={fieldErrors[`socialLinks.${key}`]} />
           </div>
         ))}
       </div>
@@ -294,7 +315,9 @@ export default function AdminSettingsPage() {
               value={supportEmails[key]}
               onChange={(e) => setSupportEmails((s) => ({ ...s, [key]: e.target.value }))}
               className={`mt-1 ${field}`}
+              name={`supportEmails.${key}`}
             />
+            <FieldError message={fieldErrors[`supportEmails.${key}`]} />
           </div>
         ))}
       </div>
@@ -346,6 +369,7 @@ export default function AdminSettingsPage() {
                 placeholder={placeholder}
                 onChange={(e) => setLegal((l) => ({ ...l, [key]: e.target.value }))}
                 className={`mt-1 ${field}`}
+                name={`legalEntity.${key}`}
               />
             ) : (
               <input
@@ -354,8 +378,10 @@ export default function AdminSettingsPage() {
                 placeholder={placeholder}
                 onChange={(e) => setLegal((l) => ({ ...l, [key]: e.target.value }))}
                 className={`mt-1 ${field}`}
+                name={`legalEntity.${key}`}
               />
             )}
+            <FieldError message={fieldErrors[`legalEntity.${key}`]} />
           </div>
         ))}
       </div>
@@ -376,7 +402,9 @@ export default function AdminSettingsPage() {
             value={codMaxRupees}
             onChange={(e) => setCodMaxRupees(e.target.value)}
             className={field}
+            name={'codMaxOrderPaise'}
           />
+          <FieldError message={fieldErrors['codMaxOrderPaise']} />
         </div>
       </div>
 
@@ -401,7 +429,9 @@ export default function AdminSettingsPage() {
               value={dispatch.slaHours}
               onChange={(e) => setDispatch((d) => ({ ...d, slaHours: e.target.value }))}
               className={field}
+              name={'dispatchSlaHours'}
             />
+            <FieldError message={fieldErrors['dispatchSlaHours']} />
           </div>
           <div>
             <label className="text-xs text-gray-500">Penalty after (hours)</label>
@@ -412,7 +442,9 @@ export default function AdminSettingsPage() {
               value={dispatch.afterHours}
               onChange={(e) => setDispatch((d) => ({ ...d, afterHours: e.target.value }))}
               className={field}
+              name={'lateDispatchPenaltyAfterHours'}
             />
+            <FieldError message={fieldErrors['lateDispatchPenaltyAfterHours']} />
           </div>
           <div>
             <label className="text-xs text-gray-500">Penalty per order (₹)</label>
@@ -422,7 +454,9 @@ export default function AdminSettingsPage() {
               value={dispatch.penaltyRupees}
               onChange={(e) => setDispatch((d) => ({ ...d, penaltyRupees: e.target.value }))}
               className={field}
+              name={'lateDispatchPenaltyPaise'}
             />
+            <FieldError message={fieldErrors['lateDispatchPenaltyPaise']} />
           </div>
           <div>
             <label className="text-xs text-gray-500">Seller cancels an order (₹, once per order)</label>
@@ -432,7 +466,9 @@ export default function AdminSettingsPage() {
               value={dispatch.cancelRupees}
               onChange={(e) => setDispatch((d) => ({ ...d, cancelRupees: e.target.value }))}
               className={field}
+              name={'sellerCancelPenaltyPaise'}
             />
+            <FieldError message={fieldErrors['sellerCancelPenaltyPaise']} />
           </div>
           <label className="flex items-center gap-2 self-end pb-2 text-sm">
             <input
@@ -476,7 +512,9 @@ export default function AdminSettingsPage() {
               value={payout.commission}
               onChange={(e) => setPayout((p) => ({ ...p, commission: e.target.value }))}
               className={field}
+              name={'payoutCommissionPercent'}
             />
+            <FieldError message={fieldErrors['payoutCommissionPercent']} />
           </div>
           <div>
             <label className="text-xs text-gray-500">Gateway / collection (%)</label>
@@ -488,7 +526,9 @@ export default function AdminSettingsPage() {
               value={payout.gateway}
               onChange={(e) => setPayout((p) => ({ ...p, gateway: e.target.value }))}
               className={field}
+              name={'payoutGatewayPercent'}
             />
+            <FieldError message={fieldErrors['payoutGatewayPercent']} />
           </div>
           <div>
             <label className="text-xs text-gray-500">TDS 194-O (%)</label>
@@ -500,7 +540,9 @@ export default function AdminSettingsPage() {
               value={payout.tds}
               onChange={(e) => setPayout((p) => ({ ...p, tds: e.target.value }))}
               className={field}
+              name={'payoutTdsPercent'}
             />
+            <FieldError message={fieldErrors['payoutTdsPercent']} />
             <p className="mt-1 text-[11px] text-gray-400">
               0.1% since 1 Oct 2024. On the value ex-GST (CBDT Circular 20/2023).
             </p>
@@ -515,7 +557,9 @@ export default function AdminSettingsPage() {
               value={payout.tcs}
               onChange={(e) => setPayout((p) => ({ ...p, tcs: e.target.value }))}
               className={field}
+              name={'gstTcsPercent'}
             />
+            <FieldError message={fieldErrors['gstTcsPercent']} />
             <p className="mt-1 text-[11px] text-gray-400">
               0.5% since 10 Jul 2024 (Notification 15/2024-CT). On the value ex-GST.
             </p>
@@ -528,7 +572,9 @@ export default function AdminSettingsPage() {
               value={payout.minRupees}
               onChange={(e) => setPayout((p) => ({ ...p, minRupees: e.target.value }))}
               className={field}
+              name={'payoutMinPaise'}
             />
+            <FieldError message={fieldErrors['payoutMinPaise']} />
           </div>
           <div>
             <label className="text-xs text-gray-500">Clearing hold (days)</label>
@@ -539,7 +585,9 @@ export default function AdminSettingsPage() {
               value={payout.holdDays}
               onChange={(e) => setPayout((p) => ({ ...p, holdDays: e.target.value }))}
               className={field}
+              name={'payoutHoldDays'}
             />
+            <FieldError message={fieldErrors['payoutHoldDays']} />
           </div>
         </div>
         <p className="mt-2 text-xs text-gray-400">
@@ -568,7 +616,9 @@ export default function AdminSettingsPage() {
             placeholder="Off: category rules"
             className={`${field} mt-1 max-w-[200px]`}
             data-gst-uniform
+            name={'gstUniformPercent'}
           />
+          <FieldError message={fieldErrors['gstUniformPercent']} />
           <p className="mt-1 text-xs text-gray-500">
             18% on every product, in every category: the owner&rsquo;s decision, confirmed in
             writing by the CA (2026-10-16). While set, the
@@ -595,7 +645,9 @@ export default function AdminSettingsPage() {
               value={economics.gstMerit}
               onChange={(e) => setEconomics((v) => ({ ...v, gstMerit: e.target.value }))}
               className={field}
+              name={'gstMeritPercent'}
             />
+            <FieldError message={fieldErrors['gstMeritPercent']} />
           </div>
           <div>
             <label className="text-xs text-gray-500">GST standard rate (%)</label>
@@ -607,7 +659,9 @@ export default function AdminSettingsPage() {
               value={economics.gstStandard}
               onChange={(e) => setEconomics((v) => ({ ...v, gstStandard: e.target.value }))}
               className={field}
+              name={'gstStandardPercent'}
             />
+            <FieldError message={fieldErrors['gstStandardPercent']} />
           </div>
           <div>
             <label className="text-xs text-gray-500">Value-slab threshold (₹ per piece, ex-GST)</label>
@@ -617,7 +671,9 @@ export default function AdminSettingsPage() {
               value={economics.gstThresholdRupees}
               onChange={(e) => setEconomics((v) => ({ ...v, gstThresholdRupees: e.target.value }))}
               className={field}
+              name={'gstValueSlabThresholdPaise'}
             />
+            <FieldError message={fieldErrors['gstValueSlabThresholdPaise']} />
           </div>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -629,7 +685,9 @@ export default function AdminSettingsPage() {
               value={economics.platformRupees}
               onChange={(e) => setEconomics((v) => ({ ...v, platformRupees: e.target.value }))}
               className={field}
+              name={'platformFeePaise'}
             />
+            <FieldError message={fieldErrors['platformFeePaise']} />
           </div>
           <div>
             <label className="text-xs text-gray-500" title="Sellers pay Delhivery's actual freight; this is only the test courier's flat estimate">
@@ -641,7 +699,9 @@ export default function AdminSettingsPage() {
               value={economics.deliveryRupees}
               onChange={(e) => setEconomics((v) => ({ ...v, deliveryRupees: e.target.value }))}
               className={field}
+              name={'deliveryFeePaise'}
             />
+            <FieldError message={fieldErrors['deliveryFeePaise']} />
           </div>
           <div>
             <label className="text-xs text-gray-500">Closing fee (₹, per unit)</label>
@@ -651,7 +711,9 @@ export default function AdminSettingsPage() {
               value={economics.closingRupees}
               onChange={(e) => setEconomics((v) => ({ ...v, closingRupees: e.target.value }))}
               className={field}
+              name={'closingFeePaise'}
             />
+            <FieldError message={fieldErrors['closingFeePaise']} />
           </div>
           <div>
             <label className="text-xs text-gray-500">GT charge (₹, per unit)</label>
@@ -661,7 +723,9 @@ export default function AdminSettingsPage() {
               value={economics.gtRupees}
               onChange={(e) => setEconomics((v) => ({ ...v, gtRupees: e.target.value }))}
               className={field}
+              name={'gtChargePaise'}
             />
+            <FieldError message={fieldErrors['gtChargePaise']} />
           </div>
         </div>
         <p className="mt-2 text-xs text-gray-400">
@@ -688,7 +752,9 @@ export default function AdminSettingsPage() {
                     value={adPrices[`${pl}:${d}`] ?? ''}
                     onChange={(e) => setAdPrices((p) => ({ ...p, [`${pl}:${d}`]: e.target.value }))}
                     className={field}
+                    name={`adPricing.${pl}.${d}`}
                   />
+                  <FieldError message={fieldErrors[`adPricing.${pl}.${d}`]} />
                 </div>
               ))}
             </div>
@@ -699,9 +765,18 @@ export default function AdminSettingsPage() {
       <button
         onClick={() => void save()}
         disabled={busy}
+        aria-busy={busy}
+        data-action="save-settings"
         className="mt-5 w-full rounded-xl bg-ink-900 py-3 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50 sm:w-auto sm:px-10"
       >
-        {busy ? 'Saving…' : 'Save settings'}
+        {busy ? (
+          <>
+            <Spinner className="mr-2" />
+            Saving…
+          </>
+        ) : (
+          'Save settings'
+        )}
       </button>
     </div>
   );

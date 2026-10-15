@@ -10,6 +10,9 @@ import {
   type SellerPayoutRow,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import { usePending } from '@/lib/usePending';
+import Spinner from '@/components/Spinner';
 import { formatPaise, istRange } from '@/lib/format';
 import { DonutChart, MultiLineChart } from '@/components/charts/Charts';
 import {
@@ -129,6 +132,7 @@ export default function SellerPayoutsPage() {
   const [openPayout, setOpenPayout] = useState<SellerPayoutRow | null>(null);
   const [addingMethod, setAddingMethod] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { run, isPending } = usePending();
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   // Bumped after a payout so the ledger shows the transfer without a reload.
@@ -169,6 +173,7 @@ export default function SellerPayoutsPage() {
   useEffect(() => setPage(1), [statusFilter, pageSize]);
 
   async function requestPayout() {
+    if (busy) return;
     setBusy(true);
     setError('');
     setNotice('');
@@ -178,9 +183,9 @@ export default function SellerPayoutsPage() {
         body: {},
         auth: true,
       });
-      setNotice(
-        `${payout.reference}: ${money(payout.netPaise)} sent to ${payout.methodLabel ?? 'your account'}${payout.utr ? ` · UTR ${payout.utr}` : ''}`,
-      );
+      const message = `${payout.reference}: ${money(payout.netPaise)} sent to ${payout.methodLabel ?? 'your account'}${payout.utr ? ` · UTR ${payout.utr}` : ''}`;
+      setNotice(message);
+      toast.success(`Payout requested — ${message}`);
       await Promise.all([loadOverview(), loadHistory()]);
       setLedgerRefresh((n) => n + 1);
     } catch (err) {
@@ -191,22 +196,34 @@ export default function SellerPayoutsPage() {
   }
 
   async function setDefaultMethod(methodId: string) {
-    try {
-      await api(`/api/seller/payouts/methods/${methodId}/default`, { method: 'PATCH', auth: true });
-      await loadOverview();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not update the method');
-    }
+    await run(methodId, async () => {
+      try {
+        await api(`/api/seller/payouts/methods/${methodId}/default`, {
+          method: 'PATCH',
+          auth: true,
+          success: 'Default payout method saved',
+        });
+        await loadOverview();
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : 'Could not update the method');
+      }
+    });
   }
 
   async function removeMethod(method: SellerPayoutMethodRow) {
     if (!confirm(`Remove ${method.label}? Payouts will use your other method.`)) return;
-    try {
-      await api(`/api/seller/payouts/methods/${method.id}`, { method: 'DELETE', auth: true });
-      await loadOverview();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not remove the method');
-    }
+    await run(method.id, async () => {
+      try {
+        await api(`/api/seller/payouts/methods/${method.id}`, {
+          method: 'DELETE',
+          auth: true,
+          success: `${method.label} removed`,
+        });
+        await loadOverview();
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : 'Could not remove the method');
+      }
+    });
   }
 
   const k = overview?.kpis;
@@ -282,7 +299,7 @@ export default function SellerPayoutsPage() {
             }
             className="rounded-lg bg-brand-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-700 disabled:opacity-50"
           >
-            {busy ? 'Requesting…' : '＋ Request payout'}
+            {busy ? <><Spinner className="mr-1" />Requesting…</> : '＋ Request payout'}
           </button>
         </div>
       </div>
@@ -818,14 +835,18 @@ export default function SellerPayoutsPage() {
                         ) : (
                           <button
                             onClick={() => void setDefaultMethod(m.id)}
-                            className="text-gray-500 hover:text-brand-600"
+                            disabled={isPending(m.id)}
+                            aria-busy={isPending(m.id)}
+                            className="text-gray-500 hover:text-brand-600 disabled:opacity-50"
                           >
+                            {isPending(m.id) && <Spinner className="mr-1" />}
                             Make default
                           </button>
                         )}
                         <button
                           onClick={() => void removeMethod(m)}
-                          className="text-gray-500 hover:text-red-600"
+                          disabled={isPending(m.id)}
+                          className="text-gray-500 hover:text-red-600 disabled:opacity-50"
                         >
                           Remove
                         </button>

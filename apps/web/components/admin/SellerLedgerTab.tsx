@@ -8,6 +8,7 @@ import {
   type SellerLedgerPage,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
 function signed(paise: number): string {
@@ -54,13 +55,14 @@ export default function SellerLedgerTab({ sellerId }: { sellerId: string }) {
 
   async function waive(entryId: string) {
     const reason = prompt('Why is this penalty being waived? (shown on the audit log)');
-    if (!reason || reason.trim().length < 5) return;
+    if (!reason || reason.trim().length < 5 || busy) return;
     setBusy(entryId);
     try {
       await api(`/api/admin/sellers/${sellerId}/ledger/${entryId}/waive`, {
         method: 'POST',
         body: { reason: reason.trim() },
         auth: true,
+        success: 'Penalty waived — credited back to the seller',
       });
       await load();
     } catch (err) {
@@ -129,7 +131,7 @@ export default function SellerLedgerTab({ sellerId }: { sellerId: string }) {
                     onClick={() => void waive(row.id)}
                     className="mt-1 rounded-md border border-gray-300 px-2 py-0.5 text-[11px] font-semibold hover:bg-gray-50 disabled:opacity-50"
                   >
-                    {busy === row.id ? 'Waiving…' : 'Waive penalty'}
+                    {busy === row.id ? <><Spinner className="mr-1" />Waiving…</> : 'Waive penalty'}
                   </button>
                 )}
             </div>

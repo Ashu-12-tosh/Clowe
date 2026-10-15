@@ -17,6 +17,7 @@ import {
   type FacetKind,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 
 const EMPTY: CategoryFacetConfig = { add: [], hide: [] };
 
@@ -175,6 +176,7 @@ function Editor({ categoryId }: { categoryId: string }) {
     });
 
   async function save(config: CategoryFacetConfig | null) {
+    if (busy) return;
     setBusy(true);
     setError('');
     setNotice('');
@@ -183,6 +185,7 @@ function Editor({ categoryId }: { categoryId: string }) {
         method: 'PUT',
         auth: true,
         body: { config },
+        success: config ? 'Filters saved' : "Filters reset to the parent's set",
       });
       setView(v);
       setDraft(v.own);
@@ -320,15 +323,17 @@ function Editor({ categoryId }: { categoryId: string }) {
         <button
           onClick={() => save(draft)}
           disabled={!dirty || busy}
+          aria-busy={busy}
+          data-action="save-facets"
           className="rounded-lg bg-brand-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white disabled:opacity-40"
         >
-          {busy ? 'Saving…' : 'Save'}
+          {busy ? <><Spinner className="mr-1" />Saving…</> : 'Save'}
         </button>
         <button onClick={() => setDraft(view.own)} disabled={!dirty || busy} className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-semibold disabled:opacity-40">
           Discard changes
         </button>
         {view.own !== null && (
-          <button onClick={() => save(null)} disabled={busy} className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700">
+          <button onClick={() => save(null)} disabled={busy} className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700 disabled:opacity-40">
             Reset to the parent&apos;s set
           </button>
         )}

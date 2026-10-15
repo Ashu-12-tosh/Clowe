@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import AppShell from '@/components/AppShell';
 import SupportChat from '@/components/SupportChat';
+import Toaster from '@/components/Toaster';
 import './globals.css';
 
 // Inter carries ~90% of the UI; Cormorant Garamond is reserved for brand
@@ -53,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-cream-50 font-sans text-ink-900 antialiased">
         <AppShell>{children}</AppShell>
         <SupportChat />
+        <Toaster />
       </body>
     </html>
   );

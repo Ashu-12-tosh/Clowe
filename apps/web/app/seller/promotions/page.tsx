@@ -13,6 +13,7 @@ import {
   type SellerPromotionSummary,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 import { formatPaise, istRange } from '@/lib/format';
 import { DonutChart } from '@/components/charts/Charts';
 import PromotionModal from '@/components/seller/promotions/PromotionModal';
@@ -129,12 +130,14 @@ export default function SellerPromotionsPage() {
   useEffect(() => setPage(1), [tab, q]);
 
   async function setState(row: SellerPromotionRow, state: 'ACTIVE' | 'PAUSED' | 'DRAFT') {
+    if (busyId) return;
     setBusyId(row.id);
     try {
       await api(`/api/seller/promotions/${row.id}/state`, {
         method: 'PATCH',
         body: { state },
         auth: true,
+        success: `"${row.name}" ${state === 'ACTIVE' ? 'activated' : state === 'PAUSED' ? 'paused' : 'moved to drafts'}`,
       });
       await Promise.all([loadList(), loadSummary()]);
       setNotice(`"${row.name}" is now ${state.toLowerCase()}.`);
@@ -156,9 +159,14 @@ export default function SellerPromotionsPage() {
     ) {
       return;
     }
+    if (busyId) return;
     setBusyId(row.id);
     try {
-      await api(`/api/seller/promotions/${row.id}`, { method: 'DELETE', auth: true });
+      await api(`/api/seller/promotions/${row.id}`, {
+        method: 'DELETE',
+        auth: true,
+        success: used ? `"${row.name}" ended` : `"${row.name}" deleted`,
+      });
       await Promise.all([loadList(), loadSummary()]);
       setNotice(used ? 'Promotion ended.' : 'Promotion deleted.');
     } catch (err) {
@@ -404,7 +412,7 @@ export default function SellerPromotionsPage() {
                               title="Pause"
                               className="rounded-lg border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
                             >
-                              ⏸
+                              {busyId === row.id ? <Spinner /> : '⏸'}
                             </button>
                           ) : row.status === 'PAUSED' || row.status === 'DRAFT' ? (
                             <button
@@ -413,7 +421,7 @@ export default function SellerPromotionsPage() {
                               title="Activate"
                               className="rounded-lg border border-gray-300 px-2 py-1 hover:bg-gray-50 disabled:opacity-40"
                             >
-                              ▶
+                              {busyId === row.id ? <Spinner /> : '▶'}
                             </button>
                           ) : null}
                           <button

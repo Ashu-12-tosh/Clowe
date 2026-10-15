@@ -16,6 +16,8 @@ import {
   type SellerReturnSummary,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { formatPaise, istRange } from '@/lib/format';
 import { DonutChart } from '@/components/charts/Charts';
 
@@ -82,7 +84,8 @@ export default function SellerReturnsPage() {
   const [data, setData] = useState<SellerReturnPage | null>(null);
   const [summary, setSummary] = useState<SellerReturnSummary | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
+  // 'bulk:<action>' or '<return id>' while it runs.
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -149,17 +152,28 @@ export default function SellerReturnsPage() {
       body = { action, condition: ok ? 'OK' : 'DAMAGED' };
     }
 
-    setBusy(true);
+    if (busy) return;
+    setBusy(row.id);
     setError('');
     setNotice('');
     try {
-      await api(`/api/seller/returns/${row.id}`, { method: 'PATCH', body, auth: true });
+      await api(`/api/seller/returns/${row.id}`, {
+        method: 'PATCH',
+        body,
+        auth: true,
+        success:
+          action === 'received' && body.condition === 'DAMAGED'
+            ? `${row.reference} marked received damaged — support will look at it`
+            : action === 'received'
+              ? `${row.reference} received — the refund is on its way`
+              : `${row.reference} ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'marked received'}`,
+      });
       await Promise.all([loadList(), loadSummary()]);
       setNotice(`${row.reference} updated.`);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not update the return');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -175,7 +189,8 @@ export default function SellerReturnsPage() {
       body = { ...body, condition: 'OK' };
     }
 
-    setBusy(true);
+    if (busy) return;
+    setBusy(`bulk:${action}`);
     setError('');
     setNotice('');
     try {
@@ -183,18 +198,17 @@ export default function SellerReturnsPage() {
         '/api/seller/returns/bulk',
         { method: 'POST', body, auth: true },
       );
-      setNotice(
-        `${result.updated} return(s) updated` +
-          (result.skipped.length > 0
-            ? ` · ${result.skipped.length} skipped (${result.skipped[0].reason})`
-            : ''),
-      );
+      const message =
+        `${result.updated} return(s) ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'marked received'}` +
+        (result.skipped.length > 0 ? ` · ${result.skipped.length} skipped (${result.skipped[0].reason})` : '');
+      setNotice(message);
+      (result.skipped.length > 0 || result.updated === 0 ? toast.error : toast.success)(message);
       setSelected(new Set());
       await Promise.all([loadList(), loadSummary()]);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Bulk action failed');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -364,24 +378,27 @@ export default function SellerReturnsPage() {
           <div className="flex flex-wrap items-center gap-2 border-x border-gray-100 bg-cream-50 px-3 py-2 text-xs">
             <span className="font-semibold text-ink-900">{selected.size} selected</span>
             <button
-              disabled={busy || selected.size === 0}
+              disabled={!!busy || selected.size === 0}
               onClick={() => void bulk('approve')}
               className="rounded-lg bg-ink-900 px-3 py-1.5 font-semibold text-white hover:bg-ink-800 disabled:opacity-50"
             >
+              {busy === 'bulk:approve' && <Spinner className="mr-1" />}
               ✅ Approve
             </button>
             <button
-              disabled={busy || selected.size === 0}
+              disabled={!!busy || selected.size === 0}
               onClick={() => void bulk('reject')}
               className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-semibold hover:bg-gray-50 disabled:opacity-50"
             >
+              {busy === 'bulk:reject' && <Spinner className="mr-1" />}
               ⊗ Reject
             </button>
             <button
-              disabled={busy || selected.size === 0}
+              disabled={!!busy || selected.size === 0}
               onClick={() => void bulk('received')}
               className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-semibold hover:bg-gray-50 disabled:opacity-50"
             >
+              {busy === 'bulk:received' && <Spinner className="mr-1" />}
               📦 Mark received &amp; refund
             </button>
           </div>
@@ -505,17 +522,17 @@ export default function SellerReturnsPage() {
                       <div className="flex flex-wrap items-center gap-1">
                         {row.canApprove && (
                           <button
-                            disabled={busy}
+                            disabled={!!busy}
                             onClick={() => void decide(row, 'approve')}
                             title="Approve"
                             className="rounded-lg bg-ink-900 px-2 py-1 text-white hover:bg-ink-800 disabled:opacity-40"
                           >
-                            ✓
+                            {busy === row.id ? <Spinner /> : '✓'}
                           </button>
                         )}
                         {row.canReject && (
                           <button
-                            disabled={busy}
+                            disabled={!!busy}
                             onClick={() => void decide(row, 'reject')}
                             title="Reject"
                             className="rounded-lg border border-gray-300 px-2 py-1 text-red-600 hover:bg-red-50 disabled:opacity-40"
@@ -525,12 +542,12 @@ export default function SellerReturnsPage() {
                         )}
                         {row.canMarkReceived && (
                           <button
-                            disabled={busy}
+                            disabled={!!busy}
                             onClick={() => void decide(row, 'received')}
                             title="Mark received & refund"
                             className="rounded-lg bg-brand-600 px-2 py-1 text-white hover:bg-brand-700 disabled:opacity-40"
                           >
-                            📦
+                            {busy === row.id ? <Spinner /> : '📦'}
                           </button>
                         )}
                         <Link

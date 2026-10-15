@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminUserRow } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { usePending } from '@/lib/usePending';
+import Spinner from '@/components/Spinner';
 
 const ROLES = ['ALL', 'CUSTOMER', 'SELLER', 'ADMIN'] as const;
 
@@ -11,6 +13,7 @@ export default function AdminUsersPage() {
   const [q, setQ] = useState('');
   const [role, setRole] = useState<string>('ALL');
   const [error, setError] = useState('');
+  const { run, isPending } = usePending();
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
@@ -34,16 +37,19 @@ export default function AdminUsersPage() {
     ) {
       return;
     }
-    try {
-      await api(`/api/admin/users/${user.id}`, {
-        method: 'PATCH',
-        body: { isActive: !user.isActive },
-        auth: true,
-      });
-      load();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
-    }
+    await run(user.id, async () => {
+      try {
+        await api(`/api/admin/users/${user.id}`, {
+          method: 'PATCH',
+          body: { isActive: !user.isActive },
+          auth: true,
+          success: user.isActive ? `${user.name ?? user.phone} blocked` : `${user.name ?? user.phone} unblocked`,
+        });
+        load();
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
+      }
+    });
   }
 
   return (
@@ -109,12 +115,15 @@ export default function AdminUsersPage() {
                   ) : (
                     <button
                       onClick={() => void toggleActive(u)}
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      disabled={isPending(u.id)}
+                      aria-busy={isPending(u.id)}
+                      className={`rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-50 ${
                         u.isActive
                           ? 'bg-red-50 text-red-600 hover:bg-red-100'
                           : 'bg-green-100 text-green-700 hover:bg-green-200'
                       }`}
                     >
+                      {isPending(u.id) && <Spinner className="mr-1" />}
                       {u.isActive ? 'Block' : 'Unblock'}
                     </button>
                   )}

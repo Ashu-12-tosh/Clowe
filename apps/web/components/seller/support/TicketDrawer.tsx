@@ -7,6 +7,7 @@ import {
   type TicketStatusValue,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 
 export const TICKET_STATUS_STYLES: Record<TicketStatusValue, string> = {
   OPEN: 'bg-yellow-100 text-yellow-700',
@@ -32,7 +33,8 @@ export default function TicketDrawer({
   const [ticket, setTicket] = useState<SupportTicketDetail | null>(null);
   const [reply, setReply] = useState('');
   const [rating, setRating] = useState(0);
-  const [busy, setBusy] = useState(false);
+  // 'send', 'close' or 'rate' while it runs.
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -55,14 +57,15 @@ export default function TicketDrawer({
   }, [onClose]);
 
   async function send() {
-    if (reply.trim().length === 0) return;
-    setBusy(true);
+    if (reply.trim().length === 0 || busy) return;
+    setBusy('send');
     setError('');
     try {
       await api(`/api/seller/support/tickets/${ticketId}/reply`, {
         method: 'POST',
         body: { body: reply.trim(), attachments: [] },
         auth: true,
+        success: 'Reply sent',
       });
       setReply('');
       await load();
@@ -70,39 +73,41 @@ export default function TicketDrawer({
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not send your reply');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function close() {
-    if (!confirm('Close this ticket? You can always open a new one.')) return;
-    setBusy(true);
+    if (!confirm('Close this ticket? You can always open a new one.') || busy) return;
+    setBusy('close');
     try {
-      await api(`/api/seller/support/tickets/${ticketId}/close`, { method: 'POST', auth: true });
+      await api(`/api/seller/support/tickets/${ticketId}/close`, { method: 'POST', auth: true, success: 'Ticket closed' });
       await load();
       onChanged();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not close the ticket');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function rate(value: number) {
+    if (busy) return;
     setRating(value);
-    setBusy(true);
+    setBusy('rate');
     try {
       await api(`/api/seller/support/tickets/${ticketId}/rating`, {
         method: 'POST',
         body: { rating: value },
         auth: true,
+        success: 'Thanks — rating saved',
       });
       await load();
       onChanged();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not save your rating');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -194,7 +199,7 @@ export default function TicketDrawer({
                     {[1, 2, 3, 4, 5].map((n) => (
                       <button
                         key={n}
-                        disabled={busy}
+                        disabled={!!busy}
                         onClick={() => void rate(n)}
                         className={`text-lg ${n <= rating ? 'text-brand-500' : 'text-gray-300'} hover:text-brand-500 disabled:opacity-50`}
                         aria-label={`Rate ${n} out of 5`}
@@ -224,17 +229,20 @@ export default function TicketDrawer({
                 <div className="mt-2 flex justify-between gap-2">
                   <button
                     onClick={() => void close()}
-                    disabled={busy}
+                    disabled={!!busy}
+                    aria-busy={busy === 'close'}
                     className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-semibold hover:bg-gray-50 disabled:opacity-50"
                   >
+                    {busy === 'close' && <Spinner className="mr-1" />}
                     Close ticket
                   </button>
                   <button
                     onClick={() => void send()}
-                    disabled={busy || reply.trim().length === 0}
+                    disabled={!!busy || reply.trim().length === 0}
+                    aria-busy={busy === 'send'}
                     className="rounded-lg bg-ink-900 px-5 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                   >
-                    {busy ? 'Sending…' : 'Send reply'}
+                    {busy === 'send' ? <><Spinner className="mr-1" />Sending…</> : 'Send reply'}
                   </button>
                 </div>
               </div>

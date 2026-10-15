@@ -16,6 +16,8 @@ import {
   type SellerPaymentFilter,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import { StatusPill } from '@/components/seller/orders/StatusPill';
 import { BookingConfirm } from '@/components/seller/orders/BookingConfirm';
@@ -77,7 +79,8 @@ export default function SellerOrdersPage() {
   const [data, setData] = useState<SellerOrderPage | null>(null);
   const [summary, setSummary] = useState<SellerOrderSummary | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [busy, setBusy] = useState(false);
+  // The bulk action running ('pack', 'ship', 'deliver'), so its button shows it.
+  const [busy, setBusy] = useState<string | null>(null);
   /** Lines waiting on the seller to confirm Delhivery's estimate. */
   const [booking, setBooking] = useState<string[] | null>(null);
   const [error, setError] = useState('');
@@ -161,18 +164,20 @@ export default function SellerOrdersPage() {
   async function reportBulk(action: 'assign' | 'pack' | 'ship' | 'deliver', result: SellerOrderBulkResult) {
     // Every distinct reason, so "3 skipped" says why for each kind of item.
     const reasons = [...new Set(result.skipped.map((s) => s.reason))];
-    setNoticeWarn(result.updated === 0 || result.skipped.length > 0);
-    setNotice(
-      `${result.updated} item(s) ${action === 'assign' ? 'booked with Delhivery — labels now carry the AWB' : 'updated'}` +
-        (result.skipped.length > 0 ? ` · ${result.skipped.length} skipped: ${reasons.join('; ')}` : ''),
-    );
+    const warn = result.updated === 0 || result.skipped.length > 0;
+    const message =
+      `${result.updated} item(s) ${action === 'assign' ? 'booked with Delhivery — labels now carry the AWB' : action === 'pack' ? 'marked packed' : action === 'ship' ? 'shipped' : 'marked delivered'}` +
+      (result.skipped.length > 0 ? ` · ${result.skipped.length} skipped: ${reasons.join('; ')}` : '');
+    setNoticeWarn(warn);
+    setNotice(message);
+    (warn ? toast.error : toast.success)(message);
     setSelected(new Set());
     await Promise.all([loadOrders(), loadSummary()]);
   }
 
   async function runBulk(action: 'pack' | 'ship' | 'deliver') {
-    if (selectedItemIds.length === 0) return;
-    setBusy(true);
+    if (selectedItemIds.length === 0 || busy) return;
+    setBusy(action);
     setError('');
     setNotice('');
     try {
@@ -185,7 +190,7 @@ export default function SellerOrdersPage() {
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Bulk action failed');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -358,7 +363,7 @@ export default function SellerOrdersPage() {
               {selected.size} order(s) · {selectedItemIds.length} item(s) selected
             </span>
             <button
-              disabled={busy || selectedItemIds.length === 0}
+              disabled={!!busy || selectedItemIds.length === 0}
               onClick={() => setBooking(selectedItemIds)}
               title="Book with Delhivery now (one parcel per order), so the labels you print carry the AWB"
               className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-semibold hover:bg-gray-50 disabled:opacity-50"
@@ -366,24 +371,30 @@ export default function SellerOrdersPage() {
               🏷 Book with Delhivery
             </button>
             <button
-              disabled={busy || selectedItemIds.length === 0}
+              disabled={!!busy || selectedItemIds.length === 0}
               onClick={() => void runBulk('pack')}
+              aria-busy={busy === 'pack'}
               className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-semibold hover:bg-gray-50 disabled:opacity-50"
             >
+              {busy === 'pack' && <Spinner className="mr-1" />}
               📦 Mark packed
             </button>
             <button
-              disabled={busy || selectedItemIds.length === 0}
+              disabled={!!busy || selectedItemIds.length === 0}
               onClick={() => void runBulk('ship')}
+              aria-busy={busy === 'ship'}
               className="rounded-lg bg-ink-900 px-3 py-1.5 font-semibold text-white hover:bg-ink-800 disabled:opacity-50"
             >
+              {busy === 'ship' && <Spinner className="mr-1" />}
               🚚 Ship
             </button>
             <button
-              disabled={busy || selectedItemIds.length === 0}
+              disabled={!!busy || selectedItemIds.length === 0}
               onClick={() => void runBulk('deliver')}
+              aria-busy={busy === 'deliver'}
               className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-semibold hover:bg-gray-50 disabled:opacity-50"
             >
+              {busy === 'deliver' && <Spinner className="mr-1" />}
               ✓ Mark delivered
             </button>
           </div>
@@ -648,7 +659,7 @@ export default function SellerOrdersPage() {
               <li>
                 <button
                   type="button"
-                  disabled={busy || selectedItemIds.length === 0}
+                  disabled={!!busy || selectedItemIds.length === 0}
                   onClick={() => setBooking(selectedItemIds)}
                   className="text-left disabled:cursor-not-allowed disabled:opacity-50"
                 >

@@ -13,6 +13,7 @@ import {
   type InboxThread,
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadImages } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 import { ExternalLink } from '@/components/ExternalLink';
 
 /** How often a visible tab asks for new messages. */
@@ -80,6 +81,7 @@ export default function AdminSupportInboxPage() {
   const [attachments, setAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
   const [actionError, setActionError] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastCount = useRef(0);
@@ -149,7 +151,7 @@ export default function AdminSupportInboxPage() {
   const base = open ? (open.kind === 'SELLER' ? `/api/admin/support/${open.id}` : `/api/admin/support-desk/${open.id}`) : '';
 
   async function send() {
-    if (!open || (!reply.trim() && attachments.length === 0)) return;
+    if (!open || (!reply.trim() && attachments.length === 0) || sending) return;
     setSending(true);
     setActionError('');
     try {
@@ -161,6 +163,7 @@ export default function AdminSupportInboxPage() {
           ...(open.kind === 'CUSTOMER' ? { isInternal: internal } : {}),
         },
         auth: true,
+        success: open.kind === 'CUSTOMER' && internal ? 'Internal note added' : 'Reply sent',
       });
       setReply('');
       setAttachments([]);
@@ -173,13 +176,16 @@ export default function AdminSupportInboxPage() {
   }
 
   async function changeStatus(next: InboxStatus) {
-    if (!open) return;
+    if (!open || changingStatus) return;
     setActionError('');
+    setChangingStatus(true);
     try {
-      await api(base, { method: 'PATCH', body: { status: next }, auth: true });
+      await api(base, { method: 'PATCH', body: { status: next }, auth: true, success: `Status: ${INBOX_STATUS_LABELS[next]}` });
       await Promise.all([loadThread(), loadList()]);
     } catch (err) {
       setActionError(err instanceof ApiRequestError ? err.message : 'Could not change the status');
+    } finally {
+      setChangingStatus(false);
     }
   }
 
@@ -354,6 +360,8 @@ export default function AdminSupportInboxPage() {
                 <select
                   value={row.status}
                   onChange={(e) => void changeStatus(e.target.value as InboxStatus)}
+                  disabled={changingStatus}
+                  aria-busy={changingStatus}
                   aria-label="Status"
                   className="max-w-[9.5rem] rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs outline-none"
                 >
@@ -468,9 +476,11 @@ export default function AdminSupportInboxPage() {
                   type="button"
                   onClick={() => void send()}
                   disabled={sending || (!reply.trim() && attachments.length === 0)}
+                  aria-busy={sending}
+                  data-action="send-reply"
                   className="h-9 shrink-0 rounded-full bg-brand-600 px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-700 disabled:opacity-50"
                 >
-                  {sending ? '…' : 'Send'}
+                  {sending ? <><Spinner className="mr-1" />Sending…</> : 'Send'}
                 </button>
               </div>
               {open.kind === 'CUSTOMER' && (

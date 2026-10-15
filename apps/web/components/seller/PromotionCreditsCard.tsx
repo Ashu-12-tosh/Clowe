@@ -8,6 +8,8 @@ import {
   type PromotionCreditSettleResult,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import { LedgerPanel } from '@/components/seller/payouts/LedgerPanel';
 
@@ -47,8 +49,10 @@ export default function PromotionCreditsCard() {
     const amountPaise = Math.round(Number(rupees) * 100);
     if (!Number.isFinite(amountPaise) || amountPaise < PROMOTION_CREDIT_MIN_PAISE) {
       setError(`Minimum top-up is ${formatPaise(PROMOTION_CREDIT_MIN_PAISE)}`);
+      toast.error(`Minimum top-up is ${formatPaise(PROMOTION_CREDIT_MIN_PAISE)}`);
       return;
     }
+    if (busy) return;
     setBusy(true);
     try {
       setPending(
@@ -65,7 +69,7 @@ export default function PromotionCreditsCard() {
   }
 
   async function settle(outcome: 'success' | 'failure') {
-    if (!pending) return;
+    if (!pending || busy) return;
     setBusy(true);
     try {
       const result = await api<PromotionCreditSettleResult>(
@@ -75,9 +79,11 @@ export default function PromotionCreditsCard() {
       setPending(null);
       if (result.status === 'PAID') {
         setNotice(`${formatPaise(pending.amountPaise)} added to your promotion balance`);
+        toast.success(`Paid — ${formatPaise(pending.amountPaise)} added to your promotion balance`);
         setRefresh((n) => n + 1);
       } else {
         setError('Payment failed — nothing was added.');
+        toast.error('Payment failed — nothing was added');
       }
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not complete the payment');
@@ -141,7 +147,7 @@ export default function PromotionCreditsCard() {
               disabled={busy}
               className="rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
             >
-              {busy ? 'Starting…' : 'Add credits'}
+              {busy ? <><Spinner className="mr-1" />Starting…</> : 'Add credits'}
             </button>
           </div>
         ) : (
@@ -156,8 +162,11 @@ export default function PromotionCreditsCard() {
               <button
                 onClick={() => void settle('success')}
                 disabled={busy}
+                aria-busy={busy}
+                data-action="pay-credits"
                 className="rounded-lg bg-green-600 px-3 py-1.5 font-bold text-white hover:bg-green-700 disabled:opacity-50"
               >
+                {busy && <Spinner className="mr-1" />}
                 Pay now
               </button>
               <button

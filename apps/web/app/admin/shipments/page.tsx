@@ -8,6 +8,8 @@ import {
   type AdminShipmentPage,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
 const STATUS_TONE: Record<string, string> = {
@@ -45,10 +47,11 @@ export default function AdminShipmentsPage() {
   useEffect(load, [load]);
 
   async function run(id: string, path: string, body: unknown, done: string) {
-    setBusy(id);
+    if (busy) return;
+    setBusy(`${id}:${path}`);
     setError('');
     try {
-      await api(`/api/admin/orders/shipments/${id}/${path}`, { method: 'POST', body, auth: true });
+      await api(`/api/admin/orders/shipments/${id}/${path}`, { method: 'POST', body, auth: true, success: done });
       setNotice(done);
       load();
     } catch (err) {
@@ -138,8 +141,10 @@ export default function AdminShipmentsPage() {
                       type="button"
                       disabled={busy !== null}
                       onClick={() => void run(s.id, 'refresh', undefined, `Asked Delhivery about ${s.awbNumber}.`)}
+                      aria-busy={busy === `${s.id}:refresh`}
                       className="rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] font-semibold hover:bg-gray-50 disabled:opacity-50"
                     >
+                      {busy === `${s.id}:refresh` && <Spinner className="mr-1" />}
                       Refresh
                     </button>
                   )}
@@ -148,8 +153,10 @@ export default function AdminShipmentsPage() {
                       type="button"
                       disabled={busy !== null}
                       onClick={() => void run(s.id, 'ndr', { action: 'RE_ATTEMPT' }, `Asked Delhivery to try ${s.awbNumber} again.`)}
+                      aria-busy={busy === `${s.id}:ndr`}
                       className="ml-1 rounded-lg bg-ink-900 px-2 py-0.5 text-[11px] font-semibold text-white disabled:opacity-50"
                     >
+                      {busy === `${s.id}:ndr` && <Spinner className="mr-1" />}
                       Try again
                     </button>
                   )}

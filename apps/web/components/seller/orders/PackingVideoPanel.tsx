@@ -9,6 +9,7 @@ import {
   type PackingVideoView,
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadVideo } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 
 type Stage = 'idle' | 'starting' | 'live' | 'recording' | 'review' | 'uploading';
 
@@ -170,7 +171,7 @@ export function PackingVideoPanel({
   }
 
   async function saveTake() {
-    if (!take) return;
+    if (!take || stage === 'uploading') return;
     setStage('uploading');
     setError('');
     try {
@@ -180,6 +181,7 @@ export function PackingVideoPanel({
         method: 'POST',
         body: { ref: uploaded.ref },
         auth: true,
+        success: 'Packing video saved',
       });
       setTake(null);
       setStage('idle');
@@ -258,7 +260,7 @@ export function PackingVideoPanel({
           </p>
           <div className="mt-2 flex gap-2">
             <button type="button" onClick={() => void saveTake()} disabled={stage === 'uploading'} className={`${button} bg-brand-600 text-white hover:bg-brand-700`}>
-              {stage === 'uploading' ? 'Saving…' : 'Use this video'}
+              {stage === 'uploading' ? <><Spinner className="mr-1" />Saving…</> : 'Use this video'}
             </button>
             <button type="button" onClick={retake} disabled={stage === 'uploading'} className={`${button} border border-gray-300 bg-white hover:bg-gray-50`}>
               Retake

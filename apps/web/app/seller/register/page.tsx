@@ -10,6 +10,10 @@ import {
   type SellerRegisterInput,
 } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser, refreshSession, saveSession } from '@/lib/api';
+import { issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
+import { toast } from '@/lib/toast';
+import FieldError from '@/components/FieldError';
+import Spinner from '@/components/Spinner';
 import { bankNameFromIfsc } from '@clowe/shared';
 import { useSeller } from '@/components/seller/SellerContext';
 import ResendOtp from '@/components/auth/ResendOtp';
@@ -22,6 +26,7 @@ export default function SellerRegisterPage() {
   const { state, reload } = useSeller();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const { errors: fieldErrors, show: showFieldErrors, fromError } = useFieldErrors();
 
   // Guest flow: application details are held while the phone is verified.
   const [step, setStep] = useState<'form' | 'otp'>('form');
@@ -45,7 +50,8 @@ export default function SellerRegisterPage() {
   /** Create the seller profile for the logged-in session, then open the dashboard. */
   async function submitProfile(input: SellerRegisterInput) {
     try {
-      await api('/api/seller/register', { body: input, auth: true });
+      // Quiet: "already registered" just opens the dashboard; anything else is reported by the caller.
+      await api('/api/seller/register', { body: input, auth: true, quiet: true, success: 'Application submitted — we’ll review it shortly' });
     } catch (err) {
       // Phone already has a seller account → just take them to their dashboard.
       if (!(err instanceof ApiRequestError && err.code === 'ALREADY_REGISTERED')) throw err;
@@ -67,11 +73,13 @@ export default function SellerRegisterPage() {
     ) as Record<string, string>;
 
     const parsed = sellerRegisterSchema.safeParse(raw);
-    if (!parsed.success) {
-      const issue = parsed.error.issues[0];
-      setError(`${issue.path.join('.')}: ${issue.message}`);
+    const problems = parsed.success ? {} : issuesToFieldErrors(parsed.error.issues);
+    if (!loggedIn && !/^[6-9]\d{9}$/.test(enteredPhone)) problems.phone = 'Enter a valid 10-digit mobile number';
+    if (showFieldErrors(problems)) {
+      toast.error('Not submitted: fix the fields marked in red');
       return;
     }
+    if (!parsed.success || busy) return;
 
     setBusy(true);
     try {
@@ -95,7 +103,10 @@ export default function SellerRegisterPage() {
       setPendingApplication(parsed.data);
       setStep('otp');
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
+      fromError(err);
+      const message = err instanceof ApiRequestError ? err.message : 'Could not reach the API';
+      setError(message);
+      toast.error(`Not submitted: ${message}`);
     } finally {
       setBusy(false);
     }
@@ -103,6 +114,7 @@ export default function SellerRegisterPage() {
 
   /** OTP verified → login/create the account, then attach the seller profile. */
   async function verifyAndRegister() {
+    if (busy) return;
     setError('');
     setBusy(true);
     try {
@@ -112,7 +124,9 @@ export default function SellerRegisterPage() {
       saveSession(data);
       await submitProfile(pendingApplication!);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
+      const message = err instanceof ApiRequestError ? err.message : 'Could not reach the API';
+      setError(message);
+      toast.error(message);
       setBusy(false);
     }
   }
@@ -161,7 +175,7 @@ export default function SellerRegisterPage() {
             disabled={busy || code.length !== 6}
             className="w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
           >
-            {busy ? 'Verifying…' : 'Verify & Submit application'}
+            {busy ? <><Spinner className="mr-1" />Verifying…</> : 'Verify & Submit application'}
           </button>
           <ResendOtp
             key={otpSent?.n ?? 0}
@@ -215,15 +229,18 @@ export default function SellerRegisterPage() {
                 className="w-full px-3 py-2 text-sm outline-none"
               />
             </div>
+            <FieldError message={fieldErrors.phone} />
           </div>
         )}
         <div>
           <label className="text-sm font-medium">Shop name *</label>
           <input name="shopName" required minLength={3} className={`mt-1 ${field}`} placeholder="e.g. Ashu Electronics" />
+          <FieldError message={fieldErrors.shopName} />
         </div>
         <div>
           <label className="text-sm font-medium">About your shop</label>
           <textarea name="description" rows={2} className={`mt-1 ${field}`} placeholder="What do you sell?" />
+          <FieldError message={fieldErrors.description} />
         </div>
         <div>
           <label className="text-sm font-medium">Seller referral code (optional)</label>
@@ -233,6 +250,7 @@ export default function SellerRegisterPage() {
             className={`mt-1 ${field} uppercase`}
             placeholder="SLR-XXXXXX"
           />
+          <FieldError message={fieldErrors.referralCode} />
           <p className="mt-1 text-xs text-gray-400">
             Got a code from another Clowe seller? They earn a bonus when your shop takes off.
           </p>
@@ -241,13 +259,26 @@ export default function SellerRegisterPage() {
         <fieldset className="rounded-lg border border-gray-200 p-4">
           <legend className="px-1 text-sm font-semibold text-gray-700">KYC (optional in dev)</legend>
           <div className="grid gap-3 sm:grid-cols-2">
-            <input name="gstNumber" className={field} placeholder="GST number" />
-            <input name="panNumber" className={field} placeholder="PAN number" />
-            <input name="bankAccountName" className={field} placeholder="Bank account name" />
-            <input name="bankAccountNo" className={field} placeholder="Bank account number" />
+            <div>
+              <input name="gstNumber" className={`w-full ${field}`} placeholder="GST number" />
+              <FieldError message={fieldErrors.gstNumber} />
+            </div>
+            <div>
+              <input name="panNumber" className={`w-full ${field}`} placeholder="PAN number" />
+              <FieldError message={fieldErrors.panNumber} />
+            </div>
+            <div>
+              <input name="bankAccountName" className={`w-full ${field}`} placeholder="Bank account name" />
+              <FieldError message={fieldErrors.bankAccountName} />
+            </div>
+            <div>
+              <input name="bankAccountNo" className={`w-full ${field}`} placeholder="Bank account number" />
+              <FieldError message={fieldErrors.bankAccountNo} />
+            </div>
+            <div>
             <input
               name="bankIfsc"
-              className={field}
+              className={`w-full ${field}`}
               placeholder="IFSC code"
               onChange={(e) => {
                 // The IFSC names the bank; fill it in unless the seller already has.
@@ -255,9 +286,12 @@ export default function SellerRegisterPage() {
                 setBankName(bankNameFromIfsc(e.target.value) ?? '');
               }}
             />
+            <FieldError message={fieldErrors.bankIfsc} />
+            </div>
+            <div>
             <input
               name="bankName"
-              className={field}
+              className={`w-full ${field}`}
               placeholder="Bank name"
               value={bankName}
               onChange={(e) => {
@@ -265,16 +299,30 @@ export default function SellerRegisterPage() {
                 setBankName(e.target.value);
               }}
             />
+            <FieldError message={fieldErrors.bankName} />
+            </div>
           </div>
         </fieldset>
 
         <fieldset className="rounded-lg border border-gray-200 p-4">
           <legend className="px-1 text-sm font-semibold text-gray-700">Pickup address</legend>
           <div className="grid gap-3 sm:grid-cols-2">
-            <input name="addressLine1" className={`sm:col-span-2 ${field}`} placeholder="Address line" />
-            <input name="city" className={field} placeholder="City" />
-            <input name="state" className={field} placeholder="State" />
-            <input name="pincode" className={field} placeholder="Pincode (6 digits)" />
+            <div className="sm:col-span-2">
+              <input name="addressLine1" className={`w-full ${field}`} placeholder="Address line" />
+              <FieldError message={fieldErrors.addressLine1} />
+            </div>
+            <div>
+              <input name="city" className={`w-full ${field}`} placeholder="City" />
+              <FieldError message={fieldErrors.city} />
+            </div>
+            <div>
+              <input name="state" className={`w-full ${field}`} placeholder="State" />
+              <FieldError message={fieldErrors.state} />
+            </div>
+            <div>
+              <input name="pincode" className={`w-full ${field}`} placeholder="Pincode (6 digits)" />
+              <FieldError message={fieldErrors.pincode} />
+            </div>
           </div>
         </fieldset>
 
@@ -283,7 +331,7 @@ export default function SellerRegisterPage() {
           disabled={busy}
           className="w-full rounded-lg bg-brand-600 py-2.5 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
         >
-          {busy ? 'Submitting…' : loggedIn ? 'Submit application' : 'Send OTP & Submit'}
+          {busy ? <><Spinner className="mr-1" />Submitting…</> : loggedIn ? 'Submit application' : 'Send OTP & Submit'}
         </button>
       </form>
     </main>

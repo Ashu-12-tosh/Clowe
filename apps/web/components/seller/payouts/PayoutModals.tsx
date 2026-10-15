@@ -8,8 +8,13 @@ import {
   type SellerPayoutDetail,
   type SellerPayoutMethodRow,
   type SellerPayoutRow,
+  payoutMethodCreateSchema,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
+import { toast } from '@/lib/toast';
+import FieldError from '@/components/FieldError';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
 export const PAYOUT_STATUS_STYLES: Record<PayoutStatusValue, string> = {
@@ -49,27 +54,38 @@ export function AddMethodModal({
   const [upiId, setUpiId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const { errors: fieldErrors, show: showFieldErrors, fromError } = useFieldErrors();
 
   async function save() {
-    setBusy(true);
+    if (busy) return;
     setError('');
+    const body = {
+      type,
+      label: label.trim(),
+      accountName: accountName.trim(),
+      ...(type === 'BANK'
+        ? { accountNumber: accountNumber.trim(), ifsc: ifsc.trim().toUpperCase() }
+        : { upiId: upiId.trim() }),
+      makeDefault: true,
+    };
+    // The API's own rules, checked first, so each mistake shows by its field.
+    const checked = payoutMethodCreateSchema.safeParse(body);
+    if (showFieldErrors(checked.success ? {} : issuesToFieldErrors(checked.error.issues))) {
+      toast.error('Not saved: fix the fields marked in red');
+      return;
+    }
+    setBusy(true);
     try {
       const method = await api<SellerPayoutMethodRow>('/api/seller/payouts/methods', {
         method: 'POST',
-        body: {
-          type,
-          label: label.trim(),
-          accountName: accountName.trim(),
-          ...(type === 'BANK'
-            ? { accountNumber: accountNumber.trim(), ifsc: ifsc.trim().toUpperCase() }
-            : { upiId: upiId.trim() }),
-          makeDefault: true,
-        },
+        body,
         auth: true,
+        success: 'Payout method verified and saved',
       });
       onSaved(method);
       onClose();
     } catch (err) {
+      fromError(err);
       setError(err instanceof ApiRequestError ? err.message : 'Could not save this method');
     } finally {
       setBusy(false);
@@ -118,17 +134,21 @@ export function AddMethodModal({
             </label>
             <input
               value={label}
+              name="label"
               onChange={(e) => setLabel(e.target.value)}
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600"
             />
+            <FieldError message={fieldErrors.label} />
           </div>
           <div>
             <label className="text-xs font-semibold text-gray-500">Account holder name</label>
             <input
               value={accountName}
+              name="accountName"
               onChange={(e) => setAccountName(e.target.value)}
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600"
             />
+            <FieldError message={fieldErrors.accountName} />
           </div>
           {type === 'BANK' ? (
             <div className="grid grid-cols-2 gap-3">
@@ -136,19 +156,23 @@ export function AddMethodModal({
                 <label className="text-xs font-semibold text-gray-500">Account number</label>
                 <input
                   value={accountNumber}
+                  name="accountNumber"
                   onChange={(e) => setAccountNumber(e.target.value)}
                   inputMode="numeric"
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600"
                 />
+                <FieldError message={fieldErrors.accountNumber} />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-500">IFSC</label>
                 <input
                   value={ifsc}
+                  name="ifsc"
                   onChange={(e) => setIfsc(e.target.value.toUpperCase())}
                   placeholder="HDFC0001234"
                   className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase outline-none focus:border-brand-600"
                 />
+                <FieldError message={fieldErrors.ifsc} />
               </div>
             </div>
           ) : (
@@ -156,10 +180,12 @@ export function AddMethodModal({
               <label className="text-xs font-semibold text-gray-500">UPI ID</label>
               <input
                 value={upiId}
+                name="upiId"
                 onChange={(e) => setUpiId(e.target.value)}
                 placeholder="shopname@okhdfcbank"
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600"
               />
+              <FieldError message={fieldErrors.upiId} />
             </div>
           )}
         </div>
@@ -176,7 +202,7 @@ export function AddMethodModal({
             disabled={busy}
             className="rounded-lg bg-ink-900 px-5 py-2 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
           >
-            {busy ? 'Verifying…' : 'Verify & save'}
+            {busy ? <><Spinner className="mr-1" />Verifying…</> : 'Verify & save'}
           </button>
         </div>
       </div>

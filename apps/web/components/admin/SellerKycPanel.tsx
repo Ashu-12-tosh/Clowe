@@ -11,6 +11,7 @@ import {
   type SellerKycSummary,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 
 const STATE_STYLES: Record<KycCheckState, string> = {
   VERIFIED: 'bg-green-100 text-green-700',
@@ -86,6 +87,7 @@ export default function SellerKycPanel({
   const onMock = checks.some((c) => c.provider === 'mock');
 
   async function rerun(check: KycCheckView['check']) {
+    if (running) return;
     setRunning(check);
     setError('');
     try {
@@ -93,6 +95,7 @@ export default function SellerKycPanel({
         method: 'POST',
         body: { check },
         auth: true,
+        success: `${KYC_CHECK_LABELS[check]} check done — the result is below`,
       });
       await onChanged();
     } catch (err) {
@@ -149,8 +152,10 @@ export default function SellerKycPanel({
                   <button
                     onClick={() => void rerun(view.check)}
                     disabled={running !== null}
+                    aria-busy={running === view.check}
                     className="rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] font-semibold hover:bg-gray-50 disabled:opacity-50"
                   >
+                    {running === view.check && <Spinner className="mr-1" />}
                     {running === view.check ? 'Checking…' : view.state === 'ERROR' ? 'Retry' : 'Run check'}
                   </button>
                 )}

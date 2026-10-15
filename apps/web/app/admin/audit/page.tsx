@@ -15,6 +15,8 @@ import {
   type AuditTab,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { DonutChart, LineChart } from '@/components/charts/Charts';
 
 const SEVERITY_STYLES: Record<AuditSeverityValue, string> = {
@@ -133,7 +135,8 @@ export default function AdminAuditPage() {
   const [openLog, setOpenLog] = useState<AuditLogRow | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [busy, setBusy] = useState(false);
+  // 'retention', 'purge' or 'export' while it runs.
+  const [busy, setBusy] = useState<string | null>(null);
 
   const query = useMemo(() => {
     const p = new URLSearchParams({ tab, from, to });
@@ -187,21 +190,23 @@ export default function AdminAuditPage() {
     const days = Math.round(Number(input));
     if (!Number.isFinite(days) || days < 30 || days > 3650) {
       setError('Retention must be between 30 and 3650 days');
+      toast.error('Not saved: retention must be between 30 and 3650 days');
       return;
     }
-    setBusy(true);
+    setBusy('retention');
     try {
       await api('/api/admin/audit/retention', {
         method: 'PUT',
         body: { retentionDays: days },
         auth: true,
+        success: `Retention set to ${days} days`,
       });
       setNotice(`Retention set to ${days} days.`);
       await Promise.all([loadSummary(), loadList()]);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not save retention');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -214,18 +219,19 @@ export default function AdminAuditPage() {
     if (!confirm(`Permanently delete ${count} audit entries older than the retention window?`)) {
       return;
     }
-    setBusy(true);
+    setBusy('purge');
     try {
       const result = await api<{ purged: number }>('/api/admin/audit/purge', {
         method: 'POST',
         auth: true,
       });
       setNotice(`Purged ${result.purged} entries.`);
+      toast.success(`Purged ${result.purged} entries`);
       await Promise.all([loadSummary(), loadList()]);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Purge failed');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -246,25 +252,36 @@ export default function AdminAuditPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() =>
-              void downloadFile(`/api/admin/audit/export?${query}`, 'clowe-audit-log.csv').catch(
-                () => setError('Export failed'),
-              )
-            }
-            className="rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-semibold hover:bg-gray-50"
+            onClick={() => {
+              if (busy) return;
+              setBusy('export');
+              void downloadFile(`/api/admin/audit/export?${query}`, 'clowe-audit-log.csv')
+                .then(() => toast.success('Audit report downloaded'))
+                .catch(() => {
+                  setError('Export failed');
+                  toast.error('Export failed — try again');
+                })
+                .finally(() => setBusy(null));
+            }}
+            disabled={!!busy}
+            aria-busy={busy === 'export'}
+            className="rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-semibold hover:bg-gray-50 disabled:opacity-50"
           >
-            ⬇ Export report
+            {busy === 'export' ? <><Spinner className="mr-1" />Exporting…</> : '⬇ Export report'}
           </button>
           <button
             onClick={() => void setRetention()}
-            disabled={busy}
+            disabled={!!busy}
+            aria-busy={busy === 'retention'}
             className="rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-semibold hover:bg-gray-50 disabled:opacity-50"
           >
+            {busy === 'retention' && <Spinner className="mr-1" />}
             ⚙ Retention policy
           </button>
           <button
             onClick={() => void purge()}
-            disabled={busy || !summary?.retention.purgeableCount}
+            disabled={!!busy || !summary?.retention.purgeableCount}
+            aria-busy={busy === 'purge'}
             title={
               summary?.retention.purgeableCount
                 ? `${summary.retention.purgeableCount} entries are past retention`
@@ -272,6 +289,7 @@ export default function AdminAuditPage() {
             }
             className="rounded-lg bg-ink-900 px-3.5 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-40"
           >
+            {busy === 'purge' && <Spinner className="mr-1" />}
             Purge old entries
           </button>
         </div>

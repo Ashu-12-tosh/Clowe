@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AdminDealRow, AdminProductRow } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { usePending } from '@/lib/usePending';
+import Spinner from '@/components/Spinner';
 
 const field =
   'rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -31,6 +33,7 @@ export default function AdminDealsPage() {
   const [filter, setFilter] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const { run, isPending } = usePending();
 
   const load = useCallback(() => {
     api<AdminDealRow[]>('/api/admin/deals', { auth: true })
@@ -52,6 +55,7 @@ export default function AdminDealsPage() {
 
   async function createDeal(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setError('');
     setBusy(true);
     try {
@@ -63,6 +67,7 @@ export default function AdminDealsPage() {
           productIds: [...picked],
         },
         auth: true,
+        success: 'Deal created',
       });
       setShowForm(false);
       setPicked(new Set());
@@ -75,22 +80,31 @@ export default function AdminDealsPage() {
   }
 
   async function patch(id: string, body: Record<string, unknown>) {
-    try {
-      await api(`/api/admin/deals/${id}`, { method: 'PATCH', body, auth: true });
-      load();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
-    }
+    await run(id, async () => {
+      try {
+        await api(`/api/admin/deals/${id}`, {
+          method: 'PATCH',
+          body,
+          auth: true,
+          success: 'isActive' in body ? `Deal ${body.isActive ? 'activated' : 'deactivated'}` : 'Deal saved',
+        });
+        load();
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
+      }
+    });
   }
 
   async function remove(id: string) {
     if (!window.confirm('Delete this deal?')) return;
-    try {
-      await api(`/api/admin/deals/${id}`, { method: 'DELETE', auth: true });
-      load();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
-    }
+    await run(id, async () => {
+      try {
+        await api(`/api/admin/deals/${id}`, { method: 'DELETE', auth: true, success: 'Deal deleted' });
+        load();
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
+      }
+    });
   }
 
   return (
@@ -163,9 +177,10 @@ export default function AdminDealsPage() {
           <div className="mt-3 flex gap-2">
             <button
               disabled={busy || picked.size === 0}
+              aria-busy={busy}
               className="rounded-lg bg-ink-900 px-5 py-2 text-sm font-bold uppercase tracking-wide text-white disabled:opacity-50"
             >
-              Create deal
+              {busy ? <><Spinner className="mr-1" />Creating…</> : 'Create deal'}
             </button>
             <button type="button" onClick={() => setShowForm(false)} className="text-sm text-gray-500 hover:underline">
               Cancel
@@ -189,11 +204,18 @@ export default function AdminDealsPage() {
               <span className="ml-auto flex items-center gap-3 text-xs font-semibold">
                 <button
                   onClick={() => void patch(deal.id, { isActive: !deal.isActive })}
-                  className={deal.isActive ? 'text-gray-500 hover:underline' : 'text-green-600 hover:underline'}
+                  disabled={isPending(deal.id)}
+                  aria-busy={isPending(deal.id)}
+                  className={`disabled:opacity-50 ${deal.isActive ? 'text-gray-500 hover:underline' : 'text-green-600 hover:underline'}`}
                 >
+                  {isPending(deal.id) && <Spinner className="mr-1" />}
                   {deal.isActive ? 'Deactivate' : 'Activate'}
                 </button>
-                <button onClick={() => void remove(deal.id)} className="text-red-500 hover:underline">
+                <button
+                  onClick={() => void remove(deal.id)}
+                  disabled={isPending(deal.id)}
+                  className="text-red-500 hover:underline disabled:opacity-50"
+                >
                   Delete
                 </button>
               </span>

@@ -28,6 +28,10 @@ import {
   type VariantAxis,
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadImages } from '@/lib/api';
+import { issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
+import { toast } from '@/lib/toast';
+import FieldError from '@/components/FieldError';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import { PricingBreakdown, loadRates } from '@/components/seller/PricingBreakdown';
 import VariantGrid from '@/components/seller/VariantGrid';
@@ -47,6 +51,28 @@ const STEPS = [
 type StepKey = (typeof STEPS)[number]['key'];
 
 const MAX_IMAGES = 8;
+
+/** The step each part of the payload is edited on, so a problem opens the right one. */
+const FIELD_STEP: Record<string, StepKey> = {
+  title: 'BASIC',
+  brand: 'BASIC',
+  shortDescription: 'BASIC',
+  description: 'BASIC',
+  categoryId: 'CATEGORY',
+  attributes: 'CATEGORY',
+  highlights: 'CATEGORY',
+  imageUrls: 'MEDIA',
+  videoUrl: 'MEDIA',
+  variants: 'VARIANTS',
+  lowStockAlert: 'INVENTORY',
+  weightGrams: 'SHIPPING',
+  lengthMm: 'SHIPPING',
+  widthMm: 'SHIPPING',
+  heightMm: 'SHIPPING',
+  metaTitle: 'SHIPPING',
+  metaDescription: 'SHIPPING',
+  tags: 'SHIPPING',
+};
 /** Per variant; the API caps this too. */
 const MAX_VARIANT_IMAGES = 6;
 /** The API's cap on variants per listing. */
@@ -233,7 +259,10 @@ export default function ProductForm({ initial }: Props) {
 
   const [aiBusy, setAiBusy] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Which button was pressed, so it is the one that says "Saving…".
+  const [savingMode, setSavingMode] = useState<ProductSaveMode | null>(null);
   const [error, setError] = useState('');
+  const { errors: fieldErrors, show: showFieldErrors, fromError } = useFieldErrors();
   const [notice, setNotice] = useState('');
 
   useEffect(() => {
@@ -546,57 +575,85 @@ export default function ProductForm({ initial }: Props) {
     return null;
   }
 
+  /** Say why it wasn't saved — on the page, in a toast — and open the step to fix it on. */
+  function refuse(message: string, step?: StepKey) {
+    setError(message);
+    toast.error(`Not saved: ${message}`);
+    if (step) setStep(step);
+  }
+
   async function save(mode: ProductSaveMode) {
+    if (busy) return;
     setError('');
     setNotice('');
+    showFieldErrors({});
 
     // A live listing's price-only save needs no parcel; the API says so when
     // its edit goes to review. Everything else sent to review needs one.
     const problems = parcelProblems(parcel);
     if (mode === 'SUBMIT' && initial?.status !== 'APPROVED' && problems.length > 0) {
-      setError(`Before review, add ${problems.join(', ')}`);
-      setStep('SHIPPING');
+      refuse(`before review, add ${problems.join(', ')}`, 'SHIPPING');
       return;
     }
 
     if (mode === 'SUBMIT' && !isLeaf) {
-      setError('Pick the most specific category for this product');
-      setStep('CATEGORY');
+      refuse('pick the most specific category for this product', 'CATEGORY');
       return;
     }
     const problem = variantProblem();
     if (problem) {
-      setError(problem);
-      setStep('VARIANTS');
+      refuse(problem, 'VARIANTS');
       return;
     }
     if (mode === 'SUBMIT' && missingRequired.length > 0) {
-      setError(`Please fill in: ${missingRequired.join(', ')}`);
-      setStep('CATEGORY');
+      refuse(`please fill in: ${missingRequired.join(', ')}`, 'CATEGORY');
       return;
     }
     const parsed = sellerProductUpsertSchema.safeParse(buildPayload(mode));
     if (!parsed.success) {
-      const issue = parsed.error.issues[0];
-      setError(`${issue.path.join('.') || 'form'}: ${issue.message}`);
+      const issue = parsed.error.issues[0]!;
+      refuse(`${issue.path.join('.') || 'form'}: ${issue.message}`, FIELD_STEP[String(issue.path[0])]);
+      // After the step has rendered, so its inputs exist to be marked.
+      requestAnimationFrame(() => showFieldErrors(issuesToFieldErrors(parsed.error.issues)));
       return;
     }
 
     setBusy(true);
+    setSavingMode(mode);
     try {
       if (initial) {
-        await api(`/api/seller/products/${initial.id}`, {
-          method: 'PUT',
+        const saved = await api<{ status: string; revisionStatus?: 'DRAFT' | 'PENDING' | 'REJECTED' | null }>(
+          `/api/seller/products/${initial.id}`,
+          { method: 'PUT', body: parsed.data, auth: true },
+        );
+        toast.success(
+          saved.status === 'APPROVED'
+            ? saved.revisionStatus === 'PENDING'
+              ? 'Changes sent for review — the live listing stays up until they are approved'
+              : saved.revisionStatus === 'DRAFT'
+                ? 'Draft of your changes saved — the live listing is unchanged'
+                : 'Saved — live now'
+            : mode === 'DRAFT'
+              ? 'Draft saved'
+              : 'Saved and sent for review',
+        );
+      } else {
+        await api('/api/seller/products', {
           body: parsed.data,
           auth: true,
+          success: mode === 'DRAFT' ? 'Draft saved' : 'Product submitted for review',
         });
-      } else {
-        await api('/api/seller/products', { body: parsed.data, auth: true });
       }
       router.push('/seller/products');
     } catch (err) {
+      if (err instanceof ApiRequestError && err.field) {
+        const step = FIELD_STEP[err.field.split('.')[0]!];
+        if (step) setStep(step);
+        requestAnimationFrame(() => fromError(err));
+      }
       setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
       setBusy(false);
+      setSavingMode(null);
     }
   }
 
@@ -616,6 +673,7 @@ export default function ProductForm({ initial }: Props) {
               .slice(0, 200) || undefined,
         },
         auth: true,
+        success: 'Description generated — edit it before publishing',
       });
       setDescription(data.description);
       setNotice('Description generated — edit it before publishing.');
@@ -745,7 +803,9 @@ export default function ProductForm({ initial }: Props) {
                   maxLength={150}
                   placeholder="Brand, model and the key spec — e.g. Orbita Book 14 (16GB / 512GB)"
                   className={`mt-1 ${field}`}
+                  name={'title'}
                 />
+                <FieldError message={fieldErrors['title']} />
               </div>
               <div>
                 <label className="text-sm font-medium" htmlFor="brand-input">
@@ -760,7 +820,9 @@ export default function ProductForm({ initial }: Props) {
                   autoComplete="off"
                   placeholder="Start typing to pick your brand"
                   className={`mt-1 ${field}`}
+                  name={'brand'}
                 />
+                <FieldError message={fieldErrors['brand']} />
                 <datalist id="brand-suggestions">
                   {brandOptions.map((b) => (
                     <option key={b.id} value={b.name} />
@@ -783,7 +845,9 @@ export default function ProductForm({ initial }: Props) {
                   maxLength={200}
                   placeholder="One line shoppers see on cards and search results"
                   className={`mt-1 ${field}`}
+                  name={'shortDescription'}
                 />
+                <FieldError message={fieldErrors['shortDescription']} />
               </div>
               <div className="sm:col-span-2 min-w-0">
                 <div className="flex items-center justify-between">
@@ -797,7 +861,9 @@ export default function ProductForm({ initial }: Props) {
                   maxLength={5000}
                   placeholder="What it is, key specifications, what's in the box, warranty… or let AI write it from the title"
                   className={`mt-1 ${field}`}
+                  name={'description'}
                 />
+                <FieldError message={fieldErrors['description']} />
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-cream-50 px-3 py-2">
                   <p className="text-xs text-gray-600">
                     <span className="font-semibold text-ink-900">✦ AI suggestion</span> — writes a
@@ -1097,7 +1163,9 @@ export default function ProductForm({ initial }: Props) {
                 onChange={(e) => setVideoUrl(e.target.value)}
                 placeholder="Paste a YouTube or Vimeo link"
                 className={`mt-1 ${field}`}
+                name={'videoUrl'}
               />
+              <FieldError message={fieldErrors['videoUrl']} />
             </div>
           </section>
         )}
@@ -1518,7 +1586,9 @@ export default function ProductForm({ initial }: Props) {
                   value={lowStockAlert}
                   onChange={(e) => setLowStockAlert(e.target.value)}
                   className={`mt-1 ${field}`}
+                  name={'lowStockAlert'}
                 />
+                <FieldError message={fieldErrors['lowStockAlert']} />
                 <p className="mt-1 text-xs text-gray-400">
                   Variants at or below this level are flagged on your dashboard.
                 </p>
@@ -1595,7 +1665,9 @@ export default function ProductForm({ initial }: Props) {
                     onChange={(e) => setWeight(e.target.value)}
                     className={`mt-1 ${field}`}
                     placeholder="0.35"
+                    name={'weightGrams'}
                   />
+                  <FieldError message={fieldErrors['weightGrams']} />
                 </div>
                 {/* No shipping template: hidden until the Delhivery integration
                     gives it meaning. A stored value is kept by the API. */}
@@ -1661,7 +1733,9 @@ export default function ProductForm({ initial }: Props) {
                     maxLength={70}
                     placeholder={title || 'Falls back to the product name'}
                     className={`mt-1 ${field}`}
+                    name={'metaTitle'}
                   />
+                  <FieldError message={fieldErrors['metaTitle']} />
                 </div>
                 <div>
                   <div className="flex items-center justify-between">
@@ -1675,7 +1749,9 @@ export default function ProductForm({ initial }: Props) {
                     maxLength={160}
                     placeholder="What a shopper sees in search results"
                     className={`mt-1 ${field}`}
+                    name={'metaDescription'}
                   />
+                  <FieldError message={fieldErrors['metaDescription']} />
                 </div>
                 <div>
                   <div className="flex items-center justify-between">
@@ -1826,10 +1902,11 @@ export default function ProductForm({ initial }: Props) {
               type="button"
               disabled={busy || uploading || title.trim().length < 3 || !categoryId}
               onClick={() => void save('DRAFT')}
+              aria-busy={savingMode === 'DRAFT'}
               title="Saves privately — no admin review, finish it later"
               className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold uppercase tracking-wide hover:bg-gray-50 disabled:opacity-40"
             >
-              Save as draft
+              {savingMode === 'DRAFT' ? <><Spinner className="mr-1" />Saving…</> : 'Save as draft'}
             </button>
             {stepIndex < STEPS.length - 1 ? (
               <button
@@ -1844,9 +1921,11 @@ export default function ProductForm({ initial }: Props) {
                 type="button"
                 disabled={busy || uploading}
                 onClick={() => void save('SUBMIT')}
+                aria-busy={savingMode === 'SUBMIT'}
+                data-action="save-product"
                 className="rounded-lg bg-brand-600 px-5 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-700 disabled:opacity-50"
               >
-                {busy ? 'Saving…' : initial ? 'Save & resubmit' : 'Publish product'}
+                {savingMode === 'SUBMIT' ? <><Spinner className="mr-1" />Saving…</> : initial ? 'Save & resubmit' : 'Publish product'}
               </button>
             )}
           </div>

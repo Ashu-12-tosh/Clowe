@@ -25,9 +25,21 @@ import {
   type ReturnStage,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import { BarList, DonutChart, LineChart } from '@/components/charts/Charts';
 import { PackingVideoEvidence } from '@/components/seller/orders/PackingVideoPanel';
+
+/** What each return action says when it goes through. */
+const RETURN_ACTION_DONE: Record<string, string> = {
+  APPROVE: 'Return approved',
+  REJECT: 'Return rejected',
+  MARK_PICKED_UP: 'Marked picked up by the courier',
+  MARK_RECEIVED: 'Marked received',
+  REFUND: 'Refund issued',
+  OVERRIDE: 'Rejection overridden — return approved',
+};
 
 // ---------------------------------------------------------------------------
 // Shared bits
@@ -289,6 +301,7 @@ export default function AdminReturnsPage() {
       );
     }
 
+    if (busy) return;
     setBusy(true);
     try {
       const result = await api<AdminReturnBulkResult>('/api/admin/returns/bulk', {
@@ -296,13 +309,13 @@ export default function AdminReturnsPage() {
         auth: true,
         body,
       });
-      flash(
-        `${result.applied} return(s) updated${
-          result.skipped.length > 0
-            ? `. Skipped: ${result.skipped.map((s) => `${s.rmaNumber} (${s.reason})`).join('; ')}`
-            : '.'
-        }`,
-      );
+      const message = `${result.applied} return(s) updated${
+        result.skipped.length > 0
+          ? `. Skipped: ${result.skipped.map((s) => `${s.rmaNumber} (${s.reason})`).join('; ')}`
+          : '.'
+      }`;
+      flash(message);
+      (result.skipped.length > 0 ? toast.error : toast.success)(message);
       setSelected(new Set());
       await refreshAll();
     } catch (err) {
@@ -342,7 +355,7 @@ export default function AdminReturnsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => downloadFile(`/api/admin/returns/meta/export?${query}`, 'returns.csv')}
+            onClick={() => void downloadFile(`/api/admin/returns/meta/export?${query}`, 'returns.csv').catch(() => undefined)}
             className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
           >
             ⭳ Export Report
@@ -882,7 +895,7 @@ export default function AdminReturnsPage() {
                   </div>
                   <button
                     onClick={() =>
-                      downloadFile(`/api/admin/returns/meta/export?${query}`, 'returns.csv')
+                      void downloadFile(`/api/admin/returns/meta/export?${query}`, 'returns.csv').catch(() => undefined)
                     }
                     className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
                   >
@@ -1020,7 +1033,8 @@ function ReturnDrawer({
   onChanged: () => Promise<void>;
 }) {
   const [detail, setDetail] = useState<AdminReturnDetail | null>(null);
-  const [busy, setBusy] = useState(false);
+  // The action running ('APPROVE', 'REFUND'…), so its button shows it.
+  const [busy, setBusy] = useState<string | null>(null);
   const [refunding, setRefunding] = useState(false);
   const [resolution, setResolution] = useState<ReturnResolutionValue>('REFUND');
   const [qcNote, setQcNote] = useState('');
@@ -1034,12 +1048,14 @@ function ReturnDrawer({
   }, [load]);
 
   async function act(action: string, extra: Record<string, unknown> = {}) {
-    setBusy(true);
+    if (busy) return;
+    setBusy(action);
     try {
       await api(`/api/admin/returns/${returnId}/action`, {
         method: 'POST',
         auth: true,
         body: { action, ...extra },
+        success: `${detail?.rmaNumber ?? 'Return'}: ${RETURN_ACTION_DONE[action] ?? 'updated'}`,
       });
       flash(`${detail?.rmaNumber ?? 'Return'} updated.`);
       setRefunding(false);
@@ -1049,7 +1065,7 @@ function ReturnDrawer({
     } catch (err) {
       flash(err instanceof ApiRequestError ? err.message : 'Could not apply that.');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -1240,17 +1256,19 @@ function ReturnDrawer({
           {detail.stage === 'PENDING_REVIEW' && (
             <>
               <button
-                disabled={busy}
+                disabled={!!busy}
                 onClick={() => void act('APPROVE')}
                 className="rounded-lg bg-brand-600 py-2 text-white disabled:opacity-50"
               >
+                {busy === 'APPROVE' && <Spinner className="mr-1" />}
                 Approve return
               </button>
               <button
-                disabled={busy}
+                disabled={!!busy}
                 onClick={() => withNote('REJECT', 'Reason the shopper will see:')}
                 className="rounded-lg border border-red-200 py-2 text-red-600 hover:bg-red-50 disabled:opacity-50"
               >
+                {busy === 'REJECT' && <Spinner className="mr-1" />}
                 Reject return
               </button>
             </>
@@ -1258,10 +1276,11 @@ function ReturnDrawer({
 
           {detail.stage === 'APPROVED' && (
             <button
-              disabled={busy}
+              disabled={!!busy}
               onClick={() => void act('MARK_PICKED_UP')}
               className="rounded-lg bg-brand-600 py-2 text-white disabled:opacity-50"
             >
+              {busy === 'MARK_PICKED_UP' && <Spinner className="mr-1" />}
               Mark picked up by courier
             </button>
           )}
@@ -1269,17 +1288,19 @@ function ReturnDrawer({
           {detail.stage === 'IN_TRANSIT' && (
             <>
               <button
-                disabled={busy}
+                disabled={!!busy}
                 onClick={() => void act('MARK_RECEIVED', { qcPassed: true, note: qcNote })}
                 className="rounded-lg bg-brand-600 py-2 text-white disabled:opacity-50"
               >
+                {busy === 'MARK_RECEIVED' && <Spinner className="mr-1" />}
                 Received — QC passed
               </button>
               <button
-                disabled={busy}
+                disabled={!!busy}
                 onClick={() => void act('MARK_RECEIVED', { qcPassed: false, note: qcNote })}
                 className="rounded-lg border border-red-200 py-2 text-red-600 hover:bg-red-50 disabled:opacity-50"
               >
+                {busy === 'MARK_RECEIVED' && <Spinner className="mr-1" />}
                 Received — QC failed
               </button>
             </>
@@ -1287,7 +1308,7 @@ function ReturnDrawer({
 
           {detail.stage === 'QC' && detail.qcPassed !== false && (
             <button
-              disabled={busy}
+              disabled={!!busy}
               onClick={() => {
                 if (!refunding) {
                   setRefunding(true);
@@ -1297,6 +1318,7 @@ function ReturnDrawer({
               }}
               className="rounded-lg bg-brand-600 py-2 text-white disabled:opacity-50"
             >
+              {busy === 'REFUND' && <Spinner className="mr-1" />}
               {refunding ? `Issue ${RETURN_RESOLUTION_LABELS[resolution]}` : 'Issue refund…'}
             </button>
           )}
@@ -1310,10 +1332,11 @@ function ReturnDrawer({
 
           {detail.stage === 'REJECTED' && !detail.adminOverrideAt && (
             <button
-              disabled={busy}
+              disabled={!!busy}
               onClick={() => withNote('OVERRIDE', 'Why is the seller decision being overturned?')}
               className="rounded-lg border border-brand-600 py-2 text-brand-600 hover:bg-cream-50 disabled:opacity-50"
             >
+              {busy === 'OVERRIDE' && <Spinner className="mr-1" />}
               Override rejection &amp; approve
             </button>
           )}
@@ -1363,6 +1386,7 @@ function PolicyModal({ onClose, flash }: { onClose: () => void; flash: (m: strin
   }, []);
 
   async function save() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -1370,6 +1394,7 @@ function PolicyModal({ onClose, flash }: { onClose: () => void; flash: (m: strin
         method: 'PATCH',
         auth: true,
         body: { platformWindowDays: Number(days) },
+        success: `Return window set to ${days} days`,
       });
       flash(`Return window set to ${days} days. New return requests use it immediately.`);
       onClose();
@@ -1443,7 +1468,7 @@ function PolicyModal({ onClose, flash }: { onClose: () => void; flash: (m: strin
           onClick={() => void save()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? 'Saving…' : 'Save policy'}
+          {busy ? <><Spinner className="mr-1" />Saving…</> : 'Save policy'}
         </button>
       </div>
     </Modal>
@@ -1499,6 +1524,7 @@ function ManualRefundModal({
   }, [q]);
 
   async function submit() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -1511,6 +1537,7 @@ function ManualRefundModal({
           reason,
           resolution,
         },
+        success: `${resolution === 'STORE_CREDIT' ? 'Credits' : 'Refund'} of ₹${rupees} issued against ${order!.orderNumber}`,
       });
       await onDone(
         `${resolution === 'STORE_CREDIT' ? 'Credits' : 'Refund'} of ₹${rupees} issued against ${order!.orderNumber}.`,
@@ -1648,7 +1675,7 @@ function ManualRefundModal({
           onClick={() => void submit()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? 'Issuing…' : 'Issue refund'}
+          {busy ? <><Spinner className="mr-1" />Issuing…</> : 'Issue refund'}
         </button>
       </div>
     </Modal>

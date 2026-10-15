@@ -12,9 +12,20 @@ import {
   type KycStatus,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import SellerKycPanel, { KycFraudBanner } from './SellerKycPanel';
 import SellerLedgerTab from './SellerLedgerTab';
+
+/** What each account action says when it goes through. */
+const DONE = {
+  approve: 'Seller approved',
+  reject: 'Seller rejected',
+  suspend: 'Seller suspended',
+  ban: 'Seller banned',
+  reinstate: 'Seller reinstated',
+} as const;
 
 export const SELLER_STATUS_STYLES: Record<AdminSellerStatus, string> = {
   APPROVED: 'bg-green-100 text-green-700',
@@ -54,7 +65,8 @@ export default function SellerDetailPanel({
   const [detail, setDetail] = useState<AdminSellerDetail | null>(null);
   const [tab, setTab] = useState<Tab>('OVERVIEW');
   const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
+  // The action running, so its own button can say so: 'approve', 'kyc:VERIFIED', 'note'…
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
   /** Why the last approve / reject / suspend / ban / reinstate was refused, shown by the buttons. */
   const [actionError, setActionError] = useState('');
@@ -74,15 +86,21 @@ export default function SellerDetailPanel({
 
   /** Send the seller's pickup address to Delhivery again. */
   async function retryWarehouse() {
-    setBusy(true);
+    if (busy) return;
+    setBusy('warehouse');
     setError('');
     try {
-      await api(`/api/admin/sellers/${sellerId}/courier-warehouse`, { method: 'POST', auth: true });
+      const result = await api<{ status: string; error: string | null }>(
+        `/api/admin/sellers/${sellerId}/courier-warehouse`,
+        { method: 'POST', auth: true },
+      );
+      if (result.status === 'ACTIVE') toast.success('Pickup address registered with Delhivery');
+      else toast.error(`Not registered: ${result.error ?? 'Delhivery refused the address'}`);
       await load();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not register the pickup address');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -105,11 +123,15 @@ export default function SellerDetailPanel({
       return;
     }
 
-    setBusy(true);
+    if (busy) return;
+    setBusy(action);
     setActionError('');
+    const success = DONE[action];
     try {
       try {
-        await api(`/api/admin/sellers/${sellerId}/status`, { method: 'PATCH', body, auth: true });
+        // Quiet: a KYC warning is a question for the admin, not a failure; any
+        // other refusal is shown by the buttons below (and toasted there).
+        await api(`/api/admin/sellers/${sellerId}/status`, { method: 'PATCH', body, auth: true, success, quiet: true });
       } catch (err) {
         // KYC problems outstanding: the server refuses with each one spelled
         // out as it stands now. Approving past them is the admin's call, made
@@ -123,50 +145,57 @@ export default function SellerDetailPanel({
           method: 'PATCH',
           body: { ...body, acknowledgeKycWarnings: true },
           auth: true,
+          success,
+          quiet: true,
         });
       }
       await load();
       onChanged();
     } catch (err) {
-      setActionError(err instanceof ApiRequestError ? err.message : 'Action failed');
+      const message = err instanceof ApiRequestError ? err.message : 'Action failed';
+      setActionError(message);
+      toast.error(`Not ${success.replace('Seller ', '')}: ${message}`);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function setKyc(kycStatus: KycStatus, businessType?: string) {
-    setBusy(true);
+    if (busy) return;
+    setBusy(businessType !== undefined ? 'businessType' : `kyc:${kycStatus}`);
     setError('');
     try {
       await api(`/api/admin/sellers/${sellerId}/kyc`, {
         method: 'PATCH',
         body: { kycStatus, ...(businessType !== undefined ? { businessType } : {}) },
         auth: true,
+        success: businessType !== undefined ? 'Business type saved' : `KYC set to ${KYC_STATUS_LABELS[kycStatus]}`,
       });
       await load();
       onChanged();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not update KYC');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function addNote() {
-    if (note.trim().length < 3) return;
-    setBusy(true);
+    if (note.trim().length < 3 || busy) return;
+    setBusy('note');
     try {
       await api(`/api/admin/sellers/${sellerId}/notes`, {
         method: 'POST',
         body: { body: note.trim() },
         auth: true,
+        success: 'Note added',
       });
       setNote('');
       await load();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not save the note');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -275,8 +304,9 @@ export default function SellerDetailPanel({
                     <select
                       value={detail.businessType ?? ''}
                       onChange={(e) => void setKyc(detail.kycStatus, e.target.value)}
-                      disabled={busy}
-                      className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs outline-none"
+                      disabled={!!busy}
+                      aria-busy={busy === 'businessType'}
+                      className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-xs outline-none disabled:opacity-60"
                     >
                       <option value="">Not set</option>
                       {BUSINESS_TYPES.map((b) => (
@@ -310,11 +340,19 @@ export default function SellerDetailPanel({
                       {detail.courierWarehouse.status !== 'ACTIVE' && (
                         <button
                           type="button"
-                          disabled={busy}
+                          disabled={!!busy}
+                          aria-busy={busy === 'warehouse'}
                           onClick={() => void retryWarehouse()}
                           className="rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] font-semibold hover:bg-gray-50 disabled:opacity-50"
                         >
-                          Retry
+                          {busy === 'warehouse' ? (
+                            <>
+                              <Spinner className="mr-1" />
+                              Retrying…
+                            </>
+                          ) : (
+                            'Retry'
+                          )}
                         </button>
                       )}
                     </span>
@@ -447,10 +485,18 @@ export default function SellerDetailPanel({
                 />
                 <button
                   onClick={() => void addNote()}
-                  disabled={busy || note.trim().length < 3}
+                  disabled={!!busy || note.trim().length < 3}
+                  aria-busy={busy === 'note'}
                   className="mt-2 rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                 >
-                  Add note
+                  {busy === 'note' ? (
+                    <>
+                      <Spinner className="mr-1" />
+                      Saving…
+                    </>
+                  ) : (
+                    'Add note'
+                  )}
                 </button>
                 <ul className="mt-4 space-y-2">
                   {detail.notes.map((n) => (
@@ -480,13 +526,15 @@ export default function SellerDetailPanel({
                   <button
                     key={k}
                     onClick={() => void setKyc(k)}
-                    disabled={busy || detail.kycStatus === k}
+                    disabled={!!busy || detail.kycStatus === k}
+                    aria-busy={busy === `kyc:${k}`}
                     className={`rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-40 ${
                       detail.kycStatus === k
                         ? 'border-brand-600 text-brand-600'
                         : 'border-gray-300 hover:bg-gray-50'
                     }`}
                   >
+                    {busy === `kyc:${k}` && <Spinner className="mr-1" />}
                     {KYC_STATUS_LABELS[k]}
                   </button>
                 ))}
@@ -500,17 +548,21 @@ export default function SellerDetailPanel({
                   <>
                     <button
                       onClick={() => void act('approve')}
-                      disabled={busy}
+                      disabled={!!busy}
+                      aria-busy={busy === 'approve'}
+                      data-action="approve"
                       className="rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                     >
-                      ✓ Approve
+                      {busy === 'approve' ? <><Spinner className="mr-1" />Approving…</> : '✓ Approve'}
                     </button>
                     <button
                       onClick={() => void act('reject')}
-                      disabled={busy}
+                      disabled={!!busy}
+                      aria-busy={busy === 'reject'}
+                      data-action="reject"
                       className="rounded-lg border border-red-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-red-600 hover:bg-red-50 disabled:opacity-50"
                     >
-                      ✕ Reject
+                      {busy === 'reject' ? <><Spinner className="mr-1" />Rejecting…</> : '✕ Reject'}
                     </button>
                   </>
                 )}
@@ -518,17 +570,21 @@ export default function SellerDetailPanel({
                   <>
                     <button
                       onClick={() => void act('suspend')}
-                      disabled={busy}
+                      disabled={!!busy}
+                      aria-busy={busy === 'suspend'}
+                      data-action="suspend"
                       className="rounded-lg border border-orange-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-orange-600 hover:bg-orange-50 disabled:opacity-50"
                     >
-                      ⏸ Suspend
+                      {busy === 'suspend' ? <><Spinner className="mr-1" />Suspending…</> : '⏸ Suspend'}
                     </button>
                     <button
                       onClick={() => void act('ban')}
-                      disabled={busy}
+                      disabled={!!busy}
+                      aria-busy={busy === 'ban'}
+                      data-action="ban"
                       className="rounded-lg border border-red-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-red-600 hover:bg-red-50 disabled:opacity-50"
                     >
-                      ⊘ Ban
+                      {busy === 'ban' ? <><Spinner className="mr-1" />Banning…</> : '⊘ Ban'}
                     </button>
                   </>
                 )}
@@ -537,10 +593,12 @@ export default function SellerDetailPanel({
                   detail.status === 'REJECTED') && (
                   <button
                     onClick={() => void act('reinstate')}
-                    disabled={busy}
+                    disabled={!!busy}
+                    aria-busy={busy === 'reinstate'}
+                    data-action="reinstate"
                     className="rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                   >
-                    ↻ Reinstate
+                    {busy === 'reinstate' ? <><Spinner className="mr-1" />Reinstating…</> : '↻ Reinstate'}
                   </button>
                 )}
                 <Link

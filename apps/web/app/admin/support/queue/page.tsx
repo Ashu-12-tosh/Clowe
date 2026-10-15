@@ -27,6 +27,8 @@ import {
   type SupportTicketDeskDetail,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { istRange } from '@/lib/format';
 import { DonutChart, LineChart } from '@/components/charts/Charts';
 
@@ -213,10 +215,16 @@ export default function AdminSupportDeskPage() {
   }, [openId, loadDetail]);
 
   async function patchTicket(id: string, body: Record<string, unknown>) {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
-      await api(`/api/admin/support-desk/${id}`, { method: 'PATCH', body, auth: true });
+      await api(`/api/admin/support-desk/${id}`, {
+        method: 'PATCH',
+        body,
+        auth: true,
+        success: 'status' in body ? 'Status saved' : 'priority' in body ? 'Priority saved' : 'Assignment saved',
+      });
       await Promise.all([loadList(), loadSummary(), openId ? loadDetail(openId) : Promise.resolve()]);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not update the ticket');
@@ -226,13 +234,14 @@ export default function AdminSupportDeskPage() {
   }
 
   async function sendReply() {
-    if (!openId || reply.trim().length === 0) return;
+    if (!openId || reply.trim().length === 0 || busy) return;
     setBusy(true);
     try {
       await api(`/api/admin/support-desk/${openId}/reply`, {
         method: 'POST',
         body: { body: reply.trim(), attachments: [], isInternal: internal },
         auth: true,
+        success: internal ? 'Internal note saved' : 'Reply sent',
       });
       setReply('');
       await Promise.all([loadDetail(openId), loadList(), loadSummary()]);
@@ -244,7 +253,7 @@ export default function AdminSupportDeskPage() {
   }
 
   async function bulk(action: 'ASSIGN' | 'STATUS' | 'PRIORITY', value: string) {
-    if (selected.size === 0 || !value) return;
+    if (selected.size === 0 || !value || busy) return;
     setBusy(true);
     setNotice('');
     try {
@@ -263,6 +272,7 @@ export default function AdminSupportDeskPage() {
         },
       );
       setNotice(`${result.updated} ticket(s) updated.`);
+      toast.success(`${result.updated} ticket(s) updated`);
       setSelected(new Set());
       await Promise.all([loadList(), loadSummary()]);
     } catch (err) {
@@ -1087,9 +1097,10 @@ export default function AdminSupportDeskPage() {
                     <button
                       onClick={() => void sendReply()}
                       disabled={busy || reply.trim().length === 0}
+                      aria-busy={busy}
                       className="rounded-lg bg-ink-900 px-5 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                     >
-                      {busy ? 'Sending…' : internal ? 'Save note' : 'Send reply'}
+                      {busy ? <><Spinner className="mr-1" />Sending…</> : internal ? 'Save note' : 'Send reply'}
                     </button>
                   </div>
                 </div>

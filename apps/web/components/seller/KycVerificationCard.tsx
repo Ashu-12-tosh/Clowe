@@ -9,6 +9,8 @@ import {
   type SellerKycStatus,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 
 const STATE_STYLES: Record<KycCheckState, string> = {
   VERIFIED: 'bg-green-100 text-green-700',
@@ -72,10 +74,18 @@ export default function KycVerificationCard({ refresh }: { refresh: unknown }) {
   }, [load, refresh]);
 
   async function verify() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
-      setStatus(await api<SellerKycStatus>('/api/seller/kyc/verify', { method: 'POST', auth: true }));
+      const next = await api<SellerKycStatus>('/api/seller/kyc/verify', { method: 'POST', auth: true });
+      setStatus(next);
+      const states = [next.pan, next.gstin, next.bank].map((c) => c.state);
+      if (states.some((s) => s === 'FAILED' || s === 'ERROR' || s === 'INVALID_FORMAT')) {
+        toast.error('Verification ran — some details did not pass; see below');
+      } else {
+        toast.success('Verification done — see the results below');
+      }
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not run verification');
     } finally {
@@ -105,7 +115,7 @@ export default function KycVerificationCard({ refresh }: { refresh: unknown }) {
             disabled={busy}
             className="shrink-0 rounded-lg bg-ink-900 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
           >
-            {busy ? 'Checking…' : hasError ? 'Try again' : 'Verify now'}
+            {busy ? <><Spinner className="mr-1" />Checking…</> : hasError ? 'Try again' : 'Verify now'}
           </button>
         )}
       </div>

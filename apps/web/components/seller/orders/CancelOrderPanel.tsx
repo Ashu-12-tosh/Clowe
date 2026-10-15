@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { SellerOrderCancelResult, SellerPenaltiesView } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
 /**
@@ -43,6 +45,7 @@ export function CancelOrderPanel({
   if (cancellableLines === 0) return null;
 
   async function cancel() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -53,6 +56,11 @@ export function CancelOrderPanel({
       });
       setOpen(false);
       setReason('');
+      toast.success(
+        `${result.cancelledLines} item(s) cancelled` +
+          (result.refund ? ` — ${formatPaise(result.refund.amountPaise)} refunded to the buyer` : '') +
+          (result.penaltyPaise > 0 ? `; ${formatPaise(result.penaltyPaise)} cancellation penalty (see Penalties)` : ''),
+      );
       onCancelled(result);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not cancel the order');
@@ -114,7 +122,7 @@ export function CancelOrderPanel({
               disabled={busy || reason.trim().length < 5}
               className="rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-red-700 disabled:opacity-50"
             >
-              {busy ? 'Cancelling…' : 'Cancel my items'}
+              {busy ? <><Spinner className="mr-1" />Cancelling…</> : 'Cancel my items'}
             </button>
             <button
               type="button"

@@ -8,6 +8,8 @@ import {
   type SellerOrderRow,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import { StatusPill } from '@/components/seller/orders/StatusPill';
 import { DispatchCountdown } from '@/components/seller/orders/DispatchCountdown';
@@ -70,13 +72,15 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
   }
 
   async function act(itemId: string, action: Action) {
-    setBusy(itemId);
+    if (busy) return;
+    setBusy(`${itemId}:${action}`);
     setError('');
     try {
       await api(`/api/seller/orders/${itemId}/status`, {
         method: 'PATCH',
         body: { action },
         auth: true,
+        success: action === 'assign' ? 'Booked with Delhivery' : action === 'pack' ? 'Marked packed' : action === 'ship' ? 'Shipped' : 'Marked delivered',
       });
       if (action === 'assign') flash('Booked with Delhivery — the label now carries the AWB.');
       load();
@@ -95,8 +99,8 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
         action === 'assign' ? l.canAssign : action === 'pack' ? l.canPack : action === 'ship' ? l.canShip : l.canDeliver,
       )
       .map((l) => l.id);
-    if (itemIds.length === 0) return;
-    setBusy('all');
+    if (itemIds.length === 0 || busy) return;
+    setBusy(`all:${action}`);
     setError('');
     try {
       const result = await api<SellerOrderBulkResult>('/api/seller/orders/bulk', {
@@ -104,12 +108,11 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
         body: { itemIds, action },
         auth: true,
       });
-      flash(
-        `${result.updated} item(s) ${action === 'assign' ? 'booked with Delhivery, in one parcel' : 'updated'}` +
-          (result.skipped.length > 0
-            ? ` · ${result.skipped.length} skipped (${result.skipped[0].reason})`
-            : ''),
-      );
+      const message =
+        `${result.updated} item(s) ${action === 'assign' ? 'booked with Delhivery, in one parcel' : action === 'pack' ? 'marked packed' : action === 'ship' ? 'shipped' : 'marked delivered'}` +
+        (result.skipped.length > 0 ? ` · ${result.skipped.length} skipped (${result.skipped[0].reason})` : '');
+      flash(message);
+      (result.updated === 0 || result.skipped.length > 0 ? toast.error : toast.success)(message);
       load();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Bulk action failed');
@@ -233,6 +236,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                   onClick={() => void actAll('pack')}
                   className="rounded-lg border border-ink-900 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide hover:bg-cream-100 disabled:opacity-50"
                 >
+                  {busy === 'all:pack' && <Spinner className="mr-1" />}
                   📦 Mark all packed ({packable})
                 </button>
               )}
@@ -243,6 +247,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                   onClick={() => void actAll('ship')}
                   className="rounded-lg bg-ink-900 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                 >
+                  {busy === 'all:ship' && <Spinner className="mr-1" />}
                   🚚 Ship all ({shippable})
                 </button>
               )}
@@ -252,6 +257,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                   onClick={() => void actAll('deliver')}
                   className="rounded-lg bg-brand-600 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-700 disabled:opacity-50"
                 >
+                  {busy === 'all:deliver' && <Spinner className="mr-1" />}
                   ✓ Mark all delivered ({deliverable})
                 </button>
               )}
@@ -348,8 +354,10 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                     disabled={busy !== null || !hasClip}
                     title={hasClip ? undefined : PACKING_VIDEO_REQUIRED_MESSAGE}
                     onClick={() => void act(line.id, 'pack')}
+                    aria-busy={busy === `${line.id}:pack`}
                     className="rounded-lg border border-ink-900 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide hover:bg-cream-100 disabled:opacity-50"
                   >
+                    {busy === `${line.id}:pack` && <Spinner className="mr-1" />}
                     📦 Mark packed
                   </button>
                 )}
@@ -358,8 +366,10 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                     disabled={busy !== null || !hasClip}
                     title={hasClip ? undefined : PACKING_VIDEO_REQUIRED_MESSAGE}
                     onClick={() => void act(line.id, 'ship')}
+                    aria-busy={busy === `${line.id}:ship`}
                     className="rounded-lg bg-ink-900 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                   >
+                    {busy === `${line.id}:ship` && <Spinner className="mr-1" />}
                     🚚 Ship
                   </button>
                 )}
@@ -367,8 +377,10 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                   <button
                     disabled={busy !== null}
                     onClick={() => void act(line.id, 'deliver')}
+                    aria-busy={busy === `${line.id}:deliver`}
                     className="rounded-lg bg-brand-600 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-700 disabled:opacity-50"
                   >
+                    {busy === `${line.id}:deliver` && <Spinner className="mr-1" />}
                     ✓ Mark delivered
                   </button>
                 )}

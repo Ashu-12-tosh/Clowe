@@ -7,6 +7,8 @@ import {
   type CodRemittanceOverview,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
 const CARD = 'rounded-2xl border border-gray-100 bg-white p-4';
@@ -25,7 +27,8 @@ const ROW_TONE: Record<string, string> = {
 export default function CodRemittancePage() {
   const [overview, setOverview] = useState<CodRemittanceOverview | null>(null);
   const [result, setResult] = useState<CodRemittanceImportResult | null>(null);
-  const [busy, setBusy] = useState(false);
+  // 'import', or the parcel being marked.
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const load = useCallback(() => {
@@ -36,37 +39,48 @@ export default function CodRemittancePage() {
   useEffect(load, [load]);
 
   async function upload(file: File) {
-    setBusy(true);
+    if (busy) return;
+    setBusy('import');
     setError('');
     try {
       const csv = await file.text();
-      setResult(
-        await api<CodRemittanceImportResult>('/api/admin/cod-remittances/import', {
-          method: 'POST',
-          body: { csv, fileName: file.name },
-          auth: true,
-        }),
+      const imported = await api<CodRemittanceImportResult>('/api/admin/cod-remittances/import', {
+        method: 'POST',
+        body: { csv, fileName: file.name },
+        auth: true,
+      });
+      setResult(imported);
+      const problems = imported.mismatched + imported.unknown;
+      (problems > 0 ? toast.error : toast.success)(
+        `Report imported: ${imported.matched} matched` +
+          (problems > 0 ? `, ${problems} need a look (below)` : '') +
+          (imported.duplicate > 0 ? `, ${imported.duplicate} already imported` : ''),
       );
       load();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Import failed');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function mark(shipmentId: string) {
     const reference = window.prompt('Bank transaction reference (UTR) for this remittance');
-    if (!reference) return;
-    setBusy(true);
+    if (!reference || busy) return;
+    setBusy(shipmentId);
     setError('');
     try {
-      await api(`/api/admin/cod-remittances/parcels/${shipmentId}/mark`, { method: 'POST', body: { reference }, auth: true });
+      await api(`/api/admin/cod-remittances/parcels/${shipmentId}/mark`, {
+        method: 'POST',
+        body: { reference },
+        auth: true,
+        success: 'Marked remitted — the seller can now be paid for it',
+      });
       load();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not mark it');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -91,7 +105,7 @@ export default function CodRemittancePage() {
         <input
           type="file"
           accept=".csv,text/csv"
-          disabled={busy}
+          disabled={!!busy}
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) void upload(f);
@@ -99,6 +113,12 @@ export default function CodRemittancePage() {
           }}
           className="mt-3 text-xs"
         />
+        {busy === 'import' && (
+          <p className="mt-2 text-xs text-gray-500" aria-live="polite">
+            <Spinner className="mr-1" />
+            Importing…
+          </p>
+        )}
         {result && (
           <div className="mt-3 text-xs" data-import-result>
             <p className="font-semibold text-ink-900">
@@ -152,10 +172,12 @@ export default function CodRemittancePage() {
                     <td className="py-1.5 text-right">
                       <button
                         type="button"
-                        disabled={busy}
+                        disabled={!!busy}
+                        aria-busy={busy === a.shipmentId}
                         onClick={() => void mark(a.shipmentId)}
                         className="rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] font-semibold hover:bg-gray-50 disabled:opacity-50"
                       >
+                        {busy === a.shipmentId && <Spinner className="mr-1" />}
                         Mark remitted
                       </button>
                     </td>

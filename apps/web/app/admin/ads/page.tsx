@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AD_PLACEMENT_LABELS, type AdminAdRow } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { usePending } from '@/lib/usePending';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
 const FILTERS = ['PENDING', 'ACTIVE', 'REJECTED', 'EXPIRED', 'ALL'] as const;
@@ -20,6 +22,7 @@ export default function AdminAdsPage() {
   const [error, setError] = useState('');
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [reason, setReason] = useState('');
+  const { run, isPending } = usePending();
 
   const load = useCallback(() => {
     const qs = filter === 'ALL' ? '' : `?status=${filter}`;
@@ -31,14 +34,21 @@ export default function AdminAdsPage() {
 
   async function decide(id: string, body: Record<string, string>) {
     setError('');
-    try {
-      await api(`/api/admin/ads/${id}`, { method: 'PATCH', body, auth: true });
-      setRejecting(null);
-      setReason('');
-      load();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
-    }
+    await run(id, async () => {
+      try {
+        await api(`/api/admin/ads/${id}`, {
+          method: 'PATCH',
+          body,
+          auth: true,
+          success: body.action === 'approve' ? 'Ad approved — it is live' : 'Ad rejected',
+        });
+        setRejecting(null);
+        setReason('');
+        load();
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
+      }
+    });
   }
 
   return (
@@ -114,9 +124,12 @@ export default function AdminAdsPage() {
                     <div className="mt-3 flex gap-2">
                       <button
                         onClick={() => void decide(ad.id, { action: 'approve' })}
-                        className="rounded-lg bg-ink-900 px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800"
+                        disabled={isPending(ad.id)}
+                        aria-busy={isPending(ad.id)}
+                        data-action="approve-ad"
+                        className="rounded-lg bg-ink-900 px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                       >
-                        ✓ Approve — go live
+                        {isPending(ad.id) ? <><Spinner className="mr-1" />Approving…</> : '✓ Approve — go live'}
                       </button>
                       <button
                         onClick={() => {
@@ -142,10 +155,12 @@ export default function AdminAdsPage() {
                       <div className="mt-2 flex gap-2">
                         <button
                           onClick={() => void decide(ad.id, { action: 'reject', reason: reason.trim() })}
-                          disabled={reason.trim().length < 5}
+                          disabled={reason.trim().length < 5 || isPending(ad.id)}
+                          aria-busy={isPending(ad.id)}
+                          data-action="reject-ad"
                           className="rounded-lg bg-red-600 px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-red-700 disabled:opacity-50"
                         >
-                          Confirm rejection
+                          {isPending(ad.id) ? <><Spinner className="mr-1" />Rejecting…</> : 'Confirm rejection'}
                         </button>
                         <button
                           onClick={() => setRejecting(null)}

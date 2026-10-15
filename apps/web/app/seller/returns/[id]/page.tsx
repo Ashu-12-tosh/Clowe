@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { RETURN_REASON_LABELS, type ReturnReasonValue, type SellerReturnRow } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import { ExternalLink } from '@/components/ExternalLink';
 import { PackingVideoEvidence } from '@/components/seller/orders/PackingVideoPanel';
@@ -21,7 +22,8 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
   const [row, setRow] = useState<SellerReturnRow | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  // 'pickup', 'approve', 'reject', 'received:OK' or 'received:DAMAGED' while it runs.
+  const [busy, setBusy] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [receiving, setReceiving] = useState(false);
@@ -34,25 +36,42 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
   useEffect(load, [load]);
 
   async function bookPickup() {
+    if (busy) return;
     setError('');
-    setBusy(true);
+    setBusy('pickup');
     try {
-      setRow(await api<SellerReturnRow>(`/api/seller/returns/${params.id}/pickup`, { method: 'POST', auth: true }));
+      setRow(
+        await api<SellerReturnRow>(`/api/seller/returns/${params.id}/pickup`, {
+          method: 'POST',
+          auth: true,
+          success: 'Delhivery pickup booked',
+        }),
+      );
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not book the pickup');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function act(body: Record<string, string>) {
+    if (busy) return;
     setError('');
-    setBusy(true);
+    const key = body.action === 'received' ? `received:${body.condition}` : body.action!;
+    setBusy(key);
     try {
       const updated = await api<SellerReturnRow>(`/api/seller/returns/${params.id}`, {
         method: 'PATCH',
         body,
         auth: true,
+        success:
+          key === 'approve'
+            ? 'Return approved'
+            : key === 'reject'
+              ? 'Return rejected'
+              : key === 'received:OK'
+                ? 'Received — the refund is on its way'
+                : 'Marked damaged — support will look at it',
       });
       setRow(updated);
       setRejecting(false);
@@ -60,7 +79,7 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -191,14 +210,15 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
         <div className="mt-5 flex flex-col gap-2 sm:flex-row">
           <button
             onClick={() => void act({ action: 'approve' })}
-            disabled={busy}
+            disabled={!!busy}
             className="flex-1 rounded-xl bg-ink-900 py-3 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
           >
+            {busy === 'approve' && <Spinner className="mr-1" />}
             ✓ Approve return
           </button>
           <button
             onClick={() => setRejecting(true)}
-            disabled={busy}
+            disabled={!!busy}
             className="flex-1 rounded-xl border border-red-300 py-3 text-sm font-bold uppercase tracking-wide text-red-600 hover:bg-red-50 disabled:opacity-50"
           >
             ✕ Reject return
@@ -222,9 +242,10 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
           <div className="mt-3 flex gap-2">
             <button
               onClick={() => void act({ action: 'reject', rejectionReason: rejectionReason.trim() })}
-              disabled={busy || rejectionReason.trim().length < 5}
+              disabled={!!busy || rejectionReason.trim().length < 5}
               className="rounded-lg bg-red-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-red-700 disabled:opacity-50"
             >
+              {busy === 'reject' && <Spinner className="mr-1" />}
               Confirm rejection
             </button>
             <button
@@ -254,10 +275,11 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
               <p className="text-amber-800">No Delhivery pickup is booked for this return yet.</p>
               <button
                 type="button"
-                disabled={busy}
+                disabled={!!busy}
                 onClick={() => void bookPickup()}
                 className="rounded-lg bg-ink-900 px-3 py-1.5 font-bold uppercase tracking-wide text-white disabled:opacity-50"
               >
+                {busy === 'pickup' && <Spinner className="mr-1" />}
                 Book pickup
               </button>
             </div>
@@ -283,16 +305,18 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
           <div className="mt-3 flex gap-2">
             <button
               onClick={() => void act({ action: 'received', condition: 'OK' })}
-              disabled={busy}
+              disabled={!!busy}
               className="rounded-lg bg-green-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-green-700 disabled:opacity-50"
             >
+              {busy === 'received:OK' && <Spinner className="mr-1" />}
               ✓ Condition OK — refund {itemTotal}
             </button>
             <button
               onClick={() => void act({ action: 'received', condition: 'DAMAGED' })}
-              disabled={busy}
+              disabled={!!busy}
               className="rounded-lg border border-red-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
+              {busy === 'received:DAMAGED' && <Spinner className="mr-1" />}
               Damaged on arrival
             </button>
             <button

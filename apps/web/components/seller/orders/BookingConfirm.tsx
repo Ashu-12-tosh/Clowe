@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ParcelBox, SellerBookingQuote, SellerOrderBulkResult } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
 /** A box as typed: kilograms and centimetres, as the seller measures it. */
@@ -96,6 +97,7 @@ export function BookingConfirm({
       setError('Give every parcel its weight and box size');
       return;
     }
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -207,9 +209,11 @@ export function BookingConfirm({
             type="button"
             disabled={busy || pricing || bookable === 0 || complete() === null}
             onClick={() => void confirm()}
+            aria-busy={busy}
+            data-action="confirm-booking"
             className="rounded-lg bg-ink-900 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
           >
-            {busy ? 'Booking…' : `Confirm booking${bookable > 1 ? ` (${bookable} parcels)` : ''}`}
+            {busy ? <><Spinner className="mr-1" />Booking…</> : `Confirm booking${bookable > 1 ? ` (${bookable} parcels)` : ''}`}
           </button>
         </div>
       </div>

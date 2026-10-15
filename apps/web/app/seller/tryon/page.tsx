@@ -9,6 +9,8 @@ import {
   type TryOnPackKey,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
 const RANGES = [
@@ -83,7 +85,11 @@ export default function SellerTryOnPage() {
   async function saveLimit(productId: string) {
     const raw = (limitDrafts[productId] ?? '').trim();
     const tryOnLimit = raw === '' ? null : Math.max(0, Math.round(Number(raw)));
-    if (raw !== '' && Number.isNaN(Number(raw))) return;
+    if (raw !== '' && Number.isNaN(Number(raw))) {
+      toast.error('Not saved: the limit must be a number');
+      return;
+    }
+    if (savingId) return;
     setSavingId(productId);
     setError('');
     try {
@@ -91,6 +97,7 @@ export default function SellerTryOnPage() {
         method: 'PATCH',
         body: { tryOnLimit },
         auth: true,
+        success: tryOnLimit === null ? 'Limit removed — uses the shared pool' : `Limit saved: ${tryOnLimit}`,
       });
       flash(tryOnLimit === null ? 'Limit removed — uses the shared pool' : `Limit set to ${tryOnLimit}`);
       load();
@@ -102,6 +109,7 @@ export default function SellerTryOnPage() {
   }
 
   async function buy(pack: TryOnPackKey) {
+    if (buying) return;
     setBuying(pack);
     setError('');
     try {
@@ -111,6 +119,7 @@ export default function SellerTryOnPage() {
         auth: true,
       });
       flash(`${result.credits} try-ons added — balance ${result.balance}`);
+      toast.success(`Paid — ${result.credits} try-ons added, balance ${result.balance}`);
       load();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Purchase failed');
@@ -285,7 +294,7 @@ export default function SellerTryOnPage() {
                           disabled={savingId === p.productId}
                           className="rounded-lg border border-ink-900 px-3 py-1.5 text-xs font-bold uppercase tracking-wide hover:bg-cream-100 disabled:opacity-50"
                         >
-                          {savingId === p.productId ? 'Saving…' : 'Save'}
+                          {savingId === p.productId ? <><Spinner className="mr-1" />Saving…</> : 'Save'}
                         </button>
                       </div>
                     </li>
@@ -442,7 +451,7 @@ export default function SellerTryOnPage() {
                     disabled={buying !== ''}
                     className="rounded-lg bg-brand-600 px-3.5 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-700 disabled:opacity-50"
                   >
-                    {buying === pack.key ? 'Buying…' : 'Buy'}
+                    {buying === pack.key ? <><Spinner className="mr-1" />Buying…</> : 'Buy'}
                   </button>
                 </li>
               ))}

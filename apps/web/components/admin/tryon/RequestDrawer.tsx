@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { AdminTryOnRequestDetail, AdminTryOnRequestRow } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -30,7 +31,8 @@ export default function RequestDrawer({
 }) {
   const [detail, setDetail] = useState<AdminTryOnRequestDetail | null>(null);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  // 'flag', 'unflag' or 'remove' while it runs.
+  const [busy, setBusy] = useState<string | null>(null);
   const [reason, setReason] = useState('');
 
   useEffect(() => {
@@ -52,17 +54,18 @@ export default function RequestDrawer({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  async function act(path: string, options: { method?: string; body?: unknown }) {
-    setBusy(true);
+  async function act(key: string, success: string, path: string, options: { method?: string; body?: unknown }) {
+    if (busy) return;
+    setBusy(key);
     setError('');
     try {
-      const row = await api<AdminTryOnRequestRow>(path, { ...options, auth: true });
+      const row = await api<AdminTryOnRequestRow>(path, { ...options, auth: true, success });
       onChanged(row);
       setDetail((prev) => (prev ? { ...prev, ...row } : prev));
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Action failed');
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -203,38 +206,46 @@ export default function RequestDrawer({
               <div className="mt-3 flex flex-wrap gap-2">
                 {detail.flagged ? (
                   <button
-                    disabled={busy}
+                    disabled={!!busy}
+                    aria-busy={busy === 'unflag'}
                     onClick={() =>
-                      void act(`/api/admin/tryon/requests/${detail.id}/flag`, {
+                      void act('unflag', 'Flag cleared', `/api/admin/tryon/requests/${detail.id}/flag`, {
                         body: { flagged: false },
                       })
                     }
                     className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold uppercase tracking-wide hover:bg-gray-50 disabled:opacity-50"
                   >
+                    {busy === 'unflag' && <Spinner className="mr-1" />}
                     Clear flag
                   </button>
                 ) : (
                   <button
-                    disabled={busy}
+                    disabled={!!busy}
+                    aria-busy={busy === 'flag'}
                     onClick={() =>
-                      void act(`/api/admin/tryon/requests/${detail.id}/flag`, {
+                      void act('flag', 'Flagged for review', `/api/admin/tryon/requests/${detail.id}/flag`, {
                         body: { flagged: true, reason: reason.trim() || undefined },
                       })
                     }
                     className="rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                   >
+                    {busy === 'flag' && <Spinner className="mr-1" />}
                     🚩 Flag for review
                   </button>
                 )}
                 {detail.resultImageUrl && (
                   <button
-                    disabled={busy}
+                    disabled={!!busy}
+                    aria-busy={busy === 'remove'}
                     onClick={() => {
                       if (!confirm('Delete the generated image for this run? This cannot be undone.')) return;
-                      void act(`/api/admin/tryon/requests/${detail.id}/result`, { method: 'DELETE' });
+                      void act('remove', 'Result image removed', `/api/admin/tryon/requests/${detail.id}/result`, {
+                        method: 'DELETE',
+                      });
                     }}
                     className="rounded-lg border border-red-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-red-600 hover:bg-red-50 disabled:opacity-50"
                   >
+                    {busy === 'remove' && <Spinner className="mr-1" />}
                     Remove result image
                   </button>
                 )}

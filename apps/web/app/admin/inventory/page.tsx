@@ -29,6 +29,9 @@ import {
   type TransferRow,
   type WarehouseRow,
 } from '@clowe/shared';
+import { toast } from '@/lib/toast';
+import { usePending } from '@/lib/usePending';
+import Spinner from '@/components/Spinner';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { BarList, DonutChart, LineChart } from '@/components/charts/Charts';
@@ -268,9 +271,9 @@ export default function AdminInventoryPage() {
         '/api/admin/inventory/stock/bulk',
         { method: 'POST', auth: true, body },
       );
-      flash(
-        `${result.updated} row(s) updated${result.skipped.length > 0 ? `, ${result.skipped.length} skipped` : ''}.`,
-      );
+      const message = `${result.updated} row(s) updated${result.skipped.length > 0 ? `, ${result.skipped.length} skipped` : ''}.`;
+      flash(message);
+      (result.skipped.length > 0 ? toast.error : toast.success)(message);
       setSelected(new Set());
       await refreshAll();
     } catch (err) {
@@ -325,7 +328,7 @@ export default function AdminInventoryPage() {
                     key={item.file}
                     onClick={() => {
                       setOpenMenu(null);
-                      void downloadFile(item.href, item.file);
+                      void downloadFile(item.href, item.file).catch(() => undefined);
                     }}
                     className="block w-full px-3 py-2 text-left hover:bg-cream-50"
                   >
@@ -621,12 +624,14 @@ function OverviewTab({
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.locationId));
 
   async function runBulk(action: 'SET_REORDER' | 'MARK_COUNTED', reorderLevel?: number) {
+    if (busy) return;
     setBusy(true);
     try {
       const result = await api<{ updated: number }>('/api/admin/inventory/stock/bulk', {
         method: 'POST',
         auth: true,
         body: { locationIds: [...selected], action, reorderLevel },
+        success: action === 'SET_REORDER' ? 'Reorder level saved' : 'Marked counted',
       });
       flash(`${result.updated} row(s) updated.`);
       setSelected(new Set());
@@ -760,7 +765,7 @@ function OverviewTab({
           </select>
           <button
             onClick={() =>
-              downloadFile(`/api/admin/inventory/stock/export?${query}`, 'inventory.csv')
+              void downloadFile(`/api/admin/inventory/stock/export?${query}`, 'inventory.csv').catch(() => undefined)
             }
             className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
           >
@@ -1186,6 +1191,7 @@ function AddStockModal({
   const totalUnits = lines.reduce((sum, l) => sum + l.quantity, 0);
 
   async function submit() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -1202,6 +1208,7 @@ function AddStockModal({
           },
         },
       );
+      toast.success(`${num(result.units)} unit(s) received into ${result.warehouseName}`);
       await onDone(`${num(result.units)} unit(s) received into ${result.warehouseName}.`);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not receive that stock.');
@@ -1345,7 +1352,7 @@ function AddStockModal({
           onClick={() => void submit()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? 'Receiving…' : 'Receive stock'}
+          {busy ? <><Spinner className="mr-1" />Receiving…</> : 'Receive stock'}
         </button>
       </div>
     </Modal>
@@ -1500,6 +1507,7 @@ function ImportModal({
   const invalid = (rows ?? []).filter((r) => r.error);
 
   async function submit() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -1519,6 +1527,10 @@ function ImportModal({
         },
       });
       setResult(body);
+      (body.skipped.length === 0 ? toast.success : toast.error)(
+        `${num(body.applied)} row(s) imported` +
+          (body.skipped.length > 0 ? `, ${num(body.skipped.length)} skipped — see the list` : ''),
+      );
       if (body.skipped.length === 0) {
         await onDone(
           `${num(body.applied)} row(s) imported — ${num(body.quantityChanged)} stock change(s), ${num(body.reorderChanged)} reorder level(s).`,
@@ -1684,7 +1696,7 @@ function ImportModal({
           onClick={() => void submit()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? 'Importing…' : `Import ${num(valid.length)} row(s)`}
+          {busy ? <><Spinner className="mr-1" />Importing…</> : `Import ${num(valid.length)} row(s)`}
         </button>
       </div>
     </Modal>
@@ -1710,6 +1722,7 @@ function AdjustModal({
   const delta = Number(quantity) - row.available;
 
   async function submit() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -1732,6 +1745,7 @@ function AdjustModal({
           },
         });
       }
+      toast.success(delta === 0 ? `Reorder level for ${row.sku} saved` : `${row.sku} adjusted by ${delta > 0 ? '+' : ''}${delta}`);
       await onDone(
         delta === 0
           ? `Reorder level for ${row.sku} updated.`
@@ -1820,7 +1834,7 @@ function AdjustModal({
           onClick={() => void submit()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? 'Saving…' : 'Save'}
+          {busy ? <><Spinner className="mr-1" />Saving…</> : 'Save'}
         </button>
       </div>
     </Modal>
@@ -1855,6 +1869,7 @@ function WarehousesTab({
   const [editing, setEditing] = useState<WarehouseRow | 'NEW' | null>(null);
   const [transfers, setTransfers] = useState<TransferRow[] | null>(null);
   const [creatingTransfer, setCreatingTransfer] = useState(false);
+  const { run, isPending } = usePending();
 
   const load = useCallback(async () => {
     const [w, t] = await Promise.all([
@@ -1870,18 +1885,26 @@ function WarehousesTab({
   }, [load]);
 
   async function setTransferStatus(id: string, status: string) {
-    try {
-      await api(`/api/admin/inventory/transfers/${id}/status`, {
-        method: 'PATCH',
-        auth: true,
-        body: { status },
-      });
-      flash(status === 'COMPLETED' ? 'Transfer completed — stock moved.' : 'Transfer updated.');
-      await load();
-      await onChanged();
-    } catch (err) {
-      flash(err instanceof ApiRequestError ? err.message : 'Could not update the transfer.');
-    }
+    await run(id, async () => {
+      try {
+        await api(`/api/admin/inventory/transfers/${id}/status`, {
+          method: 'PATCH',
+          auth: true,
+          body: { status },
+          success:
+            status === 'COMPLETED'
+              ? 'Transfer completed — stock moved'
+              : status === 'IN_TRANSIT'
+                ? 'Transfer dispatched'
+                : 'Transfer cancelled',
+        });
+        flash(status === 'COMPLETED' ? 'Transfer completed — stock moved.' : 'Transfer updated.');
+        await load();
+        await onChanged();
+      } catch (err) {
+        flash(err instanceof ApiRequestError ? err.message : 'Could not update the transfer.');
+      }
+    });
   }
 
   return (
@@ -2007,13 +2030,17 @@ function WarehousesTab({
                       <div className="flex gap-1">
                         <button
                           onClick={() => void setTransferStatus(t.id, 'IN_TRANSIT')}
-                          className="rounded-lg border border-gray-300 px-2 py-1 font-semibold hover:bg-gray-50"
+                          disabled={isPending(t.id)}
+                          aria-busy={isPending(t.id)}
+                          className="rounded-lg border border-gray-300 px-2 py-1 font-semibold hover:bg-gray-50 disabled:opacity-50"
                         >
+                          {isPending(t.id) && <Spinner className="mr-1" />}
                           Dispatch
                         </button>
                         <button
                           onClick={() => void setTransferStatus(t.id, 'CANCELLED')}
-                          className="rounded-lg border border-gray-300 px-2 py-1 text-gray-500 hover:bg-gray-50"
+                          disabled={isPending(t.id)}
+                          className="rounded-lg border border-gray-300 px-2 py-1 text-gray-500 hover:bg-gray-50 disabled:opacity-50"
                         >
                           Cancel
                         </button>
@@ -2022,8 +2049,11 @@ function WarehousesTab({
                     {t.status === 'IN_TRANSIT' && (
                       <button
                         onClick={() => void setTransferStatus(t.id, 'COMPLETED')}
-                        className="rounded-lg bg-brand-600 px-2 py-1 font-semibold text-white"
+                        disabled={isPending(t.id)}
+                        aria-busy={isPending(t.id)}
+                        className="rounded-lg bg-brand-600 px-2 py-1 font-semibold text-white disabled:opacity-50"
                       >
+                        {isPending(t.id) && <Spinner className="mr-1" />}
                         Mark received
                       </button>
                     )}
@@ -2106,6 +2136,7 @@ function WarehouseModal({
   }
 
   async function submit() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -2118,6 +2149,7 @@ function WarehouseModal({
       } else {
         await api('/api/admin/inventory/warehouses', { method: 'POST', auth: true, body: form });
       }
+      toast.success(warehouse ? `${form.name} updated` : `${form.name} added`);
       await onDone(warehouse ? `${form.name} updated.` : `${form.name} added.`);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not save the warehouse.');
@@ -2227,7 +2259,7 @@ function WarehouseModal({
           onClick={() => void submit()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? 'Saving…' : 'Save'}
+          {busy ? <><Spinner className="mr-1" />Saving…</> : 'Save'}
         </button>
       </div>
     </Modal>
@@ -2335,6 +2367,7 @@ function TransferModal({
   const [busy, setBusy] = useState(false);
 
   async function submit() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -2348,6 +2381,7 @@ function TransferModal({
           items: lines.map((l) => ({ variantId: l.variant.id, quantity: l.quantity })),
         },
       });
+      toast.success(`${created.transferNumber} raised`);
       await onDone(`${created.transferNumber} raised — dispatch it when the stock leaves.`);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not raise the transfer.');
@@ -2475,7 +2509,7 @@ function TransferModal({
           onClick={() => void submit()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? 'Raising…' : 'Raise transfer'}
+          {busy ? <><Spinner className="mr-1" />Raising…</> : 'Raise transfer'}
         </button>
       </div>
     </Modal>
@@ -2900,6 +2934,7 @@ function SupplierModal({
   }
 
   async function submit() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -2912,6 +2947,7 @@ function SupplierModal({
       } else {
         await api('/api/admin/inventory/suppliers', { method: 'POST', auth: true, body: form });
       }
+      toast.success(supplier ? `${form.name} updated` : `${form.name} added`);
       await onDone(supplier ? `${form.name} updated.` : `${form.name} added.`);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not save the supplier.');
@@ -2977,7 +3013,7 @@ function SupplierModal({
           onClick={() => void submit()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? 'Saving…' : 'Save'}
+          {busy ? <><Spinner className="mr-1" />Saving…</> : 'Save'}
         </button>
       </div>
     </Modal>
@@ -3001,6 +3037,7 @@ function PurchaseOrdersTab({
   const [status, setStatus] = useState('ALL');
   const [creating, setCreating] = useState(false);
   const [receiving, setReceiving] = useState<PurchaseOrderRow | null>(null);
+  const { run, isPending } = usePending();
 
   const load = useCallback(async () => {
     setRows(
@@ -3016,18 +3053,21 @@ function PurchaseOrdersTab({
 
   async function cancel(po: PurchaseOrderRow) {
     if (!window.confirm(`Cancel ${po.poNumber}?`)) return;
-    try {
-      await api(`/api/admin/inventory/purchase-orders/${po.id}/status`, {
-        method: 'PATCH',
-        auth: true,
-        body: { status: 'CANCELLED' },
-      });
-      flash(`${po.poNumber} cancelled.`);
-      await load();
-      await onChanged();
-    } catch (err) {
-      flash(err instanceof ApiRequestError ? err.message : 'Could not cancel that PO.');
-    }
+    await run(po.id, async () => {
+      try {
+        await api(`/api/admin/inventory/purchase-orders/${po.id}/status`, {
+          method: 'PATCH',
+          auth: true,
+          body: { status: 'CANCELLED' },
+          success: `${po.poNumber} cancelled`,
+        });
+        flash(`${po.poNumber} cancelled.`);
+        await load();
+        await onChanged();
+      } catch (err) {
+        flash(err instanceof ApiRequestError ? err.message : 'Could not cancel that PO.');
+      }
+    });
   }
 
   return (
@@ -3110,8 +3150,11 @@ function PurchaseOrdersTab({
                         {po.receivedUnits === 0 && (
                           <button
                             onClick={() => void cancel(po)}
-                            className="rounded-lg border border-gray-300 px-2 py-1 text-gray-500 hover:bg-gray-50"
+                            disabled={isPending(po.id)}
+                            aria-busy={isPending(po.id)}
+                            className="rounded-lg border border-gray-300 px-2 py-1 text-gray-500 hover:bg-gray-50 disabled:opacity-50"
                           >
+                            {isPending(po.id) && <Spinner className="mr-1" />}
                             Cancel
                           </button>
                         )}
@@ -3185,6 +3228,7 @@ function PurchaseOrderModal({
   const total = lines.reduce((sum, l) => sum + l.quantityOrdered * l.unitCostPaise, 0);
 
   async function submit() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -3203,6 +3247,7 @@ function PurchaseOrderModal({
           })),
         },
       });
+      toast.success(`${created.poNumber} raised`);
       await onDone(`${created.poNumber} raised — the units now show as incoming.`);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not raise the PO.');
@@ -3361,7 +3406,7 @@ function PurchaseOrderModal({
           onClick={() => void submit()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? 'Raising…' : 'Raise PO'}
+          {busy ? <><Spinner className="mr-1" />Raising…</> : 'Raise PO'}
         </button>
       </div>
     </Modal>
@@ -3388,6 +3433,7 @@ function ReceiveModal({
   const totalReceiving = Object.values(quantities).reduce((sum, q) => sum + (q || 0), 0);
 
   async function submit() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -3398,6 +3444,7 @@ function ReceiveModal({
           lines: po.items.map((i) => ({ itemId: i.id, quantity: quantities[i.id] ?? 0 })),
         },
       });
+      toast.success(`${num(totalReceiving)} unit(s) received into ${po.warehouseName}`);
       await onDone(`${num(totalReceiving)} unit(s) received into ${po.warehouseName}.`);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not receive that stock.');
@@ -3475,7 +3522,7 @@ function ReceiveModal({
           onClick={() => void submit()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
-          {busy ? 'Receiving…' : 'Receive stock'}
+          {busy ? <><Spinner className="mr-1" />Receiving…</> : 'Receive stock'}
         </button>
       </div>
     </Modal>

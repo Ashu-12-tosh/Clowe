@@ -24,6 +24,10 @@ import {
   type TicketPriorityValue,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
+import { toast } from '@/lib/toast';
+import FieldError from '@/components/FieldError';
+import Spinner from '@/components/Spinner';
 import { getPublicSettings } from '@/lib/settings';
 import TicketDrawer, { TICKET_STATUS_STYLES } from '@/components/seller/support/TicketDrawer';
 
@@ -122,6 +126,7 @@ export default function SellerSupportPage() {
     orderNumber: '',
   });
   const [creating, setCreating] = useState(false);
+  const { errors: fieldErrors, show: showFieldErrors, fromError } = useFieldErrors();
   // From platform settings, where admins can change it without a deploy.
   const [vendorEmail, setVendorEmail] = useState('');
   // Articles and policies quote the return window and dispatch rules from settings too.
@@ -177,6 +182,8 @@ export default function SellerSupportPage() {
       const reply = await api<SellerAssistantReply>('/api/ai/seller-assistant', {
         body: { question: q, history: chat.slice(-6).map((t) => ({ role: t.role, content: t.content })) },
         auth: true,
+        // A failure is answered in the chat itself.
+        quiet: true,
       });
       setChat((prev) => [
         ...prev,
@@ -222,17 +229,26 @@ export default function SellerSupportPage() {
     const parsed = ticketCreateSchema.safeParse(payload);
     if (!parsed.success) {
       setFormError(parsed.error.issues[0].message);
+      showFieldErrors(issuesToFieldErrors(parsed.error.issues));
+      toast.error(`Not sent: ${parsed.error.issues[0].message}`);
       return;
     }
+    showFieldErrors({});
+    if (creating) return;
 
     setCreating(true);
     try {
-      await api('/api/seller/support/tickets', { body: parsed.data, auth: true });
+      await api('/api/seller/support/tickets', {
+        body: parsed.data,
+        auth: true,
+        success: 'Ticket raised — support will reply here',
+      });
       setForm({ category: 'ORDERS', subject: '', body: '', priority: 'MEDIUM', orderNumber: '' });
       setShowForm(false);
       setTicketNotice('Ticket raised — the support team will reply here, and you’ll get a notification.');
       await Promise.all([loadSummary(), loadTickets()]);
     } catch (err) {
+      fromError(err);
       setFormError(err instanceof ApiRequestError ? err.message : 'Could not raise the ticket');
     } finally {
       setCreating(false);
@@ -368,7 +384,9 @@ export default function SellerSupportPage() {
                 maxLength={120}
                 placeholder="One line about the problem"
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600"
+                name={'subject'}
               />
+              <FieldError message={fieldErrors['subject']} />
             </div>
             <div className="sm:col-span-2 min-w-0">
               <label className="flex justify-between text-xs font-semibold text-gray-500">
@@ -384,7 +402,9 @@ export default function SellerSupportPage() {
                 maxLength={4000}
                 placeholder="What happened, what you expected, and anything you have already tried."
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600"
+                name={'body'}
               />
+              <FieldError message={fieldErrors['body']} />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-500">
@@ -395,7 +415,9 @@ export default function SellerSupportPage() {
                 onChange={(e) => setForm((f) => ({ ...f, orderNumber: e.target.value }))}
                 placeholder="CLW-7KQ3MX9P2T"
                 className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600"
+                name={'orderNumber'}
               />
+              <FieldError message={fieldErrors['orderNumber']} />
             </div>
           </div>
           {formError && (
@@ -413,9 +435,11 @@ export default function SellerSupportPage() {
             <button
               onClick={() => void createTicket()}
               disabled={creating}
+              aria-busy={creating}
+              data-action="submit-ticket"
               className="rounded-lg bg-ink-900 px-5 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
             >
-              {creating ? 'Submitting…' : 'Submit ticket'}
+              {creating ? <><Spinner className="mr-1" />Submitting…</> : 'Submit ticket'}
             </button>
           </div>
         </section>

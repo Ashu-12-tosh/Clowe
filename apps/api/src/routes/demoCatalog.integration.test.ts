@@ -220,3 +220,15 @@ describe('once the admin turns the demo catalog on', () => {
     }
   });
 });
+
+describe('a setting the API refuses', () => {
+  it('names the field, so the admin form can mark it', async () => {
+    const res = await call('PUT', '/api/admin/settings', adminToken, { gstUniformPercent: 99 });
+    expect(res.status).toBe(400);
+    expect((res.json as { error?: unknown }).error).toMatchObject({
+      code: 'VALIDATION_ERROR',
+      field: 'gstUniformPercent',
+      message: expect.stringMatching(/^gstUniformPercent: /),
+    });
+  });
+});

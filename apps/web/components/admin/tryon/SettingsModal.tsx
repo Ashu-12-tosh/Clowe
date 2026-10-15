@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { AdminTryOnSettings, AdminTryOnSettingsInput } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
 export type SettingsMode = 'MODEL' | 'LIMITS';
@@ -32,6 +33,7 @@ export default function SettingsModal({
   const [saved, setSaved] = useState(false);
 
   async function save() {
+    if (busy) return;
     setBusy(true);
     setError('');
     try {
@@ -46,6 +48,7 @@ export default function SettingsModal({
         method: 'PUT',
         body,
         auth: true,
+        success: 'Try-on settings saved',
       });
       onSaved(next);
       setSaved(true);
@@ -194,10 +197,11 @@ export default function SettingsModal({
           </button>
           <button
             onClick={() => void save()}
-            disabled={busy}
+            disabled={busy || saved}
+            aria-busy={busy}
             className="rounded-lg bg-ink-900 px-5 py-2 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
           >
-            {saved ? '✓ Saved' : busy ? 'Saving…' : 'Save changes'}
+            {saved ? '✓ Saved' : busy ? <><Spinner className="mr-1" />Saving…</> : 'Save changes'}
           </button>
         </div>
       </div>

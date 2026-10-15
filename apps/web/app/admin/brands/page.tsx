@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminBrandRow } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import { usePending } from '@/lib/usePending';
+import Spinner from '@/components/Spinner';
 
 const field =
   'rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -13,6 +15,7 @@ export default function AdminBrandsPage() {
   const [logoUrl, setLogoUrl] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const { run, isPending } = usePending();
 
   const load = useCallback(() => {
     api<AdminBrandRow[]>('/api/admin/brands', { auth: true })
@@ -23,12 +26,14 @@ export default function AdminBrandsPage() {
 
   async function addBrand(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setError('');
     setBusy(true);
     try {
       await api('/api/admin/brands', {
         body: { name: name.trim(), logoUrl: logoUrl.trim() || null },
         auth: true,
+        success: `Brand “${name.trim()}” added`,
       });
       setName('');
       setLogoUrl('');
@@ -41,16 +46,19 @@ export default function AdminBrandsPage() {
   }
 
   async function toggle(row: AdminBrandRow) {
-    try {
-      await api(`/api/admin/brands/${row.id}`, {
-        method: 'PATCH',
-        body: { isActive: !row.isActive },
-        auth: true,
-      });
-      load();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
-    }
+    await run(row.id, async () => {
+      try {
+        await api(`/api/admin/brands/${row.id}`, {
+          method: 'PATCH',
+          body: { isActive: !row.isActive },
+          auth: true,
+          success: row.isActive ? `${row.name} hidden` : `${row.name} activated`,
+        });
+        load();
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
+      }
+    });
   }
 
   return (
@@ -70,9 +78,10 @@ export default function AdminBrandsPage() {
         <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="Logo URL (optional)" className={`${field} w-72`} />
         <button
           disabled={busy || name.trim().length < 2}
+          aria-busy={busy}
           className="rounded-lg bg-ink-900 px-5 py-2 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
         >
-          Add
+          {busy ? <><Spinner className="mr-1" />Adding…</> : 'Add'}
         </button>
       </form>
 
@@ -110,7 +119,13 @@ export default function AdminBrandsPage() {
                   </span>
                 </td>
                 <td className="px-4 py-2.5 text-right">
-                  <button onClick={() => void toggle(row)} className="text-xs font-semibold text-brand-600 hover:underline">
+                  <button
+                    onClick={() => void toggle(row)}
+                    disabled={isPending(row.id)}
+                    aria-busy={isPending(row.id)}
+                    className="text-xs font-semibold text-brand-600 hover:underline disabled:opacity-50"
+                  >
+                    {isPending(row.id) && <Spinner className="mr-1" />}
                     {row.isActive ? 'Hide' : 'Activate'}
                   </button>
                 </td>

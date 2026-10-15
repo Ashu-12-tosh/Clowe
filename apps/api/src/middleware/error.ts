@@ -32,6 +32,8 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
       error: {
         code: 'VALIDATION_ERROR',
         message: first ? `${first.path.join('.')}: ${first.message}` : 'Invalid input',
+        // The form shows it next to this input and scrolls to it.
+        ...(first && first.path.length > 0 ? { field: first.path.join('.') } : {}),
       },
     });
   }

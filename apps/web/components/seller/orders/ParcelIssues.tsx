@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { SellerParcelView } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
+import Spinner from '@/components/Spinner';
 
 /** The next six days, as YYYY-MM-DD in India, for "deliver on another day". */
 function nextDays(): { value: string; label: string }[] {
@@ -42,10 +43,11 @@ export function ParcelIssues({
   if (issues.length === 0 && buyerRtoCount === 0) return null;
 
   async function post(parcelId: string, path: string, body: unknown, done: string) {
-    setBusy(parcelId);
+    if (busy) return;
+    setBusy(`${parcelId}:${done}`);
     setError('');
     try {
-      await api(`/api/seller/orders/parcels/${parcelId}/${path}`, { method: 'POST', body, auth: true });
+      await api(`/api/seller/orders/parcels/${parcelId}/${path}`, { method: 'POST', body, auth: true, success: done });
       flash(done);
       onChanged();
     } catch (err) {
@@ -81,6 +83,7 @@ export function ParcelIssues({
                     onClick={() => void post(p.id, 'ndr', { action: 'RE_ATTEMPT' }, 'Asked Delhivery to try again.')}
                     className="rounded-lg bg-ink-900 px-3 py-1.5 font-bold uppercase tracking-wide text-white disabled:opacity-50"
                   >
+                    {busy === `${p.id}:Asked Delhivery to try again.` && <Spinner className="mr-1" />}
                     Try again
                   </button>
                   <span className="text-gray-500">or deliver on</span>
@@ -104,6 +107,7 @@ export function ParcelIssues({
                     }
                     className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-semibold disabled:opacity-50"
                   >
+                    {busy === `${p.id}:Asked Delhivery to deliver on that day.` && <Spinner className="mr-1" />}
                     Deliver that day
                   </button>
                 </div>
@@ -126,6 +130,7 @@ export function ParcelIssues({
                   onClick={() => void post(p.id, 'rto-received', { condition: 'GOOD' }, 'Checked: its stock is back on sale.')}
                   className="rounded-lg bg-ink-900 px-3 py-1.5 font-bold uppercase tracking-wide text-white disabled:opacity-50"
                 >
+                  {busy === `${p.id}:Checked: its stock is back on sale.` && <Spinner className="mr-1" />}
                   Good — put stock back
                 </button>
                 <button
@@ -134,6 +139,7 @@ export function ParcelIssues({
                   onClick={() => void post(p.id, 'rto-received', { condition: 'DAMAGED' }, 'Reported damaged: our team will look at it.')}
                   className="rounded-lg border border-red-300 bg-white px-3 py-1.5 font-semibold text-red-600 disabled:opacity-50"
                 >
+                  {busy === `${p.id}:Reported damaged: our team will look at it.` && <Spinner className="mr-1" />}
                   Damaged
                 </button>
               </div>

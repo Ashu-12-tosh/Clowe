@@ -20,6 +20,10 @@ import {
   type StoreTab,
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadImages } from '@/lib/api';
+import { issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
+import { toast } from '@/lib/toast';
+import FieldError from '@/components/FieldError';
+import Spinner from '@/components/Spinner';
 import StorePreview from '@/components/seller/store/StorePreview';
 import KycVerificationCard from '@/components/seller/KycVerificationCard';
 import { ExternalLink } from '@/components/ExternalLink';
@@ -92,6 +96,7 @@ export default function SellerStoreSettingsPage() {
   const [form, setForm] = useState<SellerStoreSettings | null>(null);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [busy, setBusy] = useState(false);
+  const { errors: fieldErrors, show: showFieldErrors, fromError } = useFieldErrors();
   const [uploading, setUploading] = useState<'logo' | 'banner' | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -125,6 +130,7 @@ export default function SellerStoreSettingsPage() {
     try {
       const [url] = await uploadImages([files[0]]);
       patch(kind === 'logo' ? { logoUrl: url } : { bannerUrl: url });
+      toast.success(`${kind === 'logo' ? 'Logo' : 'Banner'} uploaded — press Save changes to keep it`);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Upload failed');
     } finally {
@@ -138,7 +144,7 @@ export default function SellerStoreSettingsPage() {
     setError('');
     setNotice('');
 
-    const section: Record<string, { path: string; payload: unknown; schema: { safeParse: (v: unknown) => { success: boolean; error?: { issues: { message: string }[] } } } }> = {
+    const section: Record<string, { path: string; payload: unknown; schema: { safeParse: (v: unknown) => { success: boolean; error?: { issues: { path: PropertyKey[]; message: string }[] } } } }> = {
       PROFILE: {
         path: 'profile',
         schema: storeProfileSchema,
@@ -216,9 +222,14 @@ export default function SellerStoreSettingsPage() {
 
     const parsed = target.schema.safeParse(target.payload);
     if (!parsed.success) {
-      setError(parsed.error?.issues[0].message ?? 'Please check the form');
+      const issues = parsed.error?.issues ?? [];
+      setError(issues[0]?.message ?? 'Please check the form');
+      showFieldErrors(issuesToFieldErrors(issues));
+      toast.error(`Not saved: ${issues[0]?.message ?? 'please check the form'}`);
       return;
     }
+    showFieldErrors({});
+    if (busy) return;
 
     setBusy(true);
     try {
@@ -226,12 +237,14 @@ export default function SellerStoreSettingsPage() {
         method: 'PUT',
         body: target.payload,
         auth: true,
+        success: 'Store settings saved',
       });
       setData(body);
       setForm(body.settings);
       setNotice('Saved.');
       setTimeout(() => setNotice(''), 2500);
     } catch (err) {
+      fromError(err);
       setError(err instanceof ApiRequestError ? err.message : 'Could not save');
     } finally {
       setBusy(false);
@@ -275,9 +288,11 @@ export default function SellerStoreSettingsPage() {
             <button
               onClick={() => void save()}
               disabled={busy}
+              aria-busy={busy}
+              data-action="save-store"
               className="rounded-lg bg-brand-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-700 disabled:opacity-50"
             >
-              {busy ? 'Saving…' : 'Save changes'}
+              {busy ? <><Spinner className="mr-1" />Saving…</> : 'Save changes'}
             </button>
           )}
         </div>
@@ -331,7 +346,9 @@ export default function SellerStoreSettingsPage() {
                       onChange={(e) => patch({ shopName: e.target.value })}
                       maxLength={60}
                       className={field}
+                      name={'shopName'}
                     />
+                    <FieldError message={fieldErrors['shopName']} />
                   </Field>
                   <Field
                     label="Store URL"
@@ -342,7 +359,9 @@ export default function SellerStoreSettingsPage() {
                       onChange={(e) => patch({ slug: e.target.value.toLowerCase() })}
                       placeholder="your-store"
                       className={field}
+                      name={'slug'}
                     />
+                    <FieldError message={fieldErrors['slug']} />
                   </Field>
                   <Field label="Tagline" hint="One line under your store name">
                     <input
@@ -350,7 +369,9 @@ export default function SellerStoreSettingsPage() {
                       onChange={(e) => patch({ tagline: e.target.value })}
                       maxLength={80}
                       className={field}
+                      name={'tagline'}
                     />
+                    <FieldError message={fieldErrors['tagline']} />
                   </Field>
                   <Field label="Primary category">
                     <select
@@ -382,7 +403,9 @@ export default function SellerStoreSettingsPage() {
                         rows={3}
                         maxLength={500}
                         className={field}
+                        name={'description'}
                       />
+                      <FieldError message={fieldErrors['description']} />
                     </Field>
                   </div>
                   <Field label="Store email">
@@ -391,7 +414,9 @@ export default function SellerStoreSettingsPage() {
                       onChange={(e) => patch({ storeEmail: e.target.value })}
                       placeholder="support@yourstore.com"
                       className={field}
+                      name={'storeEmail'}
                     />
+                    <FieldError message={fieldErrors['storeEmail']} />
                   </Field>
                   <Field label="Store phone">
                     <input
@@ -399,7 +424,9 @@ export default function SellerStoreSettingsPage() {
                       onChange={(e) => patch({ storePhone: e.target.value })}
                       placeholder="+91 98765 43210"
                       className={field}
+                      name={'storePhone'}
                     />
+                    <FieldError message={fieldErrors['storePhone']} />
                   </Field>
                 </div>
               </Section>
@@ -601,7 +628,9 @@ export default function SellerStoreSettingsPage() {
                     onChange={(e) => patch({ gstNumber: e.target.value.toUpperCase() })}
                     disabled={form.kycStatus === 'VERIFIED'}
                     className={`${field} uppercase disabled:bg-gray-50`}
+                    name={'gstNumber'}
                   />
+                  <FieldError message={fieldErrors['gstNumber']} />
                 </Field>
                 <Field label="PAN" hint="Format ABCDE1234F">
                   <input
@@ -610,7 +639,9 @@ export default function SellerStoreSettingsPage() {
                     // Locked once verified, unless none was ever saved: payouts need one.
                     disabled={form.kycStatus === 'VERIFIED' && !!data.settings.panNumber}
                     className={`${field} uppercase disabled:bg-gray-50`}
+                    name={'panNumber'}
                   />
+                  <FieldError message={fieldErrors['panNumber']} />
                 </Field>
                 <Field label="Name as on PAN" hint="Exactly as printed on the card — this is what we verify">
                   <input
@@ -618,49 +649,63 @@ export default function SellerStoreSettingsPage() {
                     onChange={(e) => patch({ panName: e.target.value })}
                     disabled={form.kycStatus === 'VERIFIED' && !!data.settings.panName}
                     className={`${field} disabled:bg-gray-50`}
+                    name={'panName'}
                   />
+                  <FieldError message={fieldErrors['panName']} />
                 </Field>
                 <Field label="Address line 1">
                   <input
                     value={form.addressLine1 ?? ''}
                     onChange={(e) => patch({ addressLine1: e.target.value })}
                     className={field}
+                    name={'addressLine1'}
                   />
+                  <FieldError message={fieldErrors['addressLine1']} />
                 </Field>
                 <Field label="Address line 2">
                   <input
                     value={form.addressLine2 ?? ''}
                     onChange={(e) => patch({ addressLine2: e.target.value })}
                     className={field}
+                    name={'addressLine2'}
                   />
+                  <FieldError message={fieldErrors['addressLine2']} />
                 </Field>
                 <Field label="Landmark">
                   <input
                     value={form.landmark ?? ''}
                     onChange={(e) => patch({ landmark: e.target.value })}
                     className={field}
+                    name={'landmark'}
                   />
+                  <FieldError message={fieldErrors['landmark']} />
                 </Field>
                 <Field label="City">
                   <input
                     value={form.city ?? ''}
                     onChange={(e) => patch({ city: e.target.value })}
                     className={field}
+                    name={'city'}
                   />
+                  <FieldError message={fieldErrors['city']} />
                 </Field>
                 <Field label="State">
                   <input
                     value={form.state ?? ''}
                     onChange={(e) => patch({ state: e.target.value })}
                     className={field}
+                    name={'state'}
                   />
+                  <FieldError message={fieldErrors['state']} />
                 </Field>
                 <Field label="PIN code">
                   <input
                     value={form.pincode ?? ''}
                     onChange={(e) => patch({ pincode: e.target.value })}
                     className={field}
+                    name={'pincode'}
                   />
+                  <FieldError message={fieldErrors['pincode']} />
                 </Field>
               </div>
             </Section>
@@ -730,49 +775,63 @@ export default function SellerStoreSettingsPage() {
                         value={form.pickupName ?? ''}
                         onChange={(e) => patch({ pickupName: e.target.value })}
                         className={field}
+                        name={'pickupName'}
                       />
+                      <FieldError message={fieldErrors['pickupName']} />
                     </Field>
                     <Field label="Contact phone">
                       <input
                         value={form.pickupPhone ?? ''}
                         onChange={(e) => patch({ pickupPhone: e.target.value })}
                         className={field}
+                        name={'pickupPhone'}
                       />
+                      <FieldError message={fieldErrors['pickupPhone']} />
                     </Field>
                     <Field label="Address line 1 *">
                       <input
                         value={form.pickupLine1 ?? ''}
                         onChange={(e) => patch({ pickupLine1: e.target.value })}
                         className={field}
+                        name={'pickupLine1'}
                       />
+                      <FieldError message={fieldErrors['pickupLine1']} />
                     </Field>
                     <Field label="Address line 2">
                       <input
                         value={form.pickupLine2 ?? ''}
                         onChange={(e) => patch({ pickupLine2: e.target.value })}
                         className={field}
+                        name={'pickupLine2'}
                       />
+                      <FieldError message={fieldErrors['pickupLine2']} />
                     </Field>
                     <Field label="City">
                       <input
                         value={form.pickupCity ?? ''}
                         onChange={(e) => patch({ pickupCity: e.target.value })}
                         className={field}
+                        name={'pickupCity'}
                       />
+                      <FieldError message={fieldErrors['pickupCity']} />
                     </Field>
                     <Field label="State">
                       <input
                         value={form.pickupState ?? ''}
                         onChange={(e) => patch({ pickupState: e.target.value })}
                         className={field}
+                        name={'pickupState'}
                       />
+                      <FieldError message={fieldErrors['pickupState']} />
                     </Field>
                     <Field label="PIN code *">
                       <input
                         value={form.pickupPincode ?? ''}
                         onChange={(e) => patch({ pickupPincode: e.target.value })}
                         className={field}
+                        name={'pickupPincode'}
                       />
+                      <FieldError message={fieldErrors['pickupPincode']} />
                     </Field>
                   </div>
                 )}
@@ -843,7 +902,9 @@ export default function SellerStoreSettingsPage() {
                     }
                     placeholder={`${form.platformReturnWindowDays} (platform default)`}
                     className={field}
+                    name={'returnWindowDays'}
                   />
+                  <FieldError message={fieldErrors['returnWindowDays']} />
                 </Field>
                 <Field label="In force now">
                   <p className="rounded-lg bg-cream-50 px-3 py-2 text-sm font-semibold text-ink-900">
@@ -868,28 +929,36 @@ export default function SellerStoreSettingsPage() {
                       value={form.returnLine1 ?? ''}
                       onChange={(e) => patch({ returnLine1: e.target.value })}
                       className={field}
+                      name={'returnLine1'}
                     />
+                    <FieldError message={fieldErrors['returnLine1']} />
                   </Field>
                   <Field label="City">
                     <input
                       value={form.returnCity ?? ''}
                       onChange={(e) => patch({ returnCity: e.target.value })}
                       className={field}
+                      name={'returnCity'}
                     />
+                    <FieldError message={fieldErrors['returnCity']} />
                   </Field>
                   <Field label="State">
                     <input
                       value={form.returnState ?? ''}
                       onChange={(e) => patch({ returnState: e.target.value })}
                       className={field}
+                      name={'returnState'}
                     />
+                    <FieldError message={fieldErrors['returnState']} />
                   </Field>
                   <Field label="PIN code">
                     <input
                       value={form.returnPincode ?? ''}
                       onChange={(e) => patch({ returnPincode: e.target.value })}
                       className={field}
+                      name={'returnPincode'}
                     />
+                    <FieldError message={fieldErrors['returnPincode']} />
                   </Field>
                 </div>
               )}
@@ -930,7 +999,9 @@ export default function SellerStoreSettingsPage() {
                         value={form.vacationUntil ? form.vacationUntil.slice(0, 10) : ''}
                         onChange={(e) => patch({ vacationUntil: e.target.value })}
                         className={field}
+                        name={'vacationUntil'}
                       />
+                      <FieldError message={fieldErrors['vacationUntil']} />
                     </Field>
                     <Field label="Message for shoppers">
                       <input
@@ -938,7 +1009,9 @@ export default function SellerStoreSettingsPage() {
                         onChange={(e) => patch({ vacationMessage: e.target.value })}
                         placeholder="Back on 20 August — thanks for your patience!"
                         className={field}
+                        name={'vacationMessage'}
                       />
+                      <FieldError message={fieldErrors['vacationMessage']} />
                     </Field>
                   </div>
                 )}

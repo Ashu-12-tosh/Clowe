@@ -22,6 +22,8 @@ import {
   type TransactionTab,
   type TransactionType,
 } from '@clowe/shared';
+import { toast } from '@/lib/toast';
+import Spinner from '@/components/Spinner';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { BarList, DonutChart, LineChart } from '@/components/charts/Charts';
@@ -258,6 +260,7 @@ export default function AdminPaymentsPage() {
   }, []);
 
   async function reconcile() {
+    if (reconciling) return;
     setReconciling(true);
     try {
       const result = await api<ReconcileReport>('/api/admin/payments/reconcile', {
@@ -265,11 +268,12 @@ export default function AdminPaymentsPage() {
         auth: true,
       });
       setReport(result);
-      flash(
+      const message =
         result.findings.length === 0
           ? 'Reconciliation clean — every payment, refund and payout agrees with its order.'
-          : `Reconciliation found ${result.findings.length} discrepancy(ies).`,
-      );
+          : `Reconciliation found ${result.findings.length} discrepancy(ies).`;
+      flash(message);
+      (result.findings.length === 0 ? toast.success : toast.error)(message);
     } catch (err) {
       flash(err instanceof ApiRequestError ? err.message : 'Could not run reconciliation.');
     } finally {
@@ -307,17 +311,17 @@ export default function AdminPaymentsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => downloadFile(`/api/admin/payments/export?${query}`, 'transactions.csv')}
+            onClick={() => void downloadFile(`/api/admin/payments/export?${query}`, 'transactions.csv').catch(() => undefined)}
             className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
           >
             ⭳ Export Report
           </button>
           <button
             onClick={() =>
-              downloadFile(
+              void downloadFile(
                 `/api/admin/payments/settlement/export?${from ? `from=${from}&` : ''}${to ? `to=${to}` : ''}`,
                 'settlement-report.csv',
-              )
+              ).catch(() => undefined)
             }
             className="rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
           >
@@ -335,7 +339,7 @@ export default function AdminPaymentsPage() {
             />
             <button
               type="button"
-              onClick={() => downloadFile(`/api/admin/payments/gstr8?month=${gstrMonth}`, `gstr8-tcs-${gstrMonth}.csv`)}
+              onClick={() => void downloadFile(`/api/admin/payments/gstr8?month=${gstrMonth}`, `gstr8-tcs-${gstrMonth}.csv`).catch(() => undefined)}
               className="rounded-md bg-gray-100 px-2 py-1 font-semibold hover:bg-gray-200"
             >
               ⭳ CSV
@@ -344,9 +348,10 @@ export default function AdminPaymentsPage() {
           <button
             onClick={() => void reconcile()}
             disabled={reconciling}
+            aria-busy={reconciling}
             className="rounded-lg bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
           >
-            {reconciling ? 'Reconciling…' : '⟳ Reconcile Now'}
+            {reconciling ? <><Spinner className="mr-1" />Reconciling…</> : '⟳ Reconcile Now'}
           </button>
         </div>
       </div>

@@ -16,6 +16,10 @@ import {
 } from '@clowe/shared';
 import { useCouponsEnabled } from '@/lib/coupons';
 import { api, ApiRequestError } from '@/lib/api';
+import { issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
+import { toast } from '@/lib/toast';
+import FieldError from '@/components/FieldError';
+import Spinner from '@/components/Spinner';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -76,6 +80,9 @@ export default function PromotionModal({
   const [products, setProducts] = useState<SellerProductRow[]>([]);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
   const [busy, setBusy] = useState(false);
+  const { errors: fieldErrors, show: showFieldErrors, fromError } = useFieldErrors();
+  // Which button was pressed, so it is the one that says "Saving…".
+  const [saving, setSaving] = useState<'DRAFT' | 'ACTIVE' | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -88,6 +95,7 @@ export default function PromotionModal({
   }, []);
 
   async function save(state: 'DRAFT' | 'ACTIVE') {
+    if (busy) return;
     setError('');
     const payload = {
       name: name.trim(),
@@ -113,29 +121,40 @@ export default function PromotionModal({
 
     const parsed = promotionUpsertSchema.safeParse(payload);
     if (!parsed.success) {
-      const issue = parsed.error.issues[0];
-      setError(`${issue.path.join('.') || 'form'}: ${issue.message}`);
+      const problems = issuesToFieldErrors(parsed.error.issues);
+      // One the form has no input for (a rule across fields) still says why.
+      const general = parsed.error.issues.find((i) => i.path.length === 0);
+      if (general) setError(general.message);
+      showFieldErrors(problems);
+      toast.error(general ? `Not saved: ${general.message}` : 'Not saved: fix the fields marked in red');
       return;
     }
+    showFieldErrors({});
 
     setBusy(true);
+    setSaving(state);
+    const success = state === 'DRAFT' ? 'Promotion saved as a draft' : initial ? 'Promotion saved' : 'Promotion launched';
     try {
       const row = initial
         ? await api<SellerPromotionRow>(`/api/seller/promotions/${initial.id}`, {
             method: 'PUT',
             body: parsed.data,
             auth: true,
+            success,
           })
         : await api<SellerPromotionRow>('/api/seller/promotions', {
             body: parsed.data,
             auth: true,
+            success,
           });
       onSaved(row);
       onClose();
     } catch (err) {
+      fromError(err);
       setError(err instanceof ApiRequestError ? err.message : 'Could not save the promotion');
     } finally {
       setBusy(false);
+      setSaving(null);
     }
   }
 
@@ -175,7 +194,9 @@ export default function PromotionModal({
                 maxLength={60}
                 placeholder="e.g. Summer Sale"
                 className={`mt-1 ${field}`}
+                name={'name'}
               />
+              <FieldError message={fieldErrors['name']} />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-500">
@@ -188,7 +209,9 @@ export default function PromotionModal({
                 placeholder={couponsEnabled === true ? 'SUMMER25' : 'Codes are switched off'}
                 disabled={couponsEnabled !== true}
                 className={`mt-1 ${field} uppercase disabled:bg-gray-50 disabled:text-gray-400`}
+                name={'code'}
               />
+              <FieldError message={fieldErrors['code']} />
               {couponsEnabled !== true && (
                 // The same reason the API gives, before Save rather than after it.
                 <p className="mt-1 text-[11px] text-gray-500">
@@ -205,7 +228,9 @@ export default function PromotionModal({
                 maxLength={200}
                 placeholder="Shown to shoppers when the offer applies"
                 className={`mt-1 ${field}`}
+                name={'description'}
               />
+              <FieldError message={fieldErrors['description']} />
             </div>
           </div>
 
@@ -248,7 +273,9 @@ export default function PromotionModal({
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 className={`mt-1 ${field}`}
+                name={'value'}
               />
+              <FieldError message={fieldErrors['value']} />
             </div>
           </div>
 
@@ -257,7 +284,8 @@ export default function PromotionModal({
               <label className="text-xs font-semibold text-gray-500">
                 Products ({productIds.length} selected)
               </label>
-              <div className="mt-1 max-h-44 overflow-y-auto rounded-lg border border-gray-200 p-2">
+              <FieldError message={fieldErrors.productIds} />
+              <div data-field="productIds" className="mt-1 max-h-44 overflow-y-auto rounded-lg border border-gray-200 p-2">
                 {products.map((p) => (
                   <label key={p.id} className="flex items-center gap-2 py-1 text-xs">
                     <input
@@ -282,7 +310,8 @@ export default function PromotionModal({
               <label className="text-xs font-semibold text-gray-500">
                 Categories ({categoryIds.length} selected)
               </label>
-              <div className="mt-1 max-h-44 overflow-y-auto rounded-lg border border-gray-200 p-2">
+              <FieldError message={fieldErrors.categoryIds} />
+              <div data-field="categoryIds" className="mt-1 max-h-44 overflow-y-auto rounded-lg border border-gray-200 p-2">
                 {categories.map((root) => (
                   <div key={root.id} className="mb-1.5">
                     <label className="flex items-center gap-2 py-0.5 text-xs font-semibold">
@@ -321,7 +350,9 @@ export default function PromotionModal({
                 value={startAt}
                 onChange={(e) => setStartAt(e.target.value)}
                 className={`mt-1 ${field}`}
+                name={'startAt'}
               />
+              <FieldError message={fieldErrors['startAt']} />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-500">Ends</label>
@@ -330,7 +361,9 @@ export default function PromotionModal({
                 value={endAt}
                 onChange={(e) => setEndAt(e.target.value)}
                 className={`mt-1 ${field}`}
+                name={'endAt'}
               />
+              <FieldError message={fieldErrors['endAt']} />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-500">
@@ -343,7 +376,9 @@ export default function PromotionModal({
                 onChange={(e) => setMaxDiscount(e.target.value)}
                 placeholder="No cap"
                 className={`mt-1 ${field}`}
+                name={'maxDiscountPaise'}
               />
+              <FieldError message={fieldErrors['maxDiscountPaise']} />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-500">
@@ -356,7 +391,9 @@ export default function PromotionModal({
                 onChange={(e) => setMinOrder(e.target.value)}
                 placeholder="0"
                 className={`mt-1 ${field}`}
+                name={'minOrderPaise'}
               />
+              <FieldError message={fieldErrors['minOrderPaise']} />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-500">
@@ -369,7 +406,9 @@ export default function PromotionModal({
                 onChange={(e) => setUsageLimit(e.target.value)}
                 placeholder="Unlimited"
                 className={`mt-1 ${field}`}
+                name={'usageLimit'}
               />
+              <FieldError message={fieldErrors['usageLimit']} />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-500">
@@ -382,7 +421,9 @@ export default function PromotionModal({
                 onChange={(e) => setPerUserLimit(e.target.value)}
                 placeholder="Unlimited"
                 className={`mt-1 ${field}`}
+                name={'perUserLimit'}
               />
+              <FieldError message={fieldErrors['perUserLimit']} />
             </div>
           </div>
 
@@ -407,16 +448,19 @@ export default function PromotionModal({
           <button
             onClick={() => void save('DRAFT')}
             disabled={busy}
+            aria-busy={saving === 'DRAFT'}
             className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold uppercase tracking-wide hover:bg-gray-50 disabled:opacity-50"
           >
-            Save as draft
+            {saving === 'DRAFT' ? <><Spinner className="mr-1" />Saving…</> : 'Save as draft'}
           </button>
           <button
             onClick={() => void save('ACTIVE')}
             disabled={busy}
+            aria-busy={saving === 'ACTIVE'}
+            data-action="save-promotion"
             className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-bold uppercase tracking-wide text-white hover:bg-brand-700 disabled:opacity-50"
           >
-            {busy ? 'Saving…' : initial ? 'Save changes' : 'Launch promotion'}
+            {saving === 'ACTIVE' ? <><Spinner className="mr-1" />Saving…</> : initial ? 'Save changes' : 'Launch promotion'}
           </button>
         </div>
       </div>
