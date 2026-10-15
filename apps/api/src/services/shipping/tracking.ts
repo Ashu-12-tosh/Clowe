@@ -1,7 +1,7 @@
 import type { ShipmentStatus } from '@prisma/client';
 import { prisma } from '../../db';
 import { shippingProvider } from './index';
-import { postForwardFreight } from './freight';
+import { postForwardFreight, postRtoFreight } from './freight';
 import { syncOrderStatus } from '../orderStatusService';
 import { markLineDelivered, markLineShipped } from './lineTransitions';
 import { notifyFailedAttempt, notifyRtoArrived, startRto } from './rto';
@@ -128,7 +128,22 @@ export async function applyTracking(result: TrackingResult, source: TrackingSour
     if (next === 'DELIVERY_FAILED') {
       await notifyFailedAttempt(shipment, result.statusText || 'Delivery attempt failed');
     }
-    if (next === 'RTO_IN_TRANSIT' || next === 'RTO_DELIVERED') {
+    if ((next === 'RTO_IN_TRANSIT' || next === 'RTO_DELIVERED') && live.length === 0) {
+      // Every line was cancelled after pickup (an admin's cancellation): the
+      // buyer was refunded and the stock put back then, so there is nothing to
+      // count or refund — but the parcel still travelled, and comes back.
+      if (next === 'RTO_DELIVERED') {
+        const at = scanTime(result, (t, s) => t === 'DL' && s === 'rto');
+        await prisma.shipment.update({
+          where: { id: shipment.id },
+          data: { status: 'RTO_DELIVERED', rtoDeliveredAt: at, rtoInitiatedAt: shipment.rtoInitiatedAt ?? at },
+        });
+        await postRtoFreight(shipment.id).catch((err) =>
+          console.error('[clowe-api] RTO freight not posted yet for', shipment.awbNumber, err instanceof Error ? err.message : err),
+        );
+        await notifyRtoArrived(shipment);
+      }
+    } else if (next === 'RTO_IN_TRANSIT' || next === 'RTO_DELIVERED') {
       // The first sign it is coming back: count it, refund a prepaid buyer, tell both.
       if (!shipment.rtoInitiatedAt) await startRto(shipment, scanTime(result, (t) => t === 'RT'));
       await prisma.orderItem.updateMany({

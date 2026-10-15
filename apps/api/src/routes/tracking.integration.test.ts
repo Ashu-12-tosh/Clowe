@@ -309,3 +309,28 @@ describe('when delivery goes wrong', () => {
     expect(r.status, JSON.stringify(r.json)).toBe(200);
   });
 });
+
+describe('a parcel cancelled after pickup', () => {
+  it('comes back as RTO without a second refund or an RTO on the buyer, and its courier charges are posted', async () => {
+    const before = (await prisma.user.findUniqueOrThrow({ where: { id: buyerId } })).rtoCount;
+    const p = await awaitingPickup();
+    mock.simulate(p.awb, 'PICKED_UP');
+    await pollOpenShipments();
+    expect((await line(p.itemId)).status).toBe('SHIPPED');
+    const cancel = await call('POST', `/api/admin/orders/${p.orderId}/cancel`, { reason: 'Buyer called to cancel' }, adminToken);
+    expect(cancel.status, JSON.stringify(cancel.json)).toBe(200);
+    // Delhivery turns a cancelled, picked-up parcel round.
+    await pollOpenShipments();
+    expect((await parcel(p.shipmentId)).status).toBe('RTO_IN_TRANSIT');
+    mock.simulate(p.awb, 'RTO_DELIVERED');
+    await pollOpenShipments();
+    const back = await parcel(p.shipmentId);
+    expect(back.status).toBe('RTO_DELIVERED');
+    expect(back.rtoDeliveredAt).not.toBeNull();
+    expect((await line(p.itemId)).status).toBe('CANCELLED');
+    expect((await prisma.refund.findMany({ where: { orderId: p.orderId } })).map((r) => r.amountPaise)).toEqual([50_000]);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: buyerId } })).rtoCount).toBe(before);
+    const types = (await prisma.sellerLedgerEntry.findMany({ where: { orderId: p.orderId }, select: { type: true } })).map((e) => e.type).sort();
+    expect(types).toEqual(['FORWARD_FREIGHT', 'RTO_FREIGHT']);
+  });
+});
