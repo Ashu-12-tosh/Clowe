@@ -1,6 +1,6 @@
 # Clowe — Project Status
 
-_Last updated: 2026-10-14 (delivery money decisions; commit `fe7988e`) · live at **cloweshop.com**_
+_Last updated: 2026-10-16 (SMS OTP live; flat 18% GST confirmed by the CA) · live at **cloweshop.com**_
 
 This file is meant to stand on its own. Someone who reads only this should know
 what Clowe is, what works, what is deliberately switched off, what is blocking a
@@ -25,8 +25,8 @@ logic both sides must agree on).
 | Deployed | Hostinger VPS, Docker Compose, HTTPS live |
 
 **The platform is feature-complete and deployed.** What remains is not features:
-it is three external providers that have been requested and not yet activated,
-and a set of known gaps listed at the bottom.
+it is two external providers (Delhivery live booking, Cashfree) that are not
+yet switched on, and a set of known gaps listed at the bottom.
 
 ---
 
@@ -161,32 +161,30 @@ month.
 
 ## Launch blockers
 
-These are the three things standing between the current site and real customers.
-All three are waiting on an external party, not on code.
+These were the three things standing between the current site and real
+customers. The first is closed; the other two wait on an external party.
 
-**1. OTP SMS — built; waiting on the panel keys in `.env.production`.**
-The provider is written: `OTP_PROVIDER=smspanel` sends login codes as
-transactional SMS through the DLT-registered panel
-(`apps/api/src/services/otp/SmsPanelOtpProvider.ts`). Until its settings are
-in `.env.production`, production stays on the mock: codes are printed to the
-API logs rather than texted, so **nobody except the operator can sign in**.
-Setup and failure meanings: DEPLOY_RUNBOOK.md, "Turning on real SMS OTP".
-
-To read a login code while on the mock:
-```sh
-docker compose -f docker-compose.prod.yml --env-file .env.production logs -f api | grep -A2 'MOCK OTP'
-```
+**1. OTP SMS — closed (2026-10-16): codes arrive by SMS on production.**
+`OTP_PROVIDER=smspanel` sends login codes as transactional SMS through the
+DLT-registered panel (`apps/api/src/services/otp/SmsPanelOtpProvider.ts`;
+boot line `OTP: SMS panel (alots.in, sender CLOWEP, …, route TRANS)`). After a
+spell of codes not arriving, the owner confirmed on 2026-10-16 that they arrive
+again. Failure meanings: DEPLOY_RUNBOOK.md, "Turning on real SMS OTP"; every
+send is in `otp_send_logs` (never the code). Watch the panel's certificate
+expiry (below, 22 Nov 2026).
 
 **2. Shipping — Delhivery One, replacing Shiprocket.**
 Delhivery is the only courier; sellers choose none. The integration is being
 built on the mock (`SHIPPING_PROVIDER=mock`, the default): a Shipment per
 seller per order with its scans, the full provider interface, and a Delhivery
 client that defaults to staging and refuses bookings, pickups and
-cancellations on production unless `DELHIVERY_PRODUCTION_WRITES=true`. A
-staging token has been requested from Delhivery; the token from the
-Delhivery One dashboard is a **production** token, used only for read-only
-rate and pincode checks (2026-10-14). Nothing real is booked until the owner
-says so for that specific action (CLAUDE.md).
+cancellations on production unless `DELHIVERY_PRODUCTION_WRITES=true`. No
+staging token is available: Delhivery's test console hides its token
+(2026-10-16). The token from the Delhivery One dashboard is a **production**
+token, used only for read-only rate and pincode checks (2026-10-14). Instead of
+staging UAT there will be a **live-account test** on production, with ₹500 in
+the Delhivery wallet, step by step as the owner sends it. Nothing real is
+booked until the owner says so for that specific action (CLAUDE.md).
 
 Built on the mock (2026-10-14/15), all steps of the plan: seller pickup
 addresses registered with Delhivery; checkout serviceability and COD limits;
@@ -198,9 +196,10 @@ condition check); courier charges on the seller ledger; COD held until
 Delhivery's remittance is matched (admin → COD remittance); reverse pickups
 for approved returns; Delhivery cancellations when an order is cancelled; an
 admin Parcels desk. **Go-live:** DEPLOY_RUNBOOK.md, "Turning on Delhivery" —
-staging UAT, then production read-only, then live on the owner's yes. Still
-unconfirmed until staging: the packing-slip fields, warehouse-edit fields, the
-webhook's exact payload, and the remittance report's column names.
+production read-only, then the owner's live-account test (no staging token),
+then live on the owner's yes. Still unconfirmed until that test: the
+packing-slip fields, warehouse-edit fields, the webhook's exact payload, and
+the remittance report's column names.
 
 *RTO (courier returns an undelivered parcel to the seller) is designed, not
 built; it lands with this integration. Decided on 2026-10-02: RTO is a set of
@@ -297,7 +296,7 @@ locally first; `dc exec api npx tsx prisma/localizeImages.ts` does exactly that
 on the server and has not been run against production.
 
 **GST is a flat 18% on every product, in every category — the owner's
-decision (2026-10-13).** One setting, `gstUniformPercent` = 18, overrides every
+decision (2026-10-13), confirmed in writing by the CA (2026-10-16).** One setting, `gstUniformPercent` = 18, overrides every
 category rate and the apparel/footwear value slab. Those rules stay in the
 database and the code, unused: clearing the flat rate in admin settings brings
 them back, and either change reprices every listing from its seller's price
@@ -308,10 +307,9 @@ invoices, the ledger, payouts and GSTR-8 read it. It is switched on by
 catalog the dry run moves 391 of 1,031 variants' buyer prices up and none
 down: +12.4% where the rate was 5% (most apparel, drones, groceries...),
 +14.6% for jewellery (3%), +18% for books (nil). The old ₹2,625–₹2,950
-apparel band no longer arises. **Have a CA confirm before launch**: the
-statutory rates for books (nil), jewellery (3%) and apparel under ₹2,500 (5%)
-are lower, and GST collected above the rate that applies is still owed to the
-government (s.76 CGST Act); sellers file what is collected in their own returns.
+apparel band no longer arises. The CA has confirmed flat 18% in writing
+(2026-10-16), so this is no longer an open question; sellers file what is
+collected in their own returns.
 
 **TDS is withheld from the first rupee; the ₹5 lakh exemption is not applied.**
 Under s.194-O(4), an individual or HUF seller who has furnished a PAN or

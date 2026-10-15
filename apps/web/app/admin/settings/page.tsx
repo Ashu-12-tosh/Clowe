@@ -570,7 +570,8 @@ export default function AdminSettingsPage() {
             data-gst-uniform
           />
           <p className="mt-1 text-xs text-gray-500">
-            The owner&rsquo;s decision is 18% on every product, in every category. While set, the
+            18% on every product, in every category: the owner&rsquo;s decision, confirmed in
+            writing by the CA (2026-10-16). While set, the
             category rates and the value slab below are kept but not applied; clear it to go back to
             them. Saving a change reprices every listing from its seller&rsquo;s price before GST;
             past orders keep the rate they were sold at.
@@ -664,9 +665,8 @@ export default function AdminSettingsPage() {
           </div>
         </div>
         <p className="mt-2 text-xs text-gray-400">
-          A single GST rate for the whole catalog is a simplification: category-wise GST (books
-          0%, apparel under ₹1,000 at 5%) is a known follow-up. The tax invoice already applies
-          the category rules; this rate only drives what sellers are shown. The closing fee is a
+          GST is the flat 18% set above, on every product &mdash; confirmed by the CA in writing
+          &mdash; and the tax invoice charges the rate each line was sold at. The closing fee is a
           placeholder until real logistics costs are known. Buyers are not charged any of these
           &mdash; they come out of the seller&rsquo;s settlement.
         </p>
