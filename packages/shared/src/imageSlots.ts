@@ -49,6 +49,12 @@ export const IMAGE_SLOTS = {
     mobile: { width: 1080, height: 405 },
   },
   CATEGORY_TILE: { label: 'Category tile', picture: { width: 600, height: 600 } },
+  /** Product and variant photos: shown square everywhere. */
+  PRODUCT: { label: 'Product photo', picture: { width: 1200, height: 1200 } },
+  STORE_LOGO: { label: 'Store logo', picture: { width: 512, height: 512 } },
+  /** Cropped to the page width: keep the subject in the middle band. */
+  STORE_BANNER: { label: 'Store banner', picture: { width: 1920, height: 600 } },
+  BRAND_LOGO: { label: 'Brand logo', picture: { width: 400, height: 400 } },
 } as const satisfies Record<string, ImageSlot>;
 
 export type ImageSlotKey = keyof typeof IMAGE_SLOTS;

@@ -26,6 +26,8 @@ import {
   type SellerProductUpsertInput,
   type SellerVariantInput,
   type VariantAxis,
+  IMAGE_SLOTS,
+  sizeHint
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadImages } from '@/lib/api';
 import { issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
@@ -1071,7 +1073,8 @@ export default function ProductForm({ initial }: Props) {
           <section className="rounded-2xl border border-gray-100 bg-white p-4">
             <h2 className="text-sm font-bold text-ink-900">3. Images &amp; video</h2>
             <p className="mt-0.5 text-xs text-gray-400">
-              First image is the main one. JPG / PNG / WebP, up to {MAX_IMAGES} images.
+              First image is the main one. Recommended {sizeHint(IMAGE_SLOTS.PRODUCT.picture)}, shown square
+              everywhere · JPG, PNG or WebP, up to 5 MB each, up to {MAX_IMAGES} images.
             </p>
             <p className="mt-2 rounded-lg bg-cream-50 px-3 py-2 text-xs text-gray-600">
               <span className="font-semibold text-ink-900">These photos are for the whole product.</span>{' '}
@@ -1481,6 +1484,7 @@ export default function ProductForm({ initial }: Props) {
                       className="fixed z-50 w-72 rounded-xl border border-gray-200 bg-white p-3 text-left shadow-2xl"
                     >
                       <p className="text-sm font-bold text-ink-900">Images for {g.label}</p>
+                      <p className="text-[11px] text-gray-500">Recommended {sizeHint(IMAGE_SLOTS.PRODUCT.picture)}</p>
                       <p className="mt-0.5 text-xs font-semibold text-brand-600">
                         {g.idxs.length === 1
                           ? 'Applies to this variant'

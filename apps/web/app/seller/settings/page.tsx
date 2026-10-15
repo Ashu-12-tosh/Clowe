@@ -18,6 +18,8 @@ import {
   type SellerStoreSettings,
   type StoreHighlight,
   type StoreTab,
+  IMAGE_SLOTS,
+  sizeHint
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadImages } from '@/lib/api';
 import { issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
@@ -431,10 +433,15 @@ export default function SellerStoreSettingsPage() {
                 </div>
               </Section>
 
-              <Section title="Logo & banner" subtitle="Logo 512×512, banner 1920×600">
+              <Section
+                title="Logo & banner"
+                subtitle={`Logo ${sizeHint(IMAGE_SLOTS.STORE_LOGO.picture)}, banner ${sizeHint(IMAGE_SLOTS.STORE_BANNER.picture)} · JPG, PNG or WebP, up to 5 MB`}
+              >
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <p className="text-xs font-semibold text-gray-500">Store logo</p>
+                    <p className="text-xs font-semibold text-gray-500">
+                      Store logo <span className="font-normal">· {sizeHint(IMAGE_SLOTS.STORE_LOGO.picture)}, shown round</span>
+                    </p>
                     <div className="mt-2 flex items-center gap-3">
                       <span className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-ink-900 text-lg font-bold text-white">
                         {form.logoUrl ? (
@@ -469,7 +476,10 @@ export default function SellerStoreSettingsPage() {
                     </div>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold text-gray-500">Store banner</p>
+                    <p className="text-xs font-semibold text-gray-500">
+                      Store banner{' '}
+                      <span className="font-normal">· {sizeHint(IMAGE_SLOTS.STORE_BANNER.picture)}; phones crop the sides, keep the subject central</span>
+                    </p>
                     <div className="mt-2">
                       <div className="h-20 overflow-hidden rounded-lg bg-cream-100">
                         {form.bannerUrl ? (

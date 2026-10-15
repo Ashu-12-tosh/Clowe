@@ -5,6 +5,8 @@ import type { AdminBrandRow } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { usePending } from '@/lib/usePending';
 import Spinner from '@/components/Spinner';
+import ImageUploadField from '@/components/admin/ImageUploadField';
+import { IMAGE_SLOTS } from '@clowe/shared';
 
 const field =
   'rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -75,7 +77,16 @@ export default function AdminBrandsPage() {
 
       <form onSubmit={(e) => void addBrand(e)} className="mt-4 flex flex-wrap gap-2">
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Brand name" className={field} />
-        <input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} placeholder="Logo URL (optional)" className={`${field} w-72`} />
+        <div className="basis-full">
+          <ImageUploadField
+            label="Logo (optional)"
+            value={logoUrl}
+            onChange={setLogoUrl}
+            size={IMAGE_SLOTS.BRAND_LOGO.picture}
+            name="logoUrl"
+            note="a transparent PNG looks best"
+          />
+        </div>
         <button
           disabled={busy || name.trim().length < 2}
           aria-busy={busy}
