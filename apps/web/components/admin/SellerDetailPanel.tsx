@@ -56,6 +56,8 @@ export default function SellerDetailPanel({
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /** Why the last approve / reject / suspend / ban / reinstate was refused, shown by the buttons. */
+  const [actionError, setActionError] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -104,7 +106,7 @@ export default function SellerDetailPanel({
     }
 
     setBusy(true);
-    setError('');
+    setActionError('');
     try {
       try {
         await api(`/api/admin/sellers/${sellerId}/status`, { method: 'PATCH', body, auth: true });
@@ -126,7 +128,7 @@ export default function SellerDetailPanel({
       await load();
       onChanged();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Action failed');
+      setActionError(err instanceof ApiRequestError ? err.message : 'Action failed');
     } finally {
       setBusy(false);
     }
@@ -548,12 +550,22 @@ export default function SellerDetailPanel({
                   📦 Their products
                 </Link>
               </div>
+              {actionError && (
+                <p role="alert" className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700" data-action-error>
+                  {actionError}
+                </p>
+              )}
               {!detail.approvedAt &&
                 (detail.status === 'PENDING' || detail.status === 'REJECTED') &&
-                detail.kycApprovalWarnings.length > 0 && (
-                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                (detail.approvalBlockers.length > 0 || detail.kycApprovalWarnings.length > 0) && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900" data-approval-box>
                     <p className="font-semibold">Approving this seller means accepting:</p>
                     <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                      {detail.approvalBlockers.map((b) => (
+                        <li key={b} className="font-semibold text-red-700">
+                          Blocks approval: {b}
+                        </li>
+                      ))}
                       {detail.kycApprovalWarnings.map((w) => (
                         <li key={w}>{w}</li>
                       ))}

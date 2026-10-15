@@ -12,6 +12,7 @@ import {
   adminSellerKycSchema,
   adminSellerNoteSchema,
   kycApprovalWarnings,
+  approvalBlockersFor,
   ledgerWaiveSchema,
   panGstinMismatch,
   sellerLedgerQuerySchema,
@@ -470,12 +471,8 @@ adminSellersRouter.patch('/:id/status', async (req, res, next) => {
     // Unlike KYC, a GSTIN does block: every tax invoice to a buyer is the
     // seller's, issued under it. (Sellers approved before this rule keep
     // selling; their payouts wait for one — payoutService.gstinBlockFor.)
-    if (firstApproval && !seller.gstNumber?.trim()) {
-      throw ApiError.badRequest(
-        "Add the seller's GSTIN before approving: every tax invoice to a buyer is issued under it.",
-        'GSTIN_REQUIRED',
-      );
-    }
+    const blockers = firstApproval ? approvalBlockersFor(seller) : [];
+    if (blockers.length > 0) throw ApiError.badRequest(blockers.join('; '), 'GSTIN_REQUIRED');
     if (firstApproval) {
       kycWarnings = kycApprovalWarnings(await getSellerKycSummary(seller.id));
       const acknowledged = 'acknowledgeKycWarnings' in input && input.acknowledgeKycWarnings === true;
@@ -858,6 +855,7 @@ adminSellersRouter.get('/:id', async (req, res, next) => {
       panName: seller.panName,
       kyc,
       kycApprovalWarnings: kycApprovalWarnings(kyc),
+      approvalBlockers: approvalBlockersFor(seller),
       courierWarehouse: {
         status: seller.courierWarehouseStatus,
         name: seller.courierWarehouseName,

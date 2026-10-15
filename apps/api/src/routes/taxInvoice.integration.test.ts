@@ -2,7 +2,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { TaxInvoice } from '@clowe/shared';
+import { GSTIN_APPROVAL_BLOCKER, type TaxInvoice } from '@clowe/shared';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
 import { signAccessToken } from '../utils/jwt';
@@ -154,11 +154,17 @@ describe('GSTIN', () => {
 
   it('is required to approve a seller', async () => {
     const without = await pendingSeller(null);
+    // The admin's seller page lists it as blocking before anyone clicks.
+    const detail = await call<{ approvalBlockers: string[] }>('GET', `/api/admin/sellers/${without.id}`, adminToken);
+    expect(detail.json.data.approvalBlockers).toEqual([GSTIN_APPROVAL_BLOCKER]);
     const refused = await call('PATCH', `/api/admin/sellers/${without.id}/status`, adminToken, { action: 'approve', acknowledgeKycWarnings: true });
     expect(refused.status).toBe(400);
     expect(refused.json.error?.code).toBe('GSTIN_REQUIRED');
+    // The refusal says the same thing, so the panel can show it by the button.
+    expect(refused.json.error?.message).toBe(GSTIN_APPROVAL_BLOCKER);
 
     const withGstin = await pendingSeller('27ABCDE1234F1Z5');
+    expect((await call<{ approvalBlockers: string[] }>('GET', `/api/admin/sellers/${withGstin.id}`, adminToken)).json.data.approvalBlockers).toEqual([]);
     const ok = await call('PATCH', `/api/admin/sellers/${withGstin.id}/status`, adminToken, { action: 'approve', acknowledgeKycWarnings: true });
     expect(ok.status).toBe(200);
   });

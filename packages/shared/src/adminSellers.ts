@@ -113,6 +113,11 @@ export interface AdminSellerDetail extends AdminSellerListRow {
   kyc: SellerKycSummary;
   /** What the approval confirmation must say. Empty = nothing to warn about. */
   kycApprovalWarnings: string[];
+  /**
+   * What stops a first approval outright (unlike KYC warnings, these can't be
+   * acknowledged past). Empty = nothing blocks it.
+   */
+  approvalBlockers: string[];
   /** The pickup address as registered with Delhivery. */
   courierWarehouse: CourierWarehouseView;
   /** Performance the admin judges the shop on. */
@@ -197,3 +202,12 @@ export const adminSellerNoteSchema = z.object({
   body: z.string().trim().min(3, 'Write a note').max(1000),
 });
 export type AdminSellerNoteInput = z.infer<typeof adminSellerNoteSchema>;
+
+/** The refusal a seller's first approval meets without a GSTIN: every tax invoice to a buyer is issued under it. */
+export const GSTIN_APPROVAL_BLOCKER = 'GSTIN required before approval — every tax invoice to a buyer is issued under it';
+
+/** What blocks a seller's first approval. Already-approved sellers have none. */
+export function approvalBlockersFor(seller: { approvedAt: string | Date | null; gstNumber: string | null }): string[] {
+  if (seller.approvedAt) return [];
+  return seller.gstNumber?.trim() ? [] : [GSTIN_APPROVAL_BLOCKER];
+}
