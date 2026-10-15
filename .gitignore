@@ -27,3 +27,5 @@ backups/
 
 # TypeScript incremental build info
 *.tsbuildinfo
+e2e-results/
+Clowe-banners/
