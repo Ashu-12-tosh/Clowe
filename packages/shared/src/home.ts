@@ -173,6 +173,39 @@ export interface AdminPromoTileRow extends PromoTileView {
 }
 
 // ---------------------------------------------------------------------------
+// Admin: category banners (the carousel on a category's landing page)
+// ---------------------------------------------------------------------------
+
+export const categoryBannerUpsertSchema = z.object({
+  categoryId: z.string().min(1),
+  eyebrow: z.string().trim().max(40).nullable().optional(),
+  headline: z.string().trim().min(3).max(80),
+  highlight: z.string().trim().max(40).nullable().optional(),
+  subtext: z.string().trim().max(200).nullable().optional(),
+  imageUrl: imageUrlSchema.nullable().optional(),
+  primaryLabel: z.string().trim().min(1).max(30).optional(),
+  primaryHref: linkHrefSchema(200).or(z.literal('')).nullable().optional(),
+  sortOrder: z.number().int().min(0).optional(),
+  isActive: z.boolean().optional(),
+});
+export type CategoryBannerUpsertInput = z.infer<typeof categoryBannerUpsertSchema>;
+
+export interface AdminCategoryBannerRow {
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  eyebrow: string | null;
+  headline: string;
+  highlight: string | null;
+  subtext: string | null;
+  imageUrl: string | null;
+  primaryLabel: string;
+  primaryHref: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Admin: deals of the day
 // ---------------------------------------------------------------------------
 

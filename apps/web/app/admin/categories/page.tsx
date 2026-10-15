@@ -12,6 +12,7 @@ import {
   type CategoryRulesInput,
   type VariantAxis,
   categoryRulesInputSchema,
+  IMAGE_SLOTS,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { fieldError, issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
@@ -19,6 +20,7 @@ import { toast } from '@/lib/toast';
 import { usePending } from '@/lib/usePending';
 import FieldError from '@/components/FieldError';
 import Spinner from '@/components/Spinner';
+import ImageUploadField from '@/components/admin/ImageUploadField';
 
 // The GST settings describeTaxDefault needs, read once from the admin settings.
 let gstCache: Promise<GstSettings> | null = null;
@@ -133,6 +135,7 @@ function RulesEditor({
         : '',
   );
   const [hsn, setHsn] = useState(own.hsnCode ?? '');
+  const [tileImage, setTileImage] = useState(row.imageUrl ?? '');
   const [returnDays, setReturnDays] = useState(
     own.returnWindowDays === null ? '' : String(own.returnWindowDays),
   );
@@ -163,7 +166,12 @@ function RulesEditor({
     }
     setBusy(true);
     try {
-      await api(`/api/admin/categories/${row.id}`, { method: 'PATCH', body, auth: true, success: `${row.name}: rules saved` });
+      await api(`/api/admin/categories/${row.id}`, {
+        method: 'PATCH',
+        body: { ...body, imageUrl: tileImage.trim() || null },
+        auth: true,
+        success: `${row.name}: saved`,
+      });
       onSaved();
     } catch (err) {
       fromError(err);
@@ -177,7 +185,7 @@ function RulesEditor({
     <div className="mt-2 rounded-xl border border-brand-100 bg-cream-50 p-4 text-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-bold text-ink-900">Rules for {row.name}</p>
+          <p className="font-bold text-ink-900">Rules &amp; image for {row.name}</p>
           <p className="text-xs text-gray-500">
             Leave a field blank to inherit from the parent (
             {row.depth === 0 ? 'platform default' : 'shown in grey'}).
@@ -193,6 +201,18 @@ function RulesEditor({
           {error}
         </div>
       )}
+
+      <div className="mt-3">
+        <ImageUploadField
+          label="Tile image"
+          value={tileImage}
+          onChange={setTileImage}
+          size={IMAGE_SLOTS.CATEGORY_TILE.picture}
+          name="imageUrl"
+          error={fieldErrors.imageUrl}
+          note={row.depth === 0 ? 'shown in Shop by Category on the home page' : 'shown on the parent category’s page'}
+        />
+      </div>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <div className="md:col-span-2 min-w-0">
@@ -386,7 +406,7 @@ function RulesEditor({
           onClick={() => void save()}
           className="rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
         >
-          {busy ? <><Spinner className="mr-1" />Saving…</> : 'Save rules'}
+          {busy ? <><Spinner className="mr-1" />Saving…</> : 'Save'}
         </button>
       </div>
     </div>
@@ -503,7 +523,7 @@ export default function AdminCategoriesPage() {
               onClick={() => setEditing(editing === row.id ? null : row.id)}
               className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100"
             >
-              {editing === row.id ? 'Close' : 'Rules'}
+              {editing === row.id ? 'Close' : 'Rules & image'}
             </button>
             <button
               onClick={() => void toggleActive(row)}

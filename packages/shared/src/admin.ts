@@ -27,7 +27,8 @@ export type ProductDecisionInput = z.infer<typeof productDecisionSchema>;
 export const categoryUpsertSchema = z.object({
   name: z.string().trim().min(2).max(40),
   parentId: z.string().nullable().optional(),
-  imageUrl: imageUrlSchema.optional(),
+  /** The tile picture (home "Shop by Category", subcategory tiles); null removes it. */
+  imageUrl: imageUrlSchema.nullable().optional(),
   /** Emoji/glyph shown in the category nav bar and mega menu. */
   icon: z.string().trim().max(8).nullable().optional(),
   isActive: z.boolean().optional(),
@@ -163,6 +164,7 @@ export interface AdminCategoryRow {
   slug: string;
   parentId: string | null;
   icon: string | null;
+  imageUrl: string | null;
   isActive: boolean;
   sortOrder: number;
   productCount: number;

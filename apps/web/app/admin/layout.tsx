@@ -13,6 +13,7 @@ const NAV: DashNavItem[] = [
   { href: '/admin/facets', label: 'Filter facets', icon: '⧩' },
   { href: '/admin/brands', label: 'Brands', icon: '◈' },
   { href: '/admin/banners', label: 'Banners', icon: '🖼' },
+  { href: '/admin/category-banners', label: 'Category banners', icon: '🎞' },
   { href: '/admin/promos', label: 'Promos', icon: '🏷' },
   { href: '/admin/deals', label: 'Deals', icon: '⚡' },
   { href: '/admin/newsletter', label: 'Newsletter', icon: '✉' },

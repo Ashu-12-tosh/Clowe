@@ -5,6 +5,8 @@ import { Router } from 'express';
 import {
   bannerUpsertSchema,
   brandUpsertSchema,
+  categoryBannerUpsertSchema,
+  type AdminCategoryBannerRow,
   dealUpsertSchema,
   promoTileUpsertSchema,
   type AdminBannerRow,
@@ -243,6 +245,105 @@ adminContentRouter.delete('/promos/:id', async (req, res, next) => {
       throw ApiError.notFound('Promo tile not found');
     });
     bustHomeCache();
+    res.json({ success: true, data: { deleted: true } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Category banners: the carousel on a category's landing page
+// ---------------------------------------------------------------------------
+
+function toCategoryBannerRow(
+  b: Awaited<ReturnType<typeof prisma.categoryBanner.findFirstOrThrow>> & { category: { name: string } },
+): AdminCategoryBannerRow {
+  return {
+    id: b.id,
+    categoryId: b.categoryId,
+    categoryName: b.category.name,
+    eyebrow: b.eyebrow,
+    headline: b.headline,
+    highlight: b.highlight,
+    subtext: b.subtext,
+    imageUrl: b.imageUrl,
+    primaryLabel: b.primaryLabel,
+    primaryHref: b.primaryHref,
+    sortOrder: b.sortOrder,
+    isActive: b.isActive,
+  };
+}
+
+adminContentRouter.get('/category-banners', async (req, res, next) => {
+  try {
+    const categoryId = typeof req.query.categoryId === 'string' && req.query.categoryId ? req.query.categoryId : undefined;
+    const banners = await prisma.categoryBanner.findMany({
+      where: categoryId ? { categoryId } : {},
+      orderBy: [{ categoryId: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+      include: { category: { select: { name: true } } },
+    });
+    res.json({ success: true, data: banners.map(toCategoryBannerRow) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminContentRouter.post('/category-banners', async (req, res, next) => {
+  try {
+    const input = categoryBannerUpsertSchema.parse(req.body);
+    if (!(await prisma.category.findUnique({ where: { id: input.categoryId }, select: { id: true } }))) {
+      throw ApiError.badRequest('Category not found');
+    }
+    const banner = await prisma.categoryBanner.create({
+      data: {
+        categoryId: input.categoryId,
+        eyebrow: input.eyebrow || null,
+        headline: input.headline,
+        highlight: input.highlight || null,
+        subtext: input.subtext || null,
+        imageUrl: input.imageUrl ?? null,
+        primaryLabel: input.primaryLabel ?? 'Shop Now',
+        primaryHref: input.primaryHref || null,
+        sortOrder: input.sortOrder ?? 0,
+        isActive: input.isActive ?? true,
+      },
+      include: { category: { select: { name: true } } },
+    });
+    res.json({ success: true, data: toCategoryBannerRow(banner) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminContentRouter.patch('/category-banners/:id', async (req, res, next) => {
+  try {
+    const { categoryId, ...input } = categoryBannerUpsertSchema.partial().parse(req.body);
+    if (!(await prisma.categoryBanner.findUnique({ where: { id: req.params.id }, select: { id: true } }))) {
+      throw ApiError.notFound('Category banner not found');
+    }
+    if (categoryId && !(await prisma.category.findUnique({ where: { id: categoryId }, select: { id: true } }))) {
+      throw ApiError.badRequest('Category not found');
+    }
+    const banner = await prisma.categoryBanner.update({
+      where: { id: req.params.id },
+      data: {
+        ...input,
+        ...(categoryId ? { categoryId } : {}),
+        ...(input.primaryHref !== undefined ? { primaryHref: input.primaryHref || null } : {}),
+      },
+      include: { category: { select: { name: true } } },
+    });
+    res.json({ success: true, data: toCategoryBannerRow(banner) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminContentRouter.delete('/category-banners/:id', async (req, res, next) => {
+  try {
+    await prisma.categoryBanner.delete({ where: { id: req.params.id } }).catch(() => {
+      throw ApiError.notFound('Category banner not found');
+    });
     res.json({ success: true, data: { deleted: true } });
   } catch (err) {
     next(err);

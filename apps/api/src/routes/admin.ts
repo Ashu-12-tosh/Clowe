@@ -420,6 +420,7 @@ adminRouter.get('/categories', async (_req, res, next) => {
         slug: c.slug,
         parentId: c.parentId,
         icon: c.icon,
+        imageUrl: c.imageUrl,
         isActive: c.isActive,
         sortOrder: c.sortOrder,
         productCount: c._count.products,
@@ -461,7 +462,7 @@ adminRouter.post('/categories', async (req, res, next) => {
         name: input.name,
         slug,
         parentId: input.parentId ?? null,
-        imageUrl: input.imageUrl,
+        imageUrl: input.imageUrl ?? null,
         icon: input.icon ?? null,
         sortOrder: input.sortOrder ?? 0,
         ...ruleDataFrom(input),
@@ -504,6 +505,8 @@ adminRouter.patch('/categories/:id', async (req, res, next) => {
       },
     });
     invalidateCategoryRules();
+    // The tile picture shows on the home page too.
+    if (input.imageUrl !== undefined) bustHomeCache();
     if (affected) await repriceProducts(affected);
     res.json({ success: true, data: { id: category.id } });
   } catch (err) {
