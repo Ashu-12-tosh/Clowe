@@ -167,3 +167,35 @@ describe('registering the pickup address', () => {
     expect(retry.json.data).toMatchObject({ status: 'ACTIVE', name: warehouseNameFor(sellerId), error: null });
   });
 });
+
+describe('the return address', () => {
+  it('is where parcels go back to when set: RTO by the warehouse’s return address, returns by a second warehouse there', async () => {
+    const { sellerId, token } = await newSeller(DELHI);
+    await call('PATCH', `/api/admin/sellers/${sellerId}/status`, adminToken, { action: 'approve', acknowledgeKycWarnings: true });
+    const upsert = vi.spyOn(shippingProvider, 'upsertWarehouse');
+    const r = await call('PUT', '/api/seller/store/returns', token, {
+      returnAddressSameAsPickup: false, returnLine1: '12 Returns Lane', returnCity: 'Noida', returnState: 'Uttar Pradesh', returnPincode: '201301',
+    });
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    const returnTo = { line1: '12 Returns Lane', city: 'Noida', state: 'Uttar Pradesh', pincode: '201301' };
+    expect(upsert.mock.calls.map((c) => c[0])).toEqual([
+      expect.objectContaining({ name: warehouseNameFor(sellerId), address: expect.objectContaining({ pincode: '110053' }), returnAddress: returnTo }),
+      expect.objectContaining({ name: `${warehouseNameFor(sellerId)}-R`, address: returnTo, returnAddress: returnTo }),
+    ]);
+    expect(await profile(sellerId)).toMatchObject({ courierWarehouseStatus: 'ACTIVE', courierReturnWarehouseName: `${warehouseNameFor(sellerId)}-R` });
+    upsert.mockRestore();
+  });
+
+  it('falls back to the pickup address when not set, and says what is missing when half filled in', async () => {
+    const { sellerId, token } = await newSeller(DELHI);
+    await call('PATCH', `/api/admin/sellers/${sellerId}/status`, adminToken, { action: 'approve', acknowledgeKycWarnings: true });
+    expect(await profile(sellerId)).toMatchObject({ courierReturnWarehouseName: null });
+    await call('PUT', '/api/seller/store/returns', token, { returnAddressSameAsPickup: false, returnLine1: '12 Returns Lane' });
+    const p = await profile(sellerId);
+    expect(p.courierWarehouseStatus).toBe('FAILED');
+    expect(p.courierWarehouseError).toMatch(/return address.*city, state, 6-digit PIN code missing/);
+    // Back to "same as pickup": registered again, no return warehouse.
+    await call('PUT', '/api/seller/store/returns', token, { returnAddressSameAsPickup: true });
+    expect(await profile(sellerId)).toMatchObject({ courierWarehouseStatus: 'ACTIVE', courierReturnWarehouseName: null });
+  });
+});

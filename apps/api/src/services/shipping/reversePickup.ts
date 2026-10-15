@@ -10,7 +10,7 @@ import { syncWarehouse } from './warehouses';
 //
 // When a return is approved, a reverse pickup is booked: Delhivery collects
 // the item from the buyer's delivery address and brings it to the seller's
-// registered pickup address (returns go back to each seller's own address).
+// return address from Store Settings, or their pickup address if none is set.
 // Delhivery schedules the collection itself. Its scans then mark the return
 // picked up, and tell the seller when it has arrived — marking it received,
 // with their check of its condition, stays the seller's.
@@ -94,7 +94,8 @@ export async function bookReversePickup(returnId: string): Promise<ReversePickup
         state: order.shipState,
         pincode: order.shipPincode,
       },
-      warehouseName: warehouse.name,
+      // The seller's return address when set (its own warehouse), else pickup.
+      warehouseName: warehouse.returnName ?? warehouse.name,
       valuePaise: valueOfLines(order.totalPaise, order.items, [item.id]),
       weightGrams,
       lengthMm: shipment.lengthMm,

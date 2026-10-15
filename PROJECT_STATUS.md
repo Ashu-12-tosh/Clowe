@@ -250,7 +250,14 @@ wallet brands, so nothing on the site has to change when it goes in.
 - **RTO freight is the seller's**: a parcel brought back undelivered costs
   its forward freight plus Delhivery's RTO charge, posted as `RTO_FREIGHT`;
   no COD fee (nothing was collected).
-- **Returns go to each seller's own pickup address** (not a central one).
+- **Returns go to each seller's own address** (not a central one): the return
+  address from Store Settings if set, otherwise the pickup address (decided
+  2026-10-16). Undelivered parcels go back by the warehouse's return
+  address; customer returns to a second Delhivery warehouse registered at the
+  return address.
+- **Return pickup freight is the seller's** (decided 2026-10-16): Delhivery's
+  charge for collecting a customer return, posted as `RETURN_FREIGHT` when it
+  reaches the seller.
 - **COD lines become payable only after Delhivery's remittance for the AWB is
   matched**, not on delivery (remittance import and matching are still to
   build).

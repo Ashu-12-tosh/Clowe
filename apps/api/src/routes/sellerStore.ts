@@ -440,6 +440,8 @@ sellerStoreRouter.put('/returns', async (req, res, next) => {
         returnPincode: fieldUpdate(input.returnPincode),
       },
     });
+    // Delhivery brings parcels back to it: register the change now.
+    if (seller.status === 'APPROVED') await syncWarehouseSafe(seller.id);
     await respond(seller.id, res);
   } catch (err) {
     next(err);

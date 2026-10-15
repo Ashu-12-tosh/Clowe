@@ -1054,7 +1054,7 @@ function CourierWarehouseStatus({ warehouse }: { warehouse: CourierWarehouseView
       </p>
       <p className="mt-0.5">
         {warehouse.status === 'ACTIVE'
-          ? `Delhivery collects from this address, and brings undelivered parcels and returns back to it.${warehouse.syncedAt ? ` Last updated ${new Date(warehouse.syncedAt).toLocaleDateString('en-IN')}.` : ''}`
+          ? `Delhivery collects from this address, and brings undelivered parcels and returns to your return address (Returns tab), or here if you haven't set one.${warehouse.syncedAt ? ` Last updated ${new Date(warehouse.syncedAt).toLocaleDateString('en-IN')}.` : ''}`
           : warehouse.status === 'FAILED'
             ? `${warehouse.error ?? 'Check the address above.'} Fix the address and save, and it is sent again.`
             : 'It is registered when your shop is approved, or with your first booking. Saving the address sends it again.'}

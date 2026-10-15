@@ -487,6 +487,10 @@ model SellerProfile {
   // changes once set (Delhivery matches it exactly); a new address that the
   // courier cannot edit in place gets a new, versioned name.
   courierWarehouseName      String?
+  // A second warehouse at the seller's separate return address (customer
+  // returns are delivered to the warehouse a reverse pickup names); null when
+  // returns go to the pickup address.
+  courierReturnWarehouseName String?
   courierWarehouseStatus    CourierWarehouseStatus @default(NONE)
   courierWarehouseError     String?
   courierWarehouseSyncedAt  DateTime?

@@ -3,6 +3,7 @@ import { prisma } from '../../db';
 import { postEntry } from '../sellerLedgerService';
 import { shippingProvider } from './index';
 import { pickupAddress } from './shipments';
+import { returnPincodeOf } from './warehouses';
 import type { ShippingMode } from './ShippingProvider';
 
 // ---------------------------------------------------------------------------
@@ -218,7 +219,8 @@ export async function postReturnFreight(shipmentId: string): Promise<FreightOutc
   });
   if (!s || s.kind !== 'REVERSE' || s.status !== 'DELIVERED') return 'NOT_DELIVERED';
   if (s.finalFreightPaise !== null) return 'UNCHANGED';
-  const sellerPincode = pickupAddress(s.seller).pincode;
+  // It comes back to the seller's return address, or the pickup address.
+  const sellerPincode = returnPincodeOf(s.seller, pickupAddress(s.seller).pincode);
   if (!sellerPincode) return 'NO_ROUTE';
   const q = await shippingProvider.quote({
     // The reverse leg: from the buyer back to the seller.

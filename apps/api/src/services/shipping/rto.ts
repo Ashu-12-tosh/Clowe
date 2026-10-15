@@ -85,7 +85,7 @@ export async function startRto(shipment: ShipmentForRto, at: Date = new Date()):
         userId: seller.userId,
         type: 'SELLER_RTO',
         title: `Parcel coming back — ${order.orderNumber}`,
-        body: `Delhivery couldn't deliver AWB ${shipment.awbNumber ?? '—'} and is returning it to your pickup address. Check it when it arrives.`,
+        body: `Delhivery couldn't deliver AWB ${shipment.awbNumber ?? '—'} and is returning it to your return address (your pickup address if you haven't set one). Check it when it arrives.`,
         linkHref: `/seller/orders/${order.id}`,
       },
     ],
@@ -116,7 +116,7 @@ export async function notifyFailedAttempt(shipment: { orderId: string; sellerId:
   });
 }
 
-/** The parcel is back at the seller's pickup address: ask them to check it. */
+/** The parcel is back with the seller: ask them to check it. */
 export async function notifyRtoArrived(shipment: { orderId: string; sellerId: string; awbNumber: string | null }): Promise<void> {
   const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: shipment.sellerId }, select: { userId: true } });
   await prisma.notification.create({
@@ -124,7 +124,7 @@ export async function notifyRtoArrived(shipment: { orderId: string; sellerId: st
       userId: seller.userId,
       type: 'SELLER_RTO_BACK',
       title: 'An undelivered parcel is back with you',
-      body: `AWB ${shipment.awbNumber ?? '—'} is back at your pickup address. Check it on the order page: in good condition, its stock goes back on sale.`,
+      body: `AWB ${shipment.awbNumber ?? '—'} is back with you. Check it on the order page: in good condition, its stock goes back on sale.`,
       linkHref: `/seller/orders/${shipment.orderId}`,
     },
   });

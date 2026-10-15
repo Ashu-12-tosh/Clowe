@@ -187,3 +187,28 @@ describe('return pickup freight', () => {
     expect((await returnRows(r.orderId)).map((e) => e.amountPaise)).toEqual([-RETURN_LEG]);
   });
 });
+
+describe('a return to a separate return address', () => {
+  it('is delivered to the return warehouse, and priced to the return address', async () => {
+    await prisma.sellerProfile.update({
+      where: { id: sellerId },
+      data: { returnAddressSameAsPickup: false, returnLine1: '12 Returns Lane', returnCity: 'Noida', returnState: 'Uttar Pradesh', returnPincode: '201301', courierWarehouseStatus: 'NONE' },
+    });
+    const book = vi.spyOn(shippingProvider, 'createReversePickup');
+    const quote = vi.spyOn(shippingProvider, 'quote');
+    try {
+      const r = await returnRequested();
+      await call('PATCH', `/api/seller/returns/${r.returnId}`, { action: 'approve' });
+      expect(book.mock.calls[0]![0]).toMatchObject({ warehouseName: `CLW-${sellerId}-R` });
+      const s = await reverse(r.returnId);
+      mock.simulate(s!.awbNumber!, 'PICKED_UP');
+      mock.simulate(s!.awbNumber!, 'DELIVERED');
+      await pollOpenShipments();
+      expect(quote).toHaveBeenCalledWith(expect.objectContaining({ kind: 'DTO', destinationPincode: '201301' }));
+    } finally {
+      book.mockRestore();
+      quote.mockRestore();
+      await prisma.sellerProfile.update({ where: { id: sellerId }, data: { returnAddressSameAsPickup: true, returnLine1: null, returnCity: null, returnState: null, returnPincode: null } });
+    }
+  });
+});
