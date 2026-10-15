@@ -168,7 +168,7 @@ export default function StorePage({ params: paramsPromise }: { params: Promise<{
                       href={`/products/${p.slug}`}
                       className="group overflow-hidden rounded-2xl border border-gray-100 bg-white transition hover:border-gray-300"
                     >
-                      <div className="aspect-[3/4] w-full bg-cream-100">
+                      <div className="aspect-square w-full bg-cream-100">
                         {p.imageUrl && (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
