@@ -131,24 +131,29 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
                   ))}
                 </div>
               </div>
-              <div className="hidden justify-end lg:flex">
-                {banner.imageUrl ? (
+              {banner.imageUrl ? (
+                // Above the text on phones and tablets, beside it from 1024px. A phone
+                // gets its own 4:5 image, or the computer one cropped to 4:5 around
+                // its centre.
+                <div className="order-first flex justify-center lg:order-none lg:justify-end">
                   <BannerPicture
                     src={banner.imageUrl}
                     mobileSrc={banner.mobileImageUrl}
                     alt=""
                     loading={i === 0 ? 'eager' : 'lazy'}
-                    className="h-72 w-full max-w-lg rounded-2xl object-cover shadow-lg"
+                    className="aspect-[4/5] w-full max-w-sm rounded-2xl object-cover object-center shadow-lg sm:aspect-video sm:max-w-lg lg:aspect-auto lg:h-72"
                   />
-                ) : (
-                  // Until a banner image is uploaded in admin: designed, not blank.
+                </div>
+              ) : (
+                <div className="hidden justify-end lg:flex">
+                  {/* Until a banner image is uploaded in admin: designed, not blank. */}
                   <ArtPanel
                     icon={heroIcon(banner.primaryHref, i)}
                     caption={banner.highlight?.replace(/[.!]+$/, '')}
                     className="h-72 w-full max-w-lg shadow-lg"
                   />
-                )}
-              </div>
+                </div>
+              )}
             </div>
           </div>
           ),
