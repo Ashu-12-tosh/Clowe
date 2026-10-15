@@ -9,6 +9,18 @@ import Spinner from '@/components/Spinner';
 
 const input = 'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
 
+/** What to tell the admin about an image's size against its slot, if anything. */
+function sizeAdvice(img: { width: number; height: number }, slot: ImageSize): string | null {
+  const off = Math.abs(img.width / img.height - slot.width / slot.height) / (slot.width / slot.height);
+  if (off > 0.05) {
+    return `This image is ${img.width} × ${img.height}, a different shape from ${sizeHint(slot)}: the edges will be cropped. The preview shows how.`;
+  }
+  if (img.width < slot.width * 0.75) {
+    return `This image is ${img.width} × ${img.height}, smaller than ${slot.width} × ${slot.height}: it may look soft on large screens.`;
+  }
+  return null;
+}
+
 /**
  * An image for a banner or tile: "Upload image" (the same upload and storage
  * as product images), or an image URL pasted in instead. Shows the image in
@@ -36,6 +48,9 @@ export default function ImageUploadField({
 }) {
   const id = useId();
   const [uploading, setUploading] = useState(false);
+  // The image's own size, once it has loaded, to compare with the slot.
+  const [natural, setNatural] = useState<{ src: string; width: number; height: number } | null>(null);
+  const fit = natural && natural.src === value ? sizeAdvice(natural, size) : null;
 
   async function upload(files: FileList | null) {
     const file = files?.[0];
@@ -72,7 +87,15 @@ export default function ImageUploadField({
         >
           {value ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={value} alt="" className="h-full w-full object-cover" />
+            <img
+              src={value}
+              alt=""
+              className="h-full w-full object-cover"
+              onLoad={(e) =>
+                setNatural({ src: value, width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })
+              }
+              onError={() => setNatural(null)}
+            />
           ) : (
             'No image'
           )}
@@ -129,6 +152,7 @@ export default function ImageUploadField({
             Recommended {sizeHint(size)} · JPG, PNG or WebP, up to 5 MB
             {note ? ` · ${note}` : ''}
           </p>
+          {fit && <p className="text-[11px] font-medium text-amber-700">⚠ {fit}</p>}
           <FieldError message={error} name={name} />
         </div>
       </div>

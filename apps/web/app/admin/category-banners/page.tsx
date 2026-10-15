@@ -17,6 +17,7 @@ import FieldError from '@/components/FieldError';
 import Spinner from '@/components/Spinner';
 import ImageUploadField from '@/components/admin/ImageUploadField';
 import BannerModeFields from '@/components/admin/BannerModeFields';
+import BannerPreview from '@/components/admin/BannerPreview';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -292,6 +293,25 @@ export default function AdminCategoryBannersPage() {
             </label>
             <input value={form.primaryHref} name="primaryHref" onChange={set('primaryHref')} placeholder="#products" className={`mt-1 ${field}`} />
             <FieldError message={fieldErrors.primaryHref} />
+          </div>
+          <div className="sm:col-span-2">
+            <BannerPreview
+              kind="CATEGORY_BANNER"
+              icon={category?.icon}
+              slide={{
+                id: 'preview',
+                eyebrow: form.eyebrow.trim() || null,
+                headline: form.headline.trim() || 'Your headline',
+                highlight: form.highlight.trim() || null,
+                subtext: form.subtext.trim() || null,
+                imageUrl: form.imageUrl.trim() || null,
+                primaryLabel: form.primaryLabel.trim() || 'Shop Now',
+                primaryHref: form.primaryHref.trim() || null,
+                imageMode: form.imageMode,
+                altText: form.altText.trim() || null,
+                mobileImageUrl: form.mobileImageUrl.trim() || null,
+              }}
+            />
           </div>
           <div className="flex gap-2 sm:col-span-2">
             <button

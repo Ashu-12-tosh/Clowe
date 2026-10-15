@@ -6,9 +6,9 @@ import { newsletterSubscribeSchema, returnWindowPhrase, type HomePayload, safeHr
 import { useReturnWindowDays } from '@/lib/returnWindow';
 import { api, ApiRequestError } from '@/lib/api';
 import HeroCarousel from '@/components/home/HeroCarousel';
-import BannerPicture from '@/components/BannerPicture';
+import { PromoCard, PromoStrip } from '@/components/home/PromoTiles';
 import RecentlyViewed from '@/components/home/RecentlyViewed';
-import { CategoryGlyph, TileMark } from '@/components/DesignedArt';
+import { CategoryGlyph } from '@/components/DesignedArt';
 import {
   Countdown,
   DealCard,
@@ -185,58 +185,9 @@ export default function HomePage() {
       {/* 3 ─ Promo cards */}
       {home.promoCards.length > 0 && (
         <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {home.promoCards.map((card, i) =>
-            card.imageMode === 'FULL_IMAGE' && card.imageUrl ? (
-              <Link
-                key={card.id}
-                href={safeHref(card.href) ?? '/products'}
-                className="block overflow-hidden rounded-2xl"
-                data-promo-full
-              >
-                <BannerPicture
-                  src={card.imageUrl}
-                  mobileSrc={card.mobileImageUrl}
-                  alt={card.altText ?? card.title}
-                  loading="lazy"
-                  className="block aspect-[4/3] w-full object-cover transition duration-300 hover:scale-[1.02]"
-                />
-              </Link>
-            ) : (
-            <Link
-              key={card.id}
-              href={safeHref(card.href) ?? '/products'}
-              className={`group relative overflow-hidden rounded-2xl ${i % 2 === 0 ? 'bg-ink-950 text-white' : 'bg-cream-100 text-ink-900'}`}
-            >
-              {card.imageUrl ? (
-                <BannerPicture
-                  src={card.imageUrl}
-                  mobileSrc={card.mobileImageUrl}
-                  alt=""
-                  loading="lazy"
-                  className="absolute inset-0 h-full w-full object-cover opacity-30 transition duration-300 group-hover:scale-105 group-hover:opacity-40"
-                />
-              ) : (
-                <TileMark icon={promoIcon(card.href, home.categories)} tone={i % 2 === 0 ? 'dark' : 'light'} />
-              )}
-              <div className="relative p-5">
-                <p className="text-xs font-bold uppercase tracking-widest opacity-70">
-                  {card.title.split(' ')[0]}
-                </p>
-                <p className="mt-1 font-display text-lg font-bold leading-snug">
-                  {card.title.split(' ').slice(1).join(' ') || card.title}
-                </p>
-                {card.subtitle && (
-                  <p className={`mt-1 text-sm font-semibold ${i % 2 === 0 ? 'text-brand-400' : 'text-brand-600'}`}>
-                    {card.subtitle}
-                  </p>
-                )}
-                <span className="mt-4 inline-block rounded-lg border border-current px-3 py-1 text-xs font-bold uppercase tracking-wide">
-                  Shop Now
-                </span>
-              </div>
-            </Link>
-            ),
-          )}
+          {home.promoCards.map((card, i) => (
+            <PromoCard key={card.id} card={card} index={i} icon={promoIcon(card.href, home.categories)} />
+          ))}
         </section>
       )}
 
@@ -379,51 +330,9 @@ export default function HomePage() {
       {/* 9 ─ Promo strips */}
       {home.promoStrips.length > 0 && (
         <section className="mt-10 grid gap-4 lg:grid-cols-3">
-          {home.promoStrips.map((strip) =>
-            strip.imageMode === 'FULL_IMAGE' && strip.imageUrl ? (
-              <Link
-                key={strip.id}
-                href={safeHref(strip.href) ?? '/products'}
-                className="block overflow-hidden rounded-2xl"
-                data-promo-full
-              >
-                <BannerPicture
-                  src={strip.imageUrl}
-                  mobileSrc={strip.mobileImageUrl}
-                  alt={strip.altText ?? strip.title}
-                  loading="lazy"
-                  className="block aspect-[8/3] w-full object-cover transition duration-300 hover:scale-[1.02]"
-                />
-              </Link>
-            ) : (
-            <Link
-              key={strip.id}
-              href={safeHref(strip.href) ?? '/products'}
-              className="group relative flex h-36 items-center overflow-hidden rounded-2xl bg-ink-950 text-white"
-            >
-              {strip.imageUrl ? (
-                <BannerPicture
-                  src={strip.imageUrl}
-                  mobileSrc={strip.mobileImageUrl}
-                  alt=""
-                  loading="lazy"
-                  className="absolute inset-0 h-full w-full object-cover opacity-40 transition duration-300 group-hover:scale-105"
-                />
-              ) : (
-                <TileMark icon={promoIcon(strip.href, home.categories)} />
-              )}
-              <div className="relative p-6">
-                <p className="font-display text-lg font-bold uppercase tracking-wide">{strip.title}</p>
-                {strip.subtitle && (
-                  <p className="mt-0.5 text-sm font-semibold text-brand-400">{strip.subtitle}</p>
-                )}
-                <span className="mt-3 inline-block rounded-lg border border-white/60 px-3 py-1 text-xs font-bold uppercase">
-                  Shop Now
-                </span>
-              </div>
-            </Link>
-            ),
-          )}
+          {home.promoStrips.map((strip) => (
+            <PromoStrip key={strip.id} strip={strip} icon={promoIcon(strip.href, home.categories)} />
+          ))}
         </section>
       )}
 

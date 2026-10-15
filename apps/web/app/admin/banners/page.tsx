@@ -16,6 +16,7 @@ import FieldError from '@/components/FieldError';
 import Spinner from '@/components/Spinner';
 import ImageUploadField from '@/components/admin/ImageUploadField';
 import BannerModeFields from '@/components/admin/BannerModeFields';
+import BannerPreview from '@/components/admin/BannerPreview';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -247,6 +248,25 @@ export default function AdminBannersPage() {
             <label className={labelClass}>Second button link</label>
             <input value={form.secondaryHref} name="secondaryHref" onChange={set('secondaryHref')} className={`mt-1 ${field}`} />
             <FieldError message={fieldErrors.secondaryHref} />
+          </div>
+          <div className="sm:col-span-2">
+            <BannerPreview
+              kind="HOME_HERO"
+              banner={{
+                id: 'preview',
+                headline: form.headline.trim() || 'Your headline',
+                highlight: form.highlight.trim() || null,
+                subtext: form.subtext.trim() || null,
+                imageUrl: form.imageUrl.trim() || null,
+                primaryLabel: form.primaryLabel.trim() || 'Shop Now',
+                primaryHref: form.primaryHref.trim() || '/products',
+                secondaryLabel: form.secondaryLabel.trim() || null,
+                secondaryHref: form.secondaryHref.trim() || null,
+                imageMode: form.imageMode,
+                altText: form.altText.trim() || null,
+                mobileImageUrl: form.mobileImageUrl.trim() || null,
+              }}
+            />
           </div>
           <div className="flex min-w-0 gap-2 sm:col-span-2">
             <button

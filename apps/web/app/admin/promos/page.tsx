@@ -17,6 +17,7 @@ import FieldError from '@/components/FieldError';
 import Spinner from '@/components/Spinner';
 import ImageUploadField from '@/components/admin/ImageUploadField';
 import BannerModeFields from '@/components/admin/BannerModeFields';
+import BannerPreview from '@/components/admin/BannerPreview';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -272,6 +273,21 @@ export default function AdminPromosPage() {
             name="mobileImageUrl"
             error={fieldErrors.mobileImageUrl}
             note="shown on phones instead; without one, phones get the computer image"
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <BannerPreview
+            kind={form.placement}
+            tile={{
+              id: 'preview',
+              title: form.title.trim() || 'Your title',
+              subtitle: form.subtitle.trim() || null,
+              imageUrl: form.imageUrl.trim() || null,
+              href: form.href.trim() || '/products',
+              imageMode: form.imageMode,
+              altText: form.altText.trim() || null,
+              mobileImageUrl: form.mobileImageUrl.trim() || null,
+            }}
           />
         </div>
         <div className="flex gap-2 sm:col-span-2">
