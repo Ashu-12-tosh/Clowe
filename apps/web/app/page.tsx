@@ -6,6 +6,7 @@ import { newsletterSubscribeSchema, returnWindowPhrase, type HomePayload, safeHr
 import { useReturnWindowDays } from '@/lib/returnWindow';
 import { api, ApiRequestError } from '@/lib/api';
 import HeroCarousel from '@/components/home/HeroCarousel';
+import BannerPicture from '@/components/BannerPicture';
 import RecentlyViewed from '@/components/home/RecentlyViewed';
 import { CategoryGlyph, TileMark } from '@/components/DesignedArt';
 import {
@@ -192,9 +193,9 @@ export default function HomePage() {
                 className="block overflow-hidden rounded-2xl"
                 data-promo-full
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <BannerPicture
                   src={card.imageUrl}
+                  mobileSrc={card.mobileImageUrl}
                   alt={card.altText ?? card.title}
                   loading="lazy"
                   className="block aspect-[4/3] w-full object-cover transition duration-300 hover:scale-[1.02]"
@@ -207,9 +208,9 @@ export default function HomePage() {
               className={`group relative overflow-hidden rounded-2xl ${i % 2 === 0 ? 'bg-ink-950 text-white' : 'bg-cream-100 text-ink-900'}`}
             >
               {card.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <BannerPicture
                   src={card.imageUrl}
+                  mobileSrc={card.mobileImageUrl}
                   alt=""
                   loading="lazy"
                   className="absolute inset-0 h-full w-full object-cover opacity-30 transition duration-300 group-hover:scale-105 group-hover:opacity-40"
@@ -386,9 +387,9 @@ export default function HomePage() {
                 className="block overflow-hidden rounded-2xl"
                 data-promo-full
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <BannerPicture
                   src={strip.imageUrl}
+                  mobileSrc={strip.mobileImageUrl}
                   alt={strip.altText ?? strip.title}
                   loading="lazy"
                   className="block aspect-[8/3] w-full object-cover transition duration-300 hover:scale-[1.02]"
@@ -401,9 +402,9 @@ export default function HomePage() {
               className="group relative flex h-36 items-center overflow-hidden rounded-2xl bg-ink-950 text-white"
             >
               {strip.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <BannerPicture
                   src={strip.imageUrl}
+                  mobileSrc={strip.mobileImageUrl}
                   alt=""
                   loading="lazy"
                   className="absolute inset-0 h-full w-full object-cover opacity-40 transition duration-300 group-hover:scale-105"

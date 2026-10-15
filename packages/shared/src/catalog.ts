@@ -99,6 +99,8 @@ export interface CategoryBannerSlide {
   /** FULL_IMAGE: the image is the slide; nothing of ours is drawn on it. */
   imageMode: 'DESIGNED' | 'FULL_IMAGE';
   altText: string | null;
+  /** On phones instead of imageUrl, when set. */
+  mobileImageUrl: string | null;
 }
 
 /** An icon + two lines, used by the hero side card and the feature strip. */

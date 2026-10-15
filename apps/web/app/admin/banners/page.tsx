@@ -32,6 +32,7 @@ const EMPTY = {
   secondaryHref: '',
   imageMode: 'DESIGNED' as BannerImageModeValue,
   altText: '',
+  mobileImageUrl: '',
 };
 type Form = typeof EMPTY;
 
@@ -47,6 +48,7 @@ function formOf(row: AdminBannerRow): Form {
     secondaryHref: row.secondaryHref ?? '',
     imageMode: row.imageMode,
     altText: row.altText ?? '',
+    mobileImageUrl: row.mobileImageUrl ?? '',
   };
 }
 
@@ -92,6 +94,7 @@ export default function AdminBannersPage() {
       secondaryHref: form.secondaryHref.trim() || null,
       imageMode: form.imageMode,
       altText: form.altText.trim() || null,
+      mobileImageUrl: form.mobileImageUrl.trim() || null,
       ...(editing === 'new' ? { sortOrder: rows?.length ?? 0 } : {}),
     };
     const checked = bannerUpsertSchema.safeParse(body);
@@ -214,6 +217,17 @@ export default function AdminBannersPage() {
               error={fieldErrors.imageUrl}
             />
           </div>
+        <div className="sm:col-span-2">
+          <ImageUploadField
+            label="Phone image (optional)"
+            value={form.mobileImageUrl}
+            onChange={(mobileImageUrl) => setForm((f) => ({ ...f, mobileImageUrl }))}
+            size={IMAGE_SLOTS.HOME_HERO.mobile}
+            name="mobileImageUrl"
+            error={fieldErrors.mobileImageUrl}
+            note="shown on phones instead; without one, phones get the computer image"
+          />
+        </div>
           <div>
             <label className={labelClass}>Button label</label>
             <input value={form.primaryLabel} name="primaryLabel" onChange={set('primaryLabel')} className={`mt-1 ${field}`} />

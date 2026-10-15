@@ -183,6 +183,7 @@ async function buildHomePayload(): Promise<HomePayload> {
       secondaryHref: b.secondaryHref,
       imageMode: b.imageMode,
       altText: b.altText,
+      mobileImageUrl: b.mobileImageUrl,
     })),
     promoCards: promoTiles
       .filter((t) => t.placement === 'PROMO_CARD' && !opensHidden(t.href))
@@ -194,6 +195,7 @@ async function buildHomePayload(): Promise<HomePayload> {
         href: t.href,
         imageMode: t.imageMode,
         altText: t.altText,
+        mobileImageUrl: t.mobileImageUrl,
       })),
     deal: deal
       ? {
@@ -225,6 +227,7 @@ async function buildHomePayload(): Promise<HomePayload> {
         href: t.href,
         imageMode: t.imageMode,
         altText: t.altText,
+        mobileImageUrl: t.mobileImageUrl,
       })),
     brands: brands.map((b) => ({ id: b.id, name: b.name, slug: b.slug, logoUrl: b.logoUrl })),
   };

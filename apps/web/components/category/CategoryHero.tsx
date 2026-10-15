@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { CategoryCallout, CategoryBannerSlide } from '@clowe/shared';
 import { safeHref } from '@clowe/shared';
 import { ArtPanel } from '@/components/DesignedArt';
+import BannerPicture from '@/components/BannerPicture';
 
 interface Props {
   /** The category's glyph, for the art panel a slide without an image shows. */
@@ -50,19 +51,20 @@ export default function CategoryHero({ icon, slides, highlights, intervalMs = 60
     >
       {full ? (
         <Link href={safeHref(slide.primaryHref) ?? '#products'} className="block" data-banner-full>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <BannerPicture
             key={slide.id}
             src={slide.imageUrl!}
+            mobileSrc={slide.mobileImageUrl}
             alt={slide.altText ?? slide.headline}
-            className="block aspect-[10/3] w-full object-cover"
+            // A phone image is square; without one the computer image shows whole.
+            className={`block w-full object-cover ${slide.mobileImageUrl ? 'aspect-square sm:aspect-[10/3]' : 'aspect-[10/3]'}`}
           />
         </Link>
       ) : slide.imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <BannerPicture
           key={slide.id}
           src={slide.imageUrl}
+          mobileSrc={slide.mobileImageUrl}
           alt=""
           className="absolute inset-y-0 right-0 h-full w-3/4 object-cover"
         />

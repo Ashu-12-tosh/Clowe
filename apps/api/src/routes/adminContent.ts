@@ -129,6 +129,7 @@ adminContentRouter.get('/banners', async (_req, res, next) => {
       secondaryHref: b.secondaryHref,
       imageMode: b.imageMode,
       altText: b.altText,
+      mobileImageUrl: b.mobileImageUrl,
       sortOrder: b.sortOrder,
       isActive: b.isActive,
     }));
@@ -154,6 +155,7 @@ adminContentRouter.post('/banners', async (req, res, next) => {
         secondaryHref: input.secondaryHref ?? null,
         imageMode: input.imageMode ?? 'DESIGNED',
         altText: input.altText || null,
+        mobileImageUrl: input.mobileImageUrl || null,
         sortOrder: input.sortOrder ?? 0,
         isActive: input.isActive ?? true,
       },
@@ -209,6 +211,7 @@ adminContentRouter.get('/promos', async (_req, res, next) => {
       href: t.href,
       imageMode: t.imageMode,
       altText: t.altText,
+      mobileImageUrl: t.mobileImageUrl,
       sortOrder: t.sortOrder,
       isActive: t.isActive,
     }));
@@ -231,6 +234,7 @@ adminContentRouter.post('/promos', async (req, res, next) => {
         href: input.href ?? '/products',
         imageMode: input.imageMode ?? 'DESIGNED',
         altText: input.altText || null,
+        mobileImageUrl: input.mobileImageUrl || null,
         sortOrder: input.sortOrder ?? 0,
         isActive: input.isActive ?? true,
       },
@@ -288,6 +292,7 @@ function toCategoryBannerRow(
     primaryHref: b.primaryHref,
     imageMode: b.imageMode,
     altText: b.altText,
+    mobileImageUrl: b.mobileImageUrl,
     sortOrder: b.sortOrder,
     isActive: b.isActive,
   };
@@ -326,6 +331,7 @@ adminContentRouter.post('/category-banners', async (req, res, next) => {
         primaryHref: input.primaryHref || null,
         imageMode: input.imageMode ?? 'DESIGNED',
         altText: input.altText || null,
+        mobileImageUrl: input.mobileImageUrl || null,
         sortOrder: input.sortOrder ?? 0,
         isActive: input.isActive ?? true,
       },

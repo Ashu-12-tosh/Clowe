@@ -853,6 +853,7 @@ model CategoryBanner {
   primaryHref  String?
   imageMode    BannerImageMode @default(DESIGNED)
   altText      String?
+  mobileImageUrl String?
   sortOrder    Int      @default(0)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -1818,6 +1819,8 @@ model HomeBanner {
   // in), one link, nothing drawn on top; altText is then required.
   imageMode      BannerImageMode @default(DESIGNED)
   altText        String?
+  // Shown instead of imageUrl on phones (below 640px); null: imageUrl everywhere.
+  mobileImageUrl String?
   sortOrder      Int      @default(0)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -1846,6 +1849,7 @@ model PromoTile {
   href      String         @default("/products")
   imageMode BannerImageMode @default(DESIGNED)
   altText   String?
+  mobileImageUrl String?
   sortOrder Int            @default(0)
   isActive  Boolean        @default(true)
   createdAt DateTime       @default(now())

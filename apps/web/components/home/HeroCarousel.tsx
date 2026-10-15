@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HomeBannerView } from '@clowe/shared';
 import { safeHref } from '@clowe/shared';
 import { ArtPanel } from '@/components/DesignedArt';
+import BannerPicture from '@/components/BannerPicture';
 
 /** The art panel's icon: from where the banner leads, else one of a few in turn. */
 function heroIcon(href: string | null | undefined, i: number): string {
@@ -79,12 +80,13 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
               className="block w-full shrink-0"
               data-banner-full
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <BannerPicture
                 src={banner.imageUrl}
+                mobileSrc={banner.mobileImageUrl}
                 alt={banner.altText ?? banner.headline}
                 loading={i === 0 ? 'eager' : 'lazy'}
-                className="block aspect-[8/3] w-full object-cover"
+                // A phone image is 4:5; without one the computer image shows whole.
+                className={`block w-full object-cover ${banner.mobileImageUrl ? 'aspect-[4/5] sm:aspect-[8/3]' : 'aspect-[8/3]'}`}
               />
             </Link>
           ) : (
@@ -131,9 +133,9 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
               </div>
               <div className="hidden justify-end lg:flex">
                 {banner.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <BannerPicture
                     src={banner.imageUrl}
+                    mobileSrc={banner.mobileImageUrl}
                     alt=""
                     loading={i === 0 ? 'eager' : 'lazy'}
                     className="h-72 w-full max-w-lg rounded-2xl object-cover shadow-lg"

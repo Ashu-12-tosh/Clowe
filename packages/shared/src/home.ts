@@ -36,6 +36,8 @@ const bannerImageFields = {
   imageMode: z.enum(BANNER_IMAGE_MODES).optional(),
   /** What the image says, for screen readers; required for a full-image banner. */
   altText: z.string().trim().max(200).nullable().optional(),
+  /** Shown instead of imageUrl on phones; null: imageUrl everywhere. */
+  mobileImageUrl: imageUrlSchema.nullable().optional(),
 };
 
 /**
@@ -68,6 +70,8 @@ export interface HomeBannerView {
   secondaryHref: string | null;
   imageMode: BannerImageModeValue;
   altText: string | null;
+  /** On phones instead of imageUrl, when set. */
+  mobileImageUrl: string | null;
 }
 
 export interface PromoTileView {
@@ -78,6 +82,7 @@ export interface PromoTileView {
   href: string;
   imageMode: BannerImageModeValue;
   altText: string | null;
+  mobileImageUrl: string | null;
 }
 
 export interface HomeCategoryTile {
@@ -242,6 +247,7 @@ export interface AdminCategoryBannerRow {
   primaryHref: string | null;
   imageMode: BannerImageModeValue;
   altText: string | null;
+  mobileImageUrl: string | null;
   sortOrder: number;
   isActive: boolean;
 }

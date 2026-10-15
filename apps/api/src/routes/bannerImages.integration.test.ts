@@ -160,3 +160,21 @@ describe('a full-image banner', () => {
     );
   });
 });
+
+describe('a phone image', () => {
+  it('is kept beside the computer one, reaches the storefront, and can be removed', async () => {
+    const phone = 'https://cdn.example.com/hero-1080x1350.jpg';
+    const res = await call('POST', '/api/admin/banners', adminToken, { headline: 'Banner test phone', imageUrl: IMG, mobileImageUrl: phone });
+    const id = (res.json.data as { id: string }).id;
+    const { bustHomeCache } = await import('./home');
+    bustHomeCache();
+    const home = (await call('GET', '/api/home', null)).json.data as { banners: { id: string; mobileImageUrl: string | null }[] };
+    expect(home.banners.find((b) => b.id === id)).toMatchObject({ mobileImageUrl: phone });
+
+    await call('PATCH', `/api/admin/banners/${id}`, adminToken, { mobileImageUrl: null });
+    expect((await prisma.homeBanner.findUniqueOrThrow({ where: { id } })).mobileImageUrl).toBeNull();
+
+    const bad = await call('POST', '/api/admin/promos', adminToken, { placement: 'PROMO_CARD', title: 'Banner test bad phone', mobileImageUrl: 'ftp://x/y.jpg' });
+    expect(bad.json.error).toMatchObject({ field: 'mobileImageUrl' });
+  });
+});

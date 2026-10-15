@@ -30,6 +30,7 @@ const EMPTY = {
   imageUrl: '',
   imageMode: 'DESIGNED' as BannerImageModeValue,
   altText: '',
+  mobileImageUrl: '',
 };
 type Form = typeof EMPTY;
 
@@ -66,6 +67,7 @@ export default function AdminPromosPage() {
       imageUrl: row.imageUrl ?? '',
       imageMode: row.imageMode,
       altText: row.altText ?? '',
+      mobileImageUrl: row.mobileImageUrl ?? '',
     });
     showFieldErrors({});
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -89,6 +91,7 @@ export default function AdminPromosPage() {
       imageUrl: form.imageUrl.trim() || null,
       imageMode: form.imageMode,
       altText: form.altText.trim() || null,
+      mobileImageUrl: form.mobileImageUrl.trim() || null,
       ...(editing ? {} : { sortOrder: rows?.filter((r) => r.placement === form.placement).length ?? 0 }),
     };
     const checked = promoTileUpsertSchema.safeParse(body);
@@ -258,6 +261,17 @@ export default function AdminPromosPage() {
             size={form.imageMode === 'FULL_IMAGE' ? slot.full : slot.picture}
             name="imageUrl"
             error={fieldErrors.imageUrl}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <ImageUploadField
+            label="Phone image (optional)"
+            value={form.mobileImageUrl}
+            onChange={(mobileImageUrl) => setForm((f) => ({ ...f, mobileImageUrl }))}
+            size={slot.mobile}
+            name="mobileImageUrl"
+            error={fieldErrors.mobileImageUrl}
+            note="shown on phones instead; without one, phones get the computer image"
           />
         </div>
         <div className="flex gap-2 sm:col-span-2">
