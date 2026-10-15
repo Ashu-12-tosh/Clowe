@@ -23,10 +23,15 @@ export function ArtPanel({
   caption?: string | null;
   className?: string;
 }) {
+  // `relative` anchors the decoration, but only when the caller hasn't
+  // positioned the panel itself: CategoryHero places it `absolute`, and both
+  // classes on one element let `relative` win (it comes later in Tailwind's
+  // CSS), which drew the panel as a dark strip above the headline.
+  const positioned = /(^|\s)(absolute|fixed|sticky)(\s|$)/.test(className);
   return (
     <div
       aria-hidden
-      className={`relative flex items-center justify-center overflow-hidden rounded-2xl bg-ink-950 ${className}`}
+      className={`${positioned ? '' : 'relative '}flex items-center justify-center overflow-hidden rounded-2xl bg-ink-950 ${className}`}
       style={GRID}
     >
       <span className="absolute -right-10 -top-10 h-48 w-48 rounded-full bg-brand-400/25 blur-3xl" />

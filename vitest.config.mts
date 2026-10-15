@@ -19,7 +19,7 @@ export default defineConfig({
   },
   oxc: { jsx: { runtime: 'automatic' } },
   test: {
-    include: ['{apps,packages}/*/src/**/*.test.ts', 'apps/web/lib/**/*.test.{ts,tsx}'],
+    include: ['{apps,packages}/*/src/**/*.test.ts', 'apps/web/{lib,components}/**/*.test.{ts,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/*.integration.test.ts'],
     environment: 'node',
   },
