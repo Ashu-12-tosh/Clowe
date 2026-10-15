@@ -171,7 +171,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         where: {
           sellerId,
           bucket: 'SETTLEMENT',
-          type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'COD_FEE', 'RTO_FREIGHT', 'DELIVERY_FEE'] },
+          type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'COD_FEE', 'RTO_FREIGHT', 'RETURN_FREIGHT', 'DELIVERY_FEE'] },
           createdAt: { gte: from, lt: to },
         },
         _sum: { amountPaise: true },
@@ -181,7 +181,8 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       const forward = of('FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT');
       const cod = of('COD_FEE');
       const rto = of('RTO_FREIGHT');
-      return { forward, cod, rto, legacyDelivery: of('DELIVERY_FEE'), total: forward + cod + rto };
+      const returns = of('RETURN_FREIGHT');
+      return { forward, cod, rto, returns, legacyDelivery: of('DELIVERY_FEE'), total: forward + cod + rto + returns };
     };
     const [monthCourier, prevCourier] = await Promise.all([
       courier(range.from, range.to),
@@ -191,7 +192,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       where: {
         sellerId,
         bucket: 'SETTLEMENT',
-        type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'COD_FEE', 'RTO_FREIGHT'] },
+        type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'COD_FEE', 'RTO_FREIGHT', 'RETURN_FREIGHT'] },
         createdAt: { gte: range.from, lt: range.to },
       },
       select: { amountPaise: true, createdAt: true },
@@ -377,6 +378,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         forwardFreightPaise: monthCourier.forward,
         codFeePaise: monthCourier.cod,
         rtoFreightPaise: monthCourier.rto,
+        returnFreightPaise: monthCourier.returns,
         adjustmentsPaise: balance.adjustmentsPaise,
         totalPaise: monthFees.feesPaise + monthCourier.legacyDelivery + monthCourier.total + balance.adjustmentsPaise,
       },
@@ -614,7 +616,7 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
       where: {
         sellerId,
         bucket: 'SETTLEMENT',
-        type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'COD_FEE', 'RTO_FREIGHT'] },
+        type: { in: ['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT', 'COD_FEE', 'RTO_FREIGHT', 'RETURN_FREIGHT'] },
         createdAt: { gte: range.from, lt: range.to },
       },
       orderBy: { createdAt: 'asc' },

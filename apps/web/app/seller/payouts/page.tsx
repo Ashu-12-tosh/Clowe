@@ -648,6 +648,10 @@ export default function SellerPayoutsPage() {
                     <dt className="text-gray-500">RTO freight (parcels brought back undelivered)</dt>
                     <dd className="font-semibold">{money(overview.fees.rtoFreightPaise)}</dd>
                   </div>
+                  <div className="flex justify-between" data-fee="return-freight">
+                    <dt className="text-gray-500">Return pickup freight (customer returns)</dt>
+                    <dd className="font-semibold">{money(overview.fees.returnFreightPaise)}</dd>
+                  </div>
                   <div className="flex justify-between">
                     <dt className="text-gray-500">Ad spend recovery</dt>
                     <dd className="font-semibold">{money(overview.fees.adjustmentsPaise)}</dd>

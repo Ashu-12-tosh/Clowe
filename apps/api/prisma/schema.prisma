@@ -2122,6 +2122,7 @@ enum SellerLedgerType {
   FREIGHT_ADJUSTMENT // +/- the freight re-priced after Delhivery's charged weight changed
   COD_FEE // - Delhivery's COD collection charge on a delivered COD parcel (GST included)
   RTO_FREIGHT // - Delhivery's charge for bringing an undelivered parcel back (GST included)
+  RETURN_FREIGHT // - Delhivery's charge for collecting a customer return (reverse pickup, GST included)
 }
 
 /// Settlement money can be paid out; promotion credits never can. Keeping them

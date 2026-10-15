@@ -1,7 +1,7 @@
 import type { ShipmentStatus } from '@prisma/client';
 import { prisma } from '../../db';
 import { shippingProvider } from './index';
-import { postForwardFreight, postRtoFreight } from './freight';
+import { postForwardFreight, postReturnFreight, postRtoFreight } from './freight';
 import { syncOrderStatus } from '../orderStatusService';
 import { settleEarnedCredits } from '../purchaseCredits';
 import { markLineDelivered, markLineShipped } from './lineTransitions';
@@ -108,6 +108,13 @@ export async function applyTracking(result: TrackingResult, source: TrackingSour
             ? { status: 'DELIVERED', deliveredAt: at, pickedUpAt: shipment.pickedUpAt ?? at }
             : { pickedUpAt: shipment.pickedUpAt ?? at },
       });
+      // Delivered to the seller: the trip is theirs to pay. If the charges API
+      // is down it is posted before the next payout figures.
+      if (next === 'DELIVERED') {
+        await postReturnFreight(shipment.id).catch((err) =>
+          console.error('[clowe-api] return freight not posted yet for', shipment.awbNumber, err instanceof Error ? err.message : err),
+        );
+      }
     }
     const after = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id }, select: { status: true } });
     return { awbNumber: result.awbNumber, known: true, newScans, status: after.status };

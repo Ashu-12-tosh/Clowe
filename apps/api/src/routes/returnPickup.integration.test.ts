@@ -1,7 +1,7 @@
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app';
 import { shippingProvider } from '../services/shipping';
 import type { MockShippingProvider } from '../services/shipping/MockShippingProvider';
@@ -86,6 +86,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  vi.restoreAllMocks();
+  await prisma.sellerLedgerEntry.deleteMany({ where: { sellerId } });
   await prisma.return.deleteMany({ where: { orderItem: { orderId: { in: orders } } } });
   await prisma.order.deleteMany({ where: { id: { in: orders } } });
   await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -145,5 +147,43 @@ describe('a return, collected by Delhivery', () => {
     const res = await call('POST', `/api/admin/returns/${r.returnId}/action`, { action: 'APPROVE' }, adminToken);
     expect(res.status, JSON.stringify(res.json)).toBe(200);
     expect((await reverse(r.returnId))!.status).toBe('PICKUP_REQUESTED');
+  });
+});
+
+describe('return pickup freight', () => {
+  /** The mock's return leg: 1.2 × the ₹60 test rate, GST included. */
+  const RETURN_LEG = 7_200;
+  const returnRows = (orderId: string) => prisma.sellerLedgerEntry.findMany({ where: { orderId, type: 'RETURN_FREIGHT' } });
+
+  it('is the seller’s, posted once when the return reaches them, at Delhivery’s charge', async () => {
+    const quote = vi.spyOn(shippingProvider, 'quote');
+    const r = await returnRequested();
+    await call('PATCH', `/api/seller/returns/${r.returnId}`, { action: 'approve' });
+    const s = await reverse(r.returnId);
+    mock.simulate(s!.awbNumber!, 'PICKED_UP');
+    await pollOpenShipments();
+    expect(await returnRows(r.orderId)).toHaveLength(0); // not until it arrives
+    mock.simulate(s!.awbNumber!, 'DELIVERED');
+    await pollOpenShipments();
+    await pollOpenShipments();
+    expect((await returnRows(r.orderId)).map((e) => e.amountPaise)).toEqual([-RETURN_LEG]);
+    expect(quote).toHaveBeenCalledWith(expect.objectContaining({ kind: 'DTO', originPincode: '411001', destinationPincode: '110053' }));
+    quote.mockRestore();
+    const fees = (await call('GET', '/api/seller/payouts/overview')).json.data.fees as { returnFreightPaise: number };
+    expect(fees.returnFreightPaise).toBeGreaterThanOrEqual(RETURN_LEG);
+  });
+
+  it('is caught up before the payout figures if the charges API was down', async () => {
+    const r = await returnRequested();
+    await call('PATCH', `/api/seller/returns/${r.returnId}`, { action: 'approve' });
+    const s = await reverse(r.returnId);
+    mock.simulate(s!.awbNumber!, 'PICKED_UP');
+    mock.simulate(s!.awbNumber!, 'DELIVERED');
+    const down = vi.spyOn(shippingProvider, 'quote').mockRejectedValue(new Error('Delhivery did not answer in time'));
+    await pollOpenShipments();
+    expect(await returnRows(r.orderId)).toHaveLength(0);
+    down.mockRestore();
+    expect((await call('GET', '/api/seller/payouts/overview')).status).toBe(200);
+    expect((await returnRows(r.orderId)).map((e) => e.amountPaise)).toEqual([-RETURN_LEG]);
   });
 });

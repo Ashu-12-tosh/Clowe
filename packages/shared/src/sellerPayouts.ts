@@ -147,6 +147,8 @@ export interface SellerPayoutOverview {
     codFeePaise: number;
     /** Delhivery's charges for bringing undelivered parcels back. */
     rtoFreightPaise: number;
+    /** Delhivery's charges for collecting customer returns. */
+    returnFreightPaise: number;
     adjustmentsPaise: number;
     totalPaise: number;
   };

@@ -59,6 +59,7 @@ export async function codFeePaise(route: ParcelRoute, codAmountPaise: number): P
 const forwardKey = (shipmentId: string) => `forward-freight:${shipmentId}`;
 const codFeeKey = (shipmentId: string) => `cod-fee:${shipmentId}`;
 const rtoKey = (shipmentId: string) => `rto-freight:${shipmentId}`;
+const returnKey = (shipmentId: string) => `return-freight:${shipmentId}`;
 
 /**
  * Delhivery's charge for bringing a parcel back, GST included. Its RTO quote
@@ -206,6 +207,42 @@ export async function postRtoFreight(shipmentId: string): Promise<FreightOutcome
 }
 
 /**
+ * A customer return Delhivery collected and delivered to the seller: its
+ * charge for the trip (a reverse pickup, "DTO") is the seller's, as its own
+ * entry at Delhivery's actual charge. Once, however often called.
+ */
+export async function postReturnFreight(shipmentId: string): Promise<FreightOutcome> {
+  const s = await prisma.shipment.findUnique({
+    where: { id: shipmentId },
+    include: { order: { select: { orderNumber: true, shipPincode: true } }, seller: true },
+  });
+  if (!s || s.kind !== 'REVERSE' || s.status !== 'DELIVERED') return 'NOT_DELIVERED';
+  if (s.finalFreightPaise !== null) return 'UNCHANGED';
+  const sellerPincode = pickupAddress(s.seller).pincode;
+  if (!sellerPincode) return 'NO_ROUTE';
+  const q = await shippingProvider.quote({
+    // The reverse leg: from the buyer back to the seller.
+    originPincode: s.order.shipPincode,
+    destinationPincode: sellerPincode,
+    mode: 'SURFACE',
+    weightGrams: s.chargedWeightGrams ?? chargeableGrams(s),
+    kind: 'DTO',
+    payment: 'PREPAID',
+  });
+  const posted = await postEntry({
+    sellerId: s.sellerId,
+    type: 'RETURN_FREIGHT',
+    bucket: 'SETTLEMENT',
+    amountPaise: -q.totalPaise,
+    orderId: s.orderId,
+    idempotencyKey: returnKey(s.id),
+    note: `Delhivery return pickup, ${s.order.orderNumber} (AWB ${s.awbNumber ?? '—'})`,
+  });
+  await prisma.shipment.update({ where: { id: s.id }, data: { finalFreightPaise: q.totalPaise } });
+  return posted ? 'POSTED' : 'UNCHANGED';
+}
+
+/**
  * Delivered parcels whose freight is not on the ledger yet — the charges API
  * was down when they were delivered. Posted before any payout is worked out,
  * so money never leaves before the freight it owes.
@@ -225,6 +262,19 @@ export async function ensureFreightPosted(sellerId: string): Promise<number> {
     take: 200,
   });
   let posted = 0;
+  // Customer returns delivered to the seller, their return freight not posted.
+  const returns = await prisma.shipment.findMany({
+    where: { sellerId, kind: 'REVERSE', status: 'DELIVERED', finalFreightPaise: null },
+    select: { id: true },
+    take: 200,
+  });
+  for (const r of returns) {
+    try {
+      if ((await postReturnFreight(r.id)) === 'POSTED') posted += 1;
+    } catch (err) {
+      console.error('[clowe-api] return freight not posted yet for shipment', r.id, err instanceof Error ? err.message : err);
+    }
+  }
   for (const s of pending) {
     try {
       if (s.status === 'RTO_DELIVERED') {
