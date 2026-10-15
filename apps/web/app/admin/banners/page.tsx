@@ -1,7 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { IMAGE_SLOTS, bannerUpsertSchema, type AdminBannerRow } from '@clowe/shared';
+import {
+  IMAGE_SLOTS,
+  bannerImageProblem,
+  bannerUpsertSchema,
+  type AdminBannerRow,
+  type BannerImageModeValue,
+} from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
 import { toast } from '@/lib/toast';
@@ -9,6 +15,7 @@ import { usePending } from '@/lib/usePending';
 import FieldError from '@/components/FieldError';
 import Spinner from '@/components/Spinner';
 import ImageUploadField from '@/components/admin/ImageUploadField';
+import BannerModeFields from '@/components/admin/BannerModeFields';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -23,6 +30,8 @@ const EMPTY = {
   primaryHref: '/products',
   secondaryLabel: '',
   secondaryHref: '',
+  imageMode: 'DESIGNED' as BannerImageModeValue,
+  altText: '',
 };
 type Form = typeof EMPTY;
 
@@ -36,6 +45,8 @@ function formOf(row: AdminBannerRow): Form {
     primaryHref: row.primaryHref,
     secondaryLabel: row.secondaryLabel ?? '',
     secondaryHref: row.secondaryHref ?? '',
+    imageMode: row.imageMode,
+    altText: row.altText ?? '',
   };
 }
 
@@ -79,10 +90,15 @@ export default function AdminBannersPage() {
       primaryHref: form.primaryHref.trim() || '/products',
       secondaryLabel: form.secondaryLabel.trim() || null,
       secondaryHref: form.secondaryHref.trim() || null,
+      imageMode: form.imageMode,
+      altText: form.altText.trim() || null,
       ...(editing === 'new' ? { sortOrder: rows?.length ?? 0 } : {}),
     };
     const checked = bannerUpsertSchema.safeParse(body);
-    if (showFieldErrors(checked.success ? {} : issuesToFieldErrors(checked.error.issues))) {
+    const problems = checked.success ? {} : issuesToFieldErrors(checked.error.issues);
+    const image = bannerImageProblem(body);
+    if (image && !problems[image.field]) problems[image.field] = image.message;
+    if (showFieldErrors(problems)) {
       toast.error('Not saved: fix the fields marked in red');
       return;
     }
@@ -162,7 +178,19 @@ export default function AdminBannersPage() {
         >
           <p className="text-sm font-bold sm:col-span-2">{editing === 'new' ? 'New banner' : 'Edit banner'}</p>
           <div className="sm:col-span-2">
-            <label className={labelClass}>Headline *</label>
+            <BannerModeFields
+              mode={form.imageMode}
+              onMode={(imageMode) => setForm((f) => ({ ...f, imageMode }))}
+              altText={form.altText}
+              onAltText={(altText) => setForm((f) => ({ ...f, altText }))}
+              altError={fieldErrors.altText}
+              linkHint="the button link below"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={labelClass}>
+              Headline *{form.imageMode === 'FULL_IMAGE' && ' (not shown on a full-image banner — it names the banner here)'}
+            </label>
             <input value={form.headline} name="headline" onChange={set('headline')} placeholder="e.g. Shop Everything. Smarter with AI." className={`mt-1 ${field}`} />
             <FieldError message={fieldErrors.headline} />
           </div>
@@ -178,10 +206,10 @@ export default function AdminBannersPage() {
           </div>
           <div className="sm:col-span-2">
             <ImageUploadField
-              label="Picture beside the text"
+              label={form.imageMode === 'FULL_IMAGE' ? 'Banner image * (computer)' : 'Picture beside the text'}
               value={form.imageUrl}
               onChange={(imageUrl) => setForm((f) => ({ ...f, imageUrl }))}
-              size={IMAGE_SLOTS.HOME_HERO.picture}
+              size={form.imageMode === 'FULL_IMAGE' ? IMAGE_SLOTS.HOME_HERO.full : IMAGE_SLOTS.HOME_HERO.picture}
               name="imageUrl"
               error={fieldErrors.imageUrl}
             />
@@ -192,7 +220,7 @@ export default function AdminBannersPage() {
             <FieldError message={fieldErrors.primaryLabel} />
           </div>
           <div>
-            <label className={labelClass}>Button link</label>
+            <label className={labelClass}>{form.imageMode === 'FULL_IMAGE' ? 'Where the banner leads' : 'Button link'}</label>
             <input value={form.primaryHref} name="primaryHref" onChange={set('primaryHref')} placeholder="/products?category=fashion" className={`mt-1 ${field}`} />
             <FieldError message={fieldErrors.primaryHref} />
           </div>
@@ -241,6 +269,9 @@ export default function AdminBannersPage() {
             )}
             <div className="min-w-0 flex-1">
               <p className="font-semibold">
+                {row.imageMode === 'FULL_IMAGE' && (
+                  <span className="mr-1 rounded bg-ink-900 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">Full image</span>
+                )}
                 {row.headline}{' '}
                 {row.highlight && <span className="text-xs text-brand-600">(gold: {row.highlight})</span>}
               </p>

@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   IMAGE_SLOTS,
+  bannerImageProblem,
   promoTileUpsertSchema,
   type AdminPromoTileRow,
+  type BannerImageModeValue,
   type PromoPlacementValue,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
@@ -14,6 +16,7 @@ import { usePending } from '@/lib/usePending';
 import FieldError from '@/components/FieldError';
 import Spinner from '@/components/Spinner';
 import ImageUploadField from '@/components/admin/ImageUploadField';
+import BannerModeFields from '@/components/admin/BannerModeFields';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -25,6 +28,8 @@ const EMPTY = {
   subtitle: '',
   href: '/products',
   imageUrl: '',
+  imageMode: 'DESIGNED' as BannerImageModeValue,
+  altText: '',
 };
 type Form = typeof EMPTY;
 
@@ -59,6 +64,8 @@ export default function AdminPromosPage() {
       subtitle: row.subtitle ?? '',
       href: row.href,
       imageUrl: row.imageUrl ?? '',
+      imageMode: row.imageMode,
+      altText: row.altText ?? '',
     });
     showFieldErrors({});
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -80,10 +87,15 @@ export default function AdminPromosPage() {
       subtitle: form.subtitle.trim() || null,
       href: form.href.trim() || '/products',
       imageUrl: form.imageUrl.trim() || null,
+      imageMode: form.imageMode,
+      altText: form.altText.trim() || null,
       ...(editing ? {} : { sortOrder: rows?.filter((r) => r.placement === form.placement).length ?? 0 }),
     };
     const checked = promoTileUpsertSchema.safeParse(body);
-    if (showFieldErrors(checked.success ? {} : issuesToFieldErrors(checked.error.issues))) {
+    const problems = checked.success ? {} : issuesToFieldErrors(checked.error.issues);
+    const image = bannerImageProblem(body);
+    if (image && !problems[image.field]) problems[image.field] = image.message;
+    if (showFieldErrors(problems)) {
       toast.error('Not saved: fix the fields marked in red');
       return;
     }
@@ -149,6 +161,9 @@ export default function AdminPromosPage() {
               )}
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">
+                  {row.imageMode === 'FULL_IMAGE' && (
+                    <span className="mr-1 rounded bg-ink-900 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">Full image</span>
+                  )}
                   {row.title} {row.subtitle && <span className="text-brand-600">· {row.subtitle}</span>}
                 </p>
                 <p className="break-words text-xs text-gray-500">→ {row.href}</p>
@@ -226,11 +241,21 @@ export default function AdminPromosPage() {
           <FieldError message={fieldErrors.href} />
         </div>
         <div className="sm:col-span-2">
+          <BannerModeFields
+            mode={form.imageMode}
+            onMode={(imageMode) => setForm((f) => ({ ...f, imageMode }))}
+            altText={form.altText}
+            onAltText={(altText) => setForm((f) => ({ ...f, altText }))}
+            altError={fieldErrors.altText}
+            linkHint="the link above"
+          />
+        </div>
+        <div className="sm:col-span-2">
           <ImageUploadField
-            label="Tile image"
+            label={form.imageMode === 'FULL_IMAGE' ? 'Tile image * (the whole tile)' : 'Background picture'}
             value={form.imageUrl}
             onChange={(imageUrl) => setForm((f) => ({ ...f, imageUrl }))}
-            size={slot.picture}
+            size={form.imageMode === 'FULL_IMAGE' ? slot.full : slot.picture}
             name="imageUrl"
             error={fieldErrors.imageUrl}
           />

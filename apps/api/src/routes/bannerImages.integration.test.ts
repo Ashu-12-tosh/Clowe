@@ -124,3 +124,39 @@ describe('hero banner and promo tile images', () => {
     expect((await prisma.promoTile.findUniqueOrThrow({ where: { id: tileId } })).imageUrl).toBe('/uploads/strip.webp');
   });
 });
+
+describe('a full-image banner', () => {
+  it('needs its image and alt text — on create, and on an edit that makes one', async () => {
+    const noImage = await call('POST', '/api/admin/banners', adminToken, { headline: 'Banner test full', imageMode: 'FULL_IMAGE', altText: 'Diwali sale, up to 60% off' });
+    expect(noImage.status).toBe(400);
+    expect(noImage.json.error).toMatchObject({ field: 'imageUrl' });
+    const noAlt = await call('POST', '/api/admin/promos', adminToken, { placement: 'PROMO_CARD', title: 'Banner test card', imageMode: 'FULL_IMAGE', imageUrl: IMG });
+    expect(noAlt.json.error).toMatchObject({ field: 'altText' });
+
+    const designed = await call('POST', '/api/admin/category-banners', adminToken, { categoryId, headline: 'Banner test slide', imageUrl: IMG });
+    const id = (designed.json.data as { id: string }).id;
+    const flip = await call('PATCH', `/api/admin/category-banners/${id}`, adminToken, { imageMode: 'FULL_IMAGE' });
+    expect(flip.status).toBe(400);
+    expect(flip.json.error).toMatchObject({ field: 'altText' });
+    const ok = await call('PATCH', `/api/admin/category-banners/${id}`, adminToken, { imageMode: 'FULL_IMAGE', altText: 'New season — dresses from ₹499' });
+    expect(ok.json.data).toMatchObject({ imageMode: 'FULL_IMAGE', altText: 'New season — dresses from ₹499' });
+    const slides = ((await call('GET', `/api/categories/${categorySlug}`, null)).json.data as { banners: unknown[] }).banners;
+    expect(slides).toEqual([expect.objectContaining({ imageMode: 'FULL_IMAGE', altText: 'New season — dresses from ₹499', imageUrl: IMG })]);
+  });
+
+  it('reaches the home page with its mode and alt text', async () => {
+    const res = await call('POST', '/api/admin/banners', adminToken, {
+      headline: 'Banner test home full',
+      imageMode: 'FULL_IMAGE',
+      imageUrl: IMG,
+      altText: 'Big billion days — everything up to 70% off',
+    });
+    expect(res.status).toBe(200);
+    const { bustHomeCache } = await import('./home');
+    bustHomeCache();
+    const home = (await call('GET', '/api/home', null)).json.data as { banners: { headline: string; imageMode: string; altText: string | null }[] };
+    expect(home.banners).toContainEqual(
+      expect.objectContaining({ headline: 'Banner test home full', imageMode: 'FULL_IMAGE', altText: 'Big billion days — everything up to 70% off' }),
+    );
+  });
+});

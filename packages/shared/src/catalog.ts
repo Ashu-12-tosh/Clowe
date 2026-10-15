@@ -96,6 +96,9 @@ export interface CategoryBannerSlide {
   imageUrl: string | null;
   primaryLabel: string;
   primaryHref: string | null;
+  /** FULL_IMAGE: the image is the slide; nothing of ours is drawn on it. */
+  imageMode: 'DESIGNED' | 'FULL_IMAGE';
+  altText: string | null;
 }
 
 /** An icon + two lines, used by the hero side card and the feature strip. */

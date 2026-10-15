@@ -39,6 +39,8 @@ export default function CategoryHero({ icon, slides, highlights, intervalMs = 60
   const slide = slides[Math.min(index, slides.length - 1)];
   const go = (dir: 1 | -1) =>
     setIndex((i) => (i + dir + slides.length) % slides.length);
+  // The image is the slide: one link, nothing of ours drawn on it.
+  const full = slide.imageMode === 'FULL_IMAGE' && !!slide.imageUrl;
 
   return (
     <div
@@ -46,7 +48,17 @@ export default function CategoryHero({ icon, slides, highlights, intervalMs = 60
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      {slide.imageUrl ? (
+      {full ? (
+        <Link href={safeHref(slide.primaryHref) ?? '#products'} className="block" data-banner-full>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            key={slide.id}
+            src={slide.imageUrl!}
+            alt={slide.altText ?? slide.headline}
+            className="block aspect-[10/3] w-full object-cover"
+          />
+        </Link>
+      ) : slide.imageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           key={slide.id}
@@ -59,6 +71,7 @@ export default function CategoryHero({ icon, slides, highlights, intervalMs = 60
         <ArtPanel icon={icon ?? '🛍️'} className="absolute inset-y-3 right-3 hidden w-2/5 sm:flex" />
       )}
 
+      {!full && (
       <div className="relative flex min-h-[15rem] items-center gap-4 p-6 sm:min-h-[16rem] sm:p-8">
         {/* Copy — sits on a fade so it stays readable over the photo. */}
         <div className="max-w-sm bg-gradient-to-r from-cream-100 via-cream-100/90 to-transparent pr-8">
@@ -102,6 +115,7 @@ export default function CategoryHero({ icon, slides, highlights, intervalMs = 60
           </div>
         )}
       </div>
+      )}
 
       {slides.length > 1 && (
         <>

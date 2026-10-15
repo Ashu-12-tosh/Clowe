@@ -4,9 +4,16 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly code: string,
     message: string,
+    /** The input the error is about, when there is one: the form marks it. */
+    public readonly field?: string,
   ) {
     super(message);
     this.name = 'ApiError';
+  }
+
+  /** A 400 about one input. */
+  static invalidField(field: string, message: string, code = 'VALIDATION_ERROR') {
+    return new ApiError(400, code, message, field);
   }
 
   static badRequest(message: string, code = 'BAD_REQUEST') {

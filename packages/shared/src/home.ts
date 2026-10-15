@@ -24,6 +24,38 @@ export interface HomeProductCard {
   badge: 'BEST_SELLER' | 'NEW' | 'TRENDING' | null;
 }
 
+// ---------------------------------------------------------------------------
+// Banner images: designed (our text beside or over a picture) or full image
+// ---------------------------------------------------------------------------
+
+export const BANNER_IMAGE_MODES = ['DESIGNED', 'FULL_IMAGE'] as const;
+export type BannerImageModeValue = (typeof BANNER_IMAGE_MODES)[number];
+
+/** The image fields every banner and promo tile shares. */
+const bannerImageFields = {
+  imageMode: z.enum(BANNER_IMAGE_MODES).optional(),
+  /** What the image says, for screen readers; required for a full-image banner. */
+  altText: z.string().trim().max(200).nullable().optional(),
+};
+
+/**
+ * Why a banner can't be saved as it stands, if it can't: a full-image banner
+ * is nothing but its image, so it needs one, and alt text saying what it says.
+ * Checked on the finished banner (after a partial edit too), here and in the API.
+ */
+export function bannerImageProblem(b: {
+  imageMode?: BannerImageModeValue | null;
+  imageUrl?: string | null;
+  altText?: string | null;
+}): { field: 'imageUrl' | 'altText'; message: string } | null {
+  if (b.imageMode !== 'FULL_IMAGE') return null;
+  if (!b.imageUrl?.trim()) return { field: 'imageUrl', message: 'A full-image banner needs its image' };
+  if ((b.altText?.trim().length ?? 0) < 5) {
+    return { field: 'altText', message: 'Describe the image for screen readers (at least 5 characters)' };
+  }
+  return null;
+}
+
 export interface HomeBannerView {
   id: string;
   headline: string;
@@ -34,6 +66,8 @@ export interface HomeBannerView {
   primaryHref: string;
   secondaryLabel: string | null;
   secondaryHref: string | null;
+  imageMode: BannerImageModeValue;
+  altText: string | null;
 }
 
 export interface PromoTileView {
@@ -42,6 +76,8 @@ export interface PromoTileView {
   subtitle: string | null;
   imageUrl: string | null;
   href: string;
+  imageMode: BannerImageModeValue;
+  altText: string | null;
 }
 
 export interface HomeCategoryTile {
@@ -138,6 +174,7 @@ export const bannerUpsertSchema = z.object({
   primaryHref: linkHrefSchema(200).optional(),
   secondaryLabel: z.string().trim().max(30).nullable().optional(),
   secondaryHref: linkHrefSchema(200).or(z.literal('')).nullable().optional(),
+  ...bannerImageFields,
   sortOrder: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
 });
@@ -161,6 +198,7 @@ export const promoTileUpsertSchema = z.object({
   subtitle: z.string().trim().max(80).nullable().optional(),
   imageUrl: imageUrlSchema.nullable().optional(),
   href: linkHrefSchema(200).optional(),
+  ...bannerImageFields,
   sortOrder: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
 });
@@ -185,6 +223,7 @@ export const categoryBannerUpsertSchema = z.object({
   imageUrl: imageUrlSchema.nullable().optional(),
   primaryLabel: z.string().trim().min(1).max(30).optional(),
   primaryHref: linkHrefSchema(200).or(z.literal('')).nullable().optional(),
+  ...bannerImageFields,
   sortOrder: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
 });
@@ -201,6 +240,8 @@ export interface AdminCategoryBannerRow {
   imageUrl: string | null;
   primaryLabel: string;
   primaryHref: string | null;
+  imageMode: BannerImageModeValue;
+  altText: string | null;
   sortOrder: number;
   isActive: boolean;
 }

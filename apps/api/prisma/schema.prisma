@@ -851,6 +851,8 @@ model CategoryBanner {
   imageUrl     String?
   primaryLabel String   @default("Shop Now")
   primaryHref  String?
+  imageMode    BannerImageMode @default(DESIGNED)
+  altText      String?
   sortOrder    Int      @default(0)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -1812,12 +1814,21 @@ model HomeBanner {
   primaryHref    String   @default("/products")
   secondaryLabel String?
   secondaryHref  String?
+  // FULL_IMAGE: the image is the whole banner (its text and buttons baked
+  // in), one link, nothing drawn on top; altText is then required.
+  imageMode      BannerImageMode @default(DESIGNED)
+  altText        String?
   sortOrder      Int      @default(0)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   @@map("home_banners")
+}
+
+enum BannerImageMode {
+  DESIGNED // our headline and buttons, the image beside or behind them
+  FULL_IMAGE // the image is the banner
 }
 
 enum PromoPlacement {
@@ -1833,6 +1844,8 @@ model PromoTile {
   subtitle  String? // discount line, e.g. "Up to 60% Off"
   imageUrl  String?
   href      String         @default("/products")
+  imageMode BannerImageMode @default(DESIGNED)
+  altText   String?
   sortOrder Int            @default(0)
   isActive  Boolean        @default(true)
   createdAt DateTime       @default(now())

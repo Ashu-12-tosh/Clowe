@@ -181,10 +181,20 @@ async function buildHomePayload(): Promise<HomePayload> {
       primaryHref: b.primaryHref,
       secondaryLabel: b.secondaryLabel,
       secondaryHref: b.secondaryHref,
+      imageMode: b.imageMode,
+      altText: b.altText,
     })),
     promoCards: promoTiles
       .filter((t) => t.placement === 'PROMO_CARD' && !opensHidden(t.href))
-      .map((t) => ({ id: t.id, title: t.title, subtitle: t.subtitle, imageUrl: t.imageUrl, href: t.href })),
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        subtitle: t.subtitle,
+        imageUrl: t.imageUrl,
+        href: t.href,
+        imageMode: t.imageMode,
+        altText: t.altText,
+      })),
     deal: deal
       ? {
           id: deal.id,
@@ -207,7 +217,15 @@ async function buildHomePayload(): Promise<HomePayload> {
     trending,
     promoStrips: promoTiles
       .filter((t) => t.placement === 'PROMO_STRIP' && !opensHidden(t.href))
-      .map((t) => ({ id: t.id, title: t.title, subtitle: t.subtitle, imageUrl: t.imageUrl, href: t.href })),
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        subtitle: t.subtitle,
+        imageUrl: t.imageUrl,
+        href: t.href,
+        imageMode: t.imageMode,
+        altText: t.altText,
+      })),
     brands: brands.map((b) => ({ id: b.id, name: b.name, slug: b.slug, logoUrl: b.logoUrl })),
   };
 }

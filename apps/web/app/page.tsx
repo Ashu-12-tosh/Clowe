@@ -184,7 +184,23 @@ export default function HomePage() {
       {/* 3 ─ Promo cards */}
       {home.promoCards.length > 0 && (
         <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {home.promoCards.map((card, i) => (
+          {home.promoCards.map((card, i) =>
+            card.imageMode === 'FULL_IMAGE' && card.imageUrl ? (
+              <Link
+                key={card.id}
+                href={safeHref(card.href) ?? '/products'}
+                className="block overflow-hidden rounded-2xl"
+                data-promo-full
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={card.imageUrl}
+                  alt={card.altText ?? card.title}
+                  loading="lazy"
+                  className="block aspect-[4/3] w-full object-cover transition duration-300 hover:scale-[1.02]"
+                />
+              </Link>
+            ) : (
             <Link
               key={card.id}
               href={safeHref(card.href) ?? '/products'}
@@ -218,7 +234,8 @@ export default function HomePage() {
                 </span>
               </div>
             </Link>
-          ))}
+            ),
+          )}
         </section>
       )}
 
@@ -361,7 +378,23 @@ export default function HomePage() {
       {/* 9 ─ Promo strips */}
       {home.promoStrips.length > 0 && (
         <section className="mt-10 grid gap-4 lg:grid-cols-3">
-          {home.promoStrips.map((strip) => (
+          {home.promoStrips.map((strip) =>
+            strip.imageMode === 'FULL_IMAGE' && strip.imageUrl ? (
+              <Link
+                key={strip.id}
+                href={safeHref(strip.href) ?? '/products'}
+                className="block overflow-hidden rounded-2xl"
+                data-promo-full
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={strip.imageUrl}
+                  alt={strip.altText ?? strip.title}
+                  loading="lazy"
+                  className="block aspect-[8/3] w-full object-cover transition duration-300 hover:scale-[1.02]"
+                />
+              </Link>
+            ) : (
             <Link
               key={strip.id}
               href={safeHref(strip.href) ?? '/products'}
@@ -388,7 +421,8 @@ export default function HomePage() {
                 </span>
               </div>
             </Link>
-          ))}
+            ),
+          )}
         </section>
       )}
 

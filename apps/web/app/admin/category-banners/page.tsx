@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   IMAGE_SLOTS,
+  bannerImageProblem,
   categoryBannerUpsertSchema,
   type AdminCategoryBannerRow,
   type AdminCategoryRow,
+  type BannerImageModeValue,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
@@ -14,6 +16,7 @@ import { usePending } from '@/lib/usePending';
 import FieldError from '@/components/FieldError';
 import Spinner from '@/components/Spinner';
 import ImageUploadField from '@/components/admin/ImageUploadField';
+import BannerModeFields from '@/components/admin/BannerModeFields';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -27,6 +30,8 @@ const EMPTY = {
   imageUrl: '',
   primaryLabel: 'Shop Now',
   primaryHref: '',
+  imageMode: 'DESIGNED' as BannerImageModeValue,
+  altText: '',
 };
 type Form = typeof EMPTY;
 
@@ -39,6 +44,8 @@ function formOf(row: AdminCategoryBannerRow): Form {
     imageUrl: row.imageUrl ?? '',
     primaryLabel: row.primaryLabel,
     primaryHref: row.primaryHref ?? '',
+    imageMode: row.imageMode,
+    altText: row.altText ?? '',
   };
 }
 
@@ -101,10 +108,15 @@ export default function AdminCategoryBannersPage() {
       imageUrl: form.imageUrl.trim() || null,
       primaryLabel: form.primaryLabel.trim() || 'Shop Now',
       primaryHref: form.primaryHref.trim() || null,
+      imageMode: form.imageMode,
+      altText: form.altText.trim() || null,
       ...(editing === 'new' ? { sortOrder: rows?.length ?? 0 } : {}),
     };
     const checked = categoryBannerUpsertSchema.safeParse(body);
-    if (showFieldErrors(checked.success ? {} : issuesToFieldErrors(checked.error.issues))) {
+    const problems = checked.success ? {} : issuesToFieldErrors(checked.error.issues);
+    const image = bannerImageProblem(body);
+    if (image && !problems[image.field]) problems[image.field] = image.message;
+    if (showFieldErrors(problems)) {
       toast.error('Not saved: fix the fields marked in red');
       return;
     }
@@ -212,13 +224,25 @@ export default function AdminCategoryBannersPage() {
           <p className="text-sm font-bold sm:col-span-2">
             {editing === 'new' ? 'New banner' : 'Edit banner'} for {category?.name}
           </p>
+          <div className="sm:col-span-2">
+            <BannerModeFields
+              mode={form.imageMode}
+              onMode={(imageMode) => setForm((f) => ({ ...f, imageMode }))}
+              altText={form.altText}
+              onAltText={(altText) => setForm((f) => ({ ...f, altText }))}
+              altError={fieldErrors.altText}
+              linkHint="the button link below, or the products"
+            />
+          </div>
           <div>
             <label className={labelClass}>Small line above (optional)</label>
             <input value={form.eyebrow} name="eyebrow" onChange={set('eyebrow')} placeholder="e.g. New season" className={`mt-1 ${field}`} />
             <FieldError message={fieldErrors.eyebrow} />
           </div>
           <div>
-            <label className={labelClass}>Headline *</label>
+            <label className={labelClass}>
+              Headline *{form.imageMode === 'FULL_IMAGE' && ' (names the banner here; not shown)'}
+            </label>
             <input value={form.headline} name="headline" onChange={set('headline')} placeholder="e.g. Dress the" className={`mt-1 ${field}`} />
             <FieldError message={fieldErrors.headline} />
           </div>
@@ -234,13 +258,13 @@ export default function AdminCategoryBannersPage() {
           </div>
           <div className="sm:col-span-2">
             <ImageUploadField
-              label="Picture behind the text"
+              label={form.imageMode === 'FULL_IMAGE' ? 'Banner image * (computer)' : 'Picture behind the text'}
               value={form.imageUrl}
               onChange={(imageUrl) => setForm((f) => ({ ...f, imageUrl }))}
-              size={IMAGE_SLOTS.CATEGORY_BANNER.picture}
+              size={form.imageMode === 'FULL_IMAGE' ? IMAGE_SLOTS.CATEGORY_BANNER.full : IMAGE_SLOTS.CATEGORY_BANNER.picture}
               name="imageUrl"
               error={fieldErrors.imageUrl}
-              note="the right three-quarters show; keep the subject on the right"
+              note={form.imageMode === 'FULL_IMAGE' ? undefined : 'the right three-quarters show; keep the subject on the right'}
             />
           </div>
           <div>
@@ -249,7 +273,9 @@ export default function AdminCategoryBannersPage() {
             <FieldError message={fieldErrors.primaryLabel} />
           </div>
           <div>
-            <label className={labelClass}>Button link (blank: the products below)</label>
+            <label className={labelClass}>
+              {form.imageMode === 'FULL_IMAGE' ? 'Where the banner leads' : 'Button link'} (blank: the products below)
+            </label>
             <input value={form.primaryHref} name="primaryHref" onChange={set('primaryHref')} placeholder="#products" className={`mt-1 ${field}`} />
             <FieldError message={fieldErrors.primaryHref} />
           </div>
@@ -290,6 +316,9 @@ export default function AdminCategoryBannersPage() {
             <div className="min-w-0 flex-1">
               {row.eyebrow && <p className="text-[11px] font-bold uppercase tracking-wide text-brand-600">{row.eyebrow}</p>}
               <p className="font-semibold">
+                {row.imageMode === 'FULL_IMAGE' && (
+                  <span className="mr-1 rounded bg-ink-900 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">Full image</span>
+                )}
                 {row.headline} {row.highlight && <span className="text-brand-600">{row.highlight}</span>}
               </p>
               <p className="break-words text-xs text-gray-500">

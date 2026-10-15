@@ -3,6 +3,7 @@
 // alongside the main admin router; every mutation busts the homepage cache.
 import { Router } from 'express';
 import {
+  bannerImageProblem,
   bannerUpsertSchema,
   brandUpsertSchema,
   categoryBannerUpsertSchema,
@@ -21,6 +22,12 @@ import { ApiError } from '../utils/ApiError';
 import { bustHomeCache } from './home';
 
 export const adminContentRouter = Router();
+
+/** Refuse a banner whose image fields don't add up (see bannerImageProblem). */
+function assertBannerImage(b: Parameters<typeof bannerImageProblem>[0]) {
+  const problem = bannerImageProblem(b);
+  if (problem) throw ApiError.invalidField(problem.field, problem.message);
+}
 adminContentRouter.use(requireAuth, requireRole('ADMIN'));
 
 function slugify(text: string): string {
@@ -120,6 +127,8 @@ adminContentRouter.get('/banners', async (_req, res, next) => {
       primaryHref: b.primaryHref,
       secondaryLabel: b.secondaryLabel,
       secondaryHref: b.secondaryHref,
+      imageMode: b.imageMode,
+      altText: b.altText,
       sortOrder: b.sortOrder,
       isActive: b.isActive,
     }));
@@ -132,6 +141,7 @@ adminContentRouter.get('/banners', async (_req, res, next) => {
 adminContentRouter.post('/banners', async (req, res, next) => {
   try {
     const input = bannerUpsertSchema.parse(req.body);
+    assertBannerImage(input);
     const banner = await prisma.homeBanner.create({
       data: {
         headline: input.headline,
@@ -142,6 +152,8 @@ adminContentRouter.post('/banners', async (req, res, next) => {
         primaryHref: input.primaryHref ?? '/products',
         secondaryLabel: input.secondaryLabel ?? null,
         secondaryHref: input.secondaryHref ?? null,
+        imageMode: input.imageMode ?? 'DESIGNED',
+        altText: input.altText || null,
         sortOrder: input.sortOrder ?? 0,
         isActive: input.isActive ?? true,
       },
@@ -156,9 +168,9 @@ adminContentRouter.post('/banners', async (req, res, next) => {
 adminContentRouter.patch('/banners/:id', async (req, res, next) => {
   try {
     const input = bannerUpsertSchema.partial().parse(req.body);
-    if (!(await prisma.homeBanner.findUnique({ where: { id: req.params.id } }))) {
-      throw ApiError.notFound('Banner not found');
-    }
+    const current = await prisma.homeBanner.findUnique({ where: { id: req.params.id } });
+    if (!current) throw ApiError.notFound('Banner not found');
+    assertBannerImage({ ...current, ...input });
     await prisma.homeBanner.update({ where: { id: req.params.id }, data: input });
     bustHomeCache();
     res.json({ success: true, data: { id: req.params.id } });
@@ -195,6 +207,8 @@ adminContentRouter.get('/promos', async (_req, res, next) => {
       subtitle: t.subtitle,
       imageUrl: t.imageUrl,
       href: t.href,
+      imageMode: t.imageMode,
+      altText: t.altText,
       sortOrder: t.sortOrder,
       isActive: t.isActive,
     }));
@@ -207,6 +221,7 @@ adminContentRouter.get('/promos', async (_req, res, next) => {
 adminContentRouter.post('/promos', async (req, res, next) => {
   try {
     const input = promoTileUpsertSchema.parse(req.body);
+    assertBannerImage(input);
     const tile = await prisma.promoTile.create({
       data: {
         placement: input.placement,
@@ -214,6 +229,8 @@ adminContentRouter.post('/promos', async (req, res, next) => {
         subtitle: input.subtitle ?? null,
         imageUrl: input.imageUrl ?? null,
         href: input.href ?? '/products',
+        imageMode: input.imageMode ?? 'DESIGNED',
+        altText: input.altText || null,
         sortOrder: input.sortOrder ?? 0,
         isActive: input.isActive ?? true,
       },
@@ -228,9 +245,9 @@ adminContentRouter.post('/promos', async (req, res, next) => {
 adminContentRouter.patch('/promos/:id', async (req, res, next) => {
   try {
     const input = promoTileUpsertSchema.partial().parse(req.body);
-    if (!(await prisma.promoTile.findUnique({ where: { id: req.params.id } }))) {
-      throw ApiError.notFound('Promo tile not found');
-    }
+    const current = await prisma.promoTile.findUnique({ where: { id: req.params.id } });
+    if (!current) throw ApiError.notFound('Promo tile not found');
+    assertBannerImage({ ...current, ...input });
     await prisma.promoTile.update({ where: { id: req.params.id }, data: input });
     bustHomeCache();
     res.json({ success: true, data: { id: req.params.id } });
@@ -269,6 +286,8 @@ function toCategoryBannerRow(
     imageUrl: b.imageUrl,
     primaryLabel: b.primaryLabel,
     primaryHref: b.primaryHref,
+    imageMode: b.imageMode,
+    altText: b.altText,
     sortOrder: b.sortOrder,
     isActive: b.isActive,
   };
@@ -291,6 +310,7 @@ adminContentRouter.get('/category-banners', async (req, res, next) => {
 adminContentRouter.post('/category-banners', async (req, res, next) => {
   try {
     const input = categoryBannerUpsertSchema.parse(req.body);
+    assertBannerImage(input);
     if (!(await prisma.category.findUnique({ where: { id: input.categoryId }, select: { id: true } }))) {
       throw ApiError.badRequest('Category not found');
     }
@@ -304,6 +324,8 @@ adminContentRouter.post('/category-banners', async (req, res, next) => {
         imageUrl: input.imageUrl ?? null,
         primaryLabel: input.primaryLabel ?? 'Shop Now',
         primaryHref: input.primaryHref || null,
+        imageMode: input.imageMode ?? 'DESIGNED',
+        altText: input.altText || null,
         sortOrder: input.sortOrder ?? 0,
         isActive: input.isActive ?? true,
       },
@@ -318,9 +340,9 @@ adminContentRouter.post('/category-banners', async (req, res, next) => {
 adminContentRouter.patch('/category-banners/:id', async (req, res, next) => {
   try {
     const { categoryId, ...input } = categoryBannerUpsertSchema.partial().parse(req.body);
-    if (!(await prisma.categoryBanner.findUnique({ where: { id: req.params.id }, select: { id: true } }))) {
-      throw ApiError.notFound('Category banner not found');
-    }
+    const current = await prisma.categoryBanner.findUnique({ where: { id: req.params.id } });
+    if (!current) throw ApiError.notFound('Category banner not found');
+    assertBannerImage({ ...current, ...input });
     if (categoryId && !(await prisma.category.findUnique({ where: { id: categoryId }, select: { id: true } }))) {
       throw ApiError.badRequest('Category not found');
     }

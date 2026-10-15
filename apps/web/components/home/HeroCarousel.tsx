@@ -70,7 +70,24 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
         className="flex transition-transform duration-500"
         style={{ transform: `translateX(-${active * 100}%)` }}
       >
-        {banners.map((banner, i) => (
+        {banners.map((banner, i) =>
+          banner.imageMode === 'FULL_IMAGE' && banner.imageUrl ? (
+            // The image is the banner: one link, nothing of ours drawn on it.
+            <Link
+              key={banner.id}
+              href={safeHref(banner.primaryHref) ?? '/products'}
+              className="block w-full shrink-0"
+              data-banner-full
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={banner.imageUrl}
+                alt={banner.altText ?? banner.headline}
+                loading={i === 0 ? 'eager' : 'lazy'}
+                className="block aspect-[8/3] w-full object-cover"
+              />
+            </Link>
+          ) : (
           <div key={banner.id} className="w-full shrink-0">
             <div className="grid items-center gap-6 p-7 sm:p-10 lg:grid-cols-2 lg:gap-10">
               <div>
@@ -132,7 +149,8 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
               </div>
             </div>
           </div>
-        ))}
+          ),
+        )}
       </div>
 
       {banners.length > 1 && (
