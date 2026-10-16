@@ -1085,6 +1085,26 @@ async function fulfil(orderId, itemId, page, { tag }) {
     if (!S.cameraTried) {
       S.cameraTried = true;
       await step('9 Fulfilment', 'packing video recorded in the browser (fake camera)', async () => {
+        // Headless Chrome's fake camera sometimes delivers no frames, and then
+        // nothing can record it. The real getUserMedia still runs (so the
+        // page's camera permission is what is tested); the page then gets a
+        // moving canvas in its place, which always records.
+        await page.evaluate(() => {
+          const real = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+          navigator.mediaDevices.getUserMedia = async (constraints) => {
+            (await real(constraints)).getTracks().forEach((t) => t.stop());
+            const c = document.createElement('canvas');
+            c.width = 640;
+            c.height = 360;
+            const g = c.getContext('2d');
+            let f = 0;
+            setInterval(() => {
+              g.fillStyle = `hsl(${(f += 12) % 360},60%,50%)`;
+              g.fillRect(0, 0, 640, 360);
+            }, 50);
+            return c.captureStream(20);
+          };
+        });
         await page.getByRole('button', { name: /Record video/i }).first().click();
         const blocked = page.getByText(/Camera permission was denied|can.t record video/i);
         if (await blocked.first().waitFor({ timeout: 8000 }).then(() => true, () => false)) {
