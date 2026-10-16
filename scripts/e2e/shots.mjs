@@ -1,6 +1,7 @@
 // Screenshots of public pages at computer and phone width, read-only.
 //   node scripts/e2e/shots.mjs <outDir> <baseUrl> <path> [<path> ...]
-// Each page is shot at 1440 and 390 wide (full page), named after its path.
+// Each page is shot at 1440 and 390 wide (full page), named after its path
+// (SHOT_WIDTHS=1440,1024,390 for others).
 // Also reports any image drawn smaller than it is shown (blurry) and any
 // <img> squashed out of its natural shape.
 import fs from 'node:fs';
@@ -13,7 +14,8 @@ if (!outDir || !base || paths.length === 0) {
   process.exit(2);
 }
 fs.mkdirSync(outDir, { recursive: true });
-const WIDTHS = [1440, 390];
+// SHOT_WIDTHS=1440,1024,390 to choose the widths.
+const WIDTHS = (process.env.SHOT_WIDTHS ?? '1440,390').split(',').map(Number);
 const nameOf = (p) => (p === '/' ? 'home' : p.replace(/^\//, '').replace(/[/?=&]+/g, '_'));
 
 const browser = await chromium.launch({ channel: 'chrome' });

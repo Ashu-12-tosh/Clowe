@@ -1,17 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { heroPictureShape } from './HeroCarousel';
+import { heroPictureClass } from './HeroCarousel';
 import { categoryPictureClass } from '../category/CategoryHero';
 
 // On a phone no banner product may be cut off and no headline may sit on one.
 
-describe('home hero picture on a phone', () => {
-  it('shows the whole 16:9 picture when there is no phone image', () => {
-    expect(heroPictureShape(null)).toBe('aspect-video');
-    expect(heroPictureShape(null)).not.toContain('4/5');
+describe('home hero picture', () => {
+  const cls = (mobile: string | null) => heroPictureClass(mobile).split(' ');
+
+  it('on a phone: the slide’s 4:5 phone image when there is one', () => {
+    expect(cls('https://cloweshop.com/uploads/p-w800.webp')).toContain('aspect-[4/5]');
   });
 
-  it('uses the phone image’s own 4:5 when there is one', () => {
-    expect(heroPictureShape('https://cloweshop.com/uploads/p-w800.webp')).toContain('aspect-[4/5]');
+  it('on a phone without one: the right-hand (product) side of the picture, square', () => {
+    expect(cls(null)).toEqual(expect.arrayContaining(['aspect-square', 'object-right']));
+    expect(cls(null)).not.toContain('aspect-[4/5]');
+  });
+
+  it('on a tablet: the whole 16:9 picture', () => {
+    expect(cls(null)).toEqual(expect.arrayContaining(['sm:aspect-video', 'sm:object-center']));
+  });
+
+  it('from 1024px: fills the card behind the words, anchored right', () => {
+    expect(cls(null)).toEqual(expect.arrayContaining(['lg:h-full', 'lg:aspect-auto', 'lg:object-right', 'object-cover']));
   });
 });
 

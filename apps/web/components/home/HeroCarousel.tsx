@@ -24,9 +24,17 @@ const AI_PILLS = [
 
 const ROTATE_MS = 5500;
 
-/** The hero picture's shape below 1024px: the phone image's 4:5, else the whole 16:9 picture. */
-export function heroPictureShape(mobileImageUrl: string | null | undefined): string {
-  return mobileImageUrl ? 'aspect-[4/5] max-w-sm sm:aspect-video' : 'aspect-video';
+/**
+ * The hero picture, by width. Phones: the slide's own 4:5 phone image, or
+ * without one the right-hand part of the computer image (where the products
+ * and people are) as a square, above the words. Tablets: the whole 16:9
+ * picture above the words. From 1024px: the picture fills the card behind the
+ * words, anchored right, the card keeping the picture's 16:9 so nothing is
+ * cut; the words sit on the plain cream the picture leaves on its left.
+ */
+export function heroPictureClass(mobileImageUrl: string | null | undefined): string {
+  const phone = mobileImageUrl ? 'aspect-[4/5]' : 'aspect-square object-right';
+  return `mx-auto block w-full max-w-sm rounded-2xl object-cover shadow-lg ${phone} sm:max-w-lg sm:aspect-video sm:object-center lg:h-full lg:max-w-none lg:aspect-auto lg:rounded-none lg:object-right lg:shadow-none`;
 }
 
 /** Headline with the admin-chosen word rendered in gold. */
@@ -40,6 +48,47 @@ function Headline({ text, highlight }: { text: string; highlight: string | null 
       {text.slice(0, idx)}
       <span className="text-brand-600">{highlight}</span>
       {text.slice(idx + highlight.length)}
+    </>
+  );
+}
+
+/** A designed slide's words: headline, subtext, buttons and the AI chips. */
+function HeroCopy({ banner }: { banner: HomeBannerView }) {
+  return (
+    <>
+      <h1 className="font-display text-3xl font-bold leading-tight text-ink-900 sm:text-4xl xl:text-5xl">
+        <Headline text={banner.headline} highlight={banner.highlight} />
+      </h1>
+      {banner.subtext && <p className="mt-4 max-w-md text-sm leading-relaxed text-gray-600">{banner.subtext}</p>}
+      <div className="mt-6 flex flex-wrap gap-3">
+        <Link
+          href={safeHref(banner.primaryHref) ?? '/products'}
+          className="rounded-lg bg-ink-900 px-6 py-3 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800"
+        >
+          {banner.primaryLabel}
+        </Link>
+        {banner.secondaryLabel && safeHref(banner.secondaryHref) && (
+          <Link
+            href={safeHref(banner.secondaryHref) ?? '/products'}
+            className="rounded-lg border border-brand-600 bg-white/60 px-6 py-3 text-sm font-bold uppercase tracking-wide text-brand-600 hover:bg-brand-50"
+          >
+            {banner.secondaryLabel}
+          </Link>
+        )}
+      </div>
+      <div className="mt-6 flex flex-wrap gap-2">
+        {AI_PILLS.map((pill) => (
+          <Link
+            key={pill.label}
+            // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
+            href={pill.href}
+            className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/70 px-3 py-1.5 text-xs font-medium text-gray-700 backdrop-blur transition hover:border-brand-600 hover:text-brand-600"
+          >
+            <span className="text-brand-600">{pill.icon}</span>
+            {pill.label}
+          </Link>
+        ))}
+      </div>
     </>
   );
 }
@@ -95,61 +144,32 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
               />
             </Link>
           ) : (
-          <div key={banner.id} className="w-full shrink-0">
-            <div className="grid items-center gap-6 p-7 sm:p-10 lg:grid-cols-2 lg:gap-10">
-              <div>
-                <h1 className="font-display text-3xl font-bold leading-tight text-ink-900 sm:text-4xl lg:text-5xl">
-                  <Headline text={banner.headline} highlight={banner.highlight} />
-                </h1>
-                {banner.subtext && (
-                  <p className="mt-4 max-w-md text-sm leading-relaxed text-gray-600">
-                    {banner.subtext}
-                  </p>
-                )}
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <Link
-                    href={safeHref(banner.primaryHref) ?? '/products'}
-                    className="rounded-lg bg-ink-900 px-6 py-3 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800"
-                  >
-                    {banner.primaryLabel}
-                  </Link>
-                  {banner.secondaryLabel && safeHref(banner.secondaryHref) && (
-                    <Link
-                      href={safeHref(banner.secondaryHref) ?? '/products'}
-                      className="rounded-lg border border-brand-600 px-6 py-3 text-sm font-bold uppercase tracking-wide text-brand-600 hover:bg-brand-50"
-                    >
-                      {banner.secondaryLabel}
-                    </Link>
-                  )}
-                </div>
-                <div className="mt-6 flex flex-wrap gap-2">
-                  {AI_PILLS.map((pill) => (
-                    <Link
-                      key={pill.label}
-                      // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
-                      href={pill.href}
-                      className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/70 px-3 py-1.5 text-xs font-medium text-gray-700 backdrop-blur transition hover:border-brand-600 hover:text-brand-600"
-                    >
-                      <span className="text-brand-600">{pill.icon}</span>
-                      {pill.label}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-              {banner.imageUrl ? (
-                // Above the text on phones and tablets, beside it from 1024px. A phone
-                // gets its own 4:5 image when there is one; otherwise the computer
-                // image shows whole (16:9), so no product is cut off at the sides.
-                <div className="order-first flex justify-center lg:order-none lg:justify-end">
+          <div key={banner.id} className={`relative w-full shrink-0 ${banner.imageUrl ? 'lg:aspect-video' : ''}`}>
+            {banner.imageUrl ? (
+              <>
+                <div className="px-7 pt-7 sm:px-10 sm:pt-10 lg:absolute lg:inset-0 lg:p-0">
                   <BannerPicture
                     src={banner.imageUrl}
                     mobileSrc={banner.mobileImageUrl}
                     alt=""
                     loading={i === 0 ? 'eager' : 'lazy'}
-                    className={`${heroPictureShape(banner.mobileImageUrl)} w-full rounded-2xl object-cover object-center shadow-lg sm:max-w-lg lg:aspect-auto lg:h-72`}
+                    className={heroPictureClass(banner.mobileImageUrl)}
                   />
                 </div>
-              ) : (
+                {/* A soft cream fade behind the words, over the picture's plain left side. */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-y-0 left-0 hidden w-3/5 bg-gradient-to-r from-cream-100/80 via-cream-100/40 to-transparent lg:block"
+                />
+                <div className="relative p-7 sm:p-10 lg:flex lg:h-full lg:max-w-[46%] lg:flex-col lg:justify-center lg:py-12 lg:pl-14 lg:pr-0">
+                  <HeroCopy banner={banner} />
+                </div>
+              </>
+            ) : (
+              <div className="grid items-center gap-6 p-7 sm:p-10 lg:grid-cols-2 lg:gap-10">
+                <div>
+                  <HeroCopy banner={banner} />
+                </div>
                 <div className="hidden justify-end lg:flex">
                   {/* Until a banner image is uploaded in admin: designed, not blank. */}
                   <ArtPanel
@@ -158,8 +178,8 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
                     className="h-72 w-full max-w-lg shadow-lg"
                   />
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
           ),
         )}
