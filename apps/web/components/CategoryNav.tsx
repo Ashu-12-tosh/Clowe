@@ -124,7 +124,8 @@ export default function CategoryNav() {
           fade that lingers one swipe too long is a far smaller problem than
           the one it fixes. */}
       <div className="relative lg:hidden">
-        <div className="scrollbar-none flex items-center gap-4 overflow-x-auto px-4">
+        {/* A fixed height: the row is there before the categories arrive, so nothing below it moves. */}
+        <div className="scrollbar-none flex h-[41px] items-center gap-4 overflow-x-auto px-4">
           {tree.map((cat) => (
             <Link key={cat.id} href={`/category/${cat.slug}`} className={linkClass(cat.slug)}>
               <span className="whitespace-nowrap">{cat.name}</span>

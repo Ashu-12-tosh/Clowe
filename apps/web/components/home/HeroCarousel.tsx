@@ -56,10 +56,10 @@ function Headline({ text, highlight }: { text: string; highlight: string | null 
 function HeroCopy({ banner }: { banner: HomeBannerView }) {
   return (
     <>
-      <h1 className="font-display text-3xl font-bold leading-tight text-ink-900 sm:text-4xl xl:text-5xl">
+      <h1 className="line-clamp-2 font-display text-3xl font-bold leading-tight text-ink-900 sm:text-4xl xl:text-5xl">
         <Headline text={banner.headline} highlight={banner.highlight} />
       </h1>
-      {banner.subtext && <p className="mt-4 max-w-md text-sm leading-relaxed text-gray-600">{banner.subtext}</p>}
+      {banner.subtext && <p className="mt-4 line-clamp-2 max-w-md text-sm leading-relaxed text-gray-600">{banner.subtext}</p>}
       <div className="mt-6 flex flex-wrap gap-3">
         <Link
           href={safeHref(banner.primaryHref) ?? '/products'}

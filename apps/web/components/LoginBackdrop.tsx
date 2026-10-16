@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import HomePage from '@/app/page';
+import HomePage from '@/app/HomeClient';
 
 /**
  * The real landing page, blurred, sitting behind the auth card — so logging in

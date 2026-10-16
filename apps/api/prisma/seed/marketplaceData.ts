@@ -580,14 +580,15 @@ export const HERO_BANNERS = [
 ];
 
 export const PROMO_CARDS = [
-  { title: 'Electronics Mega Sale', subtitle: 'Up to 60% Off', href: '/products?category=electronics', image: 'promo-electronics' },
-  { title: 'Fashion New Arrivals', subtitle: 'Min. 40% Off', href: '/products?category=fashion', image: 'promo-fashion' },
-  { title: 'Books Festival', subtitle: 'Up to 50% Off', href: '/products?category=books', image: 'promo-books' },
-  { title: 'Home & Kitchen Best Deals', subtitle: 'Up to 60% Off', href: '/products?category=home-kitchen', image: 'promo-home' },
+  // Honest copy only: no discount or price is claimed that is not real.
+  { title: 'Explore Electronics', subtitle: 'Audio, wearables, laptops and more', href: '/products?category=electronics', image: 'promo-electronics' },
+  { title: 'New on Clowe', subtitle: 'Everyday, ethnic and occasion wear', href: '/products?category=fashion', image: 'promo-fashion' },
+  { title: 'Explore Books', subtitle: "Fiction, non-fiction, academic and children's books", href: '/products?category=books', image: 'promo-books' },
+  { title: 'Shop Home & Kitchen', subtitle: 'Cookware, decor, bedding and more', href: '/products?category=home-kitchen', image: 'promo-home' },
 ];
 
 export const PROMO_STRIPS = [
-  { title: 'Supplements', subtitle: 'Up to 35% Off', href: '/products?category=supplements', image: 'strip-supplements' },
-  { title: 'Premium Beauty', subtitle: 'Up to 40% Off', href: '/products?category=beauty', image: 'strip-beauty' },
-  { title: 'Grocery Essentials', subtitle: 'Up to 30% Off', href: '/products?category=grocery', image: 'strip-grocery' },
+  { title: 'Supplements', subtitle: 'Protein, vitamins and fitness nutrition', href: '/products?category=supplements', image: 'strip-supplements' },
+  { title: 'Beauty Essentials', subtitle: 'Skincare, makeup, haircare and fragrances', href: '/products?category=beauty', image: 'strip-beauty' },
+  { title: 'Grocery Essentials', subtitle: 'Staples, snacks and packaged food', href: '/products?category=grocery', image: 'strip-grocery' },
 ];

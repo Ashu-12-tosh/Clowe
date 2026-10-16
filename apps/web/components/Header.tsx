@@ -422,7 +422,8 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       </div>
 
       {/* ---------------- Category nav ---------------- */}
-      <Suspense fallback={<div className="hidden h-10 border-b border-gray-100 lg:block" />}>
+      {/* The fallback holds the strip's exact height (42px, every width), so nothing moves when it renders. */}
+      <Suspense fallback={<div className="h-[42px] border-b border-gray-100 bg-white" />}>
         <CategoryNav />
       </Suspense>
 

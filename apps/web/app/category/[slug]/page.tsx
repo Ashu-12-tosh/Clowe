@@ -18,6 +18,7 @@ import {
   type RailFacet, imageAt
 } from '@clowe/shared';
 import { api } from '@/lib/api';
+import { useInitialCategory } from './InitialCategory';
 import { fetchWishlistIds } from '@/lib/wishlist';
 import CategoryHero from '@/components/category/CategoryHero';
 import { CategoryGlyph } from '@/components/DesignedArt';
@@ -158,7 +159,8 @@ function CategoryPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [category, setCategory] = useState<CategoryDetail | null>(null);
+  const initialCategory = useInitialCategory(rootSlug);
+  const [category, setCategory] = useState<CategoryDetail | null>(initialCategory);
   const [data, setData] = useState<ProductListResponse | null>(null);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -193,11 +195,17 @@ function CategoryPageInner() {
 
   useEffect(() => {
     setNotFound(false);
+    if (initialCategory) {
+      // Fetched with the page (also on moving to another category); just the wishlist to add.
+      setCategory(initialCategory);
+      fetchWishlistIds().then(setWishlistIds);
+      return;
+    }
     api<CategoryDetail>(`/api/categories/${rootSlug}`)
       .then(setCategory)
       .catch(() => setNotFound(true));
     fetchWishlistIds().then(setWishlistIds);
-  }, [rootSlug]);
+  }, [rootSlug, initialCategory]);
 
   useEffect(() => {
     setLoading(true);
@@ -352,7 +360,8 @@ function CategoryPageInner() {
 
       {category && <SubcategoryRail category={category} selected={selectedCategory} />}
 
-      <div id="products" className="mt-6 grid items-start gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
+      {/* At least a screen tall, so the footer never shows while products load and then jumps away. */}
+      <div id="products" className="mt-6 grid min-h-[100vh] items-start gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
         {/* ── Filters (desktop) ─────────────────────────────────────────── */}
         <aside className="hidden rounded-2xl border border-gray-100 bg-white px-4 py-3 lg:block">
           <div className="flex items-center justify-between">
@@ -427,10 +436,15 @@ function CategoryPageInner() {
             </div>
           )}
 
+          {/* One row of placeholders at every width (2 / 3 / 4 across), the same
+              height as the "nothing listed" message, so what is below never moves. */}
           {loading && !data && (
             <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="h-72 animate-pulse rounded-2xl bg-cream-100" />
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-72 animate-pulse rounded-2xl bg-cream-100 ${i === 2 ? 'hidden sm:block' : i === 3 ? 'hidden xl:block' : ''}`}
+                />
               ))}
             </div>
           )}
@@ -438,7 +452,7 @@ function CategoryPageInner() {
           {/* Empty with no filters set means nothing is listed yet — the same
               words as /products — not that a filter was too tight. */}
           {data && data.items.length === 0 && sponsoredAds.length === 0 && railCount === 0 && (
-            <div className="mt-12 text-center">
+            <div className="mt-4 flex h-72 flex-col items-center justify-center text-center">
               <p className="text-sm font-semibold text-ink-900">Nothing listed here yet.</p>
               <p className="mt-1 text-sm text-gray-500">
                 Sellers are setting up shop — new listings appear here as they go live.

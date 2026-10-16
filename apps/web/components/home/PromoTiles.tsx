@@ -47,8 +47,8 @@ export function PromoCard({ card, index, icon, label }: { card: PromoTileView; i
         </span>
         <span className="flex flex-1 flex-col p-4">
           <span className="text-xs font-bold uppercase tracking-widest text-brand-600">{eyebrow}</span>
-          <span className="mt-1 font-display text-lg font-bold leading-snug">{title}</span>
-          {card.subtitle && <span className="mt-1 text-sm text-gray-600">{card.subtitle}</span>}
+          <span className="mt-1 line-clamp-2 font-display text-lg font-bold leading-snug">{title}</span>
+          {card.subtitle && <span className="mt-1 line-clamp-2 text-sm text-gray-600">{card.subtitle}</span>}
           <span className="mt-3 self-start rounded-lg border border-current px-3 py-1 text-xs font-bold uppercase tracking-wide">
             Shop Now
           </span>

@@ -44,12 +44,19 @@ describe('no hard-coded return window', () => {
     /45 days after delivery/, // how long a packing video is kept
   ];
 
+  // The lawyer's documents are published word for word, timelines included;
+  // everything else carries tokens.
+  const LAWYER_PAGES = new Set(
+    ['terms-conditions', 'customer-terms-of-sale', 'seller-terms', 'cancellation', 'return-policy', 'shipping-policy',
+      'payment-policy', 'privacy-policy', 'cookie-policy', 'grievance-redressal', 'faq'].map((s) => `${s}.md`),
+  );
+
   function files(dir: string): string[] {
     const out: string[] = [];
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) out.push(...files(full));
-      else if (/\.(ts|tsx|md)$/.test(entry.name) && !/\.test\.ts$/.test(entry.name)) out.push(full);
+      else if (/\.(ts|tsx|md)$/.test(entry.name) && !/\.test\.ts$/.test(entry.name) && !LAWYER_PAGES.has(entry.name)) out.push(full);
     }
     return out;
   }
