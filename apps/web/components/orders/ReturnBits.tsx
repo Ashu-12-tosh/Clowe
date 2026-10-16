@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import {
+  codRefundAccountSchema,
   returnReasonsFor,
   RETURN_REASON_LABELS,
   RETURN_REASONS_NEED_PHOTOS,
@@ -11,6 +12,8 @@ import {
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadPrivateImages } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
+import { issuesToFieldErrors } from '@/lib/fieldErrors';
+import FieldError from '@/components/FieldError';
 
 
 /** Return status timeline: Requested → Approved → Item received → Refunded. */
@@ -72,13 +75,18 @@ export function ReturnTimeline({ info }: { info: ReturnInfo }) {
 /** Return request modal: reason + details + photos (theme card, mobile sheet). */
 export function ReturnModal({
   item,
+  cod = false,
   onClose,
   onDone,
 }: {
   item: OrderDetailItem;
+  /** A Cash on Delivery order: the refund is a bank transfer, so ask where to. */
+  cod?: boolean;
   onClose: () => void;
   onDone: () => void;
 }) {
+  const [bank, setBank] = useState({ accountName: '', accountNumber: '', ifsc: '', ownAccount: false });
+  const [bankErrors, setBankErrors] = useState<Record<string, string>>({});
   const [reason, setReason] = useState<ReturnReasonValue | ''>('');
   const [details, setDetails] = useState('');
   const [files, setFiles] = useState<File[]>([]);
@@ -97,12 +105,23 @@ export function ReturnModal({
       setError('Please add at least one photo of the item');
       return;
     }
+    let codRefundAccount: unknown;
+    if (cod) {
+      const checked = codRefundAccountSchema.safeParse(bank);
+      if (!checked.success) {
+        setBankErrors(issuesToFieldErrors(checked.error.issues));
+        setError('Check the bank details for your refund');
+        return;
+      }
+      setBankErrors({});
+      codRefundAccount = checked.data;
+    }
     setError('');
     setBusy(true);
     try {
       const photos = files.length > 0 ? (await uploadPrivateImages(files, 'RETURN_PHOTO')).map((p) => p.ref) : [];
       await api(`/api/orders/items/${item.id}/return`, {
-        body: { reason, details: details.trim() || undefined, photos },
+        body: { reason, details: details.trim() || undefined, photos, codRefundAccount },
         auth: true,
       });
       onDone();
@@ -200,6 +219,61 @@ export function ReturnModal({
           </>
         )}
 
+        {reason && cod && (
+          <fieldset className="mt-4 rounded-xl border border-gray-200 p-3.5">
+            <legend className="px-1 text-sm font-semibold text-ink-900">Bank account for your refund</legend>
+            <p className="text-xs text-gray-500">
+              You paid cash on delivery, so we refund you by bank transfer — to an account in your own name. We never
+              refund in cash. Only Clowe&apos;s team sees these details, never the seller.
+            </p>
+            <label className="mt-3 block text-xs font-semibold text-gray-700">
+              Name on the account
+              <input
+                name="accountName"
+                value={bank.accountName}
+                onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))}
+                autoComplete="name"
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal outline-none focus:border-brand-600"
+              />
+              <FieldError message={bankErrors.accountName} />
+            </label>
+            <label className="mt-2 block text-xs font-semibold text-gray-700">
+              Account number
+              <input
+                name="accountNumber"
+                value={bank.accountNumber}
+                onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))}
+                inputMode="numeric"
+                autoComplete="off"
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal outline-none focus:border-brand-600"
+              />
+              <FieldError message={bankErrors.accountNumber} />
+            </label>
+            <label className="mt-2 block text-xs font-semibold text-gray-700">
+              IFSC
+              <input
+                name="ifsc"
+                value={bank.ifsc}
+                onChange={(e) => setBank((b) => ({ ...b, ifsc: e.target.value.toUpperCase() }))}
+                autoComplete="off"
+                placeholder="HDFC0001234"
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal uppercase outline-none focus:border-brand-600"
+              />
+              <FieldError message={bankErrors.ifsc} />
+            </label>
+            <label className="mt-3 flex items-start gap-2 text-xs text-gray-700">
+              <input
+                type="checkbox"
+                name="ownAccount"
+                checked={bank.ownAccount}
+                onChange={(e) => setBank((b) => ({ ...b, ownAccount: e.target.checked }))}
+                className="mt-0.5 accent-brand-600"
+              />
+              This account is in my own name.
+            </label>
+            <FieldError message={bankErrors.ownAccount} />
+          </fieldset>
+        )}
         <button
           onClick={() => void submit()}
           disabled={busy || !reason}

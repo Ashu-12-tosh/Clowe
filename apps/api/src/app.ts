@@ -48,6 +48,7 @@ import { adminPaymentsRouter } from './routes/adminPayments';
 import { adminCodRemittanceRouter } from './routes/adminCodRemittance';
 import { adminShipmentsRouter } from './routes/adminShipments';
 import { adminReturnsRouter } from './routes/adminReturns';
+import { adminCodRefundsRouter } from './routes/adminCodRefunds';
 import { sellerDashboardRouter } from './routes/sellerDashboard';
 import { sellerOrdersRouter } from './routes/sellerOrders';
 import { sellerPayoutsRouter } from './routes/sellerPayouts';
@@ -172,6 +173,7 @@ export function createApp() {
   app.use('/api/admin/cod-remittances', adminCodRemittanceRouter);
   app.use('/api/admin/shipments', adminShipmentsRouter);
   app.use('/api/admin/returns', adminReturnsRouter);
+  app.use('/api/admin/cod-refunds', adminCodRefundsRouter);
   app.use('/api/admin/support', adminSupportRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/admin', adminContentRouter);

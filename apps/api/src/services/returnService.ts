@@ -3,7 +3,7 @@ import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 import { sendToUserSafe } from './messaging';
 import { paymentProvider } from './payments';
-import { processRefund } from './refundService';
+import { MANUAL_COD_PROVIDER, processRefund } from './refundService';
 import { postReturnReversal } from './sellerLedgerService';
 import { settleEarnedCredits } from './purchaseCredits';
 import { istDate, istDayStart, type SellerReturnActionInput } from '@clowe/shared';
@@ -151,7 +151,8 @@ export async function applyReturnDecision(
                 returnId: r.id,
                 orderId: item.orderId,
                 amountPaise: refundPaise,
-                provider: paymentProvider.name,
+                // Cash on Delivery: a bank transfer an admin makes by hand.
+                provider: item.order.paymentMethod === 'COD' ? MANUAL_COD_PROVIDER : paymentProvider.name,
                 status: 'PENDING',
               },
             }),
@@ -160,7 +161,10 @@ export async function applyReturnDecision(
                 userId: customer.id,
                 type: 'REFUND_INITIATED',
                 title: 'Refund initiated 💰',
-                body: `We received ${label} back. Your refund of ₹${(refundPaise / 100).toFixed(2)} has been initiated — expect it within 5–7 business days.`,
+                body:
+                  item.order.paymentMethod === 'COD'
+                    ? `We received ${label} back. We will transfer your refund of ₹${(refundPaise / 100).toFixed(2)} to the bank account you gave, and tell you as soon as it is sent.`
+                    : `We received ${label} back. Your refund of ₹${(refundPaise / 100).toFixed(2)} has been initiated — expect it within 5–7 business days.`,
               },
             }),
           ]

@@ -152,6 +152,10 @@ const envSchema = z.object({
   // Signs the short-lived URLs for locally stored private files. Falls back to
   // JWT_ACCESS_SECRET, so nothing breaks when it is unset.
   FILE_URL_SECRET: optionalSecret,
+  // Encrypts the bank details Cash on Delivery buyers give for a refund. Set
+  // once (32+ random characters) and leave it: rotating it makes the stored
+  // details unreadable. Unset: a key derived from JWT_ACCESS_SECRET.
+  COD_REFUND_KEY: optionalSecret,
   // Public base URL of this API, used to build absolute image URLs.
   API_PUBLIC_URL: z.string().default('http://localhost:4000'),
   // Public base URL of the web app, printed into the QR codes on seller labels and

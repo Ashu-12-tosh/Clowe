@@ -635,6 +635,7 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
       {returning && (
         <ReturnModal
           item={returning}
+          cod={order.paymentMethod === 'COD'}
           onClose={() => setReturning(null)}
           onDone={() => {
             setReturning(null);

@@ -27,6 +27,7 @@ import { getSettings } from '../services/settingsService';
 import { recordRedemptions } from '../services/promotionService';
 import { orderLineReturnWindowDays, saleReturnWindows } from '../services/categoryRules';
 import { orderLineReturnable, saleReturnability } from '../services/returnability';
+import { encryptCodRefundAccount } from '../services/codRefundCrypto';
 import { saleGstRates } from '../services/sellerPricing';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -898,7 +899,7 @@ ordersRouter.post('/items/:itemId/return', async (req, res, next) => {
     const item = await prisma.orderItem.findUnique({
       where: { id: req.params.itemId },
       include: {
-        order: { select: { userId: true, orderNumber: true } },
+        order: { select: { userId: true, orderNumber: true, paymentMethod: true } },
         seller: { select: { userId: true, returnWindowDays: true } },
         product: { select: { categoryId: true } },
         return: true,
@@ -912,6 +913,18 @@ ordersRouter.post('/items/:itemId/return', async (req, res, next) => {
     if (!(await orderLineReturnable(item))) {
       throw ApiError.badRequest('This item cannot be returned', 'NOT_RETURNABLE');
     }
+    // Cash on Delivery: the refund is a bank transfer to the buyer's own
+    // account, so it is asked for now (and stored encrypted, never shown to
+    // the seller). A prepaid order is refunded to how it was paid.
+    const cod = item.order.paymentMethod === 'COD';
+    if (cod && !input.codRefundAccount) {
+      throw ApiError.invalidField(
+        'codRefundAccount.accountNumber',
+        'Give the bank account (in your own name) for the refund — Cash on Delivery refunds are paid by bank transfer',
+        'COD_REFUND_ACCOUNT_REQUIRED',
+      );
+    }
+    const codRefundAccount = cod && input.codRefundAccount ? input.codRefundAccount : null;
 
     // Return window enforced server-side (UI hides the button, this is the law):
     // the window this line was sold with, whatever the setting says today.
@@ -934,6 +947,17 @@ ordersRouter.post('/items/:itemId/return', async (req, res, next) => {
           reasonCategory: input.reason,
           reason: input.details ?? '',
           photos: input.photos ?? [],
+          ...(codRefundAccount
+            ? {
+                codRefundAccount: {
+                  create: {
+                    method: 'BANK',
+                    last4: codRefundAccount.accountNumber.slice(-4),
+                    cipher: encryptCodRefundAccount(codRefundAccount),
+                  },
+                },
+              }
+            : {}),
         },
       }),
       prisma.orderItem.update({

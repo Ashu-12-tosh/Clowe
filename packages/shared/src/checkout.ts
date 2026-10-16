@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { phoneSchema } from './auth';
 import { assetRefSchema } from './assets';
+import { codRefundAccountSchema } from './codRefund';
 
 // ---------------------------------------------------------------------------
 // Cart
@@ -580,6 +581,8 @@ export const returnRequestSchema = z
     details: z.string().trim().max(300).optional(),
     /** References from POST /api/uploads/private (purpose RETURN_PHOTO). */
     photos: z.array(assetRefSchema).max(3, 'Up to 3 photos').optional(),
+    /** Cash on Delivery orders only, and required there: where the refund is sent. */
+    codRefundAccount: codRefundAccountSchema.optional(),
   })
   .superRefine((val, ctx) => {
     if (val.reason === 'OTHER' && (!val.details || val.details.length < 5)) {
