@@ -86,9 +86,12 @@ const envSchema = z.object({
 
   // --- AI features (descriptions, review summary, voice search, support chat) ---
   // 'auto': use Claude when ANTHROPIC_API_KEY is set, otherwise the free mock.
-  AI_PROVIDER: z.enum(['auto', 'mock', 'anthropic']).default('auto'),
+  // 'auto': Gemini when GEMINI_API_KEY is set, else Claude when ANTHROPIC_API_KEY is set, else the free mock.
+  AI_PROVIDER: z.enum(['auto', 'mock', 'anthropic', 'gemini']).default('auto'),
   ANTHROPIC_API_KEY: z.string().optional(),
   AI_MODEL: z.string().default('claude-opus-4-8'),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default('gemini-3.5-flash-lite'),
 
   // --- Growth & notifications ---
   // Reward credited to the referrer when a referred user's first order is paid.

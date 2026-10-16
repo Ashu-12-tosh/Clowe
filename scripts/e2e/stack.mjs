@@ -41,6 +41,7 @@ export const MOCK_ENV = {
   // Blank keys: no real provider can be reached even by mistake.
   DELHIVERY_API_TOKEN: '',
   FASHN_API_KEY: '',
+  GEMINI_API_KEY: '',
   ANTHROPIC_API_KEY: '',
   SMS_PANEL_API_KEY: '',
   CASHFREE_VERIFICATION_CLIENT_ID: '',
