@@ -9,6 +9,7 @@ import { FIXTURE, seedFixture } from '../test/fixture';
 import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
 import { invalidateCategoryRules } from '../services/categoryRules';
 import { signAccessToken } from '../utils/jwt';
+import { useEarlierReturnRules } from '../test/returnRules';
 
 /**
  * The return window is one platform setting (5 days by default), read by
@@ -26,6 +27,8 @@ let fixtureSellerId: string;
 const DAY = 86_400_000;
 
 beforeAll(async () => {
+  // These items are under the earlier return rules (delivered before the claims began).
+  await useEarlierReturnRules(prisma);
   await seedFixture(prisma);
   const seller = await prisma.sellerProfile.findFirstOrThrow({ where: { slug: 'fixture-store' } });
   fixtureSellerId = seller.id;

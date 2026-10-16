@@ -254,7 +254,7 @@ export default function StorePage({ params: paramsPromise }: { params: Promise<{
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-gray-500">Returns</dt>
-                  <dd className="text-ink-900">{store.returnWindowDays} days</dd>
+                  <dd className="text-right text-ink-900">Defective, damaged or wrong items: claim within 48 hours</dd>
                 </div>
               </dl>
             </section>

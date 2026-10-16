@@ -2,8 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { newsletterSubscribeSchema, returnWindowPhrase, type HomePayload, safeHref, imageAt } from '@clowe/shared';
-import { useReturnWindowDays } from '@/lib/returnWindow';
+import { newsletterSubscribeSchema, type HomePayload, safeHref, imageAt } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import HeroCarousel from '@/components/home/HeroCarousel';
 import { PromoCard, PromoStrip } from '@/components/home/PromoTiles';
@@ -20,7 +19,7 @@ import PolicyText from '@/components/PolicyText';
 
 const TRUST_ITEMS = [
   { icon: '🚚', title: 'Free Shipping', text: 'On all orders' },
-  { icon: '↩️', title: 'Easy Returns', text: 'Hassle-free returns' },
+  { icon: '↩️', title: 'Exchange or Refund', text: 'For defective, damaged or wrong items' },
   { icon: '🔒', title: 'Secure Payments', text: 'Safe & secure checkout' },
   { icon: '🤖', title: 'AI Shopping Assistant', text: 'Get smart help' },
   { icon: '🎧', title: 'Help & Support', text: 'Help centre and support chat' },
@@ -55,7 +54,7 @@ function promoIcon(href: string, categories: HomePayload['categories']): string 
 const BOTTOM_STRIP = [
   { icon: '🏷', title: 'Clear Pricing', text: 'GST included in every price' },
   { icon: '🗂', title: 'Many Departments', text: 'Fashion, electronics, home, beauty & more' },
-  { icon: '🤝', title: 'Trusted Shopping', text: 'Secure payments & easy returns' },
+  { icon: '🤝', title: 'Trusted Shopping', text: 'Secure payments & approved sellers' },
 ];
 
 function NewsletterForm() {
@@ -125,7 +124,6 @@ export default function HomeClient({ initial = null }: { initial?: HomePayload |
   const [home, setHome] = useState<HomePayload | null>(initial);
   const [failed, setFailed] = useState(false);
   // The returns card quotes the platform window once settings arrive.
-  const windowDays = useReturnWindowDays();
 
   const load = useCallback(() => {
     api<HomePayload>('/api/home')
@@ -185,9 +183,7 @@ export default function HomeClient({ initial = null }: { initial?: HomePayload |
             <div className="min-w-0">
               <p className="text-sm font-bold text-ink-900">{item.title}</p>
               <p className="text-xs text-gray-500">
-                {item.title === 'Easy Returns' && windowDays
-                  ? `${returnWindowPhrase(windowDays)} easy returns`
-                  : <PolicyText text={item.text} />}
+                <PolicyText text={item.text} />
               </p>
             </div>
           </div>

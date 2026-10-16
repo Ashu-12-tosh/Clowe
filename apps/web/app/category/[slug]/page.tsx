@@ -40,7 +40,7 @@ const DEFAULT_FEATURES: CategoryCallout[] = [
   { icon: '✅', title: 'Approved Sellers', subtitle: 'Every shop is reviewed before it sells.' },
   { icon: '🏷', title: 'Clear Pricing', subtitle: 'GST included in every price.' },
   { icon: '🛡', title: 'Secure Payments', subtitle: 'Safe & secure checkout.' },
-  { icon: '↩', title: 'Easy Returns', subtitle: 'Hassle-free return policy.' },
+  { icon: '↩', title: 'Exchange or Refund', subtitle: 'For defective, damaged or wrong items.' },
 ];
 
 /** Collapsible sidebar group. */

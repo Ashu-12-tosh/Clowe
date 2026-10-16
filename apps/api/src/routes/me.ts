@@ -14,8 +14,12 @@ import {
   type ReturnFilter,
   type ProductListItem,
   type SavedPaymentMethodInfo,
+  selfShipReceiptSchema,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { assertOwnAssets } from '../services/assets';
+import { recordSelfShipReceipt } from '../services/returnClaims';
+import { pickupAddress } from '../services/shipping/shipments';
 import { visibleProductWhere } from '../services/shopperVisibility';
 import { getSettings } from '../services/settingsService';
 import { requireAuth } from '../middleware/auth';
@@ -224,6 +228,34 @@ meRouter.get('/recently-viewed', async (req, res, next) => {
   }
 });
 
+/** Where a self-shipped return goes: the seller's return address, else their pickup address. */
+function returnAddressOf(seller: Parameters<typeof pickupAddress>[0] & {
+  shopName: string;
+  returnAddressSameAsPickup: boolean;
+  returnLine1: string | null;
+  returnCity: string | null;
+  returnState: string | null;
+  returnPincode: string | null;
+}) {
+  const a = seller.returnAddressSameAsPickup
+    ? pickupAddress(seller)
+    : { line1: seller.returnLine1, city: seller.returnCity, state: seller.returnState, pincode: seller.returnPincode };
+  if (!a.line1 || !a.city || !a.state || !a.pincode) return null;
+  return { name: seller.shopName, line1: a.line1, city: a.city, state: a.state, pincode: a.pincode };
+}
+
+// The buyer self-shipped a claim (pickup not serviceable): the courier receipt.
+meRouter.post('/returns/:id/self-ship', async (req, res, next) => {
+  try {
+    const input = selfShipReceiptSchema.parse(req.body);
+    await assertOwnAssets([input.receipt], { ownerId: req.auth!.userId, purpose: 'RETURN_PHOTO' });
+    await recordSelfShipReceipt({ returnId: req.params.id, userId: req.auth!.userId, ...input });
+    res.json({ success: true, data: { saved: true } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Every return this shopper has raised, newest first, with per-status counts.
 meRouter.get('/returns', async (req, res, next) => {
   try {
@@ -241,10 +273,16 @@ meRouter.get('/returns', async (req, res, next) => {
           include: {
             order: { select: { id: true, orderNumber: true, createdAt: true } },
             product: { include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } } },
+            seller: true,
           },
         },
       },
     });
+    const linkedIds = rows.flatMap((r) => [r.replacementOrderId, r.sentBackOrderId]).filter((id): id is string => !!id);
+    const linked = new Map(
+      (await prisma.order.findMany({ where: { id: { in: linkedIds } }, select: { id: true, orderNumber: true } })).map((o) => [o.id, o]),
+    );
+    const orderRef = (id: string | null) => (id && linked.get(id) ? { id, orderNumber: linked.get(id)!.orderNumber } : null);
 
     const mapped: MyReturnRow[] = rows.map((r) => ({
       id: r.id,
@@ -276,6 +314,20 @@ meRouter.get('/returns', async (req, res, next) => {
             status: r.refund.status,
             amountPaise: r.refund.amountPaise,
             processedAt: r.refund.processedAt?.toISOString() ?? null,
+          }
+        : null,
+      rmaNumber: r.rmaNumber,
+      rules: r.rules === 'CLAIM' ? 'CLAIM' : 'LEGACY',
+      remedy: r.remedy === 'EXCHANGE' || r.remedy === 'REFUND' ? r.remedy : null,
+      qcNote: r.qcPassed === false ? r.qcNote : null,
+      replacementOrder: orderRef(r.replacementOrderId),
+      sentBackOrder: orderRef(r.sentBackOrderId),
+      selfShip: r.selfShip
+        ? {
+            sendTo: returnAddressOf(r.orderItem.seller),
+            receiptUploaded: !!r.selfShipReceipt,
+            costPaise: r.selfShipCostPaise,
+            reimbursedPaise: r.selfShipReimbursedPaise,
           }
         : null,
     }));

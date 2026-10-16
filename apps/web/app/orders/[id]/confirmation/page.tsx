@@ -31,7 +31,7 @@ const STEPS = [
 ] as const;
 
 const HAPPINESS = [
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'On eligible items' },
+  { Icon: ReturnIcon, title: 'Exchange or Refund', text: 'For defective, damaged or wrong items' },
   { Icon: BoxIcon, title: 'Approved', text: 'Sellers' },
   { Icon: ShieldCheckIcon, title: 'Secure', text: 'Payments' },
   { Icon: HeadsetIcon, title: 'Help', text: 'Centre & chat' },
@@ -39,7 +39,7 @@ const HAPPINESS = [
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
+  { Icon: ReturnIcon, title: 'Exchange or Refund', text: 'If an item arrives defective, damaged or wrong' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On all orders' },
   { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },

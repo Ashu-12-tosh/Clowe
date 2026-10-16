@@ -10,7 +10,7 @@ import { z } from 'zod';
 // a return photo or a try-on photo at a file they did not upload.
 // ---------------------------------------------------------------------------
 
-export const ASSET_PURPOSES = ['RETURN_PHOTO', 'TRYON_PHOTO', 'TRYON_RESULT', 'PACKING_VIDEO'] as const;
+export const ASSET_PURPOSES = ['RETURN_PHOTO', 'TRYON_PHOTO', 'TRYON_RESULT', 'PACKING_VIDEO', 'RETURN_VIDEO'] as const;
 export type AssetPurposeValue = (typeof ASSET_PURPOSES)[number];
 
 /** Purposes a client may upload directly (results are written by the server). */

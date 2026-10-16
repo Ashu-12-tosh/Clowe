@@ -106,7 +106,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     label: 'Return policy & window',
     keywords: ['return policy', 'wapas', 'exchange', 'return window', 'galat size', 'size'],
     answer:
-      'Returns are simple:\n\n• Request a return within {{returnWindow}} of delivery\n• Go to Orders → open the order → "Request return" on the delivered item\n• Pickup is free for you\n• Your refund is made once the item reaches the seller and is checked\n\nItems should be unused with tags intact. Size guide is available on each product page under details.',
+      'Exchange or refund, when something is wrong with the item:\n\n• For a defective, damaged, wrong, incomplete or counterfeit item, or one materially different from its page — not for a change of mind, fit or colour preference\n• Claim within 48 hours of delivery: Orders → open the order → "Report a problem" (a hidden defect: within 7 days of noticing it)\n• Add photos of the item, its tag and barcode, and the packaging and label — and your unboxing video for damaged, missing or wrong items\n• Choose an identical exchange or a refund; pickup is free\n• Once the item passes the check, the exchange ships free or the refund starts within 3 working days\n\nItems delivered before these rules began keep the earlier return window. Check the size chart before you buy.',
     links: [{ label: 'My orders', href: '/orders' }],
     followUps: ['return-cancel', 'helped', 'menu'],
   },

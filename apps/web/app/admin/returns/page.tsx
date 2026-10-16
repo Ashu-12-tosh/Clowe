@@ -30,6 +30,7 @@ import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import { BarList, DonutChart, LineChart } from '@/components/charts/Charts';
 import { PackingVideoEvidence } from '@/components/seller/orders/PackingVideoPanel';
+import { ClaimEvidence } from '@/components/orders/ClaimEvidence';
 
 /** What each return action says when it goes through. */
 const RETURN_ACTION_DONE: Record<string, string> = {
@@ -1069,6 +1070,29 @@ function ReturnDrawer({
     }
   }
 
+  /** Self-shipped return (Return Policy 7.2): record the courier charges paid to the buyer by hand. */
+  async function reimburse() {
+    const cost = detail?.claim?.selfShip?.costPaise ?? 0;
+    const rupees = window.prompt('Amount paid to the buyer (₹, at most 100):', String(Math.min(100, Math.round(cost / 100))));
+    if (rupees === null) return;
+    const reference = window.prompt('UPI or bank reference of the payment:');
+    if (!reference) return;
+    setBusy('REIMBURSE');
+    try {
+      await api(`/api/admin/returns/${returnId}/self-ship/reimburse`, {
+        method: 'POST',
+        auth: true,
+        body: { amountPaise: Math.round(Number(rupees) * 100), reference: reference.trim() },
+        success: 'Reimbursement recorded — the seller is charged for it',
+      });
+      await load();
+    } catch (err) {
+      flash(err instanceof ApiRequestError ? err.message : 'Could not record that.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   function withNote(action: string, prompt: string) {
     const note = window.prompt(prompt);
     if (note === null) return;
@@ -1162,6 +1186,16 @@ function ReturnDrawer({
               />
             ))}
           </div>
+        )}
+        {detail.claim && <ClaimEvidence claim={detail.claim} />}
+        {detail.claim?.selfShip?.costPaise && !detail.claim.selfShip.reimbursedPaise && (
+          <button
+            onClick={() => void reimburse()}
+            disabled={!!busy}
+            className="mt-2 rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+          >
+            Record courier reimbursement (up to ₹100)
+          </button>
         )}
         <div className="mt-3">
           <PackingVideoEvidence video={detail.packingVideo} />

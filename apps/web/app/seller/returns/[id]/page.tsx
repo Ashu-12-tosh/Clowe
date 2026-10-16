@@ -8,6 +8,7 @@ import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import { ExternalLink } from '@/components/ExternalLink';
 import { PackingVideoEvidence } from '@/components/seller/orders/PackingVideoPanel';
+import { ClaimEvidence } from '@/components/orders/ClaimEvidence';
 
 const returnStatusStyles: Record<string, string> = {
   REQUESTED: 'bg-orange-100 text-orange-700',
@@ -27,6 +28,7 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
   const [rejecting, setRejecting] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [receiving, setReceiving] = useState(false);
+  const [qcNote, setQcNote] = useState('');
 
   const load = useCallback(() => {
     api<SellerReturnRow>(`/api/seller/returns/${params.id}`, { auth: true })
@@ -70,12 +72,20 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
             : key === 'reject'
               ? 'Return rejected'
               : key === 'received:OK'
-                ? 'Received — the refund is on its way'
-                : 'Marked damaged — support will look at it',
+                ? row?.claim
+                  ? row.claim.remedy === 'EXCHANGE'
+                    ? 'Passed — send the exchange from Orders'
+                    : 'Passed — the refund is on its way'
+                  : 'Received — the refund is on its way'
+                : row?.claim
+                  ? 'Failed — send the item back to the buyer from Orders'
+                  : 'Marked damaged — support will look at it',
       });
       setRow(updated);
       setRejecting(false);
       setReceiving(false);
+      // The detail (claim evidence, outcome) comes from the full view.
+      load();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
     } finally {
@@ -163,6 +173,7 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
           </div>
         )}
         {/* What went into the box, beside what the buyer says came out. */}
+        {row.claim && <ClaimEvidence claim={row.claim} />}
         <div className="mt-4">
           <PackingVideoEvidence video={row.packingVideo} />
         </div>
@@ -298,26 +309,39 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
 
       {receiving && (
         <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4">
-          <p className="text-sm font-semibold text-ink-900">What condition is the item in?</p>
+          <p className="text-sm font-semibold text-ink-900">{row.claim ? 'Quality check' : 'What condition is the item in?'}</p>
           <p className="mt-0.5 text-xs text-gray-500">
-            OK → the refund of {itemTotal} is initiated automatically. Damaged → no auto-refund; support steps in.
+            {row.claim
+              ? `Passed → ${row.claim.remedy === 'EXCHANGE' ? 'an identical item is ordered for you to ship free (refunded instead if none is in stock)' : `the buyer is refunded ${itemTotal}`}. Failed (used, altered, substituted, not what you sent) → the item goes back to the buyer and their account is reviewed; say what you found.`
+              : `OK → the refund of ${itemTotal} is initiated automatically. Damaged → no auto-refund; support steps in.`}
           </p>
+          {row.claim && (
+            <textarea
+              name="qcNote"
+              value={qcNote}
+              onChange={(e) => setQcNote(e.target.value)}
+              maxLength={300}
+              rows={2}
+              placeholder="What the check found (required if it failed — the buyer sees this)"
+              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600"
+            />
+          )}
           <div className="mt-3 flex gap-2">
             <button
-              onClick={() => void act({ action: 'received', condition: 'OK' })}
+              onClick={() => void act({ action: 'received', condition: 'OK', ...(qcNote.trim() ? { note: qcNote.trim() } : {}) })}
               disabled={!!busy}
               className="rounded-lg bg-green-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-green-700 disabled:opacity-50"
             >
               {busy === 'received:OK' && <Spinner className="mr-1" />}
-              ✓ Condition OK — refund {itemTotal}
+              {row.claim ? (row.claim.remedy === 'EXCHANGE' ? '✓ Passed — exchange' : `✓ Passed — refund ${itemTotal}`) : `✓ Condition OK — refund ${itemTotal}`}
             </button>
             <button
-              onClick={() => void act({ action: 'received', condition: 'DAMAGED' })}
-              disabled={!!busy}
+              onClick={() => void act({ action: 'received', condition: 'DAMAGED', ...(qcNote.trim() ? { note: qcNote.trim() } : {}) })}
+              disabled={!!busy || (!!row.claim && qcNote.trim().length < 5)}
               className="rounded-lg border border-red-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
               {busy === 'received:DAMAGED' && <Spinner className="mr-1" />}
-              Damaged on arrival
+              {row.claim ? 'Failed the check' : 'Damaged on arrival'}
             </button>
             <button
               onClick={() => setReceiving(false)}

@@ -7,6 +7,7 @@ import { shippingProvider } from '../services/shipping';
 import type { MockShippingProvider } from '../services/shipping/MockShippingProvider';
 import { pollOpenShipments } from '../services/shipping/tracking';
 import { signAccessToken } from '../utils/jwt';
+import { useEarlierReturnRules } from '../test/returnRules';
 
 /**
  * Approving a return books a Delhivery reverse pickup: collected from the
@@ -61,6 +62,8 @@ async function returnRequested(pincode = '411001') {
 const reverse = (returnId: string) => prisma.shipment.findUnique({ where: { returnId } });
 
 beforeAll(async () => {
+  // These items are under the earlier return rules (delivered before the claims began).
+  await useEarlierReturnRules(prisma);
   const user = await prisma.user.create({ data: { phone: '9192200001', name: 'Return Seller', role: Role.SELLER, referralCode: 'RTN-S' } });
   sellerId = (
     await prisma.sellerProfile.create({

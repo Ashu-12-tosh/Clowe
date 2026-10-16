@@ -117,7 +117,9 @@ It becomes payable once Delhivery has paid that cash to Clowe — usually within
     summary: 'The window, your decision SLA, and when the refund goes out.',
     popular: true,
     tags: ['return', 'refund', 'window', 'reject', 'damaged'],
-    body: `Customers can request a return within the return window: {{returnWindow}} from delivery, unless the category or your store sets its own (Store Settings → Returns). Each order keeps the window it was sold with. You then approve or decline it — decline needs a written reason the customer sees.
+    body: `Under the Return Policy a buyer can claim only for an item that is defective, damaged in transit or tampered with, the wrong item, size or colour, incomplete, counterfeit, or materially different from its page — never for a change of mind or fit. They claim within 48 hours of delivery (a hidden defect: within 7 days of noticing it), with photos of the item, its tag and barcode and the packaging and label, and an unboxing video for damaged, missing or wrong items, and choose an identical exchange or a refund. Items delivered before these rules began keep the earlier return window. You approve or decline the claim — decline needs a written reason the customer sees.
+
+At the quality check: passed → the exchange is ordered for you to ship (free to the buyer, freight yours), or the buyer is refunded; failed (used, altered, substituted, not what you sent) → say what you found, and the item is sent back to the buyer.
 
 Decide within 48 hours. Requests older than that are flagged as overdue on your Returns page, and the admin can override a rejection on the customer's behalf.
 

@@ -136,6 +136,8 @@ enum ReturnReason {
   QUALITY
   CHANGED_MIND
   OTHER
+  // Appended for the Return Policy's claims (2.1): spurious or counterfeit.
+  COUNTERFEIT
 }
 
 enum RefundStatus {
@@ -281,6 +283,10 @@ model User {
   // adult): when, and which wording. Null = not given, or withdrawn.
   tryOnConsentAt      DateTime?
   tryOnConsentVersion String?
+  // Return Policy 4.3 / 8.1: placed under review after a claim failed quality
+  // check (used, altered, substituted). Seen by admins; cleared by them.
+  claimsReviewAt   DateTime?
+  claimsReviewNote String?
   referredById String?
   referredBy   User?    @relation("UserReferrals", fields: [referredById], references: [id])
   referrals    User[]   @relation("UserReferrals")
@@ -1570,6 +1576,30 @@ model Return {
   // Warehouse quality check, recorded when the parcel is opened.
   qcPassed          Boolean?
   qcNote            String?
+  // Which rules the claim is under: LEGACY (delivered before the Return
+  // Policy's claims took effect) or CLAIM (Return Policy 2–7).
+  rules             String    @default("LEGACY")
+  // CLAIM: what the buyer asked for — EXCHANGE (an identical item) or REFUND.
+  remedy            String?
+  // CLAIM: evidence (3.2) — the item (photos above), its tag and barcode, the
+  // outer packaging and label, and the unboxing video where required.
+  tagPhotos         String[]  @default([])
+  packagingPhotos   String[]  @default([])
+  unboxingVideo     String?
+  // A latent defect (3.3): when the buyer noticed it.
+  latentNoticedAt   DateTime?
+  // EXCHANGE done: the replacement order sent.
+  replacementOrderId String?
+  // QC failed (4.3): the item was sent back to the buyer on this order.
+  sentBackOrderId   String?
+  // Pickup not serviceable (7.2): the buyer ships it, with a receipt, and is
+  // reimbursed courier charges up to ₹100.
+  selfShip          Boolean   @default(false)
+  selfShipReceipt   String?
+  selfShipCostPaise Int?
+  selfShipReimbursedPaise Int?
+  selfShipReimbursedAt    DateTime?
+  selfShipReimburseRef    String?
   // How the shopper gets their money back.
   resolution        ReturnResolution @default(REFUND)
   // Cash on Delivery returns only: where the buyer wants the money sent.
@@ -2357,6 +2387,7 @@ enum AssetPurpose {
   TRYON_PHOTO // private: the shopper, admins
   TRYON_RESULT // private: the shopper, admins
   PACKING_VIDEO // private: the seller, admins
+  RETURN_VIDEO // private: the buyer's unboxing video for a claim — the buyer, that item's seller, admins
 }
 
 /// A stored file. Rows that use it hold "asset:<id>", never a URL: the API

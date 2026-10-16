@@ -15,6 +15,7 @@ import { signLocalFile } from '../services/storage/LocalStorageProvider';
 import { sweepExpiredTryOnPhotos, TRYON_PHOTO_RETENTION_HOURS } from '../services/tryonPhotoRetention';
 import { uploadDir } from './uploads';
 import { backfillPrivateFiles } from '../../prisma/backfillPrivateFiles';
+import { useEarlierReturnRules } from '../test/returnRules';
 
 /**
  * Private files — return photos, try-on photos and results, packing videos —
@@ -35,6 +36,8 @@ async function user(phone: string, role: Role = Role.CUSTOMER) {
 }
 
 beforeAll(async () => {
+  // These items are under the earlier return rules (delivered before the claims began).
+  await useEarlierReturnRules(prisma);
   await seedFixture(prisma);
   buyer = await user('9800000001');
   other = await user('9800000002');

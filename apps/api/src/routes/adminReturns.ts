@@ -29,6 +29,7 @@ import {
   type ReturnStage,
   istDayKey,
   istStartOfDay,
+  selfShipReimburseSchema,
 } from '@clowe/shared';
 import { bookReversePickup, bookReversePickupSafe } from '../services/shipping/reversePickup';
 import { prisma } from '../db';
@@ -41,6 +42,7 @@ import { getSettings, setSetting } from '../services/settingsService';
 import { creditExpiryFrom } from './credits';
 import { withPhotoUrls } from '../services/assets';
 import { packingVideoView } from '../services/packingVideos';
+import { claimEvidenceView, reimburseSelfShip, settleClaimAfterQc } from '../services/returnClaims';
 
 export const adminReturnsRouter = Router();
 adminReturnsRouter.use(requireAuth, requireRole('ADMIN'));
@@ -577,6 +579,7 @@ adminReturnsRouter.get('/:id', async (req, res, next) => {
       adminOverrideAt: r.adminOverrideAt?.toISOString() ?? null,
       adminOverrideNote: r.adminOverrideNote,
       packingVideo: await packingVideoView(r.orderItem.orderId, r.orderItem.sellerId),
+      claim: await claimEvidenceView(r.id, { forAdmin: true }),
       timeline: [
         {
           key: 'requested',
@@ -772,6 +775,11 @@ async function applyAdminAction(
       if (input.qcPassed === undefined) {
         throw ApiError.badRequest('Record whether the item passed the quality check');
       }
+      if (r.rules === 'CLAIM') {
+        // A Return Policy claim: the check decides exchange, refund or send-back.
+        await settleClaimAfterQc({ returnId: r.id, passed: input.qcPassed, note: input.note ?? null, actorId: adminId });
+        break;
+      }
       await prisma.$transaction([
         prisma.return.update({
           where: { id: r.id },
@@ -797,6 +805,9 @@ async function applyAdminAction(
     }
 
     case 'REFUND': {
+      if (r.rules === 'CLAIM') {
+        throw ApiError.badRequest(`${r.rmaNumber} is a claim: it was settled at its quality check`, 'CLAIM_SETTLED_AT_QC');
+      }
       if (r.status !== 'RECEIVED') {
         throw ApiError.badRequest(`${r.rmaNumber} has not been received and checked yet`);
       }
@@ -907,6 +918,18 @@ adminReturnsRouter.post('/:id/action', async (req, res, next) => {
     const input = adminReturnActionSchema.parse(req.body);
     const result = await applyAdminAction(req.params.id, input, req.auth!.userId);
     res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Self-shipped return (Return Policy 7.2): the buyer's courier charges, up to
+// ₹100, paid by hand and recorded here; the seller bears them.
+adminReturnsRouter.post('/:id/self-ship/reimburse', async (req, res, next) => {
+  try {
+    const input = selfShipReimburseSchema.parse(req.body);
+    await reimburseSelfShip({ returnId: req.params.id, ...input, adminId: req.auth!.userId });
+    res.json({ success: true, data: { reimbursed: true } });
   } catch (err) {
     next(err);
   }

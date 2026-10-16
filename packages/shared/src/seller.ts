@@ -288,6 +288,8 @@ export interface SellerReturnRow {
   requestedAt: string;
   /** On the return's own page: the seller's packing clip for the order (never sent to the buyer). */
   packingVideo?: PackingVideoView | null;
+  /** A Return Policy claim: the remedy asked for and the rest of the evidence (detail view only). */
+  claim?: import('./returnClaims').ClaimEvidenceView | null;
 }
 
 export interface SellerStats {

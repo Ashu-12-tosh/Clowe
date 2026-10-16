@@ -190,6 +190,22 @@ uploadsRouter.post(
   },
 );
 
+// A buyer's unboxing video for a return claim (Return Policy 3.2). Private:
+// the buyer, that item's seller and admins see it.
+uploadsRouter.post('/return-video', requireAuth, uploadLimiter, videoUpload.single('video'), async (req, res, next) => {
+  try {
+    const file = req.file;
+    if (!file) throw ApiError.badRequest('No video uploaded. Use multipart field name "video".');
+    const contentType = videoTypeOf(file.buffer.subarray(0, 12), file.mimetype);
+    if (!contentType) throw ApiError.badRequest('That file is not a valid video', 'INVALID_FILE_CONTENT');
+    const stored = await storePrivateFile({ purpose: 'RETURN_VIDEO', ownerId: req.auth!.userId, body: file.buffer, contentType });
+    const body: UploadedAsset = { ref: stored.ref, url: (await resolveFileUrl(stored.ref))! };
+    res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /** Best-effort delete of a public upload by its URL (files from before private storage). */
 export function removeUploadByUrl(url: string): void {
   const name = url.split('/uploads/')[1];

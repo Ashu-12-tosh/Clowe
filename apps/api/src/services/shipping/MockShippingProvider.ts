@@ -43,6 +43,8 @@ const DEFAULT_FLAT_PAISE = 6_000;
 const COD_LIMIT_PAISE = 5_000_000;
 const NOT_SERVED = '999999';
 const PREPAID_ONLY = '888888';
+/** Delivered to, but returns are not collected from here (the buyer self-ships). */
+const NO_REVERSE_PICKUP = '777777';
 
 /** Jammu & Kashmir, Himachal, the North East, Andaman: Delhivery's special zone. */
 const REMOTE_PREFIXES = ['17', '18', '19', '74', '78', '79'];
@@ -111,7 +113,7 @@ export class MockShippingProvider implements ShippingProvider {
       prepaid: valid,
       cod: valid && pincode !== PREPAID_ONLY,
       pickup: valid,
-      reversePickup: valid,
+      reversePickup: valid && pincode !== NO_REVERSE_PICKUP,
       codLimitPaise: valid && pincode !== PREPAID_ONLY ? COD_LIMIT_PAISE : null,
       city: null,
       state: null,

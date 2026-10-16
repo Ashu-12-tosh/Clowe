@@ -18,6 +18,10 @@ import {
   codPlatformRefusal,
   INTERCEPT_SUBJECT,
   interceptRequestSchema,
+  CLAIM_REASONS,
+  CLAIM_REASONS_NON_RETURNABLE,
+  claimWindow,
+  type OrderDetailItem,
   isNotASale,
   isPoBoxAddress,
   LOST_PARCEL_CHOICES,
@@ -26,6 +30,7 @@ import {
 } from '@clowe/shared';
 import { chooseLostOutcome } from '../services/shipping/lostParcels';
 import { cancelOrderLines } from '../services/lineCancellation';
+import { exchangeAllowed, raiseClaim, rulesForDelivery } from '../services/returnClaims';
 import { raiseComplaint } from '../services/complaintService';
 import { scanViews } from './track';
 import { prisma } from '../db';
@@ -694,6 +699,19 @@ ordersRouter.get('/:id', async (req, res, next) => {
       windowDaysByItem.set(i.id, await orderLineReturnWindowDays(i));
       returnableByItem.set(i.id, await orderLineReturnable(i));
     }
+    // Claims under the Return Policy, for lines delivered since its rules began.
+    const claimByItem = new Map<string, OrderDetailItem['claim']>();
+    for (const i of order.items) {
+      if (!i.deliveredAt || (await rulesForDelivery(i.deliveredAt)) !== 'CLAIM') continue;
+      const w = claimWindow(i.deliveredAt);
+      const reasons = returnableByItem.get(i.id) === false ? [...CLAIM_REASONS_NON_RETURNABLE] : [...CLAIM_REASONS];
+      claimByItem.set(i.id, {
+        windowEndsAt: w.endsAt.toISOString(),
+        latentUntil: w.latentUntil.toISOString(),
+        reasons,
+        exchangeAllowed: await exchangeAllowed(i.id, 'DEFECTIVE'),
+      });
+    }
     const platformWindowDays = (await getSettings()).returnWindowDays;
     const windowMsFor = (itemId: string) =>
       (windowDaysByItem.get(itemId) ?? platformWindowDays) * 24 * 60 * 60 * 1000;
@@ -768,13 +786,16 @@ ordersRouter.get('/:id', async (req, res, next) => {
           : null,
         returnable: returnableByItem.get(i.id) ?? true,
         nonCancellable: i.nonCancellable,
+        claim: claimByItem.get(i.id) ?? null,
         cancelReason: i.cancelReason,
-        canReturn:
-          (returnableByItem.get(i.id) ?? true) &&
-          i.status === 'DELIVERED' &&
-          !i.return &&
-          !!i.deliveredAt &&
-          Date.now() - i.deliveredAt.getTime() <= windowMsFor(i.id),
+        canReturn: claimByItem.get(i.id)
+          ? // A claim: within 48 hours, or later for a hidden defect (the form asks).
+            i.status === 'DELIVERED' && !i.return && Date.now() <= new Date(claimByItem.get(i.id)!.latentUntil).getTime()
+          : (returnableByItem.get(i.id) ?? true) &&
+            i.status === 'DELIVERED' &&
+            !i.return &&
+            !!i.deliveredAt &&
+            Date.now() - i.deliveredAt.getTime() <= windowMsFor(i.id),
         scans: scanViews(i.shipment?.events),
         parcel: i.shipment
           ? {
@@ -961,6 +982,14 @@ ordersRouter.post('/:id/cancel', async (req, res, next) => {
 // Request a return for a delivered item (inside the return window).
 ordersRouter.post('/items/:itemId/return', async (req, res, next) => {
   try {
+    // Items delivered since the Return Policy's claim rules took effect are
+    // claimed under them; anything delivered before keeps the old rules.
+    const line = await prisma.orderItem.findUnique({ where: { id: req.params.itemId }, select: { deliveredAt: true } });
+    if (line && (await rulesForDelivery(line.deliveredAt)) === 'CLAIM') {
+      const result = await raiseClaim(req.auth!.userId, req.params.itemId, req.body);
+      res.json({ success: true, data: result });
+      return;
+    }
     const input = returnRequestSchema.parse(req.body);
     if (input.photos?.length) {
       await assertOwnAssets(input.photos, { ownerId: req.auth!.userId, purpose: 'RETURN_PHOTO' });

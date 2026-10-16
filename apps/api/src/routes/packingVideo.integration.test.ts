@@ -8,6 +8,7 @@ import { seedFixture } from '../test/fixture';
 import { signAccessToken } from '../utils/jwt';
 import { sweepExpiredPackingVideos } from '../services/packingVideos';
 import { storePrivateFile } from '../services/assets';
+import { useEarlierReturnRules } from '../test/returnRules';
 
 /**
  * The packing video belongs to the order now: required before dispatch,
@@ -26,6 +27,8 @@ const DAY = 24 * 60 * 60 * 1000;
 const MP4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom'), Buffer.alloc(64)]);
 
 beforeAll(async () => {
+  // These items are under the earlier return rules (delivered before the claims began).
+  await useEarlierReturnRules(prisma);
   await seedFixture(prisma);
   categoryId = (await prisma.category.findFirstOrThrow({ where: { isActive: true } })).id;
   const admin = await prisma.user.create({ data: { phone: '9150000000', name: 'Pack Admin', role: Role.ADMIN, referralCode: 'PACK-A' } });

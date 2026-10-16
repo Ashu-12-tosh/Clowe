@@ -6,6 +6,7 @@ import { paymentProvider } from './payments';
 import { MANUAL_COD_PROVIDER, processRefund } from './refundService';
 import { postReturnReversal } from './sellerLedgerService';
 import { settleEarnedCredits } from './purchaseCredits';
+import { settleClaimAfterQc } from './returnClaims';
 import { istDate, istDayStart, type SellerReturnActionInput } from '@clowe/shared';
 
 /**
@@ -126,8 +127,16 @@ export async function applyReturnDecision(
       },
       { critical: true },
     );
+  } else if (r.rules === 'CLAIM') {
+    // A Return Policy claim: the check decides exchange, refund or send-back.
+    await settleClaimAfterQc({
+      returnId: r.id,
+      passed: input.condition === 'OK',
+      note: input.note ?? null,
+      actorId: null,
+    });
   } else {
-    // action === 'received'
+    // action === 'received' (a return under the earlier rules)
     if (r.status !== 'APPROVED') {
       throw ApiError.badRequest(`Cannot mark received a return in status ${r.status}`);
     }

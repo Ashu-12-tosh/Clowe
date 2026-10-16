@@ -118,6 +118,13 @@ export async function uploadVideo(file: File): Promise<UploadedAsset> {
   return upload<UploadedAsset>('/api/uploads/video', form);
 }
 
+/** Upload a buyer's unboxing video for a return claim (multipart). */
+export async function uploadReturnVideo(file: File): Promise<UploadedAsset> {
+  const form = new FormData();
+  form.append('video', file);
+  return upload<UploadedAsset>('/api/uploads/return-video', form);
+}
+
 // --- Fetch helper with the standard { success, data, error } envelope ---
 
 export class ApiRequestError extends Error {

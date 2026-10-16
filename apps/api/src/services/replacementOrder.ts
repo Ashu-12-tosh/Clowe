@@ -41,7 +41,13 @@ export async function createReplacementOrder(input: {
   itemIds: string[];
   reason: string;
   actorId?: string | null;
+  /**
+   * False: the same unit goes back to the buyer (a claim that failed quality
+   * check, Return Policy 4.3) — no stock is taken, and the buyer owes nothing.
+   */
+  fromStock?: boolean;
 }): Promise<ReplacementResult | null> {
+  const fromStock = input.fromStock ?? true;
   const original = await prisma.order.findUniqueOrThrow({
     where: { id: input.orderId },
     include: { items: true, payment: true },
@@ -52,15 +58,14 @@ export async function createReplacementOrder(input: {
   const prepaidPaid = original.paymentMethod !== 'COD' && original.payment?.status === 'PAID';
   const paidFor = (l: (typeof lines)[number]) => prepaidPaid || original.paymentMethod === REPLACEMENT_PAYMENT_METHOD || !!l.deliveredAt;
   const unpaid = lines.filter((l) => !paidFor(l));
-  const amountDuePaise = unpaid.length
-    ? valueOfLines(original.totalPaise, original.items, unpaid.map((l) => l.id))
-    : 0;
+  const amountDuePaise =
+    fromStock && unpaid.length ? valueOfLines(original.totalPaise, original.items, unpaid.map((l) => l.id)) : 0;
   const method = amountDuePaise > 0 ? 'COD' : REPLACEMENT_PAYMENT_METHOD;
   const orderNumber = await generateOrderNumber();
   const eta = orderEtaWindow(original.shipPincode);
 
   const created = await prisma.$transaction(async (tx) => {
-    for (const l of lines) {
+    for (const l of fromStock ? lines : []) {
       const took = await tx.productVariant.updateMany({
         where: { id: l.variantId, stock: { gte: l.quantity } },
         data: { stock: { decrement: l.quantity } },
@@ -139,17 +144,20 @@ export async function createReplacementOrder(input: {
       {
         userId: original.userId,
         type: 'ORDER_CONFIRMED',
-        title: `Replacement on its way — ${orderNumber}`,
-        body:
-          `${input.reason}: we're sending ${lines.map((l) => `"${l.title}"`).join(', ')} again as order ${orderNumber}` +
-          (amountDuePaise > 0 ? `, Cash on Delivery ₹${(amountDuePaise / 100).toLocaleString('en-IN')} as before.` : ', at no cost to you.'),
+        title: fromStock ? `Replacement on its way — ${orderNumber}` : `Your item is coming back to you — ${orderNumber}`,
+        body: fromStock
+          ? `${input.reason}: we're sending ${lines.map((l) => `"${l.title}"`).join(', ')} again as order ${orderNumber}` +
+            (amountDuePaise > 0 ? `, Cash on Delivery ₹${(amountDuePaise / 100).toLocaleString('en-IN')} as before.` : ', at no cost to you.')
+          : `${input.reason}: ${lines.map((l) => `"${l.title}"`).join(', ')} is being sent back to you as order ${orderNumber}, at no cost.`,
         linkHref: `/account/orders/${created.id}`,
       },
       ...sellers.map((s) => ({
         userId: s.userId,
         type: 'NEW_ORDER',
-        title: 'Replacement to ship 🔁',
-        body: `${input.reason} (order ${original.orderNumber}): send the same items again as ${orderNumber}. Dispatch as usual.`,
+        title: fromStock ? 'Replacement to ship 🔁' : 'Send a returned item back ↩',
+        body: fromStock
+          ? `${input.reason} (order ${original.orderNumber}): send the same items again as ${orderNumber}. Dispatch as usual.`
+          : `${input.reason} (order ${original.orderNumber}): send the returned item back to the buyer as ${orderNumber}. Dispatch as usual.`,
         linkHref: '/seller/orders',
       })),
     ],

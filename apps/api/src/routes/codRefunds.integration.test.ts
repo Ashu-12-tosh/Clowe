@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { FIXTURE, seedFixture } from '../test/fixture';
 import { signAccessToken } from '../utils/jwt';
+import { useEarlierReturnRules } from '../test/returnRules';
 
 /**
  * Cash on Delivery return refunds (Refund Policy 6.4): the buyer gives a bank
@@ -24,6 +25,8 @@ const DAY = 86_400_000;
 const ACCOUNT = { accountName: 'Cod Buyer', accountNumber: '50100123456789', ifsc: 'HDFC0001234', ownAccount: true };
 
 beforeAll(async () => {
+  // These items are under the earlier return rules (delivered before the claims began).
+  await useEarlierReturnRules(prisma);
   await seedFixture(prisma);
   const admin = await prisma.user.create({ data: { phone: '9579999991', name: 'COD Admin', role: 'ADMIN', referralCode: 'CODR-ADM' } });
   adminToken = signAccessToken({ sub: admin.id, role: 'ADMIN' });

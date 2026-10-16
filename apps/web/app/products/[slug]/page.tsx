@@ -244,21 +244,20 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
     product.tryOnEligible &&
     tryonMinPaise !== null &&
     Math.min(...product.variants.map((v) => v.pricePaise)) >= tryonMinPaise;
-  const returnsText = `Within ${product.returnWindowDays} day${product.returnWindowDays === 1 ? '' : 's'}`;
 
   const trustRow = [
     { Icon: BoxIcon, title: 'Approved', text: 'Sellers' },
     product.returnable
-      ? { Icon: ReturnIcon, title: 'Easy Returns', text: returnsText }
-      : { Icon: ReturnIcon, title: 'Not returnable', text: 'This item cannot be returned' },
+      ? { Icon: ReturnIcon, title: 'Exchange or Refund', text: 'If it arrives defective, damaged or wrong' }
+      : { Icon: ReturnIcon, title: 'Not returnable', text: 'Unless wrong, counterfeit or not as described' },
     { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
     { Icon: TruckIcon, title: 'Free Delivery', text: 'On all orders' },
   ];
   const trustStrip = [
     { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
     product.returnable
-      ? { Icon: ReturnIcon, title: 'Easy Returns', text: `Hassle-free returns ${returnsText.toLowerCase()}` }
-      : { Icon: ReturnIcon, title: 'Not returnable', text: 'This item cannot be returned once delivered' },
+      ? { Icon: ReturnIcon, title: 'Exchange or Refund', text: 'Claim within 48 hours of delivery if it is defective, damaged or wrong — not for a change of mind' }
+      : { Icon: ReturnIcon, title: 'Not returnable', text: 'Only a wrong, counterfeit or not-as-described item can be claimed' },
     { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
     { Icon: TruckIcon, title: 'Free Delivery', text: 'On all orders' },
     { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },

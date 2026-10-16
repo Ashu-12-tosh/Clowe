@@ -123,6 +123,23 @@ export interface MyReturnRow {
   awbNumber: string | null;
   courierName: string | null;
   refund: { status: string; amountPaise: number; processedAt: string | null } | null;
+  rmaNumber: string;
+  /** CLAIM: under the Return Policy's claims; LEGACY: delivered before them. */
+  rules: 'LEGACY' | 'CLAIM';
+  /** CLAIM: what the buyer asked for. */
+  remedy: 'EXCHANGE' | 'REFUND' | null;
+  /** What the quality check found, when it failed. */
+  qcNote: string | null;
+  /** An exchange sent, or the item sent back after a failed check. */
+  replacementOrder: { id: string; orderNumber: string } | null;
+  sentBackOrder: { id: string; orderNumber: string } | null;
+  /** The courier does not collect from the buyer: they send it (Return Policy 7.2). */
+  selfShip: {
+    sendTo: { name: string; line1: string; city: string; state: string; pincode: string } | null;
+    receiptUploaded: boolean;
+    costPaise: number | null;
+    reimbursedPaise: number | null;
+  } | null;
 }
 
 export interface MyReturnsResponse {

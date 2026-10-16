@@ -6,6 +6,7 @@ import { createApp } from '../app';
 import { FIXTURE, seedFixture } from '../test/fixture';
 import { invalidateCategoryRules } from '../services/categoryRules';
 import { signAccessToken } from '../utils/jwt';
+import { useEarlierReturnRules } from '../test/returnRules';
 
 /**
  * Non-returnable categories. A category (or a subcategory, overriding its
@@ -24,6 +25,8 @@ let seq = 0;
 const DAY = 86_400_000;
 
 beforeAll(async () => {
+  // These items are under the earlier return rules (delivered before the claims began).
+  await useEarlierReturnRules(prisma);
   await seedFixture(prisma);
   server = createApp().listen(0);
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

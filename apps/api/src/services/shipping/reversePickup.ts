@@ -4,6 +4,7 @@ import { valueOfLines } from './codAmount';
 import { shippingProvider } from './index';
 import { ShippingProviderError } from './ShippingProvider';
 import { syncWarehouse } from './warehouses';
+import { pincodeServiceability } from './serviceability';
 
 // ---------------------------------------------------------------------------
 // Returns, collected by Delhivery.
@@ -58,6 +59,27 @@ export async function bookReversePickup(returnId: string): Promise<ReversePickup
     });
     return { booked: false, reason };
   };
+
+  // A claim from where the courier does not collect returns (Return Policy
+  // 7.2): the buyer sends it themselves and is reimbursed up to ₹100.
+  if (r.rules === 'CLAIM') {
+    const check = await pincodeServiceability(order.shipPincode);
+    if (check && !check.reversePickup) {
+      if (!r.selfShip) {
+        await prisma.return.update({ where: { id: r.id }, data: { selfShip: true } });
+        await prisma.notification.create({
+          data: {
+            userId: r.userId,
+            type: 'RETURN_SELF_SHIP',
+            title: `Please send your return yourself — ${r.rmaNumber}`,
+            body: `The courier does not collect returns from ${order.shipPincode}. Send "${item.title}" to the seller's address shown in My Returns, then upload the courier receipt: we reimburse up to ₹100.`,
+            linkHref: '/account/returns',
+          },
+        });
+      }
+      return { booked: false, reason: `Returns are not collected from ${order.shipPincode}: the buyer sends it themselves` };
+    }
+  }
 
   const warehouse = await syncWarehouse(item.sellerId);
   if (warehouse.status !== 'ACTIVE' || !warehouse.name) {

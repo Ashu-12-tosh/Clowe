@@ -58,7 +58,7 @@ export interface StoreHighlight {
 /** Suggested trust chips a seller can add with one click. */
 export const HIGHLIGHT_PRESETS: StoreHighlight[] = [
   { icon: '🎥', title: 'Packed on video', subtitle: 'Every order is filmed as it is packed' },
-  { icon: '↩', title: 'Easy returns', subtitle: 'Hassle-free within the window' },
+  { icon: '↩', title: 'Exchange or refund', subtitle: 'For defective, damaged or wrong items' },
   { icon: '🔒', title: 'Secure payments', subtitle: 'Protected checkout' },
   { icon: '🚚', title: 'Fast dispatch', subtitle: 'Packed and shipped quickly' },
   { icon: '✅', title: 'Quality checked', subtitle: 'Inspected before shipping' },

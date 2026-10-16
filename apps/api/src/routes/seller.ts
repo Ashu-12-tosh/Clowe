@@ -36,6 +36,7 @@ import { gstSettings } from '../services/economicsRates';
 import { priceInput, sellerPricesOf, type PricedUpsertInput } from '../services/sellerPricing';
 import { brandSuggestions, linkBrand } from '../services/brands';
 import { packingVideoView } from '../services/packingVideos';
+import { claimEvidenceView } from '../services/returnClaims';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { applyReturnDecision, findSellerReturn } from '../services/returnService';
@@ -1109,7 +1110,15 @@ sellerRouter.get('/returns/:id', requireSeller, async (req, res, next) => {
     if (!r) throw ApiError.notFound('Return not found');
     const [row] = await withPhotoUrls([toReturnRow(r)]);
     // What went into the box, beside what the buyer says came out of it.
-    res.json({ success: true, data: { ...row, packingVideo: await packingVideoView(r.orderItem.orderId, req.seller!.id) } });
+    res.json({
+      success: true,
+      data: {
+        ...row,
+        packingVideo: await packingVideoView(r.orderItem.orderId, req.seller!.id),
+        // A Return Policy claim: the remedy asked for and the rest of the evidence.
+        claim: await claimEvidenceView(r.id),
+      },
+    });
   } catch (err) {
     next(err);
   }

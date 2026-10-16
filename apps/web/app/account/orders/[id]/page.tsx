@@ -18,6 +18,7 @@ import { Scroller } from '@/components/home/HomeBits';
 import ProductCard from '@/components/ProductCard';
 import { ReturnModal, ReturnTimeline } from '@/components/orders/ReturnBits';
 import { ParcelStatus } from '@/components/orders/ParcelBits';
+import { ClaimModal } from '@/components/orders/ClaimModal';
 import ReviewModal from '@/components/orders/ReviewModal';
 import NotReturnable from '@/components/NotReturnable';
 import NonCancellable from '@/components/NonCancellable';
@@ -401,7 +402,7 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
                         onClick={() => setReturning(item)}
                         className="t-caption rounded-lg border border-gray-300 px-4 py-2 font-semibold text-gray-700 transition hover:border-orange-300 hover:text-orange-700"
                       >
-                        Return item
+                        {item.claim ? 'Report a problem' : 'Return item'}
                       </button>
                     )}
                     {!item.returnable && item.status === 'DELIVERED' && <NotReturnable className="self-center" />}
@@ -685,7 +686,19 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
         </aside>
       </div>
 
-      {returning && (
+      {returning?.claim && (
+        <ClaimModal
+          item={{ ...returning, claim: returning.claim }}
+          cod={order.paymentMethod === 'COD'}
+          onClose={() => setReturning(null)}
+          onDone={(rma) => {
+            setReturning(null);
+            load();
+            flash(`Claim ${rma} sent — the seller decides within 48 hours.`);
+          }}
+        />
+      )}
+      {returning && !returning.claim && (
         <ReturnModal
           item={returning}
           cod={order.paymentMethod === 'COD'}

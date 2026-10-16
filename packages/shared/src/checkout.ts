@@ -479,6 +479,7 @@ export const RETURN_REASONS = [
   'QUALITY',
   'CHANGED_MIND',
   'OTHER',
+  'COUNTERFEIT',
 ] as const;
 export type ReturnReasonValue = (typeof RETURN_REASONS)[number];
 
@@ -492,6 +493,7 @@ export const RETURN_REASON_LABELS: Record<ReturnReasonValue, string> = {
   QUALITY: 'Quality not as expected',
   CHANGED_MIND: 'No longer needed',
   OTHER: 'Other',
+  COUNTERFEIT: 'Spurious or counterfeit',
 };
 
 /** Reasons where photo proof is mandatory. */
@@ -546,6 +548,17 @@ export interface OrderDetailItem {
   returnable: boolean;
   /** Sold as non-cancellable: no cancelling it once confirmed. */
   nonCancellable: boolean;
+  /**
+   * Under the Return Policy's claims (delivered since they took effect): the
+   * claim window, the reasons this item can be claimed for, and whether an
+   * exchange can be asked for. Null: the earlier return rules apply.
+   */
+  claim: {
+    windowEndsAt: string;
+    latentUntil: string;
+    reasons: import('./returnClaims').ClaimReason[];
+    exchangeAllowed: boolean;
+  } | null;
   /** Why a seller or admin cancelled this line, as the buyer was told. */
   cancelReason: string | null;
   canReturn: boolean;
@@ -663,7 +676,12 @@ export const sellerReturnActionSchema = z.discriminatedUnion('action', [
     action: z.literal('reject'),
     rejectionReason: z.string().trim().min(5, 'Give the customer a reason (min 5 chars)').max(300),
   }),
-  z.object({ action: z.literal('received'), condition: z.enum(['OK', 'DAMAGED']) }),
+  z.object({
+    action: z.literal('received'),
+    condition: z.enum(['OK', 'DAMAGED']),
+    /** What the quality check found; required when a claim fails it (the buyer is told). */
+    note: z.string().trim().max(300).optional(),
+  }),
 ]);
 export type SellerReturnActionInput = z.infer<typeof sellerReturnActionSchema>;
 

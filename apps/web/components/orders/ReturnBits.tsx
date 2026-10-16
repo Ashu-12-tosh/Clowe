@@ -219,61 +219,7 @@ export function ReturnModal({
           </>
         )}
 
-        {reason && cod && (
-          <fieldset className="mt-4 rounded-xl border border-gray-200 p-3.5">
-            <legend className="px-1 text-sm font-semibold text-ink-900">Bank account for your refund</legend>
-            <p className="text-xs text-gray-500">
-              You paid cash on delivery, so we refund you by bank transfer — to an account in your own name. We never
-              refund in cash. Only Clowe&apos;s team sees these details, never the seller.
-            </p>
-            <label className="mt-3 block text-xs font-semibold text-gray-700">
-              Name on the account
-              <input
-                name="accountName"
-                value={bank.accountName}
-                onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))}
-                autoComplete="name"
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal outline-none focus:border-brand-600"
-              />
-              <FieldError message={bankErrors.accountName} />
-            </label>
-            <label className="mt-2 block text-xs font-semibold text-gray-700">
-              Account number
-              <input
-                name="accountNumber"
-                value={bank.accountNumber}
-                onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))}
-                inputMode="numeric"
-                autoComplete="off"
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal outline-none focus:border-brand-600"
-              />
-              <FieldError message={bankErrors.accountNumber} />
-            </label>
-            <label className="mt-2 block text-xs font-semibold text-gray-700">
-              IFSC
-              <input
-                name="ifsc"
-                value={bank.ifsc}
-                onChange={(e) => setBank((b) => ({ ...b, ifsc: e.target.value.toUpperCase() }))}
-                autoComplete="off"
-                placeholder="HDFC0001234"
-                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal uppercase outline-none focus:border-brand-600"
-              />
-              <FieldError message={bankErrors.ifsc} />
-            </label>
-            <label className="mt-3 flex items-start gap-2 text-xs text-gray-700">
-              <input
-                type="checkbox"
-                name="ownAccount"
-                checked={bank.ownAccount}
-                onChange={(e) => setBank((b) => ({ ...b, ownAccount: e.target.checked }))}
-                className="mt-0.5 accent-brand-600"
-              />
-              This account is in my own name.
-            </label>
-            <FieldError message={bankErrors.ownAccount} />
-          </fieldset>
-        )}
+        {reason && cod && <CodBankFields bank={bank} setBank={setBank} errors={bankErrors} />}
         <button
           onClick={() => void submit()}
           disabled={busy || !reason}
@@ -283,5 +229,79 @@ export function ReturnModal({
         </button>
       </div>
     </div>
+  );
+}
+
+export interface CodBank {
+  accountName: string;
+  accountNumber: string;
+  ifsc: string;
+  ownAccount: boolean;
+}
+
+/** Where a Cash on Delivery refund is sent: an account in the buyer's own name (Return Policy 6.4). */
+export function CodBankFields({
+  bank,
+  setBank,
+  errors: bankErrors,
+}: {
+  bank: CodBank;
+  setBank: (update: (b: CodBank) => CodBank) => void;
+  errors: Record<string, string>;
+}) {
+  return (
+    <fieldset className="mt-4 rounded-xl border border-gray-200 p-3.5">
+      <legend className="px-1 text-sm font-semibold text-ink-900">Bank account for your refund</legend>
+      <p className="text-xs text-gray-500">
+        You paid cash on delivery, so we refund you by bank transfer — to an account in your own name. We never
+        refund in cash. Only Clowe&apos;s team sees these details, never the seller.
+      </p>
+      <label className="mt-3 block text-xs font-semibold text-gray-700">
+        Name on the account
+        <input
+          name="accountName"
+          value={bank.accountName}
+          onChange={(e) => setBank((b) => ({ ...b, accountName: e.target.value }))}
+          autoComplete="name"
+          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal outline-none focus:border-brand-600"
+        />
+        <FieldError message={bankErrors.accountName} />
+      </label>
+      <label className="mt-2 block text-xs font-semibold text-gray-700">
+        Account number
+        <input
+          name="accountNumber"
+          value={bank.accountNumber}
+          onChange={(e) => setBank((b) => ({ ...b, accountNumber: e.target.value }))}
+          inputMode="numeric"
+          autoComplete="off"
+          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal outline-none focus:border-brand-600"
+        />
+        <FieldError message={bankErrors.accountNumber} />
+      </label>
+      <label className="mt-2 block text-xs font-semibold text-gray-700">
+        IFSC
+        <input
+          name="ifsc"
+          value={bank.ifsc}
+          onChange={(e) => setBank((b) => ({ ...b, ifsc: e.target.value.toUpperCase() }))}
+          autoComplete="off"
+          placeholder="HDFC0001234"
+          className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-normal uppercase outline-none focus:border-brand-600"
+        />
+        <FieldError message={bankErrors.ifsc} />
+      </label>
+      <label className="mt-3 flex items-start gap-2 text-xs text-gray-700">
+        <input
+          type="checkbox"
+          name="ownAccount"
+          checked={bank.ownAccount}
+          onChange={(e) => setBank((b) => ({ ...b, ownAccount: e.target.checked }))}
+          className="mt-0.5 accent-brand-600"
+        />
+        This account is in my own name.
+      </label>
+      <FieldError message={bankErrors.ownAccount} />
+    </fieldset>
   );
 }

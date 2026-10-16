@@ -63,13 +63,12 @@ describe('no hard-coded return window', () => {
 
   /**
    * The dispatch promise and penalty time are settings too ({{dispatchSla}},
-   * {{penaltyAfter}}). "Working days" belonged to the old promise.
+   * {{penaltyAfter}}). "Working days" are the Return and Shipping Policies'
+   * own unit for refunds and delivery estimates, so only a dispatch or ship
+   * time is caught.
    */
   it('finds no hard-coded dispatch time either', () => {
-    const dispatch = new RegExp(
-      String.raw`working days?|\b(dispatch|ship)\w*\b.{0,25}\b\d+(\s*[–-]\s*\d+)?\s*(h|hrs?|hours?|days?)\b`,
-      'i',
-    );
+    const dispatch = new RegExp(String.raw`\b(dispatch|ship)\w*\b.{0,25}\b\d+(\s*[–-]\s*\d+)?\s*(h|hrs?|hours?|days?)\b`, 'i');
     const hits: string[] = [];
     for (const dir of dirs) {
       for (const file of files(path.join(root, dir))) {

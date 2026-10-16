@@ -143,6 +143,8 @@ export interface AdminReturnDetail extends AdminReturnListRow {
   adminOverrideNote: string | null;
   /** The seller's packing clip for this order: what went into the box. */
   packingVideo: PackingVideoView | null;
+  /** A Return Policy claim: remedy, evidence, self-ship, the buyer's review flag. Null under the earlier rules. */
+  claim: import('./returnClaims').ClaimEvidenceView | null;
   timeline: { key: string; label: string; at: string | null; note: string | null }[];
   /** How often this shopper returns things — the real numbers, not a score. */
   customerHistory: {

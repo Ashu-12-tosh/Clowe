@@ -18,7 +18,7 @@ import PolicyText from '@/components/PolicyText';
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: 'Free Shipping', text: 'On all orders' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Easy return policy' },
+  { Icon: ReturnIcon, title: 'Exchange or Refund', text: 'If an item arrives defective, damaged or wrong' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
   { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
 ];

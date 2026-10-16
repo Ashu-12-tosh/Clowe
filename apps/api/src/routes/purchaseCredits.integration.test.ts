@@ -6,6 +6,7 @@ import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
 import { settleEarnedCredits } from '../services/purchaseCredits';
 import { signAccessToken } from '../utils/jwt';
+import { useEarlierReturnRules } from '../test/returnRules';
 
 /**
  * Reward credits follow what was actually bought. An order's credits come
@@ -72,6 +73,8 @@ async function returnLine(b: { token: string }, orderId: string, itemId: string)
 }
 
 beforeAll(async () => {
+  // These items are under the earlier return rules (delivered before the claims began).
+  await useEarlierReturnRules(prisma);
   await seedFixture(prisma);
   const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { slug: 'fixture-store' } });
   sellerToken = signAccessToken({ sub: seller.userId, role: 'SELLER' });

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { ClaimStatus } from '@/components/orders/ClaimStatus';
 import Link from 'next/link';
 import {
   RETURN_FILTERS,
@@ -26,7 +27,7 @@ import PolicyText from '@/components/PolicyText';
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
-  { Icon: ReturnIcon, title: 'Easy Returns', text: 'Hassle-free returns on eligible items' },
+  { Icon: ReturnIcon, title: 'Exchange or Refund', text: 'If an item arrives defective, damaged or wrong' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On all orders' },
   { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
@@ -133,26 +134,27 @@ export default function ReturnsPage() {
     );
   }
 
+  // The Return Policy, in short (orders delivered before it keep the old rules).
   const POLICY = [
     {
       Icon: ReturnIcon,
-      title: 'Easy Returns',
-      text: `Return within ${data.returnWindowDays} days of delivery`,
+      title: 'Exchange or refund',
+      text: 'For defective, damaged, wrong, incomplete or counterfeit items — claim within 48 hours of delivery',
     },
     {
       Icon: ShieldCheckIcon,
-      title: 'Product Condition',
-      text: 'Item must be unused, unwashed and in original condition',
+      title: 'Not for a change of mind',
+      text: 'No returns for fit, colour or preference when the item matches its page',
     },
     {
       Icon: BoxIcon,
-      title: 'Original Packaging',
-      text: 'Product must be returned in original packaging with tags',
+      title: 'Show us',
+      text: 'Photos of the item, tag and packaging; an unboxing video for damaged, missing or wrong items',
     },
     {
       Icon: ClockIcon,
-      title: 'Refund Time',
-      text: 'Refunds are processed within 5–7 business days',
+      title: 'Refund time',
+      text: 'Starts within 3 working days of the check; usually with you in 7 more',
     },
   ];
 
@@ -283,6 +285,7 @@ export default function ReturnsPage() {
                         {RETURN_REASON_LABELS[row.reason as ReturnReasonValue] ?? row.reason}
                       </span>
                     </p>
+                    <ClaimStatus row={row} onChanged={load} />
                   </div>
 
                   <div className="min-w-44 shrink-0">
