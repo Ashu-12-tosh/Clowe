@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ToastList } from '../components/Toaster';
-import { api, ApiRequestError } from './api';
+import { api, ApiRequestError, RATE_LIMIT_RETRY_MS, TOO_MANY_REQUESTS } from './api';
 import { clearToasts, getToasts } from './toast';
 
 // The API client in a browser-like setting: an admin page, a stored session,
@@ -97,6 +97,52 @@ describe('a double click', () => {
     await expect(Promise.all([first, second])).resolves.toEqual([{ id: 'b1' }, { id: 'b1' }]);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(getToasts()).toHaveLength(1);
+  });
+});
+
+describe('a busy moment (429)', () => {
+  const tooMany = () => new Response(JSON.stringify({ success: false, error: { code: 'TOO_MANY_REQUESTS', message: TOO_MANY_REQUESTS } }), { status: 429 });
+  const ok = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { status: 200 });
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('waits a moment and tries once more', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(tooMany()).mockResolvedValueOnce(ok({ items: [1] }));
+    vi.stubGlobal('fetch', fetch);
+    const loading = api<{ items: number[] }>('/api/home');
+    await vi.advanceTimersByTimeAsync(RATE_LIMIT_RETRY_MS - 1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(loading).resolves.toEqual({ items: [1] });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(getToasts()).toEqual([]);
+  });
+
+  it('says "Too many requests" when the retry is refused too, and stops there', async () => {
+    const fetch = vi.fn(async () => tooMany());
+    vi.stubGlobal('fetch', fetch);
+    const saving = api('/api/admin/banners', { body: { headline: 'Sale' }, auth: true });
+    const refused = expect(saving).rejects.toMatchObject({ code: 'TOO_MANY_REQUESTS', message: TOO_MANY_REQUESTS });
+    await vi.advanceTimersByTimeAsync(RATE_LIMIT_RETRY_MS);
+    await refused;
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(getToasts()).toEqual([expect.objectContaining({ kind: 'error', message: TOO_MANY_REQUESTS })]);
+  });
+
+  it('reads the same when a proxy answers the 429 with a page, not "Could not reach Clowe"', async () => {
+    vi.stubGlobal('fetch', respond(429, '<html>429 Too Many Requests</html>'));
+    const loading = api('/api/categories');
+    const refused = expect(loading).rejects.toMatchObject({ code: 'TOO_MANY_REQUESTS', message: TOO_MANY_REQUESTS });
+    await vi.advanceTimersByTimeAsync(RATE_LIMIT_RETRY_MS);
+    await refused;
+  });
+
+  it('does not retry other failures', async () => {
+    const fetch = respond(404, { success: false, error: { code: 'NOT_FOUND', message: 'Nope' } });
+    vi.stubGlobal('fetch', fetch);
+    await expect(api('/api/products/x')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
 
