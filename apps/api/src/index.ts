@@ -10,6 +10,7 @@ import { logShippingProviderStatus } from './services/shipping';
 import { startTrackingPoll } from './services/shipping/tracking';
 import { startLostParcelSweep } from './services/shipping/lostParcels';
 import { startComplaintBreachSweep } from './services/complaintService';
+import { startSellerInvoiceJob } from './services/sellerInvoice';
 import { logOtpProviderStatus } from './services/otp';
 import { startSearchLogCleanup } from './services/searchAnalytics';
 import { startQuerySuggestionRefresh } from './services/querySuggestions';
@@ -38,6 +39,8 @@ startTrackingPoll();
 startLostParcelSweep();
 // Support tickets past their acknowledge, resolve or seller deadline - every 30 minutes.
 startComplaintBreachSweep();
+// Clowe's monthly tax invoices to sellers, issued once a month ends - checked every 6 hours.
+startSellerInvoiceJob();
 
 // Shoppers' try-on photos are deleted 24 hours after upload - every 10 minutes.
 startTryOnPhotoRetention();

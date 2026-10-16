@@ -207,6 +207,12 @@ export const commercialSettingsSchema = z.object({
     /** What Premium sellers save on sponsorship, percent (100 = free). */
     premiumDiscountPercent: percent,
   }),
+  /** Clowe's monthly tax invoice to sellers. */
+  invoice: z.object({
+    /** SAC for Clowe's services to sellers — confirm with the CA. */
+    sacCode: z.string().trim().min(4).max(8),
+    numberPrefix: z.string().trim().min(1).max(12),
+  }),
   tryon: z.object({
     packs: z.array(z.object({ credits: z.number().int().min(1), pricePaise: paise })).min(1),
     /** Above the biggest pack: per credit, added by admin after a support request. */
@@ -306,6 +312,7 @@ export const DEFAULT_COMMERCIAL: CommercialSettings = {
     attributionDays: 7,
   },
   sponsorship: { perClickRangePaise: [50, 150], premiumDiscountPercent: 50 },
+  invoice: { sacCode: '998599', numberPrefix: 'CLW/SI' },
   tryon: {
     packs: [
       { credits: 100, pricePaise: 150_000 },

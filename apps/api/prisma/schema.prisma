@@ -483,6 +483,7 @@ model SellerProfile {
   // Admin's VIP flag: no handling fee, whatever the plan.
   vip            Boolean @default(false)
   subscription   SellerSubscription?
+  taxInvoices    SellerTaxInvoice[]
   tryOnCreditLedger TryOnCreditLedger[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -1776,6 +1777,25 @@ model SellerSubscription {
 
   @@index([periodEnd])
   @@map("seller_subscriptions")
+}
+
+/// Clowe's monthly tax invoice to a seller (owner's Batch 2): every Clowe
+/// charge in the month — fees, plan, advertising, sponsorship, try-on
+/// credits — with GST, from CLOWE PARTNERS LLP. Issued once a month ends;
+/// the number and figures are fixed when issued.
+model SellerTaxInvoice {
+  id        String        @id @default(cuid())
+  sellerId  String
+  seller    SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  /// YYYY-MM (India time)
+  month     String
+  number    String        @unique
+  issuedAt  DateTime      @default(now())
+  /// The whole document as issued (lines, taxes, parties).
+  document  Json
+
+  @@unique([sellerId, month])
+  @@map("seller_tax_invoices")
 }
 
 /// Each acceptance of the Vendor Terms and Seller Agreement: which version,

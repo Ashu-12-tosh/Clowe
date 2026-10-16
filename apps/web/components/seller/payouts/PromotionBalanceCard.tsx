@@ -27,7 +27,7 @@ export function PromotionBalanceCard() {
   return (
     <section className="rounded-2xl border border-gray-100 bg-white p-4" data-promotion-balance>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-bold text-ink-900">Promotion balance</h2>
+        <h2 className="text-sm font-bold text-ink-900">Seller Wallet</h2>
         <Link
           href="/seller#promotion-credits"
           className="rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800"

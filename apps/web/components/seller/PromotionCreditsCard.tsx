@@ -78,8 +78,8 @@ export default function PromotionCreditsCard() {
       );
       setPending(null);
       if (result.status === 'PAID') {
-        setNotice(`${formatPaise(pending.amountPaise)} added to your promotion balance`);
-        toast.success(`Paid — ${formatPaise(pending.amountPaise)} added to your promotion balance`);
+        setNotice(`${formatPaise(pending.amountPaise)} added to your Seller Wallet`);
+        toast.success(`Paid — ${formatPaise(pending.amountPaise)} added to your Seller Wallet`);
         setRefresh((n) => n + 1);
       } else {
         setError('Payment failed — nothing was added.');
@@ -97,10 +97,10 @@ export default function PromotionCreditsCard() {
       <section className="rounded-2xl border border-gray-100 bg-white p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold text-ink-900">Promotion balance</h2>
+            <h2 className="text-sm font-bold text-ink-900">Seller Wallet</h2>
             <p className="text-[11px] text-gray-400">
-              Prepaid credits for ad placements. Spent when you book an ad, returned if it is
-              declined, never paid out.
+              Top up to pay for your plan, advertising, sponsorship and AI Try-On credits. Clowe&apos;s charges come from
+              here first, then from your next payout. Never paid out.
             </p>
             <p className="mt-2 font-display text-2xl font-bold text-ink-900">
               {balance === null ? '—' : formatPaise(balance)}
