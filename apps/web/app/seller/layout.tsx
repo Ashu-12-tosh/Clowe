@@ -15,6 +15,7 @@ const NAV: DashNavItem[] = [
   { href: '/seller/inventory', label: 'Inventory', icon: '▤' },
   { href: '/seller/orders', label: 'Orders', icon: '📦' },
   { href: '/seller/returns', label: 'Returns', icon: '↩' },
+  { href: '/seller/customer-complaints', label: 'Customer complaints', icon: '📢' },
   { href: '/seller/payouts', label: 'Payouts', icon: '₹' },
   { href: '/seller/penalties', label: 'Penalties', icon: '⚠' },
   { href: '/seller/customers', label: 'Customers', icon: '👥' },

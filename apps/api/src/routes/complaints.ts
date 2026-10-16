@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { complaintCreateSchema, type ComplaintRow } from '@clowe/shared';
+import { complaintCreateSchema, complaintEscalateSchema, type ComplaintRow, type SupportLevel } from '@clowe/shared';
 import {
   customerRatingSchema,
   customerReplySchema,
@@ -7,7 +7,7 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
-import { raiseComplaint } from '../services/complaintService';
+import { escalateComplaint, raiseComplaint } from '../services/complaintService';
 import { ApiError } from '../utils/ApiError';
 
 export const complaintsRouter = Router();
@@ -57,6 +57,17 @@ complaintsRouter.post('/', async (req, res, next) => {
   }
 });
 
+// Not satisfied: up to the Nodal Officer, then the Grievance Officer (Grievance Policy 3.1).
+complaintsRouter.post('/:id/escalate', async (req, res, next) => {
+  try {
+    const { reason } = complaintEscalateSchema.parse(req.body);
+    const result = await escalateComplaint({ complaintId: req.params.id!, by: 'CUSTOMER', actorId: req.auth!.userId, reason });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // My complaints (account page "My complaints" list).
 complaintsRouter.get('/me', async (req, res, next) => {
   try {
@@ -74,6 +85,8 @@ complaintsRouter.get('/me', async (req, res, next) => {
       status: c.status,
       orderNumber: c.order?.orderNumber ?? null,
       createdAt: c.createdAt.toISOString(),
+      level: c.level as SupportLevel,
+      resolveDueAt: c.resolveDueAt?.toISOString() ?? null,
     }));
     res.json({ success: true, data: body });
   } catch (err) {
@@ -116,7 +129,14 @@ complaintsRouter.get('/:id', async (req, res, next) => {
         messages: complaint.messages.map((m) => ({
           id: m.id,
           authorRole: m.authorRole,
-          authorName: m.authorRole === 'AGENT' ? (m.author?.name ?? 'Clowe support') : 'You',
+          authorName:
+            m.authorRole === 'AGENT'
+              ? (m.author?.name ?? 'Clowe support')
+              : m.authorRole === 'SELLER'
+                ? 'The seller'
+                : m.authorRole === 'SYSTEM'
+                  ? 'Clowe'
+                  : 'You',
           body: m.body,
           createdAt: m.createdAt.toISOString(),
         })),

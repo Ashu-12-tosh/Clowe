@@ -51,8 +51,12 @@ export const SLA_RESPONSE_HOURS: Record<DeskPriority, number> = {
   URGENT: 2,
   HIGH: 8,
   MEDIUM: 24,
-  LOW: 48,
+  // Every ticket is answered within 24 hours (Grievance Policy 2.2, 3.1).
+  LOW: 24,
 };
+
+export const deskEscalateSchema = z.object({ reason: z.string().trim().min(5, 'Say why it is escalated').max(1000) });
+export const deskRouteSellerSchema = z.object({ sellerId: z.string().min(1) });
 
 export const SLA_STATES = ['MET', 'ON_TRACK', 'AT_RISK', 'BREACHED'] as const;
 export type SlaState = (typeof SLA_STATES)[number];
@@ -88,7 +92,7 @@ export const DESK_SORT_LABELS: Record<DeskSort, string> = {
 
 export interface SupportMessageRow {
   id: string;
-  authorRole: 'CUSTOMER' | 'AGENT' | 'SYSTEM';
+  authorRole: 'CUSTOMER' | 'AGENT' | 'SYSTEM' | 'SELLER';
   authorName: string | null;
   body: string;
   attachments: string[];
@@ -112,6 +116,14 @@ export interface SupportTicketDeskRow {
   assignedTo: { id: string; name: string | null } | null;
   slaDueAt: string | null;
   slaState: SlaState;
+  /** Grievance Policy 3: which level has it, and the date it must be resolved by. */
+  level: import('./complaints').SupportLevel;
+  levelLabel: string;
+  resolveDueAt: string | null;
+  /** Past its resolve-by date and still open. */
+  resolveOverdue: boolean;
+  /** A product complaint routed to its seller, who answers within 24 hours. */
+  seller: { id: string; shopName: string; dueAt: string | null; respondedAt: string | null; overdue: boolean } | null;
   /** Minutes from creation to the first agent reply. */
   firstResponseMinutes: number | null;
   /** Minutes from creation to resolution. */

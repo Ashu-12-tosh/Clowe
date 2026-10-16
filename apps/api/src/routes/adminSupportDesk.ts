@@ -28,7 +28,13 @@ import {
   istDayKey,
   monthToDateIST,
   periodWindow,
+  deskEscalateSchema,
+  deskRouteSellerSchema,
+  SUPPORT_LEVEL_LABELS,
+  SUPPORT_LEVELS,
+  type SupportLevel,
 } from '@clowe/shared';
+import { escalateComplaint, routeComplaintToSeller } from '../services/complaintService';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -62,6 +68,7 @@ const TICKET_INCLUDE = {
   user: { select: { id: true, name: true, email: true, phone: true } },
   order: { select: { orderNumber: true } },
   assignedTo: { select: { id: true, name: true } },
+  seller: { select: { id: true, shopName: true } },
   messages: {
     orderBy: { createdAt: 'asc' },
     include: { author: { select: { name: true } } },
@@ -123,6 +130,20 @@ function toRow(ticket: TicketRecord): SupportTicketDeskRow {
       : null,
     slaDueAt: ticket.slaDueAt?.toISOString() ?? null,
     slaState: slaStateOf(ticket),
+    level: (SUPPORT_LEVELS as readonly string[]).includes(ticket.level) ? (ticket.level as SupportLevel) : 'SUPPORT',
+    levelLabel: SUPPORT_LEVEL_LABELS[ticket.level as SupportLevel] ?? ticket.level,
+    resolveDueAt: ticket.resolveDueAt?.toISOString() ?? null,
+    resolveOverdue:
+      !!ticket.resolveDueAt && ticket.resolveDueAt.getTime() < Date.now() && !['RESOLVED', 'CLOSED'].includes(ticket.status),
+    seller: ticket.seller
+      ? {
+          id: ticket.seller.id,
+          shopName: ticket.seller.shopName,
+          dueAt: ticket.sellerDueAt?.toISOString() ?? null,
+          respondedAt: ticket.sellerRespondedAt?.toISOString() ?? null,
+          overdue: !ticket.sellerRespondedAt && !!ticket.sellerDueAt && ticket.sellerDueAt.getTime() < Date.now(),
+        }
+      : null,
     firstResponseMinutes: minutesBetween(ticket.createdAt, ticket.firstResponseAt),
     resolutionMinutes: minutesBetween(ticket.createdAt, ticket.resolvedAt),
     messageCount: visible.length,
@@ -422,7 +443,7 @@ adminSupportDeskRouter.get('/:id', async (req, res, next) => {
       ratingComment: ticket.ratingComment,
       messages: ticket.messages.map((m) => ({
         id: m.id,
-        authorRole: m.authorRole as 'CUSTOMER' | 'AGENT' | 'SYSTEM',
+        authorRole: m.authorRole as 'CUSTOMER' | 'AGENT' | 'SYSTEM' | 'SELLER',
         authorName: m.author?.name ?? null,
         body: m.body,
         attachments: m.attachments,
@@ -438,6 +459,27 @@ adminSupportDeskRouter.get('/:id', async (req, res, next) => {
       })),
     };
     res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Up a level: Customer Support → Nodal Officer → Grievance Officer (Grievance Policy 3.1).
+adminSupportDeskRouter.post('/:id/escalate', async (req, res, next) => {
+  try {
+    const { reason } = deskEscalateSchema.parse(req.body);
+    res.json({ success: true, data: await escalateComplaint({ complaintId: req.params.id, by: 'AGENT', actorId: req.auth!.userId, reason }) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// A complaint about the product goes to its seller, who answers within 24 hours (2.4).
+adminSupportDeskRouter.post('/:id/route-seller', async (req, res, next) => {
+  try {
+    const { sellerId } = deskRouteSellerSchema.parse(req.body);
+    await routeComplaintToSeller(req.params.id, sellerId);
+    res.json({ success: true, data: { routed: true } });
   } catch (err) {
     next(err);
   }

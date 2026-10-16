@@ -554,6 +554,7 @@ model SellerProfile {
   promotions        Promotion[]
   notes             SellerNote[]
   tickets           SupportTicket[]
+  customerComplaints Complaint[]
   kycChecks         SellerKycCheck[]
   ledgerEntries     SellerLedgerEntry[]
   promotionCreditPurchases PromotionCreditPurchase[]
@@ -1738,8 +1739,23 @@ model Complaint {
   assignedToId String?
   assignedTo   User?     @relation("ComplaintAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
   assignedAt   DateTime?
-  // When the first reply is due, from the priority's response target.
+  // When the first reply is due, from the priority's response target (and
+  // again from an escalation: the new level acknowledges it).
   slaDueAt      DateTime?
+  // Customer Support and Grievance Policy 3–4: SUPPORT → NODAL → GRIEVANCE,
+  // and when it must be resolved (1 month for a consumer complaint, 15 days
+  // at the Grievance Officer, 24 hours for unlawful content).
+  level         String    @default("SUPPORT")
+  escalatedAt   DateTime?
+  resolveDueAt  DateTime?
+  // A complaint about the product itself goes to its seller, who answers
+  // within 24 hours (2.4).
+  sellerId          String?
+  seller            SellerProfile? @relation(fields: [sellerId], references: [id], onDelete: SetNull)
+  sellerDueAt       DateTime?
+  sellerRespondedAt DateTime?
+  // Admins were told a timer ran out (once per ticket).
+  breachNotifiedAt  DateTime?
   firstResponseAt DateTime?
   resolvedAt    DateTime?
   closedAt      DateTime?
@@ -1759,6 +1775,7 @@ model Complaint {
   @@index([userId, createdAt])
   @@index([assignedToId, status])
   @@index([priority, status])
+  @@index([sellerId, sellerRespondedAt])
   @@map("complaints")
 }
 

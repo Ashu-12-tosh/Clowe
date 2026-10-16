@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { ComplaintRow } from '@clowe/shared';
-import { COMPLAINT_CATEGORY_LABELS } from '@clowe/shared';
-import { api, getStoredUser } from '@/lib/api';
+import { COMPLAINT_CATEGORY_LABELS, nextSupportLevel, SUPPORT_LEVEL_LABELS } from '@clowe/shared';
+import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 
 const STATUS_STYLES: Record<string, string> = {
   OPEN: 'bg-yellow-100 text-yellow-700',
@@ -17,15 +17,31 @@ export default function MyComplaintsPage() {
   const [rows, setRows] = useState<ComplaintRow[] | null>(null);
   const [loggedOut, setLoggedOut] = useState(false);
 
+  const [note, setNote] = useState('');
+  const load = () =>
+    api<ComplaintRow[]>('/api/complaints/me', { auth: true })
+      .then(setRows)
+      .catch(() => setRows([]));
   useEffect(() => {
     if (!getStoredUser()) {
       setLoggedOut(true);
       return;
     }
-    api<ComplaintRow[]>('/api/complaints/me', { auth: true })
-      .then(setRows)
-      .catch(() => setRows([]));
+    void load();
   }, []);
+
+  /** Not satisfied: up to the Nodal Officer, then the Grievance Officer (Grievance Policy 3.1). */
+  async function escalate(c: ComplaintRow) {
+    const reason = window.prompt('Why are you not satisfied with the answer so far?');
+    if (!reason || reason.trim().length < 5) return;
+    try {
+      await api(`/api/complaints/${c.id}/escalate`, { auth: true, quiet: true, body: { reason: reason.trim() } });
+      setNote(`${c.complaintId} escalated — you will hear back within the time shown.`);
+      void load();
+    } catch (err) {
+      setNote(err instanceof ApiRequestError ? err.message : 'Could not escalate it');
+    }
+  }
 
   if (loggedOut) {
     return (
@@ -56,6 +72,7 @@ export default function MyComplaintsPage() {
         </p>
       )}
 
+      {note && <p className="mt-3 rounded-lg bg-cream-50 px-3 py-2 text-sm text-gray-700">{note}</p>}
       <div className="mt-4 space-y-3">
         {rows?.map((c) => (
           <div key={c.id} className="rounded-2xl border border-gray-100 bg-white p-4">
@@ -75,6 +92,22 @@ export default function MyComplaintsPage() {
               })}
             </p>
             <p className="mt-2 text-sm text-gray-700">{c.description}</p>
+            {c.level && (
+              <p className="mt-2 text-xs text-gray-500">
+                {SUPPORT_LEVEL_LABELS[c.level]}
+                {c.resolveDueAt && c.status !== 'RESOLVED' && c.status !== 'CLOSED' && (
+                  <> · to be resolved by {new Date(c.resolveDueAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</>
+                )}
+              </p>
+            )}
+            {c.level && nextSupportLevel(c.level) && c.status !== 'CLOSED' && (
+              <button
+                onClick={() => void escalate(c)}
+                className="mt-2 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:border-brand-600"
+              >
+                Not satisfied? Escalate to the {SUPPORT_LEVEL_LABELS[nextSupportLevel(c.level)!].split('— ')[1]}
+              </button>
+            )}
           </div>
         ))}
       </div>

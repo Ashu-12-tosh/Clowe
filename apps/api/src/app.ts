@@ -61,6 +61,7 @@ import { sellerReturnsRouter } from './routes/sellerReturns';
 import { sellerCustomersRouter } from './routes/sellerCustomers';
 import { sellerInventoryRouter } from './routes/sellerInventory';
 import { sellerSupportRouter } from './routes/sellerSupport';
+import { sellerComplaintsRouter } from './routes/sellerComplaints';
 import { sellerStoreRouter } from './routes/sellerStore';
 import { sellerTryonRouter } from './routes/sellerTryon';
 import { sellerKycRouter } from './routes/sellerKyc';
@@ -153,6 +154,7 @@ export function createApp() {
   app.use('/api/seller/customers', sellerCustomersRouter);
   app.use('/api/seller/inventory', sellerInventoryRouter);
   app.use('/api/seller/support', sellerSupportRouter);
+  app.use('/api/seller/customer-complaints', sellerComplaintsRouter);
   app.use('/api/seller/store', sellerStoreRouter);
   app.use('/api/seller/tryon', sellerTryonRouter);
   app.use('/api/seller/kyc', sellerKycRouter);

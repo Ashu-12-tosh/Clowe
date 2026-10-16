@@ -233,6 +233,36 @@ export default function AdminSupportDeskPage() {
     }
   }
 
+  /** Up a level: Support → Nodal Officer → Grievance Officer (Grievance Policy 3.1). */
+  async function escalateTicket(id: string) {
+    const reason = window.prompt('Why is it escalated? (the customer is told it moved up)');
+    if (!reason || reason.trim().length < 5 || busy) return;
+    setBusy(true);
+    try {
+      await api(`/api/admin/support-desk/${id}/escalate`, { auth: true, body: { reason: reason.trim() }, success: 'Escalated' });
+      await Promise.all([loadList(), openId ? loadDetail(openId) : Promise.resolve()]);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Could not escalate');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** A complaint about the product: its seller answers within 24 hours (2.4). */
+  async function routeToSeller(id: string) {
+    const sellerId = window.prompt('Seller ID to send this complaint to (Admin → Sellers):');
+    if (!sellerId || busy) return;
+    setBusy(true);
+    try {
+      await api(`/api/admin/support-desk/${id}/route-seller`, { auth: true, body: { sellerId: sellerId.trim() }, success: 'Sent to the seller' });
+      await Promise.all([loadList(), openId ? loadDetail(openId) : Promise.resolve()]);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Could not send it to the seller');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function sendReply() {
     if (!openId || reply.trim().length === 0 || busy) return;
     setBusy(true);
@@ -673,6 +703,19 @@ export default function AdminSupportDeskPage() {
                             ? `due ${new Date(row.slaDueAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
                             : ''}
                       </span>
+                      {row.level !== 'SUPPORT' && (
+                        <span className="block text-[11px] font-semibold text-purple-700">{row.levelLabel.split(' — ')[0]}</span>
+                      )}
+                      {row.resolveDueAt && (
+                        <span className={`block text-[11px] ${row.resolveOverdue ? 'font-semibold text-red-600' : 'text-gray-400'}`}>
+                          resolve by {new Date(row.resolveDueAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        </span>
+                      )}
+                      {row.seller && !row.seller.respondedAt && (
+                        <span className={`block text-[11px] ${row.seller.overdue ? 'font-semibold text-red-600' : 'text-amber-700'}`}>
+                          seller {row.seller.overdue ? 'overdue' : 'to answer'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5">
                       <button
@@ -1019,6 +1062,38 @@ export default function AdminSupportDeskPage() {
                   <span className={`font-semibold ${SLA_STYLES[detail.slaState]}`}>
                     SLA {SLA_STATE_LABELS[detail.slaState]}
                   </span>
+                  <span className="font-semibold text-purple-700" data-ticket-level>
+                    {detail.levelLabel}
+                  </span>
+                  {detail.resolveDueAt && (
+                    <span className={detail.resolveOverdue ? 'font-semibold text-red-600' : 'text-gray-500'}>
+                      Resolve by {new Date(detail.resolveDueAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
+                    </span>
+                  )}
+                  {detail.seller && (
+                    <span className={detail.seller.overdue ? 'font-semibold text-red-600' : 'text-gray-500'}>
+                      Seller {detail.seller.shopName}:{' '}
+                      {detail.seller.respondedAt ? 'answered' : detail.seller.overdue ? 'overdue (24 h)' : 'to answer within 24 h'}
+                    </span>
+                  )}
+                  {detail.level !== 'GRIEVANCE' && (
+                    <button
+                      onClick={() => void escalateTicket(detail.id)}
+                      disabled={busy}
+                      className="rounded-lg border border-purple-300 px-2 py-1 font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-50"
+                    >
+                      Escalate
+                    </button>
+                  )}
+                  {!detail.seller && detail.orderNumber && (
+                    <button
+                      onClick={() => void routeToSeller(detail.id)}
+                      disabled={busy}
+                      className="rounded-lg border border-gray-300 px-2 py-1 font-semibold hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Send to seller
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex-1 space-y-3 overflow-y-auto p-5">
@@ -1046,7 +1121,9 @@ export default function AdminSupportDeskPage() {
                       >
                         {m.authorRole === 'CUSTOMER'
                           ? (detail.customer.name ?? 'Customer')
-                          : (m.authorName ?? 'Agent')}{' '}
+                          : m.authorRole === 'SELLER'
+                            ? `Seller${detail.seller ? ` (${detail.seller.shopName})` : ''}`
+                            : (m.authorName ?? 'Agent')}{' '}
                         · {new Date(m.createdAt).toLocaleString('en-IN')}
                       </p>
                     </div>
