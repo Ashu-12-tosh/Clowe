@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { CategoryCallout, CategoryDetail, CategoryNode } from '@clowe/shared';
 import { prisma } from '../db';
-import { specFieldsFor } from '@clowe/shared';
+import { categoryIcon, specFieldsFor } from '@clowe/shared';
 import { chainOf, descendantIds, facetsFromChain, rulesFromChain } from '../services/categoryRules';
 import { hiddenCategoryIds } from '../services/shopperVisibility';
 import { ApiError } from '../utils/ApiError';
@@ -51,7 +51,7 @@ categoriesRouter.get('/', async (_req, res, next) => {
         name: cat.name,
         slug: cat.slug,
         imageUrl: cat.imageUrl,
-        icon: cat.icon,
+        icon: categoryIcon(cat, cat.parentId ? byId.get(cat.parentId)?.icon : null),
         rules,
         specFields: specFieldsFor(rules, facetsFromChain(chain)),
         children: (byParent.get(cat.id) ?? []).map(toNode),
@@ -121,7 +121,8 @@ categoriesRouter.get('/:slug', async (req, res, next) => {
         name: child.name,
         slug: child.slug,
         imageUrl: child.imageUrl,
-        icon: child.icon ?? category.icon,
+        // Its own icon, else its own from the subcategory list, else the parent's.
+        icon: categoryIcon(child, category.icon),
         productCount: countById.get(child.id) ?? 0,
       })),
       productCount: scopeIds.reduce((sum, id) => sum + (countById.get(id) ?? 0), 0),
