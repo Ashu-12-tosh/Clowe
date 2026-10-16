@@ -36,6 +36,9 @@ export const CONTENT_PAGES: ContentPageMeta[] = [
   { slug: 'return-policy', title: 'Return Policy', description: 'Eligibility windows and conditions for returns.' },
   { slug: 'payment-policy', title: 'Payment Policy', description: 'Accepted payment methods and how refunds are paid.' },
   { slug: 'cookie-policy', title: 'Cookie Policy', description: 'How Clowe uses cookies and local storage.' },
+  { slug: 'seller-terms', title: 'Seller Terms', description: 'The agreement every seller on Clowe accepts: approval, dispatch, returns, fees and payouts.' },
+  { slug: 'seller-fees', title: 'Seller Fees', description: 'What it costs to sell on Clowe: commission, fixed fees, courier charges and tax deducted by law.' },
+  { slug: 'grievance-redressal', title: 'Grievance Redressal', description: 'How to raise a complaint, and how to reach our Grievance Officer.' },
 ];
 
 /** True for a slug that has a page. */

@@ -222,6 +222,18 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     couponsEnabled: s.couponsEnabled,
     legalEntity: s.legalEntity,
     returnWindowDays: s.returnWindowDays,
+    gstUniformPercent: s.gstUniformPercent,
+    sellerFees: {
+      commissionPercent: s.payoutCommissionPercent,
+      gatewayPercent: s.payoutGatewayPercent,
+      platformFeePaise: s.platformFeePaise,
+      closingFeePaise: s.closingFeePaise,
+      gtChargePaise: s.gtChargePaise,
+      tdsPercent: s.payoutTdsPercent,
+      tcsPercent: s.gstTcsPercent,
+      payoutHoldDays: s.payoutHoldDays,
+      payoutMinPaise: s.payoutMinPaise,
+    },
   };
 }
 

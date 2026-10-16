@@ -1,4 +1,4 @@
-import { assetRef } from '@clowe/shared';
+import { assetRef, TRYON_PHOTO_RETENTION_DAYS } from '@clowe/shared';
 import { prisma } from '../db';
 import { deleteFileRef } from './assets';
 
@@ -12,7 +12,7 @@ import { deleteFileRef } from './assets';
  * history points at a stock-photo host) have no asset and are never seen
  * here; they go with the demo catalog.
  */
-export const TRYON_PHOTO_RETENTION_DAYS = 30;
+export { TRYON_PHOTO_RETENTION_DAYS };
 
 /** Delete every try-on photo past retention that nobody has saved; returns how many. */
 export async function sweepExpiredTryOnPhotos(now = new Date()): Promise<number> {

@@ -38,6 +38,8 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
       { label: 'Careers', href: '/pages/careers' },
       { label: 'Blog', href: '/pages/blog' },
       { label: 'Become a Seller', href: '/sell' },
+      { label: 'Seller Terms', href: '/pages/seller-terms' },
+      { label: 'Seller Fees', href: '/pages/seller-fees' },
       { label: 'Affiliate Program', href: '/pages/affiliate' },
     ],
   },
@@ -50,6 +52,7 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
       { label: 'Return Policy', href: '/pages/return-policy' },
       { label: 'Payment Policy', href: '/pages/payment-policy' },
       { label: 'Cookie Policy', href: '/pages/cookie-policy' },
+      { label: 'Grievance Redressal', href: '/pages/grievance-redressal' },
     ],
   },
 ];

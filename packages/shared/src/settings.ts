@@ -208,6 +208,23 @@ export interface PublicSettings {
    * shows the window that applies to each item.
    */
   returnWindowDays: number;
+  /** The one GST rate on every product, when set (null: rates by slab). */
+  gstUniformPercent: number | null;
+  /** What a seller is charged, as published on the seller fee page and Seller Terms. */
+  sellerFees: SellerFeeSchedule;
+}
+
+/** The marketplace's charges to sellers, read from platform settings. */
+export interface SellerFeeSchedule {
+  commissionPercent: number;
+  gatewayPercent: number;
+  platformFeePaise: number;
+  closingFeePaise: number;
+  gtChargePaise: number;
+  tdsPercent: number;
+  tcsPercent: number;
+  payoutHoldDays: number;
+  payoutMinPaise: number;
 }
 
 const adPriceRow = z.object({

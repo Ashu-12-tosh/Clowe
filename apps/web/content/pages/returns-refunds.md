@@ -1,16 +1,25 @@
 # Returns & Refunds
 
-Changed your mind or received something unexpected? We keep it simple. Returns and refunds on cloweshop.com are handled by **{{legal.name}}** together with the seller of the item.
+*Last updated: 16 October 2026*
 
-1. Go to **My Orders**, pick the item and choose **Return**.
-2. Select a reason and add photos if the item arrived damaged.
-3. Once the seller (or Clowe support) approves, a pickup is arranged.
-4. Your refund is issued to the original payment method after the item is received.
+Returns and refunds on cloweshop.com are handled by **{{legal.name}}** together with the seller of the item.
 
-- Return window: **{{returnWindow}}** from delivery for eligible items (each product page shows the window for that item).
-- Refund timeline: **5–7 business days** after pickup.
+## Returns
 
-Full details: [Return Policy](/pages/return-policy).
+- Return most items within **{{returnWindow}}** of delivery. Some categories, such as grocery, have a shorter window — each product page shows it.
+- Start a return from **My Orders**: choose the item, a reason, and add photos if it arrived damaged or wrong.
+- Once the seller approves, our courier partner picks it up from you **for free**.
+
+## Refunds
+
+- **Cancelled before shipping:** refunded in full straight away.
+- **Returned:** refunded once the item reaches the seller and is checked.
+- **Could not be delivered or lost in transit:** refunded in full.
+- Refunds go to your **original payment method**; banks usually show them within **5–7 business days**.
+- **Cash on Delivery orders:** our support team will contact you to arrange the refund.
+- Clowe Credits used on a cancelled order come back to your account.
+
+Full details: [Return Policy](/pages/return-policy) and [Cancellation](/pages/cancellation).
 
 ## Who we are
 
@@ -19,6 +28,6 @@ cloweshop.com is owned and operated by **{{legal.name}}**.
 - Registered address: {{legal.registeredAddress}}
 - LLPIN: {{legal.llpin}}
 - GSTIN: {{legal.gstin}}
-- Email: {{legal.supportEmail}}
+- Email: {{customerSupportEmail}}
 - Phone: {{legal.supportPhone}}
 - Every way to reach us: [Contact Us](/contact)

@@ -104,6 +104,18 @@ export default async function ContactPage() {
           </ul>
         </section>
 
+        <section className="mt-8">
+          <h2 className="font-display text-xl font-bold text-ink-900">Grievance Officer</h2>
+          <p className="mt-3 leading-relaxed text-gray-700">
+            Complaint not resolved? Our Grievance Officer acknowledges every complaint within 24 hours and
+            resolves it within 15 days. Their details are on{' '}
+            <Link href="/pages/grievance-redressal" className="font-semibold text-brand-600 hover:underline">
+              Grievance Redressal
+            </Link>
+            .
+          </p>
+        </section>
+
         <p className="mt-8 text-sm text-gray-500">
           Policies: <Link href="/pages/terms-conditions" className="hover:underline">Terms</Link> ·{' '}
           <Link href="/pages/privacy-policy" className="hover:underline">Privacy</Link> ·{' '}

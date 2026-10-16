@@ -64,7 +64,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     label: 'Payment & refund questions',
     keywords: ['payment', 'refund', 'paisa', 'money', 'upi', 'card', 'paid', 'charged', 'debit'],
     answer:
-      'Payments on Clowe are processed securely via Razorpay (UPI, cards, netbanking).\n\n• Payment failed but money deducted? It is auto-refunded by your bank, usually within 5–7 business days. /* TODO: confirm real refund timeline */\n• Refund for a cancelled order: initiated immediately, reflects in 5–7 business days. /* TODO: confirm */\n• Refund for a returned item: processed after the seller receives the item back.\n\nCash on Delivery is available on orders up to the limit shown at checkout — pick it on the payment step and keep the amount ready at handover. Some sellers do not offer it, and the payment step says so.',
+      'Payments on Clowe go through certified payment gateways (UPI, cards, net banking). Prices include GST and delivery is free.\n\n• Payment failed but money deducted? Your bank returns it automatically; it usually takes 5–7 business days.\n• Refund for a cancelled order: started as soon as you cancel; banks usually show it in 5–7 business days.\n• Refund for a returned item: made once the item reaches the seller and is checked.\n• Every refund goes back to the original payment method.\n\nCash on Delivery is available on orders up to {{codMax}} — pick it on the payment step and keep the amount ready at handover. Some sellers do not offer it, and the payment step says so.',
     followUps: ['helped', 'complaint', 'menu'],
   },
   {
@@ -73,7 +73,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     label: 'How does AI Try-On work?',
     keywords: ['try on', 'tryon', 'try-on', 'virtual', 'photo', 'ai photo', 'dekh'],
     answer:
-      'AI Try-On ✨ lets you see clothes on yourself before buying:\n\n1. Upload one full-body photo (Account → My Try-On Photo)\n2. Open any product and tap "Try On Me"\n3. Our AI generates a preview of you wearing it!\n\nPhoto tips: front-facing, full body, good lighting, plain background, no sunglasses. You get 10 try-ons per day. /* TODO: confirm daily limit if changed */',
+      'AI Try-On ✨ lets you see clothes on yourself before buying:\n\n1. Upload one full-body photo (Account → My Try-On Photo)\n2. Open any product and tap "Try On Me"\n3. Our AI generates a preview of you wearing it — a guide, not an exact fit\n\nPhoto tips: front-facing, full body, good lighting, plain background, no sunglasses. There is a daily limit on try-ons; the try-on page shows how many you have left.\n\nYour photo is used only to make your try-on images and is deleted {{tryonPhotoDays}} after upload, unless you save it for next time.',
     links: [{ label: 'Set my try-on photo', href: '/account' }],
     followUps: ['helped', 'menu'],
   },
@@ -83,7 +83,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     label: 'How to become a seller',
     keywords: ['seller', 'sell', 'shop', 'business', 'bechna', 'register shop', 'dukan'],
     answer:
-      'Selling on Clowe is free:\n\n1. Open "Sell on Clowe" and tap Register\n2. Fill your shop name + KYC details, verify your phone via OTP\n3. Our team reviews your application (usually within a day) /* TODO: confirm review SLA */\n4. Once approved, list products — our AI even writes descriptions for you!',
+      'Selling on Clowe is free:\n\n1. Open "Sell on Clowe" and tap Register\n2. Fill your shop name + KYC details, verify your phone via OTP\n3. Our team reviews your application and your GSTIN — a GSTIN is required for approval\n4. Once approved, list products — our AI even writes descriptions for you!',
     links: [
       { label: 'Why sell on Clowe', href: '/sell' },
       { label: 'Register now', href: '/seller/register' },
@@ -96,7 +96,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     label: 'Shipping & delivery times',
     keywords: ['shipping', 'delivery', 'kitne din', 'deliver', 'courier', 'kab aayega', 'time'],
     answer:
-      'Shipping on Clowe:\n\n• FREE delivery on every order — no minimum, no delivery fee\n• Sellers are asked to dispatch within {{dispatchSla}} of your order\n• Delivery takes 3–7 days depending on your pincode\n\nOnce shipped, you get the courier name + AWB number and can track without login on the Track page.',
+      'Shipping on Clowe:\n\n• FREE delivery on every order — no minimum, no delivery fee\n• Sellers are asked to dispatch within {{dispatchSla}} of your order\n• Standard delivery usually takes 4–6 business days; checkout shows the date for your pincode\n\nOnce shipped, you get the courier name + AWB number and can track without login on the Track page.',
     links: [{ label: 'Track my order', href: '/track' }],
     followUps: ['order-status', 'helped', 'menu'],
   },
@@ -106,7 +106,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     label: 'Return policy & window',
     keywords: ['return policy', 'wapas', 'exchange', 'return window', 'galat size', 'size'],
     answer:
-      'Returns are simple:\n\n• Request a return within {{returnWindow}} of delivery\n• Go to Orders → open the order → "Request return" on the delivered item\n• Refund is processed after the seller receives the item back\n\nItems should be unused with tags intact. Size guide is available on each product page under details.',
+      'Returns are simple:\n\n• Request a return within {{returnWindow}} of delivery\n• Go to Orders → open the order → "Request return" on the delivered item\n• Pickup is free for you\n• Your refund is made once the item reaches the seller and is checked\n\nItems should be unused with tags intact. Size guide is available on each product page under details.',
     links: [{ label: 'My orders', href: '/orders' }],
     followUps: ['return-cancel', 'helped', 'menu'],
   },
@@ -129,7 +129,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     label: 'How do I cancel my order?',
     keywords: ['cancel', 'cancellation', 'band karo', 'stop order'],
     answer:
-      'You can cancel while nothing has shipped:\n\n1. Open Orders → the order you want to cancel\n2. Tap "Cancel order"\n\nStock goes back immediately, any Clowe Credits you redeemed are returned to your wallet, and a paid order is marked for refund. Once an item ships, use a return instead.',
+      'You can cancel while nothing has shipped:\n\n1. Open Orders → the order you want to cancel\n2. Tap "Cancel order"\n\nThis cancels the whole order. Any Clowe Credits you redeemed come back to your wallet, and a paid order is refunded in full to the original payment method straight away (banks usually show it in 5–7 business days). Once an item ships, use a return instead.',
     links: [{ label: 'My orders', href: '/orders' }],
     followUps: ['returns-policy', 'helped', 'menu'],
   },

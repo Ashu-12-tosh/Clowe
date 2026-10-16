@@ -65,8 +65,8 @@ describe('free delivery on all orders, in copy', () => {
 
   it('says free delivery on all orders on the shipping pages and in the support answers', () => {
     const read = (p: string) => fs.readFileSync(path.join(root, p), 'utf8');
-    expect(read('apps/web/content/pages/shipping-info.md')).toMatch(/Free delivery on all orders/);
-    expect(read('apps/web/content/pages/shipping-policy.md')).toMatch(/free on all orders/);
+    expect(read('apps/web/content/pages/shipping-info.md')).toMatch(/Free delivery on (all|every) orders?/);
+    expect(read('apps/web/content/pages/shipping-policy.md')).toMatch(/free on (all|every) orders?/);
     expect(read('apps/web/lib/support/faq-content.ts')).toMatch(/FREE delivery on every order/);
     expect(read('apps/web/components/UtilityBar.tsx')).toMatch(/on all orders/);
   });

@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { assetRefSchema } from './assets';
 
+/**
+ * Days a shopper's try-on photo is kept after upload, unless they save it to
+ * reuse: the API's sweep deletes it then, and the privacy policy quotes it.
+ */
+export const TRYON_PHOTO_RETENTION_DAYS = 30;
+
 export const tryOnRequestSchema = z.object({
   productId: z.string().min(1),
   /** The customer's photo: the reference from POST /api/uploads/private (purpose TRYON_PHOTO). */

@@ -1,9 +1,13 @@
 # Cookie Policy
 
-Clowe uses a small number of cookies and local storage entries to:
+*Last updated: 16 October 2026*
 
-- keep you signed in securely,
-- remember your cart and preferences,
-- measure which pages are useful so we can improve them.
+Clowe keeps this small.
 
-We do not use third-party advertising cookies. You can clear cookies from your browser at any time — you will simply need to log in again.
+- **One cookie** keeps you signed in. It is secure (HTTP-only), so scripts on the page cannot read it.
+- **Browser storage** on your device remembers your session, your delivery pincode and the last page you were on, so the site works as you expect.
+- We do **not** use advertising or tracking cookies, and we do not use third-party analytics.
+
+You can clear cookies and site data from your browser at any time — you will just need to sign in again.
+
+Questions? See the [Privacy Policy](/pages/privacy-policy).

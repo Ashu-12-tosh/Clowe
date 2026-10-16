@@ -123,7 +123,7 @@ Decide within 48 hours. Requests older than that are flagged as overdue on your 
 
 After an approved return comes back, mark it Received. If the item is in good condition, the refund is raised automatically for the amount the customer paid. If it arrives damaged, flag it as damaged — no automatic refund is issued and support reviews the case.
 
-Return shipping is arranged by the marketplace; you do not pay pickup charges.`,
+Clowe books the return pickup with Delhivery, which brings the item to the return address in Store Settings (or your pickup address). Its charge for that trip is yours, posted as "Return pickup freight" when the return reaches you.`,
   },
   {
     id: 'payout-cycle',
@@ -136,7 +136,7 @@ Return shipping is arranged by the marketplace; you do not pay pickup charges.`,
 
 Once cleared, the amount appears as Amount payable on the Payouts page. Request a payout and it transfers to your default payout method, subject to the minimum payout amount.
 
-Every payout is net of: marketplace commission, payment gateway/collection charges, TDS under section 194-O, and any unrecovered ad spend. The exact rates in force are shown on your Payouts page, and each payout can be opened to see the individual order lines it settled.`,
+Every payout is net of: marketplace commission, payment gateway/collection charges, the platform fee, closing fee and GT charge, Delhivery's freight and COD fees, any penalties, TDS under section 194-O, TCS under section 52 of the CGST Act, and any unrecovered ad spend. The exact rates in force are shown on your Payouts page, and each payout can be opened to see the individual order lines it settled.`,
   },
   {
     id: 'payout-not-received',
@@ -160,7 +160,7 @@ If all of that checks out, raise a ticket under Payouts & payments with the payo
     title: 'Fees, commission and TDS explained',
     summary: 'What is deducted from a sale and why.',
     tags: ['commission', 'fees', 'tds', '194-O', 'gst', 'invoice'],
-    body: `Three deductions apply to your delivered sales:
+    body: `These deductions apply to your delivered sales:
 
 • Commission — the marketplace fee, a percentage of your price (before GST) for the units sold.
 • Payment gateway / collection charge — a percentage of what the buyer pays (GST included), covering online payment or COD collection.
@@ -169,7 +169,8 @@ If all of that checks out, raise a ticket under Payouts & payments with the payo
 • COD fee — on a Cash on Delivery parcel, Delhivery's collection charge (₹40 or 2 % of the amount collected, whichever is higher, plus GST) is yours too, posted as its own line when the parcel is delivered. You can stop accepting COD in Store Settings.
 • Return pickup freight — when you approve a return, Delhivery collects it from the buyer and brings it to you; its charge for that trip is yours, posted as its own line when the return reaches you, at Delhivery's actual charge.
 • RTO freight — when a parcel can't be delivered and Delhivery brings it back to you (RTO), you pay the forward freight for the trip out and Delhivery's RTO charge for the trip back, each its own line, at Delhivery's actual charge. No COD fee applies: nothing was collected. When a delivery attempt fails you'll be told at once, and can ask Delhivery from the order page to try again or to deliver on another day (within six days). When an RTO parcel is back with you, check it on the order page: in good condition its stock goes back on sale; if it came back damaged, our team is told.
-• TDS under section 194-O — withheld against your PAN and deposited with the payout that carried it. Download the TDS report from the Payouts page for your accountant.
+• TDS under section 194-O — {{tds}}, withheld against your PAN and deposited with the payout that carried it. Download the TDS report from the Payouts page for your accountant.
+• TCS under section 52 of the CGST Act — {{tcs}} of the taxable value, collected against your GSTIN and reported in GSTR-8.
 
 You enter your price before GST. The customer pays it plus GST at the rate Clowe applies (shown on your product form and in the pricing calculator), and that GST reaches your bank with the sale for you to file in your return. You issue the tax invoice for your own lines from the Orders page.`,
   },
