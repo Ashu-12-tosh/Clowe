@@ -146,6 +146,7 @@ const SCANS = {
   DELIVERY_FAILED: ['Pending', 'UD', 'EOD-11'],
   RTO: ['In Transit', 'RT', 'RT-101'],
   RTO_DELIVERED: ['RTO', 'DL', 'RT-110'],
+  LOST: ['Lost', 'UD', 'LT-100'],
 };
 const courier = (awb, event) => scan(awb, ...SCANS[event]);
 
@@ -179,6 +180,24 @@ async function makeImage(name, w, h, color) {
   return file;
 }
 
+/** A small, valid PDF (an application document). */
+function makePdf(name) {
+  const file = path.join(OUT, name);
+  fs.writeFileSync(file, '%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n');
+  return file;
+}
+
+/** Upload a file the way the pages do (multipart), as `token`'s user. */
+async function upload(token, route, field, file, purpose) {
+  const form = new FormData();
+  if (purpose) form.append('purpose', purpose);
+  const type = file.endsWith('.pdf') ? 'application/pdf' : file.endsWith('.webm') ? 'video/webm' : 'image/jpeg';
+  form.append(field, new Blob([fs.readFileSync(file)], { type }), path.basename(file));
+  const res = await fetch(`${API}${route}`, { method: 'POST', headers: { 'x-forwarded-for': SCRIPT_IP, authorization: `Bearer ${token}` }, body: form });
+  const json = await res.json().catch(() => ({}));
+  return { status: res.status, json, ref: json.data?.ref ?? json.data?.items?.[0]?.ref };
+}
+
 /** A GSTIN with a valid check digit for a PAN (state 07). */
 function gstinFor(pan) {
   const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -204,8 +223,13 @@ const pageProblems = [];
 /** 429 and 5xx answers seen by any page, newest last: a failed step shows the ones from its last 30 s. */
 const badResponses = [];
 
-async function newPage(label, viewport = { width: 1366, height: 900 }) {
+async function newPage(label, viewport = { width: 1366, height: 900 }, { consent = true } = {}) {
   const ctx = await browser.newContext({ viewport, permissions: ['camera', 'microphone'] });
+  // The cookie banner (Cookie Policy 4) is answered up front, except where a step tests it.
+  if (consent) {
+    const value = encodeURIComponent(JSON.stringify({ v: 1, functional: true, analytics: false, advertising: false, at: new Date().toISOString() }));
+    await ctx.addCookies([{ name: 'clowe_consent', value, url: WEB }]);
+  }
   const ip = `10.77.1.${contextIpSeq++}`;
   await ctx.route(`${API}/**`, (route) => route.continue({ headers: { ...route.request().headers(), 'x-forwarded-for': ip } }));
   const page = await ctx.newPage();
@@ -277,6 +301,37 @@ async function tokenOf(page) {
   return page.evaluate(() => localStorage.getItem('clowe.accessToken'));
 }
 
+/**
+ * A fresh access token for the session a page holds, the way the site renews
+ * it (POST /api/auth/refresh with the session cookie). The run outlasts an
+ * access token, so the script renews before each flow and before each order.
+ */
+async function renew(page) {
+  if (!page || page.isClosed()) return null;
+  const token = await page
+    .evaluate(async (api) => {
+      const res = await fetch(`${api}/api/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(localStorage.getItem('clowe.refreshToken') ? { refreshToken: localStorage.getItem('clowe.refreshToken') } : {}),
+      });
+      const json = await res.json();
+      if (!json.success) return null;
+      localStorage.setItem('clowe.accessToken', json.data.accessToken);
+      return json.data.accessToken;
+    }, API)
+    .catch(() => null);
+  return token ?? (await tokenOf(page).catch(() => null));
+}
+
+/** Renew every session the script uses. */
+async function renewAll() {
+  if (S.shopPage) S.shopperToken = (await renew(S.shopPage)) ?? S.shopperToken;
+  if (S.sellerPage) S.sellerToken = (await renew(S.sellerPage)) ?? S.sellerToken;
+  if (S.adminPage) S.adminToken = (await renew(S.adminPage)) ?? S.adminToken;
+}
+
 /** Sign in at /login (or /seller/login) with a phone and PIN. */
 async function pinLogin(page, phone, pin, at = '/login') {
   await goto(page, at);
@@ -334,11 +389,11 @@ async function main() {
     if (want(6)) await flow6TryOn();
     if (want(7)) await flow7Ads();
     if (want(8)) await flow8Shopper();
-    if (want(9)) await flow9Fulfilment();
-    if (want(10)) await flow10CancelReturnRto();
-    if (want(11)) await flow11Payouts();
-    if (want(12)) await flow12Support();
-    if (want(13)) await flow13Admin();
+    if (want(9)) await renewAll().then(flow9Fulfilment);
+    if (want(10)) await renewAll().then(flow10CancelReturnRto);
+    if (want(11)) await renewAll().then(flow11Payouts);
+    if (want(12)) await renewAll().then(flow12Support);
+    if (want(13)) await renewAll().then(flow13Admin);
   } finally {
     fs.writeFileSync(path.join(OUT, 'api.log'), stack.apiLog.join(''));
     fs.writeFileSync(path.join(OUT, 'web.log'), stack.webLog.join(''));
@@ -409,25 +464,24 @@ async function flow2Seller() {
   S.sellerGstin = gstinFor(S.sellerPan);
   S.shopName = `E2E Shop ${RUN}`;
 
-  await step(F, 'register: a bad PAN is marked by its field', async () => {
+  await step(F, 'register: the phone is verified first (OTP, mock)', async () => {
     await goto(page, '/seller/register');
-    // A throwaway number: if the bad PAN gets through, its OTP cooldown doesn't block the real one.
-    await page.locator('input[name=phone]').fill(await freshPhone('90'), { timeout: 120_000 });
-    await page.locator('input[name=shopName]').fill(`${S.shopName} (bad PAN)`);
-    await page.locator('input[name=panNumber]').fill('BADPAN');
-    await page.getByRole('button', { name: /Send OTP & Submit|Submit application/ }).click();
-    await toast(page, /Not submitted/);
-    await page.locator('[name=panNumber] ~ p[role=alert], [name=panNumber] + p[role=alert]').first().waitFor({ timeout: 5000 });
-  }, { page });
+    await page.locator('input[name=phone]').fill(S.sellerPhone, { timeout: 120_000 });
+    await withOtpCooldown(page, () => page.getByRole('button', { name: /^Send OTP$/ }).click());
+    await page.getByRole('button', { name: /Verify & continue/ }).click({ timeout: 60_000 });
+    await page.locator('input[name=shopName]').waitFor({ timeout: 60_000 });
+  }, { page, key: 'sellerPhone' });
 
-  await step(F, 'register with a new phone, OTP (mock), application submitted', async () => {
-    // If the bad PAN went through to the OTP screen, go back to the form.
-    if (await page.getByText('Verify your phone').count()) {
-      await page.getByRole('button', { name: 'change' }).click().catch(async () => goto(page, '/seller/register'));
-      await page.locator('[name=panNumber]').waitFor({ timeout: 30_000 }).catch(async () => goto(page, '/seller/register'));
-    }
-    await page.locator('input[name=phone]').fill(S.sellerPhone);
+  await step(F, 'register: a bad PAN is marked by its field, and the terms window does not open', async () => {
     await page.locator('input[name=shopName]').fill(S.shopName);
+    await page.locator('input[name=panNumber]').fill('BADPAN');
+    await page.getByRole('button', { name: /^Submit$/ }).click();
+    await toast(page, /Fix the fields marked in red/);
+    await page.locator('[name=panNumber] ~ p[role=alert], [name=panNumber] + p[role=alert]').first().waitFor({ timeout: 5000 });
+    check(!(await page.locator('[data-vendor-terms]').count()), 'the Vendor Terms window opened with a bad PAN');
+  }, { page, needs: ['sellerPhone'] });
+
+  await step(F, 'register: documents, the full Vendor Terms (box unticked, Final Submit disabled), application submitted — not the dashboard', async () => {
     const fill = (n, v) => page.locator(`[name=${n}]`).fill(v);
     await fill('panNumber', S.sellerPan);
     await fill('gstNumber', S.sellerGstin);
@@ -438,25 +492,53 @@ async function flow2Seller() {
     await fill('city', 'New Delhi');
     await fill('state', 'Delhi');
     await fill('pincode', '110059');
-    await page.getByRole('button', { name: /Send OTP & Submit/ }).click();
-    // The bad-PAN attempt already sent a code: wait out the resend cooldown.
-    const wait = page.getByText(/Please wait (\d+)s/);
-    if (await wait.waitFor({ timeout: 4000 }).then(() => true, () => false)) {
-      const secs = Number((await wait.innerText()).match(/(\d+)s/)[1]);
-      await page.waitForTimeout((secs + 2) * 1000);
-      await page.getByRole('button', { name: /Send OTP & Submit/ }).click();
+    const pdf = makePdf('constitution.pdf');
+    for (const n of ['constitutionDoc', 'cancelledChequeDoc', 'signatoryKycDoc']) {
+      await page.locator(`input[type=file][name=${n}]`).setInputFiles(pdf);
     }
-    await page.getByRole('button', { name: /Verify & Submit application/ }).click({ timeout: 60_000 });
-    await page.waitForURL((u) => u.pathname === '/seller', { timeout: 120_000 });
-    const profile = await prisma.sellerProfile.findFirst({ where: { user: { phone: S.sellerPhone } } });
+    await page.getByText('✓ uploaded').nth(2).waitFor({ timeout: 60_000 });
+    await page.getByRole('button', { name: /^Submit$/ }).click();
+    const terms = page.locator('[data-vendor-terms]');
+    await terms.waitFor({ timeout: 30_000 });
+    await terms.locator('[data-vendor-terms-text]').getByText(/Registration and Documentation/).waitFor({ timeout: 60_000 });
+    const finalSubmit = terms.getByRole('button', { name: 'Final Submit' });
+    check(!(await terms.locator('input[name=acceptVendorTerms]').isChecked()), 'the acceptance box started ticked');
+    check(await finalSubmit.isDisabled(), 'Final Submit was enabled before the box was ticked');
+    for (const link of ['Terms & Conditions', 'Privacy Policy', 'Seller Fees']) {
+      check(await terms.getByRole('link', { name: link }).count(), `the terms window has no link to ${link}`);
+    }
+    await terms.locator('input[name=acceptVendorTerms]').check();
+    await finalSubmit.click();
+    const done = page.locator('[data-application-submitted]');
+    await done.waitFor({ timeout: 60_000 });
+    const shown = await done.innerText();
+    check(/SA-[A-Z0-9]{8}/.test(shown), `no application number shown: ${shown.slice(0, 200)}`);
+    check(/SMS and e-mail/.test(shown), 'the screen does not say we notify by SMS and e-mail');
+    check(new URL(page.url()).pathname === '/seller/register', `went on to ${page.url()}`);
+    const profile = await prisma.sellerProfile.findFirst({ where: { user: { phone: S.sellerPhone } }, include: { termsAcceptances: true } });
     check(profile, 'no seller profile in the database');
     check(profile.status === 'PENDING', `status ${profile.status}`);
     check(profile.gstNumber === S.sellerGstin, `GSTIN stored ${profile.gstNumber}`);
+    check(profile.constitutionDoc && profile.cancelledChequeDoc && profile.signatoryKycDoc, 'documents not stored');
+    check(profile.termsAcceptances.length === 1 && profile.termsAcceptances[0].ip, 'the terms acceptance was not recorded with its IP');
     S.sellerId = profile.id;
     S.sellerUserId = profile.userId;
     S.sellerToken = await tokenOf(page);
-  }, { page, key: 'seller' });
+  }, { page, needs: ['sellerPhone'], key: 'seller' });
 
+  await step(F, 'a pending seller sees only the application status, not the dashboard', async () => {
+    await goto(page, '/seller/products');
+    await page.locator('[data-application-status="Pending review"]').waitFor({ timeout: 60_000 });
+    check(!(await page.getByRole('link', { name: /My Products/ }).count()), 'the dashboard menu is showing to a pending seller');
+  }, { page, needs: ['seller'] });
+}
+
+// ---------------------------------------------------------------------------
+// The seller's setup, once approved (a pending seller only sees the status page)
+// ---------------------------------------------------------------------------
+async function sellerSetup() {
+  const F = '3 Seller setup';
+  const page = S.sellerPage;
   await step(F, 'KYC verification (mock) from Business info', async () => {
     await goto(page, '/seller/settings?tab=BUSINESS');
     const verify = page.getByRole('button', { name: /Verify now|Try again/ });
@@ -465,7 +547,7 @@ async function flow2Seller() {
     const checks = await prisma.sellerKycCheck.findMany({ where: { sellerId: S.sellerId } });
     check(checks.length > 0, 'no KYC checks recorded');
     check(checks.every((c) => c.provider === 'mock'), `a KYC check used ${checks.map((c) => c.provider).join(',')}`);
-  }, { page, needs: ['seller'] });
+  }, { page, needs: ['approved'] });
 
   await step(F, 'store profile saves (URL, tagline, contact)', async () => {
     await goto(page, '/seller/settings');
@@ -478,7 +560,7 @@ async function flow2Seller() {
     await saveStore(page);
     const p = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
     check(p.slug === S.storeSlug && p.storeEmail === 'e2e@example.com', `stored slug=${p.slug} email=${p.storeEmail}`);
-  }, { page, needs: ['seller'] });
+  }, { page, needs: ['approved'] });
 
   await step(F, 'business info: GSTIN, PAN and name on PAN save', async () => {
     await page.getByRole('button', { name: /Business info/ }).click();
@@ -486,7 +568,7 @@ async function flow2Seller() {
     await saveStore(page);
     const p = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
     check(p.panName === 'E2E SELLER' && p.panNumber === S.sellerPan, `stored panName=${p.panName} pan=${p.panNumber}`);
-  }, { page, needs: ['seller'] });
+  }, { page, needs: ['approved'] });
 
   await step(F, 'payout method (Payouts page) verified and saved', async () => {
     await goto(page, '/seller/payouts');
@@ -502,7 +584,7 @@ async function flow2Seller() {
     }
     const methods = await prisma.sellerPayoutMethod.count({ where: { sellerId: S.sellerId } });
     check(methods > 0, 'no payout method stored');
-  }, { page, needs: ['seller'] });
+  }, { page, needs: ['approved'] });
 
   await step(F, 'pickup address (same as business) saves', async () => {
     await goto(page, '/seller/settings');
@@ -510,7 +592,7 @@ async function flow2Seller() {
     await saveStore(page);
     const p = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
     check(p.pickupSameAsBusiness && p.pincode === '110059', `pickupSame=${p.pickupSameAsBusiness} pin=${p.pincode}`);
-  }, { page, needs: ['seller'] });
+  }, { page, needs: ['approved'] });
 
   await step(F, 'return address (separate) saves', async () => {
     await page.getByRole('button', { name: /Return policy/ }).click();
@@ -522,7 +604,7 @@ async function flow2Seller() {
     await saveStore(page);
     const p = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
     check(!p.returnAddressSameAsPickup && p.returnPincode === '201301', `returnSame=${p.returnAddressSameAsPickup} pin=${p.returnPincode}`);
-  }, { page, needs: ['seller'] });
+  }, { page, needs: ['approved'] });
 }
 
 // ---------------------------------------------------------------------------
@@ -554,6 +636,25 @@ async function flow3Approval() {
     check(p.status === 'PENDING', `became ${p.status}`);
   }, { page, needs: ['admin'] });
 
+  await step(F, 'admin sees the documents and asks for more; the seller answers from the status page', async () => {
+    await page.keyboard.press('Escape');
+    await openSellerPanel(page, S.shopName);
+    const app = page.locator('[data-application]');
+    check((await app.getByRole('link', { name: 'open' }).count()) === 3, 'the three documents are not linked for the admin');
+    check(/current version accepted/.test(await app.innerText()), 'the Vendor Terms acceptance is not shown');
+    await page.locator('[data-action=request-info]').click();
+    await toast(page, /Asked the seller for more/);
+    const sp = S.sellerPage;
+    await goto(sp, '/seller');
+    await sp.locator('[data-application-status="Needs more info"]').waitFor({ timeout: 60_000 });
+    await sp.locator('input[type=file][name=cancelledChequeDoc]').setInputFiles(makePdf('cheque-again.pdf'));
+    await sp.getByText('✓').first().waitFor({ timeout: 60_000 });
+    await sp.getByRole('button', { name: 'Send for review' }).click();
+    await sp.locator('[data-application-status="Pending review"]').waitFor({ timeout: 60_000 });
+    const p = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
+    check(p.infoRequest === null, `the request is still open: ${p.infoRequest}`);
+  }, { page, needs: ['admin', 'seller'] });
+
   await step(F, 'admin approves the new seller ("Seller approved")', async () => {
     await page.keyboard.press('Escape');
     await openSellerPanel(page, S.shopName);
@@ -563,6 +664,31 @@ async function flow3Approval() {
     check(p.status === 'APPROVED', `status ${p.status}`);
     check(p.courierWarehouseStatus === 'ACTIVE', `Delhivery (mock) pickup address ${p.courierWarehouseStatus}: ${p.courierWarehouseError}`);
   }, { page, needs: ['admin', 'seller'], key: 'approved' });
+
+  await step(F, 'a seller from before the Vendor Terms accepts them in the same window on their next visit', async () => {
+    const u = await seedUser('SELLER', `E2E Old Seller ${RUN}`);
+    await prisma.sellerProfile.create({
+      data: { userId: u.id, shopName: `E2E Old Shop ${RUN}`, status: 'APPROVED', approvedAt: new Date(), gstNumber: gstinFor(randomPan()), panNumber: randomPan() },
+    });
+    const old = await newPage('old-seller');
+    try {
+      await pinLogin(old, u.phone, u.pin);
+      await goto(old, '/seller');
+      const terms = old.locator('[data-vendor-terms]');
+      await terms.waitFor({ timeout: 60_000 });
+      const accept = terms.getByRole('button', { name: 'Accept and continue' });
+      check(await accept.isDisabled(), 'accept was enabled before the box was ticked');
+      await terms.locator('input[name=acceptVendorTerms]').check();
+      await accept.click();
+      await terms.waitFor({ state: 'detached', timeout: 30_000 });
+      const n = await prisma.sellerTermsAcceptance.count({ where: { seller: { userId: u.id } } });
+      check(n === 1, `${n} acceptances recorded`);
+    } finally {
+      await old.context().close().catch(() => {});
+    }
+  }, { needs: ['admin'] });
+
+  await sellerSetup();
 }
 
 // ---------------------------------------------------------------------------
@@ -778,7 +904,14 @@ async function flow6TryOn() {
     const token = await tokenOf(page);
     const before = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
     const photo = await makeImage('shopper-photo.jpg', 800, 1200, '#6b4f3a');
+    // No photo is taken before the 18+ consent (Privacy Policy 3).
+    const early = await upload(token, '/api/uploads/private', 'images', photo, 'TRYON_PHOTO');
+    check(early.status >= 400 && /consent|18\+/i.test(JSON.stringify(early.json)), `a try-on photo was taken before consent (${early.status})`);
     await goto(page, `/products/${S.clothSlug}/tryon`);
+    const consent = page.locator('input[name=tryOnConsent]').first();
+    await consent.waitFor({ timeout: 120_000 });
+    check(!(await consent.isChecked()), 'the consent box started ticked');
+    await consent.check();
     const file = page.locator('input[type=file]').first();
     await file.setInputFiles(photo, { timeout: 120_000 });
     await page.getByRole('button', { name: /Generate my try-on/ }).click({ timeout: 30_000 });
@@ -786,6 +919,8 @@ async function flow6TryOn() {
     await page.getByText(/left today/).waitFor({ timeout: 10_000 });
     const after = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
     check(after.tryOnCredits === before.tryOnCredits - 1, `seller credits ${before.tryOnCredits} → ${after.tryOnCredits}`);
+    const shopper = await prisma.user.findUnique({ where: { id: S.tryShopper.id } });
+    check(shopper.tryOnConsentAt, 'the consent was not stored');
     const quota = await apiOk('GET', '/api/tryon/quota', token);
     check(JSON.stringify(quota).match(/"used(Today)?":\s*1|"todayUsed":\s*1|"remaining/), `quota after one run: ${JSON.stringify(quota)}`);
     S.tryToken = token;
@@ -906,9 +1041,26 @@ async function flow7Ads() {
 // ---------------------------------------------------------------------------
 async function flow8Shopper() {
   const F = '8 Shopper';
-  S.shopPage = await newPage('shopper');
+  S.shopPage = await newPage('shopper', undefined, { consent: false });
   const page = S.shopPage;
   S.shopperPhone = await freshPhone('92');
+
+  await step(F, 'cookie banner on the first visit: nothing optional before a choice, the choice kept 12 months', async () => {
+    await goto(page, '/');
+    const banner = page.locator('[data-cookie-consent]');
+    await banner.waitFor({ timeout: 60_000 });
+    const stored = await page.evaluate(() => ['clowe.pincode', 'clowe.recentlyViewed', 'clowe.recentSearches'].filter((k) => localStorage.getItem(k)));
+    check(stored.length === 0, `functional storage written before a choice: ${stored.join(', ')}`);
+    await banner.getByRole('button', { name: 'Only necessary' }).click();
+    const c = (await page.context().cookies()).find((k) => k.name === 'clowe_consent');
+    check(c, 'no consent cookie');
+    const days = (c.expires * 1000 - Date.now()) / 86_400_000;
+    check(days > 360 && days < 367, `the choice is kept for ${days.toFixed(0)} days`);
+    check(JSON.parse(decodeURIComponent(c.value)).functional === false, 'functional recorded as allowed');
+    await goto(page, '/');
+    await page.waitForTimeout(1500);
+    check(!(await page.locator('[data-cookie-consent]').count()), 'the banner came back after a choice');
+  }, { page });
   await step(F, 'signup with OTP, profile and a PIN', async () => {
     await goto(page, '/login');
     await page.getByRole('button', { name: 'Create Account' }).click({ timeout: 120_000 });
@@ -986,6 +1138,9 @@ async function flow8Shopper() {
   await step(F, 'prepaid checkout with the mock payment: confirmation, invoice, notification', async () => {
     await goto(page, '/checkout');
     await page.getByRole('button', { name: /Continue to Payment/ }).last().click({ timeout: 120_000 });
+    // A business purchase: the buyer's GSTIN, given at checkout, goes on the invoice (Payment Policy).
+    S.buyerGstin = gstinFor(randomPan('C'));
+    await page.locator('input[name=buyerGstin]').fill(S.buyerGstin, { timeout: 120_000 });
     await page.getByRole('button', { name: /Pay ₹[\d,.]+ Securely/ }).click({ timeout: 120_000 });
     await page.getByRole('button', { name: /Simulate successful payment/ }).click({ timeout: 60_000 });
     await page.waitForURL(/confirmation|\/orders\//, { timeout: 120_000 });
@@ -996,6 +1151,11 @@ async function flow8Shopper() {
     S.prepaidItemId = order.items[0].id;
     const inv = await api('GET', `/api/orders/${order.id}/invoices`, S.shopperToken);
     check(inv.status === 200, `invoice ${inv.status}`);
+    check(order.buyerGstin === S.buyerGstin, `buyer GSTIN stored ${order.buyerGstin}`);
+    check(JSON.stringify(inv.json).includes(S.buyerGstin), 'the buyer GSTIN is not on the invoice');
+    // Mumbai is a metro: processing (1–2) + transit (2–4) working days (Shipping Policy 3).
+    const etaDays = (new Date(order.etaTo) - new Date(order.createdAt)) / 86_400_000;
+    check(order.etaTo && etaDays >= 3 && etaDays <= 8, `metro estimate ${etaDays.toFixed(1)} days`);
     const notes = await apiOk('GET', '/api/notifications', S.shopperToken);
     check(JSON.stringify(notes).includes(order.orderNumber), 'no notification about the order');
   }, { page, needs: ['cart'], key: 'prepaid' });
@@ -1008,6 +1168,26 @@ async function flow8Shopper() {
     check(o.paymentMethod === 'COD', o.paymentMethod);
     S.codItemId = o.items[0].id;
   }, { needs: ['shopper', 'live'], key: 'cod' });
+
+  await step(F, 'COD under the ₹1,000 floor is refused (Payment Policy 6.1)', async () => {
+    const settings = await apiOk('GET', '/api/settings/public', null);
+    check(settings.codMinOrderPaise === 100000, `COD floor ${settings.codMinOrderPaise}`);
+    // One item is above ₹1,000, so lift the floor over this cart for one checkout.
+    await prisma.platformSetting.upsert({ where: { key: 'codMinOrderPaise' }, update: { value: 10_000_000 }, create: { key: 'codMinOrderPaise', value: 10_000_000 } });
+    try {
+      await apiOk('POST', '/api/cart/items', S.shopperToken, { variantId: S.simpleVariantId, quantity: 1 });
+      const r = await api('POST', '/api/orders/checkout', S.shopperToken, { addressId: S.addressId, paymentMethod: 'COD' });
+      check(r.status === 400 && /from ₹/.test(r.json?.error?.message ?? ''), `refusal: ${r.status} ${r.json?.error?.message}`);
+    } finally {
+      await prisma.platformSetting.upsert({ where: { key: 'codMinOrderPaise' }, update: { value: 100000 }, create: { key: 'codMinOrderPaise', value: 100000 } });
+      await api('DELETE', '/api/cart', S.shopperToken);
+    }
+  }, { needs: ['shopper', 'live'] });
+
+  await step(F, 'a post office box address is refused (Shipping Policy 2.3)', async () => {
+    const r = await api('POST', '/api/addresses', S.shopperToken, { name: 'E2E Shopper', phone: '9876543210', line1: 'PO Box 4321', city: 'Mumbai', state: 'Maharashtra', pincode: '400050' });
+    check(r.status === 400 && /post office box/i.test(JSON.stringify(r.json)), `PO box address: ${r.status}`);
+  }, { needs: ['shopper'] });
 
   await step(F, 'COD above the cap is refused', async () => {
     const settings = await apiOk('GET', '/api/settings/public', null);
@@ -1198,7 +1378,7 @@ async function flow9Fulfilment() {
     const co = await apiOk('POST', '/api/orders/checkout', S.shopperToken, { addressId: S.addressId, paymentMethod: 'COD' });
     await goto(page, `/seller/orders/${co.orderId}`);
     await page.getByRole('button', { name: /Cancel (this order|my items|order)/i }).first().click({ timeout: 120_000 });
-    await page.locator('textarea, input[type=text]').last().fill('E2E: out of stock at the warehouse');
+    await page.locator('select[name=cancelReason]').selectOption('Out of stock or discontinued');
     await page.getByRole('button', { name: /Cancel my items/ }).click();
     await toast(page, /cancelled.*₹150|₹150.*penalty/i, 30_000);
     const rows = await ledger(S.sellerId, co.orderId);
@@ -1213,6 +1393,7 @@ async function flow9Fulfilment() {
 // 10 Cancellation, return, RTO
 // ---------------------------------------------------------------------------
 async function prepaidOrder(variantId, extra = {}) {
+  await renewAll();
   await apiOk('POST', '/api/cart/items', S.shopperToken, { variantId, quantity: 1 });
   const co = await apiOk('POST', '/api/orders/checkout', S.shopperToken, { addressId: S.addressId, paymentMethod: 'UPI', ...extra });
   await apiOk('POST', '/api/payments/mock-pay', S.shopperToken, { orderId: co.orderId, outcome: 'success' });
@@ -1238,11 +1419,46 @@ async function flow10CancelReturnRto() {
     check(u.creditsBalance >= S.creditsBefore, `credits ${S.creditsBefore} before the order → ${u.creditsBalance} after cancelling`);
   }, { page: () => S.shopPage, needs: ['shopper', 'live'] });
 
-  await step(F, 'return: approved, reverse pickup, refund, reverse freight on the ledger', async () => {
+  await step(F, 'a non-cancellable item: marked before buying, not cancellable once confirmed', async () => {
+    await prisma.product.update({ where: { id: S.simpleId }, data: { nonCancellable: true } });
+    try {
+      const page = S.shopPage;
+      await goto(page, `/products/${S.simpleSlug}`);
+      await page.locator('[data-pdp-non-cancellable]').waitFor({ timeout: 120_000 });
+      const o = await prepaidOrder(S.simpleVariantId);
+      check(o.items[0].nonCancellable, 'the order line was not marked non-cancellable');
+      const r = await api('POST', `/api/orders/${o.id}/cancel`, S.shopperToken);
+      check(r.json?.error?.code === 'NON_CANCELLABLE', `cancel: ${r.status} ${r.json?.error?.code}`);
+      await goto(page, `/account/orders/${o.id}`);
+      await page.locator('[data-non-cancellable]').first().waitFor({ timeout: 120_000 });
+      check(!(await page.getByRole('button', { name: /^Cancel order/ }).count()), 'a Cancel button is offered');
+    } finally {
+      await prisma.product.update({ where: { id: S.simpleId }, data: { nonCancellable: false } });
+    }
+  }, { page: () => S.shopPage, needs: ['shopper', 'live'] });
+
+  /** Evidence for a claim: the item, its tag, the packaging (Return Policy 3.2). */
+  const evidence = async () => {
+    const photo = S.claimPhoto ?? (S.claimPhoto = await makeImage('claim.jpg', 400, 400, '#884444'));
+    const one = async () => (await upload(S.shopperToken, '/api/uploads/private', 'images', photo, 'RETURN_PHOTO')).ref;
+    return { photos: [await one()], tagPhotos: [await one()], packagingPhotos: [await one()] };
+  };
+
+  await step(F, 'claim (Return Policy): no discretionary return; a defect refunded after the check; reverse freight on the ledger', async () => {
     const o = await prepaidOrder(S.simpleVariantId);
     const s = await fulfil(o.id, o.items[0].id, S.sellerPage, { tag: 'return' });
     await courier(s.awbNumber, 'DELIVERED');
-    await apiOk('POST', `/api/orders/items/${o.items[0].id}/return`, S.shopperToken, { reason: 'SIZE_FIT', details: 'E2E: too large' });
+    const shop = S.shopPage;
+    await goto(shop, `/account/orders/${o.id}`);
+    await shop.getByRole('button', { name: 'Report a problem' }).click({ timeout: 120_000 });
+    const modal = shop.locator('[data-claim-modal]');
+    await modal.waitFor({ timeout: 30_000 });
+    const reasons = await modal.locator('label:has(input[name=claim-reason])').allInnerTexts();
+    check(reasons.length === 6, `${reasons.length} claim reasons offered`);
+    check(!reasons.some((r) => /size\s*\/\s*fit|no longer needed|other/i.test(r)), `a discretionary reason is offered: ${reasons.join(' | ')}`);
+    const sizeFit = await api('POST', `/api/orders/items/${o.items[0].id}/return`, S.shopperToken, { reason: 'SIZE_FIT', details: 'E2E: too large' });
+    check(sizeFit.status === 400, `a size/fit return was accepted (${sizeFit.status})`);
+    await apiOk('POST', `/api/orders/items/${o.items[0].id}/return`, S.shopperToken, { reason: 'DEFECTIVE', remedy: 'REFUND', ...(await evidence()) });
     const ret = await prisma.return.findFirst({ where: { orderItemId: o.items[0].id } });
     check(ret, 'no return');
     const page = S.sellerPage;
@@ -1255,7 +1471,7 @@ async function flow10CancelReturnRto() {
     await courier(reverse.awbNumber, 'DELIVERED');
     await goto(page, `/seller/returns/${ret.id}`);
     await page.getByRole('button', { name: /Item received back/ }).click({ timeout: 120_000 }).catch(() => {});
-    await page.getByRole('button', { name: /Condition OK/ }).click({ timeout: 30_000 });
+    await page.getByRole('button', { name: /Passed — refund|Condition OK/ }).click({ timeout: 30_000 });
     await toast(page, /refund is on its way/);
     const rows = await ledger(S.sellerId, o.id);
     check(rows.some((r) => r.type === 'RETURN_FREIGHT'), `no RETURN_FREIGHT (have ${rows.map((r) => r.type).join(', ')})`);
@@ -1263,11 +1479,60 @@ async function flow10CancelReturnRto() {
     check(refunds.length > 0, 'no refund');
   }, { page: () => S.sellerPage, needs: ['shopper', 'live', 'delivered'] });
 
+  await step(F, 'exchange claim: an identical item goes out free after the check, the sale stands', async () => {
+    const o = await prepaidOrder(S.simpleVariantId);
+    const s = await fulfil(o.id, o.items[0].id, S.sellerPage, { tag: 'exchange' });
+    await courier(s.awbNumber, 'DELIVERED');
+    await apiOk('POST', `/api/orders/items/${o.items[0].id}/return`, S.shopperToken, { reason: 'DEFECTIVE', remedy: 'EXCHANGE', ...(await evidence()) });
+    const ret = await prisma.return.findFirst({ where: { orderItemId: o.items[0].id } });
+    await apiOk('PATCH', `/api/seller/returns/${ret.id}`, S.sellerToken, { action: 'approve' });
+    const reverse = await prisma.shipment.findFirst({ where: { returnId: ret.id } });
+    check(reverse?.awbNumber, 'no reverse pickup booked');
+    await courier(reverse.awbNumber, 'PICKED_UP');
+    await courier(reverse.awbNumber, 'DELIVERED');
+    await apiOk('PATCH', `/api/seller/returns/${ret.id}`, S.sellerToken, { action: 'received', condition: 'OK' });
+    const done = await prisma.return.findUnique({ where: { id: ret.id }, include: { refund: true } });
+    check(done.replacementOrderId && !done.refund, `exchange: replacement ${done.replacementOrderId}, refund ${done.refund?.id}`);
+    const rep = await prisma.order.findUnique({ where: { id: done.replacementOrderId } });
+    check(rep.paymentMethod === 'REPLACEMENT' && rep.totalPaise === 0, `replacement ${rep.paymentMethod} ₹${rep.totalPaise / 100}`);
+    const line = await prisma.orderItem.findUnique({ where: { id: o.items[0].id } });
+    check(line.status === 'DELIVERED', `the exchanged line is ${line.status}`);
+  }, { needs: ['shopper', 'live', 'delivered'] });
+
+  await step(F, 'after dispatch the buyer asks to stop the parcel: a ticket the seller hears about', async () => {
+    const o = await prepaidOrder(S.simpleVariantId);
+    await fulfil(o.id, o.items[0].id, S.sellerPage, { tag: 'intercept' });
+    const page = S.shopPage;
+    await goto(page, `/account/orders/${o.id}`);
+    await page.getByRole('button', { name: 'Stop this parcel' }).click({ timeout: 120_000 });
+    await page.locator('[data-intercept-request]').waitFor({ timeout: 30_000 });
+    const c = await prisma.complaint.findFirst({ where: { orderId: o.id, subject: { startsWith: 'Stop my parcel' } } });
+    check(c?.priority === 'HIGH', `intercept ticket ${c?.priority}`);
+    check(await prisma.notification.count({ where: { userId: S.sellerUserId, type: 'INTERCEPT_REQUEST' } }), 'the seller was not told');
+  }, { page: () => S.shopPage, needs: ['shopper', 'live', 'delivered'] });
+
+  await step(F, 'a parcel the courier reports lost: the buyer chooses a free replacement', async () => {
+    const o = await prepaidOrder(S.simpleVariantId);
+    const s = await fulfil(o.id, o.items[0].id, S.sellerPage, { tag: 'lost' });
+    await courier(s.awbNumber, 'LOST');
+    const page = S.shopPage;
+    await goto(page, `/account/orders/${o.id}`);
+    await page.locator('[data-lost-choice]').waitFor({ timeout: 120_000 });
+    await page.getByRole('button', { name: 'Send a replacement' }).click();
+    await page.getByText(/Replacement:/).waitFor({ timeout: 60_000 });
+    const rep = await prisma.orderItem.findFirst({ where: { replacementOfId: o.items[0].id }, include: { order: true } });
+    check(rep?.order.paymentMethod === 'REPLACEMENT' && rep.order.totalPaise === 0, `replacement ${rep?.order.paymentMethod}`);
+  }, { page: () => S.shopPage, needs: ['shopper', 'live', 'delivered'] });
+
   await step(F, 'RTO: refund when RTO starts, RTO freight, the buyer\'s RTO count', async () => {
     const o = await prepaidOrder(S.simpleVariantId);
     const s = await fulfil(o.id, o.items[0].id, S.sellerPage, { tag: 'rto' });
     const before = await prisma.user.findUnique({ where: { id: S.shopperId } });
     await courier(s.awbNumber, 'DELIVERY_FAILED');
+    // Up to three attempts are made (Shipping Policy 6.5): the buyer is told which this was.
+    const attempts = (await prisma.shipment.findUnique({ where: { id: s.id } })).deliveryAttempts;
+    check(attempts === 1, `delivery attempts counted ${attempts}`);
+    check(await prisma.notification.count({ where: { userId: S.shopperId, title: { contains: 'attempt 1 of 3' } } }), 'the buyer was not told "attempt 1 of 3"');
     await courier(s.awbNumber, 'RTO');
     const refunds = await prisma.refund.findMany({ where: { orderId: o.id } });
     check(refunds.length > 0, 'not refunded when RTO started');
@@ -1385,6 +1650,33 @@ async function flow12Support() {
     await goto(admin, '/admin/support');
     await admin.getByText(S.complaint).first().waitFor({ timeout: 120_000 });
   }, { page: () => S.shopPage, needs: ['shopper', 'admin'] });
+
+  await step(F, 'a product complaint goes to the seller (24 hours), who answers; the buyer sees the answer', async () => {
+    const order = await prisma.order.findFirst({ where: { userId: S.shopperId, items: { every: { sellerId: S.sellerId } } }, orderBy: { createdAt: 'desc' } });
+    const c = await apiOk('POST', '/api/complaints', S.shopperToken, { category: 'PRODUCT_QUALITY', description: `E2E the power bank does not charge ${RUN}`, orderId: order.id });
+    const row = await prisma.complaint.findUnique({ where: { complaintId: c.complaintId } });
+    check(row.sellerId === S.sellerId && row.sellerDueAt, 'not routed to the seller');
+    const page = S.sellerPage;
+    await goto(page, '/seller/customer-complaints');
+    const card = page.locator('[data-seller-complaint]').filter({ hasText: c.complaintId });
+    await card.waitFor({ timeout: 120_000 });
+    await card.locator('textarea[name=reply]').fill('Sorry — please raise an exchange claim and we will send a new one.');
+    await card.getByRole('button', { name: 'Reply' }).click();
+    await toast(page, /Reply sent to the buyer/);
+    const thread = await apiOk('GET', `/api/complaints/${row.id}`, S.shopperToken);
+    check(thread.messages.some((m) => m.authorName === 'The seller'), 'the buyer does not see the seller\'s answer');
+  }, { page: () => S.sellerPage, needs: ['shopper', 'approved'] });
+
+  await step(F, 'not satisfied: the buyer escalates to the Nodal Officer; timers follow', async () => {
+    const page = S.shopPage;
+    await goto(page, '/complaints');
+    await page.getByRole('button', { name: /Escalate to the Nodal Officer/ }).first().click({ timeout: 120_000 });
+    await page.getByText(/escalated/).first().waitFor({ timeout: 30_000 });
+    const row = await prisma.complaint.findFirst({ where: { userId: S.shopperId, level: 'NODAL' }, orderBy: { escalatedAt: 'desc' } });
+    check(row, 'no complaint at the Nodal Officer');
+    check(row.slaDueAt - row.escalatedAt === 72 * 3_600_000, 'the Nodal Officer does not have 72 hours');
+    check(row.resolveDueAt, 'no resolve-by date');
+  }, { page: () => S.shopPage, needs: ['shopper'] });
 }
 
 // ---------------------------------------------------------------------------
