@@ -66,6 +66,8 @@ export function PackingVideoPanel({
   const [error, setError] = useState('');
   const [cameraBlocked, setCameraBlocked] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  /** The preview is showing pictures: a recorder started before this fails. */
+  const [cameraReady, setCameraReady] = useState(false);
   const [take, setTake] = useState<{ blob: Blob; url: string; type: string } | null>(null);
   const liveRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -105,6 +107,7 @@ export function PackingVideoPanel({
       return;
     }
     setStage('starting');
+    setCameraReady(false);
     try {
       streamRef.current = await navigator.mediaDevices.getUserMedia({
         audio: false,
@@ -124,9 +127,15 @@ export function PackingVideoPanel({
 
   function startRecording() {
     const stream = streamRef.current;
-    if (!stream) return;
+    if (!stream || !cameraReady) return;
     const type = recorderType();
-    const recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 2_000_000 });
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 2_000_000 });
+    } catch {
+      setError('Recording could not start — press Start recording again, or Cancel and reopen the camera.');
+      return;
+    }
     recorderRef.current = recorder;
     const chunks: Blob[] = [];
     let bytes = 0;
@@ -151,7 +160,17 @@ export function PackingVideoPanel({
       setStage('review');
     };
     setElapsed(0);
-    recorder.start(1000);
+    try {
+      recorder.start(1000);
+    } catch {
+      // The camera stalled between the preview and the press (it happens on
+      // slow phones): say so and let the seller try again.
+      clearInterval(ticker);
+      recorderRef.current = null;
+      setError('Recording could not start — press Start recording again, or Cancel and reopen the camera.');
+      return;
+    }
+    setError('');
     setStage('recording');
   }
 
@@ -224,7 +243,14 @@ export function PackingVideoPanel({
       {(stage === 'live' || stage === 'recording') && (
         <div className="mt-3 max-w-md">
           <div className="relative overflow-hidden rounded-lg bg-black">
-            <video ref={liveRef} autoPlay muted playsInline className="max-h-72 w-full object-contain" />
+            <video
+              ref={liveRef}
+              autoPlay
+              muted
+              playsInline
+              onPlaying={() => setCameraReady(true)}
+              className="max-h-72 w-full object-contain"
+            />
             {stage === 'recording' && (
               <span className="absolute left-2 top-2 flex items-center gap-1.5 rounded-full bg-black/70 px-2 py-0.5 text-xs font-semibold text-white">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
@@ -234,7 +260,13 @@ export function PackingVideoPanel({
           </div>
           <div className="mt-2 flex gap-2">
             {stage === 'live' ? (
-              <button type="button" onClick={startRecording} className={`${button} bg-red-600 text-white hover:bg-red-700`}>
+              <button
+                type="button"
+                onClick={startRecording}
+                disabled={!cameraReady}
+                title={cameraReady ? undefined : 'Waiting for the camera…'}
+                className={`${button} bg-red-600 text-white hover:bg-red-700`}
+              >
                 ● Start recording
               </button>
             ) : (
