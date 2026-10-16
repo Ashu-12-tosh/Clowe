@@ -12,9 +12,9 @@ We want to fix every problem quickly. Most are solved fastest from **My Orders**
 
 If your complaint is not resolved, or it is about content on the site or how we handle your data, write to our Grievance Officer. As required by the Consumer Protection (E-Commerce) Rules, 2020 and the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021:
 
-- **Name:** [TO FILL: Grievance Officer's full name]
-- **Designation:** [TO FILL: Grievance Officer's designation]
-- **Email:** [TO FILL: Grievance Officer's email]
+- **Name:** Shubham
+- **Designation:** Designated Partner, {{legal.name}}
+- **Email:** grievance@cloweshop.com
 - **Phone:** {{legal.supportPhone}}
 - **Address:** {{legal.name}}, {{legal.registeredAddress}}
 

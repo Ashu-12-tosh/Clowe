@@ -40,7 +40,6 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
       { label: 'Become a Seller', href: '/sell' },
       { label: 'Seller Terms', href: '/pages/seller-terms' },
       { label: 'Seller Fees', href: '/pages/seller-fees' },
-      { label: 'Affiliate Program', href: '/pages/affiliate' },
     ],
   },
   {

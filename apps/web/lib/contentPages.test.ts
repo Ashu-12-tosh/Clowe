@@ -43,6 +43,17 @@ describe('content pages', () => {
     }
   });
 
+  it('leave nothing to fill in', () => {
+    for (const page of CONTENT_PAGES) expect(read(page.slug), page.slug).not.toMatch(/TO FILL|TODO|\[placeholder/i);
+  });
+
+  it('describe no feature Clowe does not have: those pages are gone (and 404)', () => {
+    for (const slug of ['affiliate', 'recalls', 'accelerator']) {
+      expect(CONTENT_PAGES.some((p) => p.slug === slug), slug).toBe(false);
+      expect(fs.existsSync(path.join(PAGES, `${slug}.md`)), slug).toBe(false);
+    }
+  });
+
   it('the support FAQ carries no internal notes', () => {
     for (const e of FAQ_ENTRIES) expect(e.answer, e.label).not.toMatch(/TODO/);
   });
