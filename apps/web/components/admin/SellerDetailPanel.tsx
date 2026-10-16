@@ -17,6 +17,7 @@ import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import SellerKycPanel, { KycFraudBanner } from './SellerKycPanel';
 import SellerLedgerTab from './SellerLedgerTab';
+import { ExternalLink } from '@/components/ExternalLink';
 
 /** What each account action says when it goes through. */
 const DONE = {
@@ -109,6 +110,23 @@ export default function SellerDetailPanel({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  /** "Needs more info": the applicant is told what to send (app, SMS, e-mail). */
+  async function requestInfo() {
+    const message = prompt(`What does ${detail?.shopName} need to send? (shown to the seller)`);
+    if (!message || message.trim().length < 5 || busy) return;
+    setBusy('request-info');
+    setActionError('');
+    try {
+      await api(`/api/admin/sellers/${sellerId}/request-info`, { auth: true, body: { message: message.trim() }, success: 'Asked the seller for more' });
+      await load();
+      onChanged();
+    } catch (err) {
+      setActionError(err instanceof ApiRequestError ? err.message : 'Could not send the request');
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function act(action: 'approve' | 'reject' | 'suspend' | 'ban' | 'reinstate') {
     let body: Record<string, unknown> = { action };
@@ -564,6 +582,16 @@ export default function SellerDetailPanel({
                     >
                       {busy === 'reject' ? <><Spinner className="mr-1" />Rejecting…</> : '✕ Reject'}
                     </button>
+                    {detail.status === 'PENDING' && (
+                      <button
+                        onClick={() => void requestInfo()}
+                        disabled={!!busy}
+                        data-action="request-info"
+                        className="rounded-lg border border-amber-300 px-4 py-2 text-xs font-bold uppercase tracking-wide text-amber-800 hover:bg-amber-50 disabled:opacity-50"
+                      >
+                        {busy === 'request-info' ? <><Spinner className="mr-1" />Asking…</> : '? Needs more info'}
+                      </button>
+                    )}
                   </>
                 )}
                 {detail.status === 'APPROVED' && (
@@ -630,6 +658,38 @@ export default function SellerDetailPanel({
                     </ul>
                   </div>
                 )}
+              <div className="mt-3 rounded-lg border border-gray-200 p-3 text-[11px]" data-application>
+                <p className="font-semibold text-ink-900">
+                  Application {detail.application.applicationId}
+                  {detail.application.submittedAt && (
+                    <span className="font-normal text-gray-500"> · submitted {new Date(detail.application.submittedAt).toLocaleDateString('en-IN')}</span>
+                  )}
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {detail.application.documents.map((d) => (
+                    <li key={d.key}>
+                      {d.label}:{' '}
+                      {d.url ? (
+                        <ExternalLink href={d.url} className="font-semibold text-brand-600 underline">
+                          open
+                        </ExternalLink>
+                      ) : (
+                        <span className="text-gray-400">not given</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {detail.application.infoRequest && (
+                  <p className="mt-1 text-amber-800">Asked for more: {detail.application.infoRequest}</p>
+                )}
+                <p className="mt-1 text-gray-500">
+                  Vendor Terms: {detail.application.vendorTermsCurrent ? 'current version accepted' : 'current version NOT accepted yet'}
+                  {detail.application.termsAcceptances[0] &&
+                    ` — last ${detail.application.termsAcceptances[0].version} on ${new Date(detail.application.termsAcceptances[0].acceptedAt).toLocaleString('en-IN')}${
+                      detail.application.termsAcceptances[0].ip ? ` from ${detail.application.termsAcceptances[0].ip}` : ''
+                    }`}
+                </p>
+              </div>
               <p className="mt-2 text-[11px] text-gray-400">
                 Suspending or banning hides every live listing from the storefront immediately;
                 reinstating brings them back.

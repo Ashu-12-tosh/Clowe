@@ -28,7 +28,12 @@ import {
   monthToDateIST,
   periodWindow,
   isNotASale,
+  SELLER_DOCUMENT_LABELS,
+  sellerApplicationId,
+  sellerInfoRequestSchema,
+  VENDOR_TERMS_VERSION,
 } from '@clowe/shared';
+import { resolveFileUrls } from '../services/assets';
 import { syncWarehouse, syncWarehouseSafe } from '../services/shipping/warehouses';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -783,6 +788,48 @@ adminSellersRouter.post('/:id/courier-warehouse', async (req, res, next) => {
   }
 });
 
+/** The application's documents (fresh private URLs), any request for more, and every terms acceptance. */
+async function applicationView(sellerId: string): Promise<AdminSellerDetail['application']> {
+  const s = await prisma.sellerProfile.findUniqueOrThrow({
+    where: { id: sellerId },
+    include: { termsAcceptances: { orderBy: { acceptedAt: 'desc' }, take: 10 } },
+  });
+  const keys = ['constitutionDoc', 'cancelledChequeDoc', 'signatoryKycDoc', 'brandAuthorisationDoc'] as const;
+  const urls = await resolveFileUrls(keys.map((k) => s[k]));
+  return {
+    applicationId: sellerApplicationId(s.id),
+    submittedAt: s.applicationSubmittedAt?.toISOString() ?? null,
+    documents: keys.map((key, i) => ({ key, label: SELLER_DOCUMENT_LABELS[key], url: urls[i] ?? null })),
+    infoRequest: s.infoRequest,
+    infoRequestedAt: s.infoRequestedAt?.toISOString() ?? null,
+    vendorTermsCurrent: s.vendorTermsVersion === VENDOR_TERMS_VERSION,
+    termsAcceptances: s.termsAcceptances.map((t) => ({ version: t.version, acceptedAt: t.acceptedAt.toISOString(), ip: t.ip, userAgent: t.userAgent })),
+  };
+}
+
+// "Needs more info": ask a pending applicant for a document or a detail before deciding.
+adminSellersRouter.post('/:id/request-info', async (req, res, next) => {
+  try {
+    const { message } = sellerInfoRequestSchema.parse(req.body);
+    const seller = await prisma.sellerProfile.findUnique({ where: { id: req.params.id }, include: { user: { select: { id: true, phone: true, email: true } } } });
+    if (!seller) throw ApiError.notFound('Seller not found');
+    if (seller.status !== 'PENDING') throw ApiError.badRequest('Only a pending application can be asked for more', 'NOT_PENDING');
+    await prisma.sellerProfile.update({ where: { id: seller.id }, data: { infoRequest: message, infoRequestedAt: new Date() } });
+    const ref = sellerApplicationId(seller.id);
+    const body = `Your Clowe seller application ${ref} needs more information: ${message} Open the seller page to send it.`;
+    await prisma.notification.create({
+      data: { userId: seller.user.id, type: 'SELLER_APPLICATION', title: 'More information needed', body, linkHref: '/seller' },
+    });
+    sendToUserSafe(seller.user.id, { channel: 'sms', to: `+91${seller.user.phone}`, body: `Clowe: ${body}` }, { critical: true });
+    if (seller.user.email) {
+      sendToUserSafe(seller.user.id, { channel: 'email', to: seller.user.email, subject: `Seller application ${ref}`, body }, { critical: true });
+    }
+    res.json({ success: true, data: { requested: true } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 adminSellersRouter.get('/:id', async (req, res, next) => {
   try {
     const seller = await prisma.sellerProfile.findUnique({
@@ -856,6 +903,7 @@ adminSellersRouter.get('/:id', async (req, res, next) => {
       kyc,
       kycApprovalWarnings: kycApprovalWarnings(kyc),
       approvalBlockers: approvalBlockersFor(seller),
+      application: await applicationView(seller.id),
       courierWarehouse: {
         status: seller.courierWarehouseStatus,
         name: seller.courierWarehouseName,

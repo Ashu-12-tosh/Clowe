@@ -190,6 +190,33 @@ uploadsRouter.post(
   },
 );
 
+// A seller's application document (Vendor Terms 2.1): constitution
+// document, cancelled cheque, signatory KYC, brand authorisation. PDF or a
+// photo, up to 10 MB. Private: that seller and admins see it.
+const documentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf' || ALLOWED.has(file.mimetype)) cb(null, true);
+    else cb(new ApiError(400, 'INVALID_FILE_TYPE', 'Upload a PDF, JPG, PNG or WebP file'));
+  },
+});
+
+uploadsRouter.post('/seller-document', requireAuth, uploadLimiter, documentUpload.single('document'), async (req, res, next) => {
+  try {
+    const file = req.file;
+    if (!file) throw ApiError.badRequest('No file uploaded. Use multipart field name "document".');
+    const head = file.buffer.subarray(0, 12);
+    const contentType = head.subarray(0, 5).toString('ascii') === '%PDF-' ? 'application/pdf' : imageTypeOf(head);
+    if (!contentType) throw ApiError.badRequest('That file is not a valid PDF or image', 'INVALID_FILE_CONTENT');
+    const stored = await storePrivateFile({ purpose: 'SELLER_DOCUMENT', ownerId: req.auth!.userId, body: file.buffer, contentType });
+    const body: UploadedAsset = { ref: stored.ref, url: (await resolveFileUrl(stored.ref))! };
+    res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // A buyer's unboxing video for a return claim (Return Policy 3.2). Private:
 // the buyer, that item's seller and admins see it.
 uploadsRouter.post('/return-video', requireAuth, uploadLimiter, videoUpload.single('video'), async (req, res, next) => {

@@ -16,7 +16,12 @@ import {
   AD_PLACEMENT_LABELS,
   adCreateSchema,
   phoneSchema,
+  sellerApplicationId,
+  sellerApplicationSchema,
   sellerRegisterSchema,
+  sellerApplicationUpdateSchema,
+  VENDOR_TERMS_VERSION,
+  vendorTermsAcceptSchema,
   sellerProductUpsertSchema,
   sellerReturnActionSchema,
   type SellerAdRow,
@@ -37,6 +42,8 @@ import { priceInput, sellerPricesOf, type PricedUpsertInput } from '../services/
 import { brandSuggestions, linkBrand } from '../services/brands';
 import { packingVideoView } from '../services/packingVideos';
 import { claimEvidenceView } from '../services/returnClaims';
+import { assertOwnAssets } from '../services/assets';
+import { sendToUserSafe } from '../services/messaging';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { applyReturnDecision, findSellerReturn } from '../services/returnService';
@@ -146,7 +153,16 @@ function toProfileInfo(p: SellerProfile): SellerProfileInfo {
     state: p.state,
     createdAt: p.createdAt.toISOString(),
     hasGstin: Boolean(p.gstNumber?.trim()),
+    applicationId: sellerApplicationId(p.id),
+    applicationSubmittedAt: (p.applicationSubmittedAt ?? p.createdAt).toISOString(),
+    infoRequest: p.status === 'PENDING' ? p.infoRequest : null,
+    vendorTermsCurrent: p.vendorTermsVersion === VENDOR_TERMS_VERSION,
   };
+}
+
+/** Where an acceptance came from, kept with it as evidence. */
+function acceptanceOrigin(req: Request): { ip: string | null; userAgent: string | null } {
+  return { ip: req.ip ?? null, userAgent: req.get('user-agent')?.slice(0, 300) ?? null };
 }
 
 function slugify(text: string): string {
@@ -176,10 +192,23 @@ sellerRouter.use(requireAuth);
 // Registration & profile
 // ---------------------------------------------------------------------------
 
-// Apply to become a seller. Profile starts PENDING; admin approves in Phase 4.
+// Apply to become a seller (Vendor Terms 2.1): the business details, the
+// documents, and acceptance of the Vendor Terms — without it, nothing is
+// created. The profile starts PENDING; an admin reviews it.
 sellerRouter.post('/register', async (req, res, next) => {
   try {
+    if (req.body?.acceptVendorTerms !== true) {
+      throw ApiError.badRequest('Accept the Vendor Terms & Seller Agreement to submit your application', 'VENDOR_TERMS_REQUIRED');
+    }
+    // The whole application is checked; the profile takes its business details.
+    const { vendorTermsVersion, constitutionDoc, cancelledChequeDoc, signatoryKycDoc, brandAuthorisationDoc } =
+      sellerApplicationSchema.parse(req.body);
     const { referralCode, ...input } = sellerRegisterSchema.parse(req.body);
+    if (vendorTermsVersion !== VENDOR_TERMS_VERSION) {
+      throw ApiError.badRequest('The Vendor Terms have changed — please read and accept them again', 'VENDOR_TERMS_OUTDATED');
+    }
+    const docs = [constitutionDoc, cancelledChequeDoc, signatoryKycDoc, ...(brandAuthorisationDoc ? [brandAuthorisationDoc] : [])];
+    await assertOwnAssets(docs, { ownerId: req.auth!.userId, purpose: 'SELLER_DOCUMENT' });
     const existing = await prisma.sellerProfile.findUnique({
       where: { userId: req.auth!.userId },
     });
@@ -204,9 +233,22 @@ sellerRouter.post('/register', async (req, res, next) => {
       }
     }
 
+    const now = new Date();
     const profile = await prisma.sellerProfile.create({
-      data: { userId: req.auth!.userId, ...input },
+      data: {
+        userId: req.auth!.userId,
+        ...input,
+        constitutionDoc,
+        cancelledChequeDoc,
+        signatoryKycDoc,
+        brandAuthorisationDoc: brandAuthorisationDoc ?? null,
+        applicationSubmittedAt: now,
+        vendorTermsVersion,
+        vendorTermsAcceptedAt: now,
+        termsAcceptances: { create: { version: vendorTermsVersion, acceptedAt: now, ...acceptanceOrigin(req) } },
+      },
     });
+    await announceApplication(profile.id, req.auth!.userId, 'received');
     if (referrer) {
       await prisma.sellerReferral.create({
         data: { referrerId: referrer.id, referredId: profile.id },
@@ -294,6 +336,90 @@ sellerRouter.get('/referral', requireSeller, async (req, res, next) => {
 
 sellerRouter.get('/profile', requireSeller, (req, res) => {
   res.json({ success: true, data: toProfileInfo(req.seller!) });
+});
+
+/** Tell the seller (app, SMS, e-mail) and the admins about an application, new or answered. */
+async function announceApplication(profileId: string, userId: string, what: 'received' | 'updated'): Promise<void> {
+  const [user, profile, admins] = await Promise.all([
+    prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true, email: true } }),
+    prisma.sellerProfile.findUniqueOrThrow({ where: { id: profileId }, select: { shopName: true } }),
+    prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } }),
+  ]);
+  const ref = sellerApplicationId(profileId);
+  const body =
+    what === 'received'
+      ? `Your Clowe seller application ${ref} is received. We'll review it and tell you by SMS and e-mail.`
+      : `Thanks — the information for your Clowe seller application ${ref} is received. We'll review it and tell you by SMS and e-mail.`;
+  await prisma.notification.createMany({
+    data: [
+      { userId, type: 'SELLER_APPLICATION', title: what === 'received' ? 'Application submitted' : 'Information received', body, linkHref: '/seller' },
+      ...admins.map((a) => ({
+        userId: a.id,
+        type: 'SELLER_APPLICATION',
+        title: `${what === 'received' ? 'New seller application' : 'Seller application updated'} — ${ref}`,
+        body: `${profile.shopName}: review the documents and decide.`,
+        linkHref: '/admin/sellers',
+      })),
+    ],
+  });
+  sendToUserSafe(userId, { channel: 'sms', to: `+91${user.phone}`, body: `Clowe: ${body}` }, { critical: true });
+  if (user.email) sendToUserSafe(userId, { channel: 'email', to: user.email, subject: `Seller application ${ref}`, body }, { critical: true });
+}
+
+// Accept the current Vendor Terms (a seller who registered before them, or
+// after they changed): asked once, in the same window as at registration.
+sellerRouter.post('/terms/accept', requireSeller, async (req, res, next) => {
+  try {
+    const { version } = vendorTermsAcceptSchema.parse(req.body);
+    if (version !== VENDOR_TERMS_VERSION) {
+      throw ApiError.badRequest('The Vendor Terms have changed — please read them again', 'VENDOR_TERMS_OUTDATED');
+    }
+    const now = new Date();
+    const updated = await prisma.sellerProfile.update({
+      where: { id: req.seller!.id },
+      data: {
+        vendorTermsVersion: version,
+        vendorTermsAcceptedAt: now,
+        termsAcceptances: { create: { version, acceptedAt: now, ...acceptanceOrigin(req) } },
+      },
+    });
+    res.json({ success: true, data: toProfileInfo(updated) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// A pending application answering an admin's request for more information.
+sellerRouter.post('/application', requireSeller, async (req, res, next) => {
+  try {
+    if (req.seller!.status !== 'PENDING') throw ApiError.badRequest('This application has already been decided', 'APPLICATION_DECIDED');
+    const input = sellerApplicationUpdateSchema.parse(req.body);
+    const docs = [input.constitutionDoc, input.cancelledChequeDoc, input.signatoryKycDoc, input.brandAuthorisationDoc].filter(
+      (d): d is string => !!d,
+    );
+    if (docs.length === 0 && !input.gstNumber && !input.note) throw ApiError.badRequest('Add the document or details asked for', 'NOTHING_SENT');
+    await assertOwnAssets(docs, { ownerId: req.auth!.userId, purpose: 'SELLER_DOCUMENT' });
+    const updated = await prisma.sellerProfile.update({
+      where: { id: req.seller!.id },
+      data: {
+        ...(input.constitutionDoc ? { constitutionDoc: input.constitutionDoc } : {}),
+        ...(input.cancelledChequeDoc ? { cancelledChequeDoc: input.cancelledChequeDoc } : {}),
+        ...(input.signatoryKycDoc ? { signatoryKycDoc: input.signatoryKycDoc } : {}),
+        ...(input.brandAuthorisationDoc ? { brandAuthorisationDoc: input.brandAuthorisationDoc } : {}),
+        ...(input.gstNumber ? { gstNumber: input.gstNumber } : {}),
+        infoRequest: null,
+        infoRequestedAt: null,
+        applicationSubmittedAt: new Date(),
+      },
+    });
+    if (input.note) {
+      await prisma.sellerNote.create({ data: { sellerId: updated.id, authorId: req.auth!.userId, body: `Seller's reply to the request for information: ${input.note}` } });
+    }
+    await announceApplication(updated.id, req.auth!.userId, 'updated');
+    res.json({ success: true, data: toProfileInfo(updated) });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ---------------------------------------------------------------------------

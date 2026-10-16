@@ -452,6 +452,19 @@ model SellerProfile {
   status          SellerStatus @default(PENDING)
   rejectionReason String?
   approvedAt      DateTime?
+  // The application (Vendor Terms 2.1): submitted when, the documents with
+  // it (private "asset:" references), and an admin's request for more.
+  applicationSubmittedAt DateTime?
+  constitutionDoc        String?
+  cancelledChequeDoc     String?
+  signatoryKycDoc        String?
+  brandAuthorisationDoc  String?
+  infoRequest            String?
+  infoRequestedAt        DateTime?
+  // The Vendor Terms version last accepted (history in seller_terms_acceptances).
+  vendorTermsVersion     String?
+  vendorTermsAcceptedAt  DateTime?
+  termsAcceptances       SellerTermsAcceptance[]
   // Registered entity type, e.g. Proprietorship / Private Limited.
   businessType    String?
   kycStatus       SellerKycStatus @default(PENDING_DOCS)
@@ -1718,6 +1731,21 @@ model TryOnHistory {
   @@map("tryon_history")
 }
 
+/// Each acceptance of the Vendor Terms and Seller Agreement: which version,
+/// when, and from where (kept as evidence of the contract).
+model SellerTermsAcceptance {
+  id         String        @id @default(cuid())
+  sellerId   String
+  seller     SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  version    String
+  acceptedAt DateTime      @default(now())
+  ip         String?
+  userAgent  String?
+
+  @@index([sellerId, acceptedAt])
+  @@map("seller_terms_acceptances")
+}
+
 // Customer support complaints raised via the chat bot.
 model Complaint {
   id          String          @id @default(cuid())
@@ -2404,6 +2432,7 @@ enum AssetPurpose {
   TRYON_PHOTO // private: the shopper, admins
   TRYON_RESULT // private: the shopper, admins
   PACKING_VIDEO // private: the seller, admins
+  SELLER_DOCUMENT // private: a seller's application documents — that seller, admins
   RETURN_VIDEO // private: the buyer's unboxing video for a claim — the buyer, that item's seller, admins
 }
 

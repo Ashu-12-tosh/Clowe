@@ -7,6 +7,8 @@ import type { SellerProfileInfo } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import { SellerContext, type SellerState } from '@/components/seller/SellerContext';
 import DashShell, { type DashNavItem } from '@/components/DashShell';
+import { ApplicationStatus } from '@/components/seller/ApplicationStatus';
+import { VendorTermsModal } from '@/components/seller/VendorTermsModal';
 
 const NAV: DashNavItem[] = [
   { href: '/seller', label: 'Dashboard', icon: '▦' },
@@ -51,6 +53,21 @@ export default function SellerLayout({ children }: { children: React.ReactNode }
   const [state, setState] = useState<SellerState>({ kind: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
   const [pendingReturns, setPendingReturns] = useState(0);
+  const [acceptingTerms, setAcceptingTerms] = useState(false);
+  const [termsError, setTermsError] = useState('');
+
+  async function acceptTerms(version: string) {
+    setAcceptingTerms(true);
+    setTermsError('');
+    try {
+      const profile = await api<SellerProfileInfo>('/api/seller/terms/accept', { auth: true, quiet: true, body: { version } });
+      setState({ kind: 'ready', profile });
+    } catch (err) {
+      setTermsError(err instanceof ApiRequestError ? err.message : 'Could not save your acceptance');
+    } finally {
+      setAcceptingTerms(false);
+    }
+  }
 
   // Sidebar badge: returns waiting for a decision (refreshed on navigation).
   useEffect(() => {
@@ -125,6 +142,17 @@ export default function SellerLayout({ children }: { children: React.ReactNode }
     return null; // redirecting to /seller/register
   }
 
+  // Not approved (yet): the application's status, never the dashboard.
+  if (state.profile.status === 'PENDING' || state.profile.status === 'REJECTED') {
+    return (
+      <SellerContext.Provider value={{ state, reload: () => setReloadKey((k) => k + 1) }}>
+        <SellerPublicShell>
+          <ApplicationStatus profile={state.profile} onChanged={() => setReloadKey((k) => k + 1)} />
+        </SellerPublicShell>
+      </SellerContext.Provider>
+    );
+  }
+
   return (
     <SellerContext.Provider value={{ state, reload: () => setReloadKey((k) => k + 1) }}>
       <DashShell
@@ -136,6 +164,17 @@ export default function SellerLayout({ children }: { children: React.ReactNode }
       >
         <div className="mx-auto max-w-6xl">{children}</div>
       </DashShell>
+      {/* A seller who has not accepted the current Vendor Terms accepts them before going on. */}
+      {!state.profile.vendorTermsCurrent && (
+        <VendorTermsModal
+          title="Updated Vendor Terms & Seller Agreement"
+          intro="Please read and accept the current agreement to continue selling on Clowe."
+          submitLabel="Accept and continue"
+          busy={acceptingTerms}
+          error={termsError}
+          onAccept={(version) => void acceptTerms(version)}
+        />
+      )}
     </SellerContext.Provider>
   );
 }

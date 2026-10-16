@@ -7,6 +7,17 @@
 export const TERMS_VERSION = '2026-10-16';
 
 /**
+ * The version of the Vendor Terms and Seller Agreement (with the Terms and
+ * Conditions and the Privacy Policy) a seller accepts — the document's "last
+ * updated" date. Raise it when the document changes in a way that needs
+ * accepting again: every seller is then asked once more on their next visit.
+ */
+export const VENDOR_TERMS_VERSION = '2026-10-12';
+
+export const VENDOR_TERMS_ACCEPT_TEXT =
+  'I have read and accept the Vendor Terms & Seller Agreement, the Terms & Conditions and the Privacy Policy';
+
+/**
  * The legal entity behind the site — what payment gateways (Cashfree) check
  * the website for. Admin-editable platform settings, never hard-coded on a
  * page: the footer, Contact Us, About and every policy page read them.

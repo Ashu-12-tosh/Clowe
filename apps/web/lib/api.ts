@@ -118,6 +118,13 @@ export async function uploadVideo(file: File): Promise<UploadedAsset> {
   return upload<UploadedAsset>('/api/uploads/video', form);
 }
 
+/** Upload one seller application document (PDF or image). */
+export async function uploadSellerDocument(file: File): Promise<UploadedAsset> {
+  const form = new FormData();
+  form.append('document', file);
+  return upload<UploadedAsset>('/api/uploads/seller-document', form);
+}
+
 /** Upload a buyer's unboxing video for a return claim (multipart). */
 export async function uploadReturnVideo(file: File): Promise<UploadedAsset> {
   const form = new FormData();

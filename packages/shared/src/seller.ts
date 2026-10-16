@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { gstNumberField, gstinMatchesPan, panNumberField } from './taxIds';
 import type { PackingVideoView } from './sellerOrders';
 import { optionValuesSchema } from './variants';
+import { assetRefSchema } from './assets';
+import { IFSC_PATTERN } from './kyc';
 import { productAttributeInputSchema, type ProductAttribute } from './productAttributes';
 
 // ---------------------------------------------------------------------------
@@ -47,6 +49,57 @@ export const sellerRegisterSchema = z.object({
   .superRefine(gstinMatchesPan);
 export type SellerRegisterInput = z.infer<typeof sellerRegisterSchema>;
 
+/**
+ * A seller's application as submitted (Vendor Terms 2.1): the business
+ * details above, now required where the Vendor Terms require them — PAN,
+ * bank account with a cancelled cheque, principal place of business — the
+ * constitution document and the authorised signatory's KYC, an optional
+ * brand authorisation, and acceptance of the Vendor Terms. A GSTIN stays
+ * optional here ("where registration is required", 2.1(c)).
+ */
+export const sellerApplicationSchema = z
+  .object({
+    constitutionDoc: assetRefSchema,
+    cancelledChequeDoc: assetRefSchema,
+    signatoryKycDoc: assetRefSchema,
+    brandAuthorisationDoc: assetRefSchema.optional(),
+    acceptVendorTerms: z.literal(true, { errorMap: () => ({ message: 'Accept the Vendor Terms & Seller Agreement to submit' }) }),
+    vendorTermsVersion: z.string().min(1),
+  })
+  .and(sellerRegisterSchema)
+  .superRefine((v, ctx) => {
+    const need = (key: string, ok: boolean, message: string) => {
+      if (!ok) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message });
+    };
+    need('panNumber', !!v.panNumber, 'PAN is required');
+    need('bankAccountName', !!v.bankAccountName, 'Name on the bank account is required');
+    need('bankAccountNo', /^\d{9,18}$/.test(v.bankAccountNo ?? ''), 'Account number is 9–18 digits');
+    need('bankIfsc', IFSC_PATTERN.test((v.bankIfsc ?? '').toUpperCase()), 'IFSC is 11 characters, like HDFC0001234');
+    need('bankName', !!v.bankName, 'Bank name is required');
+    need('addressLine1', !!v.addressLine1, 'Business address is required');
+    need('city', !!v.city, 'City is required');
+    need('state', !!v.state, 'State is required');
+    need('pincode', !!v.pincode, 'PIN code is required');
+  });
+export type SellerApplicationInput = z.infer<typeof sellerApplicationSchema>;
+
+/** A pending application's answer to "needs more information": any field or document again. */
+export const sellerApplicationUpdateSchema = z.object({
+  constitutionDoc: assetRefSchema.optional(),
+  cancelledChequeDoc: assetRefSchema.optional(),
+  signatoryKycDoc: assetRefSchema.optional(),
+  brandAuthorisationDoc: assetRefSchema.optional(),
+  gstNumber: gstNumberField.optional(),
+  note: z.string().trim().max(1000).optional(),
+});
+
+export const vendorTermsAcceptSchema = z.object({ version: z.string().min(1) });
+
+/** "SA-" and the last 8 of the profile id: the number a seller quotes for their application. */
+export function sellerApplicationId(profileId: string): string {
+  return `SA-${profileId.slice(-8).toUpperCase()}`;
+}
+
 export type SellerStatusValue = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' | 'BANNED';
 export type ProductStatusValue = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'ARCHIVED';
 
@@ -66,6 +119,13 @@ export interface SellerProfileInfo {
   createdAt: string;
   /** Whether a GSTIN is on file. Without one there are no payouts: every tax invoice is issued under it. */
   hasGstin: boolean;
+  /** The number to quote for the application, e.g. SA-4F2A9C1B. */
+  applicationId: string;
+  applicationSubmittedAt: string | null;
+  /** An admin asked for more before deciding (the application shows "Needs more info"). */
+  infoRequest: string | null;
+  /** True when the seller has accepted the current Vendor Terms. */
+  vendorTermsCurrent: boolean;
 }
 
 // ---------------------------------------------------------------------------

@@ -118,6 +118,16 @@ export interface AdminSellerDetail extends AdminSellerListRow {
    * acknowledged past). Empty = nothing blocks it.
    */
   approvalBlockers: string[];
+  /** The application (Vendor Terms 2.1): documents (short-lived URLs), requests for more, terms accepted. */
+  application: {
+    applicationId: string;
+    submittedAt: string | null;
+    documents: { key: 'constitutionDoc' | 'cancelledChequeDoc' | 'signatoryKycDoc' | 'brandAuthorisationDoc'; label: string; url: string | null }[];
+    infoRequest: string | null;
+    infoRequestedAt: string | null;
+    vendorTermsCurrent: boolean;
+    termsAcceptances: { version: string; acceptedAt: string; ip: string | null; userAgent: string | null }[];
+  };
   /** The pickup address as registered with Delhivery. */
   courierWarehouse: CourierWarehouseView;
   /** Performance the admin judges the shop on. */
@@ -204,6 +214,16 @@ export const adminSellerNoteSchema = z.object({
 export type AdminSellerNoteInput = z.infer<typeof adminSellerNoteSchema>;
 
 /** The refusal a seller's first approval meets without a GSTIN: every tax invoice to a buyer is issued under it. */
+/** An admin asks a pending applicant for more before deciding ("Needs more info"). */
+export const sellerInfoRequestSchema = z.object({ message: z.string().trim().min(5, 'Say what is needed').max(1000) });
+
+export const SELLER_DOCUMENT_LABELS = {
+  constitutionDoc: 'Constitution document',
+  cancelledChequeDoc: 'Cancelled cheque',
+  signatoryKycDoc: 'Authorised signatory KYC',
+  brandAuthorisationDoc: 'Brand authorisation (optional)',
+} as const;
+
 export const GSTIN_APPROVAL_BLOCKER = 'GSTIN required before approval — every tax invoice to a buyer is issued under it';
 
 /** What blocks a seller's first approval. Already-approved sellers have none. */

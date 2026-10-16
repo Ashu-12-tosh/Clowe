@@ -4,6 +4,7 @@ import { PrismaClient, Role } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { signAccessToken } from '../utils/jwt';
+import { completeApplication } from '../test/sellerApplication';
 
 /**
  * Registering a shop makes a customer a SELLER, but never demotes an admin:
@@ -25,7 +26,7 @@ async function registerAs(phone: string, role: Role, shopName: string) {
       authorization: `Bearer ${signAccessToken({ sub: user.id, role })}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ shopName }),
+    body: JSON.stringify(await completeApplication(prisma, user.id, shopName)),
   });
   const after = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, include: { sellerProfile: true } });
   return { status: res.status, role: after.role, shop: after.sellerProfile };
