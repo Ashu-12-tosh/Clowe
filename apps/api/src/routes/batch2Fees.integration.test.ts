@@ -50,16 +50,16 @@ const entries = (orderItemId: string) =>
   prisma.sellerLedgerEntry.findMany({ where: { orderItemId }, orderBy: { createdAt: 'asc' } }).then((rows) => Object.fromEntries(rows.map((r) => [r.type, r])));
 
 beforeAll(async () => {
-  const admin = await prisma.user.create({ data: { phone: '9196200000', name: 'Fees Admin', role: Role.ADMIN, referralCode: 'FEE-A' } });
+  const admin = await prisma.user.create({ data: { phone: '9177200000', name: 'Fees Admin', role: Role.ADMIN, referralCode: 'FEE-A' } });
   adminToken = signAccessToken({ sub: admin.id, role: 'ADMIN' });
-  const sellerUser = await prisma.user.create({ data: { phone: '9196200001', name: 'Fees Seller', role: Role.SELLER, referralCode: 'FEE-S' } });
+  const sellerUser = await prisma.user.create({ data: { phone: '9177200001', name: 'Fees Seller', role: Role.SELLER, referralCode: 'FEE-S' } });
   sellerUserId = sellerUser.id;
   sellerId = (
     await prisma.sellerProfile.create({
       data: { userId: sellerUser.id, shopName: 'Fees Shop', slug: 'fees-shop', status: SellerStatus.APPROVED, approvedAt: new Date(), gstNumber: '27ABCDE1234F1Z5' },
     })
   ).id;
-  const buyer = await prisma.user.create({ data: { phone: '9196200002', name: 'Fees Buyer', referralCode: 'FEE-B' } });
+  const buyer = await prisma.user.create({ data: { phone: '9177200002', name: 'Fees Buyer', referralCode: 'FEE-B' } });
   buyerToken = signAccessToken({ sub: buyer.id, role: 'CUSTOMER' });
   addressId = (
     await prisma.address.create({ data: { userId: buyer.id, name: 'Fees Buyer', phone: buyer.phone, line1: '1 Road', city: 'Pune', state: 'Maharashtra', pincode: '411001', isDefault: true } })

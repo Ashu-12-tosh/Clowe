@@ -79,9 +79,12 @@ describe('store closed for orders', () => {
     await expect.poll(() => prisma.auditLog.count({ where: { entityId: shopper.id, action: 'Marked as test account' } })).toBe(1);
   });
 
-  it('opens for everyone when the admin turns it on', async () => {
-    await setSetting('storeOpenForOrders', true);
+  it('the admin closes and opens it from Settings', async () => {
+    const admin = await user(Role.ADMIN);
     const shopper = await user();
+    expect((await call('PUT', '/api/admin/settings', admin.token, { storeOpenForOrders: false })).status).toBe(200);
+    expect((await call<{ open: boolean }>('GET', '/api/orders/availability', shopper.token)).json.data.open).toBe(false);
+    expect((await call('PUT', '/api/admin/settings', admin.token, { storeOpenForOrders: true })).status).toBe(200);
     expect((await call<{ open: boolean }>('GET', '/api/orders/availability', shopper.token)).json.data.open).toBe(true);
   });
 });

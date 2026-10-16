@@ -32,10 +32,10 @@ const IMG = 'https://cdn.example.com/banner-2000x750.jpg';
 
 beforeAll(async () => {
   const admin = await prisma.user.create({
-    data: { phone: '9196100001', name: 'Banner Admin', role: Role.ADMIN, referralCode: 'BANNER-A' },
+    data: { phone: '9177100001', name: 'Banner Admin', role: Role.ADMIN, referralCode: 'BANNER-A' },
   });
   const seller = await prisma.user.create({
-    data: { phone: '9196100002', name: 'Banner Seller', role: Role.SELLER, referralCode: 'BANNER-S' },
+    data: { phone: '9177100002', name: 'Banner Seller', role: Role.SELLER, referralCode: 'BANNER-S' },
   });
   adminToken = signAccessToken({ sub: admin.id, role: 'ADMIN' });
   sellerToken = signAccessToken({ sub: seller.id, role: 'SELLER' });

@@ -905,6 +905,8 @@ adminRouter.put('/settings', async (req, res, next) => {
       'kycNameMatchMinScore',
       // Coupons on or off for shoppers (and seller promo codes with them).
       'couponsEnabled',
+      // The pre-launch switch: shoppers can place orders.
+      'storeOpenForOrders',
     ] as const) {
       if (input[key] !== undefined) await setSetting(key, input[key]);
     }

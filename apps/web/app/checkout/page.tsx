@@ -239,6 +239,7 @@ export default function CheckoutPage() {
   if (lines.length === 0) {
     return (
       <main className="mx-auto max-w-2xl px-4 py-20 text-center">
+        {ordersOpen === false && <LaunchingSoon className="mb-6" />}
         <span className="text-5xl">🛍</span>
         <h1 className="mt-4 font-display text-2xl font-bold text-ink-900">Nothing to check out</h1>
         <p className="mt-2 text-sm text-gray-500">
