@@ -12,6 +12,7 @@ import AddToCartButton from '@/components/AddToCartButton';
 import { colorToHex } from '@/lib/colors';
 import ReviewsSection from '@/components/ReviewsSection';
 import RelatedProducts from '@/components/RelatedProducts';
+import { CompareButton } from '@/components/CompareBar';
 import DeliveryCard from '@/components/product/DeliveryCard';
 import OffersCard from '@/components/product/OffersCard';
 import SizeGuideModal from '@/components/product/SizeGuideModal';
@@ -476,6 +477,9 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
               stock={selected?.stock ?? 0}
               mode="buy"
             />
+          </div>
+          <div className="mt-2">
+            <CompareButton productId={product.id} />
           </div>
 
           {product.nonCancellable && (

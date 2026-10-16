@@ -46,7 +46,7 @@ export type PlanFeature = (typeof PLAN_FEATURES)[number];
  * Plan features whose part of the site is not built yet (AI search and AI
  * compare): shown as "Coming soon", never promised as working.
  */
-export const PLAN_FEATURES_COMING_SOON: readonly PlanFeature[] = ['AI_SEARCH_VISIBILITY'];
+export const PLAN_FEATURES_COMING_SOON: readonly PlanFeature[] = [];
 
 export const PLAN_FEATURE_LABELS: Record<PlanFeature, string> = {
   AI_LISTING: 'AI listing generation',
@@ -292,7 +292,7 @@ export const DEFAULT_COMMERCIAL: CommercialSettings = {
       TRYON_PROMOTION: [300, 1_000],
       COMPARE_PROMOTION: [300, 1_000],
     },
-    unavailableTypes: ['COMPARE_PROMOTION'],
+    unavailableTypes: [],
     campaignDays: 7,
     packages: {
       STARTER: { pricePaise: 49_900, types: ['SPONSORED_PRODUCT', 'AI_SEARCH_BOOST'], placements: [] },

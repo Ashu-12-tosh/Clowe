@@ -56,6 +56,8 @@ const SURFACE_TYPES: Record<AdSurface, { top: CpcAdType[]; row: CpcAdType[] }> =
   PRODUCT: { top: [], row: ['AI_RECOMMENDATION_BOOST'] },
   HOME: { top: [], row: ['SPIN360_PROMOTION'] },
   TRYON: { top: [], row: ['TRYON_PROMOTION'] },
+  // The compare page: products like the ones being compared.
+  COMPARE: { top: [], row: ['COMPARE_PROMOTION'] },
 };
 /** Which booked placements a surface shows. */
 const SURFACE_PLACEMENTS: Record<AdSurface, PlacementKind[]> = {
@@ -64,6 +66,7 @@ const SURFACE_PLACEMENTS: Record<AdSurface, PlacementKind[]> = {
   PRODUCT: [],
   HOME: ['HOMEPAGE_BANNER', 'SP_HOMEPAGE_BANNER', 'SP_HOMEPAGE_FEATURED', 'FEATURED_SELLER', 'FLASH_SALE', 'NEW_COLLECTION', 'SP_BRAND_SPOTLIGHT', 'SP_FESTIVAL_CAMPAIGN', 'SP_BASIC_PRODUCT'],
   TRYON: [],
+  COMPARE: [],
 };
 const ROW_SIZE = 4;
 
@@ -134,7 +137,7 @@ export async function serveAds(surface: AdSurface, ctx: { q?: string; categoryId
   const types = SURFACE_TYPES[surface];
   const wanted = [...types.top, ...types.row].filter((t) => !c.ads.unavailableTypes.includes(t));
   let contextCategory: string | undefined = ctx.categoryId;
-  if (surface === 'PRODUCT' && ctx.productId) {
+  if ((surface === 'PRODUCT' || surface === 'COMPARE') && ctx.productId) {
     contextCategory = (await prisma.product.findUnique({ where: { id: ctx.productId }, select: { categoryId: true } }))?.categoryId;
   }
   // A category page shows its subcategories' products too.
@@ -150,13 +153,13 @@ export async function serveAds(surface: AdSurface, ctx: { q?: string; categoryId
     ...(surface === 'SEARCH' && words.length
       ? { OR: words.flatMap((w) => [{ title: { contains: w, mode: 'insensitive' as const } }, { brand: { contains: w, mode: 'insensitive' as const } }]) }
       : {}),
-    ...((surface === 'CATEGORY' || surface === 'PRODUCT') && contextCategory ? { categoryId: { in: categoryIds } } : {}),
-    ...(surface === 'PRODUCT' && ctx.productId ? { id: { not: ctx.productId } } : {}),
+    ...((surface === 'CATEGORY' || surface === 'PRODUCT' || surface === 'COMPARE') && contextCategory ? { categoryId: { in: categoryIds } } : {}),
+    ...((surface === 'PRODUCT' || surface === 'COMPARE') && ctx.productId ? { id: { not: ctx.productId } } : {}),
     ...(surface === 'TRYON' ? { tryOnEnabled: true } : {}),
     ...(surface === 'HOME' && wanted.includes('SPIN360_PROMOTION') ? { spinImages: { isEmpty: false } } : {}),
   };
   if (surface === 'SEARCH' && words.length === 0) return { top: [], items: [], banners: [] };
-  if ((surface === 'CATEGORY' || surface === 'PRODUCT') && !contextCategory) return { top: [], items: [], banners: [] };
+  if ((surface === 'CATEGORY' || surface === 'PRODUCT' || surface === 'COMPARE') && !contextCategory) return { top: [], items: [], banners: [] };
 
   const campaigns = wanted.length
     ? await prisma.adCampaign.findMany({

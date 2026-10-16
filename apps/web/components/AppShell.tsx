@@ -8,6 +8,7 @@ import { api, getStoredUser } from '@/lib/api';
 import { recordPage } from '@/lib/returnTo';
 import Header from './Header';
 import Footer from './Footer';
+import CompareBar from './CompareBar';
 
 const ACCOUNT_LINKS = [
   { label: 'Wishlist', href: '/wishlist', icon: '♡' },
@@ -171,6 +172,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="flex-1">{children}</div>
+      <CompareBar />
       <Footer />
     </div>
   );

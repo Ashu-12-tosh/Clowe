@@ -29,6 +29,7 @@ import { settingsRouter } from './routes/settings';
 import { deliveryRouter } from './routes/delivery';
 import { adsRouter } from './routes/ads';
 import { adminAdReviewRouter, adServeRouter, sellerAdsRouter } from './routes/advertising';
+import { aiShoppingRouter } from './routes/aiShopping';
 import { creditsRouter } from './routes/credits';
 import { uploadsRouter, uploadDir } from './routes/uploads';
 import { homeRouter } from './routes/home';
@@ -190,6 +191,7 @@ export function createApp() {
   app.use('/api/payments', paymentsRouter);
   app.use('/api/tryon', tryonRouter);
   app.use('/api/products/:productId/reviews', reviewsRouter);
+  app.use('/api/ai', aiShoppingRouter);
   app.use('/api/ai', aiRouter);
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/referrals', referralsRouter);

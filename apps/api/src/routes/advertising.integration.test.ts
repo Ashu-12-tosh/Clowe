@@ -4,6 +4,7 @@ import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { attributeOrder, istDay, registerClick, serveAds } from '../services/advertising';
+import { updateCommercial } from '../services/commercial';
 import { postEntry } from '../services/sellerLedgerService';
 import { walletView } from '../services/wallet';
 import { signAccessToken } from '../utils/jwt';
@@ -87,10 +88,17 @@ describe('pay-per-click campaigns', () => {
     expect(ok.status, JSON.stringify(ok.json)).toBe(201);
   });
 
-  it('refuses an ad type whose surface does not exist yet', async () => {
+  it('sells AI Compare Promotion now that Compare exists, and refuses a type the admin switches off', async () => {
     const s = await seller();
-    const r = await call('POST', '/api/seller/advertising/cpc', s.token, { name: 'Compare', adTypes: ['COMPARE_PROMOTION'], productId: s.productId, bidPaise: 500, dailyBudgetPaise: 10_000 });
-    expect(r.json.error?.code).toBe('AD_TYPE_UNAVAILABLE');
+    const ok = await call('POST', '/api/seller/advertising/cpc', s.token, { name: 'Compare', adTypes: ['COMPARE_PROMOTION'], productId: s.productId, bidPaise: 500, dailyBudgetPaise: 10_000 });
+    expect(ok.status, JSON.stringify(ok.json)).toBe(201);
+    await updateCommercial({ ads: { unavailableTypes: ['COMPARE_PROMOTION'] } });
+    try {
+      const r = await call('POST', '/api/seller/advertising/cpc', s.token, { name: 'Compare', adTypes: ['COMPARE_PROMOTION'], productId: s.productId, bidPaise: 500, dailyBudgetPaise: 10_000 });
+      expect(r.json.error?.code).toBe('AD_TYPE_UNAVAILABLE');
+    } finally {
+      await updateCommercial({ ads: { unavailableTypes: [] } });
+    }
   });
 
   it('serves the campaign in a labelled slot for matching searches only', async () => {

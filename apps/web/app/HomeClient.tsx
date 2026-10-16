@@ -29,7 +29,7 @@ const TRUST_ITEMS = [
 
 const AI_FEATURES = [
   { icon: '✨', title: 'AI Try-On', text: 'Try clothes on virtually', href: '/tryon' },
-  { icon: '⌕', title: 'AI Search', text: 'Search with voice', href: '/products' },
+  { icon: '⌕', title: 'AI Search', text: 'Ask in your own words', href: '/ai-search' },
   { icon: '✦', title: 'AI Recommendations', text: 'Picks just for you', href: '/products' },
   { icon: '💬', title: 'AI Assistant', text: 'Your shopping buddy', href: '/pages/help' },
 ];

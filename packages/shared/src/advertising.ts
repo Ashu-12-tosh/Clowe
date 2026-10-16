@@ -9,7 +9,7 @@ import type { ProductListItem } from './catalog';
 // ---------------------------------------------------------------------------
 
 /** Where ads are served. */
-export const AD_SURFACES = ['SEARCH', 'CATEGORY', 'PRODUCT', 'HOME', 'TRYON'] as const;
+export const AD_SURFACES = ['SEARCH', 'CATEGORY', 'PRODUCT', 'HOME', 'TRYON', 'COMPARE'] as const;
 export type AdSurface = (typeof AD_SURFACES)[number];
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-11-01');

@@ -22,9 +22,12 @@ import {
   NOT_A_SALE_STATUSES,
   commercialPatchSchema,
   feeChangeScheduleSchema,
+  aiSettingsPatchSchema,
+  istMonthOf,
 } from '@clowe/shared';
 import { getCommercial, updateCommercial } from '../services/commercial';
 import { cancelFeeChange, listFeeChanges, scheduleFeeChange } from '../services/feeChanges';
+import { aiUsageView, updateAiSettings } from '../services/aiMeter';
 import { admitToPlan } from '../services/planService';
 import { auditSafe } from '../services/auditService';
 import { Prisma } from '@prisma/client';
@@ -850,6 +853,36 @@ adminRouter.patch('/commercial', async (req, res, next) => {
       metadata: { patch, before: Object.fromEntries(Object.keys(patch).map((k) => [k, (before as Record<string, unknown>)[k]])) },
     });
     res.json({ success: true, data: after });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// AI (Gemini): the monthly budget, per-user limits, prices, and what was spent.
+adminRouter.get('/ai', async (req, res, next) => {
+  try {
+    const month = z.string().regex(/^\d{4}-\d{2}$/).optional().parse(req.query.month) ?? istMonthOf(new Date());
+    res.json({ success: true, data: await aiUsageView(month) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminRouter.patch('/ai', async (req, res, next) => {
+  try {
+    const patch = aiSettingsPatchSchema.parse(req.body);
+    const next_ = await updateAiSettings(patch);
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'SETTINGS',
+      action: 'AI settings changed',
+      entityType: 'PlatformSetting',
+      entityId: 'ai',
+      summary: `AI settings: ${Object.keys(patch).join(', ')}`,
+      metadata: { patch },
+    });
+    res.json({ success: true, data: next_ });
   } catch (err) {
     next(err);
   }

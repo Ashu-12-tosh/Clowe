@@ -23,6 +23,7 @@ export interface PolicyValues {
   lateDispatchPenaltyPaise?: number | null;
   sellerCancelPenaltyPaise?: number | null;
   codMaxOrderPaise?: number | null;
+  codMinOrderPaise?: number | null;
   gstUniformPercent?: number | null;
   sellerFees?: Partial<SellerFeeSchedule> | null;
   supportEmails?: { customer?: string; vendor?: string } | null;
@@ -71,6 +72,7 @@ function tokens(v: PolicyValues): Record<string, string> {
     [PENALTY_AMOUNT_TOKEN]: v.lateDispatchPenaltyPaise != null ? rupees(v.lateDispatchPenaltyPaise) : 'a fixed penalty',
     '{{sellerCancelPenalty}}': v.sellerCancelPenaltyPaise != null ? rupees(v.sellerCancelPenaltyPaise) : 'a fixed penalty',
     '{{codMax}}': v.codMaxOrderPaise != null ? rupees(v.codMaxOrderPaise) : 'the limit shown at checkout',
+    '{{codMin}}': v.codMinOrderPaise != null ? rupees(v.codMinOrderPaise) : 'the minimum shown at checkout',
     '{{gst}}': v.gstUniformPercent != null ? percent(v.gstUniformPercent) : 'the rate shown on each product',
     '{{commission}}': fee('commissionPercent', percent, 'the rate shown on your Payouts page'),
     '{{gatewayFee}}': fee('gatewayPercent', percent, 'the rate shown on your Payouts page'),

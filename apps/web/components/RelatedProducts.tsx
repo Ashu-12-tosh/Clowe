@@ -21,9 +21,14 @@ export default function RelatedProducts({ categorySlug, excludeId, adSurface = '
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    api<ProductListResponse>(`/api/products?category=${encodeURIComponent(categorySlug)}&limit=9`)
+    // Ordered by AI from this category's own products (falls back to the plain list).
+    api<{ items: ProductListItem[] }>(`/api/ai/recommendations/${encodeURIComponent(excludeId)}`)
       .then((data) => setItems(data.items.filter((p) => p.id !== excludeId).slice(0, 8)))
-      .catch(() => {});
+      .catch(() =>
+        api<ProductListResponse>(`/api/products?category=${encodeURIComponent(categorySlug)}&limit=9`)
+          .then((data) => setItems(data.items.filter((p) => p.id !== excludeId).slice(0, 8)))
+          .catch(() => {}),
+      );
     fetchWishlistIds().then(setWishlistIds);
   }, [categorySlug, excludeId]);
 

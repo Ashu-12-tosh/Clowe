@@ -17,7 +17,7 @@ function heroIcon(href: string | null | undefined, i: number): string {
 
 const AI_PILLS = [
   { icon: '✦', label: 'AI Recommendations', href: '/products' },
-  { icon: '⌕', label: 'AI Search', href: '/products' },
+  { icon: '⌕', label: 'AI Search', href: '/ai-search' },
   { icon: '✨', label: 'AI Try-On', href: '/tryon' },
   { icon: '💬', label: 'AI Assistant', href: '/pages/help' },
 ];
