@@ -25,6 +25,7 @@ import {
   TruckIcon,
 } from '@/components/cart/CartIcons';
 import PolicyText from '@/components/PolicyText';
+import NonCancellable from '@/components/NonCancellable';
 import { responsiveImage, imageAt } from '@clowe/shared';
 
 /** "12K+ Sold" / "845 Sold". */
@@ -463,6 +464,13 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
               mode="buy"
             />
           </div>
+
+          {product.nonCancellable && (
+            <p className="mt-4 flex flex-wrap items-center gap-2 text-xs text-gray-600" data-pdp-non-cancellable>
+              <NonCancellable />
+              This item cannot be cancelled once your order is confirmed.
+            </p>
+          )}
 
           {/* Trust row */}
           <div className="mt-5 grid grid-cols-2 gap-3 border-t border-gray-100 pt-4 sm:grid-cols-4">

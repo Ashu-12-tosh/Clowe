@@ -1,30 +1,17 @@
-import { randomInt } from 'node:crypto';
 import { Router } from 'express';
-import { complaintCreateSchema, istDate, type ComplaintRow } from '@clowe/shared';
+import { complaintCreateSchema, type ComplaintRow } from '@clowe/shared';
 import {
-  SLA_RESPONSE_HOURS,
   customerRatingSchema,
   customerReplySchema,
   type DeskPriority,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
+import { raiseComplaint } from '../services/complaintService';
 import { ApiError } from '../utils/ApiError';
 
 export const complaintsRouter = Router();
 complaintsRouter.use(requireAuth);
-
-/** Human-readable unique complaint id, e.g. CMP-2026-48213. */
-async function generateComplaintId(): Promise<string> {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const candidate = `CMP-${istDate(new Date()).year}-${randomInt(0, 100000)
-      .toString()
-      .padStart(5, '0')}`;
-    const exists = await prisma.complaint.findUnique({ where: { complaintId: candidate } });
-    if (!exists) return candidate;
-  }
-  throw new Error('Could not generate a unique complaint id');
-}
 
 // Raise a complaint (used by the support chat bot).
 complaintsRouter.post('/', async (req, res, next) => {
@@ -41,44 +28,18 @@ complaintsRouter.post('/', async (req, res, next) => {
       orderId = order.id;
     }
 
-    const complaintId = await generateComplaintId();
     // Payment and delivery problems cost the shopper money or time, so they
     // start higher up the queue with a tighter response target.
     const priority: DeskPriority =
       input.category === 'PAYMENT' ? 'HIGH' : input.category === 'DELIVERY' ? 'HIGH' : 'MEDIUM';
-    const now = new Date();
-
-    const complaint = await prisma.complaint.create({
-      data: {
-        complaintId,
-        userId: req.auth!.userId,
-        orderId,
-        category: input.category,
-        subject: input.description.split('\n')[0]!.slice(0, 90),
-        description: input.description,
-        priority,
-        channel: 'CHAT',
-        slaDueAt: new Date(now.getTime() + SLA_RESPONSE_HOURS[priority] * 3600000),
-        lastMessageAt: now,
-        // The opening description is the first turn of the conversation.
-        messages: {
-          create: {
-            authorId: req.auth!.userId,
-            authorRole: 'CUSTOMER',
-            body: input.description,
-          },
-        },
-      },
-      include: { order: { select: { orderNumber: true } } },
-    });
-
-    await prisma.notification.create({
-      data: {
-        userId: req.auth!.userId,
-        type: 'COMPLAINT_REGISTERED',
-        title: 'Complaint registered 📢',
-        body: `Your complaint ${complaintId} has been registered. Our team will get back to you.`,
-      },
+    const complaint = await raiseComplaint({
+      userId: req.auth!.userId,
+      orderId,
+      category: input.category,
+      subject: input.description.split('\n')[0]!,
+      description: input.description,
+      priority,
+      channel: 'CHAT',
     });
 
     const body: ComplaintRow = {

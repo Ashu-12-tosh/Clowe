@@ -155,6 +155,8 @@ export const sellerProductUpsertSchema = z
     tryOnEnabled: z.boolean().optional(),
     /** "Not returnable": pierced jewellery, customised or final-sale items. */
     nonReturnable: z.boolean().optional(),
+    /** "Non-cancellable" once confirmed: customised, made-to-measure or final-sale. */
+    nonCancellable: z.boolean().optional(),
     lowStockAlert: z.number().int().min(0).max(1000).optional(),
     allowBackorders: z.boolean().optional(),
     /** DRAFT keeps it private; SUBMIT sends it for admin approval. */
@@ -222,6 +224,7 @@ export interface SellerProductDetail {
   isVisible: boolean;
   tryOnEnabled: boolean;
   nonReturnable: boolean;
+  nonCancellable: boolean;
   lowStockAlert: number;
   allowBackorders: boolean;
   variants: {

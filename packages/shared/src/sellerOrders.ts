@@ -219,8 +219,24 @@ export const sellerOrderActionSchema = z.object({
 export type SellerOrderActionInput = z.infer<typeof sellerOrderActionSchema>;
 
 /** POST /api/seller/orders/:orderId/cancel — the seller can't fulfil their part. */
+/**
+ * Why a seller or Clowe may cancel an order, in whole or in part
+ * (Cancellation Policy 3.1). The buyer is told the reason (3.2).
+ */
+export const ORDER_CANCEL_REASONS = [
+  'Out of stock or discontinued',
+  'Price, description or image shown in error',
+  'Delivery address outside the serviceable area, incomplete or unreachable',
+  'Suspected fraud, or the payment was declined or flagged',
+  'Placed for resale, or above the quantity limit',
+  'Required by a court or a statutory authority',
+  'Prevented by a force majeure event',
+] as const;
+
 export const sellerOrderCancelSchema = z.object({
   reason: z.string().trim().min(5, 'Say why, in a few words').max(300),
+  /** Only these lines (a partial cancellation); all of the seller's when absent. */
+  itemIds: z.array(z.string().min(1)).min(1).max(100).optional(),
 });
 export type SellerOrderCancelInput = z.infer<typeof sellerOrderCancelSchema>;
 

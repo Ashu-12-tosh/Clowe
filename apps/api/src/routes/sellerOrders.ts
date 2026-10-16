@@ -661,12 +661,13 @@ sellerOrdersRouter.post('/parcels/:shipmentId/rto-received', async (req, res, ne
 // refund the buyer for it, and charge the cancellation penalty once.
 sellerOrdersRouter.post('/:orderId/cancel', async (req, res, next) => {
   try {
-    const { reason } = sellerOrderCancelSchema.parse(req.body);
+    const { reason, itemIds } = sellerOrderCancelSchema.parse(req.body);
     const result = await cancelSellerPart({
       orderId: req.params.orderId,
       sellerId: req.seller!.id,
       actorUserId: req.auth!.userId,
       reason,
+      itemIds,
     });
     res.json({ success: true, data: result });
   } catch (err) {

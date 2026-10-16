@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { CartLine, CartView } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import NotReturnable from '@/components/NotReturnable';
+import NonCancellable from '@/components/NonCancellable';
 import { discountPercent, formatPaise } from '@/lib/format';
 import { BADGES_EVENT } from '@/components/Header';
 import CartSuggestions from '@/components/cart/CartSuggestions';
@@ -345,6 +346,7 @@ export default function CartPage() {
                           </span>
                         )}
                         {!line.returnable && <NotReturnable className="ml-1 mt-1.5" />}
+                        {line.nonCancellable && <NonCancellable className="ml-1 mt-1.5" />}
                       </div>
 
                       {/* Price */}

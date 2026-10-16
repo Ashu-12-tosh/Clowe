@@ -12,6 +12,7 @@ import {
   ORDER_TABS,
   ORDER_TAB_STATUSES,
   adminOrderCancelSchema,
+  adminOrderLinesCancelSchema,
   adminOrderNoteSchema,
   adminOrderStatusSchema,
   manualOrderImportSchema,
@@ -33,6 +34,7 @@ import {
   parcelNdrSchema,
 } from '@clowe/shared';
 import { cancelShipmentsForLinesSafe } from '../services/shipping/cancellations';
+import { cancelOrderLines } from '../services/lineCancellation';
 import { prisma } from '../db';
 import { refundCancelledOrder } from '../services/refundService';
 import { settleEarnedCredits } from '../services/purchaseCredits';
@@ -736,6 +738,32 @@ adminOrdersRouter.patch('/:id/status', async (req, res, next) => {
 // ---------------------------------------------------------------------------
 // Cancel
 // ---------------------------------------------------------------------------
+
+// Cancel some lines of an order (Cancellation Policy 3.1): the buyer is told
+// which and why, and refunded what they paid for them (lineCancellation).
+adminOrdersRouter.post('/:id/items/cancel', async (req, res, next) => {
+  try {
+    const input = adminOrderLinesCancelSchema.parse(req.body);
+    const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
+    if (!order) throw ApiError.notFound('Order not found');
+    const picked = order.items.filter((i) => input.itemIds.includes(i.id));
+    if (picked.length !== input.itemIds.length) throw ApiError.notFound('Item not found on this order');
+    if (picked.some((i) => i.status === 'DELIVERED')) {
+      throw ApiError.badRequest('Delivered items cannot be cancelled — raise a return instead', 'ALREADY_DELIVERED');
+    }
+    const result = await cancelOrderLines({
+      orderId: order.id,
+      lineIds: input.itemIds,
+      statuses: ['PLACED', 'CONFIRMED', 'PACKED', 'SHIPPED'],
+      by: 'ADMIN',
+      actorUserId: req.auth!.userId,
+      reason: input.reason,
+    });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
 
 adminOrdersRouter.post('/:id/cancel', async (req, res, next) => {
   try {

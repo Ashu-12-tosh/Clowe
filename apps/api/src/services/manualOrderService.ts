@@ -59,7 +59,7 @@ export async function createManualOrder(input: {
       sku: true,
       pricePaise: true,
       stock: true,
-      product: { select: { id: true, title: true, sellerId: true, status: true } },
+      product: { select: { id: true, title: true, sellerId: true, status: true, nonCancellable: true } },
     },
   });
   const byId = new Map(variants.map((v) => [v.id, v]));
@@ -85,6 +85,7 @@ export async function createManualOrder(input: {
       color: variant.color,
       pricePaise: variant.pricePaise,
       quantity: item.quantity,
+      nonCancellable: variant.product.nonCancellable,
     };
   });
 
@@ -186,6 +187,7 @@ export async function createManualOrder(input: {
             status: 'PLACED',
             returnWindowDays: windowByProduct.get(l.productId) ?? null,
             returnable: returnableByProduct.get(l.productId) ?? true,
+            nonCancellable: l.nonCancellable,
             gstRatePercent: gstRates[i],
           })),
         },

@@ -20,6 +20,7 @@ import { ReturnModal, ReturnTimeline } from '@/components/orders/ReturnBits';
 import { ParcelStatus } from '@/components/orders/ParcelBits';
 import ReviewModal from '@/components/orders/ReviewModal';
 import NotReturnable from '@/components/NotReturnable';
+import NonCancellable from '@/components/NonCancellable';
 import { CheckIcon, HeadsetIcon, MapPinIcon, ReturnIcon } from '@/components/cart/CartIcons';
 
 const DELIVERY_LABEL: Record<DeliveryMethod, string> = {
@@ -125,15 +126,38 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
   }
 
   async function cancelOrder() {
-    if (!order || !confirm('Cancel this order? Stock and any credits go back.')) return;
+    if (!order || !confirm('Cancel this order? Anything you paid is refunded in full.')) return;
     setBusy('cancel');
     setError('');
     try {
-      await api(`/api/orders/${order.id}/cancel`, { method: 'POST', auth: true });
+      const done = await api<{ kept: number }>(`/api/orders/${order.id}/cancel`, { method: 'POST', auth: true });
       load();
-      flash('Order cancelled.');
+      flash(
+        done.kept > 0
+          ? `Cancelled. ${done.kept === 1 ? 'One item is' : `${done.kept} items are`} non-cancellable and will still be delivered.`
+          : 'Order cancelled.',
+      );
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not cancel this order');
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function requestIntercept() {
+    if (!order || !confirm('Ask us to stop this parcel? We will try with the seller and the courier; if it cannot be stopped, you can refuse it at the door.')) return;
+    setBusy('intercept');
+    setError('');
+    try {
+      const { complaintId } = await api<{ complaintId: string }>(`/api/orders/${order.id}/intercept`, {
+        method: 'POST',
+        auth: true,
+        body: {},
+      });
+      load();
+      flash(`Request ${complaintId} sent — we will update you within 48 hours.`);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Could not send your request');
     } finally {
       setBusy('');
     }
@@ -341,6 +365,9 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
                         {item.courierName} · AWB {item.awbNumber}
                       </p>
                     )}
+                    {item.status === 'CANCELLED' && item.cancelReason && (
+                      <p className="t-caption mt-1 text-gray-600">Cancelled: {item.cancelReason}</p>
+                    )}
                     <ParcelStatus orderId={order.id} item={item} onChanged={load} />
                     <ScanTimeline scans={item.scans} />
                     {item.returnInfo && <ReturnTimeline info={item.returnInfo} />}
@@ -378,6 +405,9 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
                       </button>
                     )}
                     {!item.returnable && item.status === 'DELIVERED' && <NotReturnable className="self-center" />}
+                    {item.nonCancellable && ['PLACED', 'CONFIRMED', 'PACKED'].includes(item.status) && (
+                      <NonCancellable className="self-center" />
+                    )}
                   </div>
                 </li>
               ))}
@@ -391,6 +421,27 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
               >
                 {busy === 'cancel' ? 'Cancelling…' : 'Cancel order'}
               </button>
+            )}
+            {order.canRequestIntercept && (
+              <div className="mt-3">
+                <button
+                  onClick={() => void requestIntercept()}
+                  disabled={busy === 'intercept'}
+                  className="t-caption rounded-lg border border-gray-300 px-4 py-2 font-semibold text-gray-600 transition hover:border-red-300 hover:text-red-600 disabled:opacity-50"
+                >
+                  {busy === 'intercept' ? 'Sending…' : 'Stop this parcel'}
+                </button>
+                <p className="t-caption mt-1 text-gray-500">
+                  It has shipped, so it can no longer be cancelled. We can ask the seller and the courier to stop it; if they
+                  can&apos;t, you may refuse it at the door and get a full refund.
+                </p>
+              </div>
+            )}
+            {order.interceptRequest && (
+              <p className="t-caption mt-3 rounded-lg bg-amber-50 px-3 py-2 text-amber-800" data-intercept-request>
+                You asked us to stop this parcel — request {order.interceptRequest.complaintId} (
+                {order.interceptRequest.status.replace(/_/g, ' ').toLowerCase()}).
+              </p>
             )}
           </section>
 

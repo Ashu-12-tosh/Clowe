@@ -951,6 +951,9 @@ model Product {
   // items). Can only make a product non-returnable: a non-returnable
   // category wins whatever this says.
   nonReturnable   Boolean       @default(false)
+  // "Non-cancellable" (Cancellation Policy 2.1): customised, made-to-measure
+  // or final-sale. Shown before ordering; cannot be cancelled once confirmed.
+  nonCancellable  Boolean       @default(false)
   // Optional per-product cap on shopper try-ons; null = until credits run out.
   tryOnLimit      Int?
   tryOnUsed       Int           @default(0)
@@ -1340,6 +1343,10 @@ model OrderItem {
   // Whether this line could be returned when it was sold, fixed at checkout
   // like the window. Null: rows written without checkout use today's rule.
   returnable Boolean?
+  // Sold as non-cancellable (the product's flag at checkout).
+  nonCancellable Boolean @default(false)
+  // Why a seller or admin cancelled this line, as the buyer was told.
+  cancelReason   String?
   // The GST rate this line was sold at, likewise fixed at checkout: invoices,
   // the ledger, payouts and GSTR-8 read it, so a later GST change (the flat
   // 18%) never rewrites a past sale. Null as above.

@@ -19,6 +19,7 @@ import {
 import { useCouponsEnabled } from '@/lib/coupons';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import NotReturnable from '@/components/NotReturnable';
+import NonCancellable from '@/components/NonCancellable';
 import { formatPaise } from '@/lib/format';
 import { BADGES_EVENT } from '@/components/Header';
 import CheckoutStepper, { type CheckoutStep } from '@/components/checkout/CheckoutStepper';
@@ -558,6 +559,7 @@ export default function CheckoutPage() {
                     {line.label ? ` | ` : ''}Qty: {line.quantity}
                   </p>
                   {!line.returnable && <NotReturnable className="mt-1" />}
+                  {line.nonCancellable && <NonCancellable className="mt-1" />}
                   <p className="mt-0.5 text-xs font-bold text-ink-900">
                     {formatPaise(line.pricePaise * line.quantity)}
                   </p>
@@ -597,6 +599,7 @@ export default function CheckoutPage() {
                       {line.label ? ` | ` : ''}Qty: {line.quantity}
                     </p>
                     {!line.returnable && <NotReturnable className="mt-1" />}
+                    {line.nonCancellable && <NonCancellable className="mt-1" />}
                   </div>
                   <span className="shrink-0 text-xs font-bold text-ink-900">
                     {formatPaise(line.pricePaise * line.quantity)}

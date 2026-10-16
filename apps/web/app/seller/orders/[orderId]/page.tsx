@@ -422,7 +422,9 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
           <CancelOrderPanel
             orderId={order.orderId}
             placedAt={order.placedAt}
-            cancellableLines={order.lines.filter((l) => ['PLACED', 'CONFIRMED', 'PACKED'].includes(l.status)).length}
+            cancellableLines={order.lines
+              .filter((l) => ['PLACED', 'CONFIRMED', 'PACKED'].includes(l.status))
+              .map((l) => ({ id: l.id, title: l.title, label: l.label }))}
             onCancelled={(r) => {
               flash(
                 `Cancelled ${r.cancelledLines} item(s).` +

@@ -16,18 +16,20 @@ import {
   type OrderListRow,
   type TaxInvoice,
   codPlatformRefusal,
+  INTERCEPT_SUBJECT,
+  interceptRequestSchema,
+  isNotASale,
   isPoBoxAddress,
   LOST_PARCEL_CHOICES,
   type LostParcelChoice,
   PO_BOX_MESSAGE,
 } from '@clowe/shared';
 import { chooseLostOutcome } from '../services/shipping/lostParcels';
+import { cancelOrderLines } from '../services/lineCancellation';
+import { raiseComplaint } from '../services/complaintService';
 import { scanViews } from './track';
-import { cancelShipmentsForLinesSafe } from '../services/shipping/cancellations';
 import { prisma } from '../db';
-import { refundCancelledOrder } from '../services/refundService';
 import { buildTaxInvoice } from '../services/taxInvoice';
-import { settleEarnedCredits } from '../services/purchaseCredits';
 import { hiddenProductTest } from '../services/shopperVisibility';
 import { getSettings } from '../services/settingsService';
 import { recordRedemptions } from '../services/promotionService';
@@ -43,8 +45,7 @@ import { deliveryPriceFor, etaWindowFor, isDeliveryMethodAvailable } from '../se
 import { codRefusal, deliveryRefusal, pincodeServiceability } from '../services/shipping/serviceability';
 import { confirmCodOrder, generateOrderNumber } from '../services/orderService';
 import { nextRmaNumber } from '../services/returnService';
-import { allocateForDispatch, returnStock } from '../services/stockService';
-import { creditExpiryFrom } from './credits';
+import { allocateForDispatch } from '../services/stockService';
 import { assertOwnAssets, withPhotoUrls } from '../services/assets';
 
 export const ordersRouter = Router();
@@ -331,6 +332,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
               promoDiscountPaise: line.promoDiscountPaise,
               returnWindowDays: windowByProduct.get(line.productId) ?? null,
               returnable: returnableByProduct.get(line.productId) ?? true,
+              nonCancellable: line.nonCancellable,
               gstRatePercent: gstRates[i],
             })),
           },
@@ -679,7 +681,12 @@ ordersRouter.get('/:id', async (req, res, next) => {
         : null;
 
     // Packed items haven't left the warehouse yet, so they stay cancellable.
-    const cancellable = ['PLACED', 'CONFIRMED', 'PACKED'];
+    const cancellable: OrderStatus[] = ['PLACED', 'CONFIRMED', 'PACKED'];
+    const liveItems = order.items.filter((i) => !isNotASale(i.status));
+    const intercept = await prisma.complaint.findFirst({
+      where: { orderId: order.id, subject: INTERCEPT_SUBJECT, status: { notIn: ['RESOLVED', 'CLOSED'] } },
+      select: { complaintId: true, status: true },
+    });
     // Return window per item: the one it was sold with.
     const windowDaysByItem = new Map<string, number>();
     const returnableByItem = new Map<string, boolean>();
@@ -760,6 +767,8 @@ ordersRouter.get('/:id', async (req, res, next) => {
             }
           : null,
         returnable: returnableByItem.get(i.id) ?? true,
+        nonCancellable: i.nonCancellable,
+        cancelReason: i.cancelReason,
         canReturn:
           (returnableByItem.get(i.id) ?? true) &&
           i.status === 'DELIVERED' &&
@@ -801,7 +810,11 @@ ordersRouter.get('/:id', async (req, res, next) => {
         : null,
       awaitingPayment: order.payment?.status === 'CREATED' && order.status === 'PLACED',
       canCancel:
-        order.status !== 'CANCELLED' && order.items.every((i) => cancellable.includes(i.status)),
+        order.status !== 'CANCELLED' &&
+        liveItems.every((i) => cancellable.includes(i.status)) &&
+        liveItems.some((i) => !lockedByNonCancellable(i)),
+      canRequestIntercept: !intercept && liveItems.some((i) => i.status === 'SHIPPED'),
+      interceptRequest: intercept ? { complaintId: intercept.complaintId, status: intercept.status } : null,
       returnWindowDays: windowDaysByItem.size
         ? Math.max(...windowDaysByItem.values())
         : platformWindowDays,
@@ -855,79 +868,91 @@ ordersRouter.post('/:id/lost-parcels/:shipmentId/choice', async (req, res, next)
   }
 });
 
-ordersRouter.post('/:id/cancel', async (req, res, next) => {
+const BUYER_CANCELLABLE: OrderStatus[] = ['PLACED', 'CONFIRMED', 'PACKED'];
+/** Sold non-cancellable and confirmed: the buyer can no longer cancel it (Cancellation Policy 2.1). */
+const lockedByNonCancellable = (i: { nonCancellable: boolean; status: OrderStatus }) => i.nonCancellable && i.status !== 'PLACED';
+
+// After dispatch the buyer can no longer cancel, but can ask support to stop
+// the parcel (Cancellation Policy 1.2): a ticket forwarded to the seller and
+// the courier, accommodated where it can still be intercepted.
+ordersRouter.post('/:id/intercept', async (req, res, next) => {
   try {
+    const { note } = interceptRequestSchema.parse(req.body ?? {});
     const order = await prisma.order.findUnique({
       where: { id: req.params.id },
-      include: { items: true, payment: true },
+      include: { items: { where: { status: 'SHIPPED' }, include: { seller: { select: { userId: true } } } } },
     });
     if (!order || order.userId !== req.auth!.userId) throw ApiError.notFound('Order not found');
-    if (order.status === 'CANCELLED') throw ApiError.badRequest('Order is already cancelled');
-    if (!order.items.every((i) => ['PLACED', 'CONFIRMED', 'PACKED'].includes(i.status))) {
-      throw ApiError.badRequest('Order cannot be cancelled after items have shipped');
+    if (order.items.length === 0) {
+      throw ApiError.badRequest('Nothing on this order is on its way — cancel it instead, or return it once delivered', 'NOT_IN_TRANSIT');
     }
-
-    await prisma.$transaction([
-      prisma.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } }),
-      prisma.orderItem.updateMany({ where: { orderId: order.id }, data: { status: 'CANCELLED' } }),
-      ...order.items.map((item) =>
-        prisma.productVariant.update({
-          where: { id: item.variantId },
-          data: { stock: { increment: item.quantity } },
-        }),
-      ),
-      // A cancelled order gives its coupon redemption back to the pool.
-      ...(order.couponCode && order.couponDiscountPaise > 0
-        ? [
-            prisma.coupon.updateMany({
-              where: { code: order.couponCode, usedCount: { gt: 0 } },
-              data: { usedCount: { decrement: 1 } },
-            }),
-          ]
-        : []),
-      // Redeemed credits come back on cancellation.
-      ...(order.creditsUsed > 0
-        ? [
-            prisma.user.update({
-              where: { id: order.userId },
-              data: { creditsBalance: { increment: order.creditsUsed } },
-            }),
-            prisma.creditLedger.create({
-              data: {
-                userId: order.userId,
-                delta: order.creditsUsed,
-                reason: 'REFUND_CREDITS',
-                orderId: order.id,
-                expiresAt: creditExpiryFrom(),
-              },
-            }),
-          ]
-        : []),
-    ]);
-
-    // The variant totals are back up; put the units back on the shelf they
-    // shipped from and leave a ledger entry explaining why they reappeared.
-    await prisma.$transaction(async (tx) => {
-      for (const item of order.items) {
-        await returnStock(tx, {
-          variantId: item.variantId,
-          quantity: item.quantity,
-          reason: 'Order cancelled by customer',
-          reference: order.orderNumber,
-          actorId: order.userId,
-        });
-      }
+    const open = await prisma.complaint.findFirst({
+      where: { orderId: order.id, subject: INTERCEPT_SUBJECT, status: { notIn: ['RESOLVED', 'CLOSED'] } },
     });
+    if (open) throw ApiError.badRequest(`You have already asked us to stop this parcel (${open.complaintId})`, 'ALREADY_REQUESTED');
+    const items = order.items.map((i) => `"${i.title}"${i.awbNumber ? ` (AWB ${i.awbNumber})` : ''}`).join(', ');
+    const complaint = await raiseComplaint({
+      userId: order.userId,
+      orderId: order.id,
+      category: 'DELIVERY',
+      subject: INTERCEPT_SUBJECT,
+      description: `Please stop ${items} on order ${order.orderNumber} — I no longer want it.${note ? `\n\n${note}` : ''}`,
+      priority: 'HIGH',
+      channel: 'APP',
+    });
+    const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+    const sellerUsers = [...new Set(order.items.map((i) => i.seller.userId))];
+    await prisma.notification.createMany({
+      data: [
+        ...sellerUsers.map((userId) => ({
+          userId,
+          type: 'INTERCEPT_REQUEST',
+          title: `Buyer asks to stop a parcel — ${order.orderNumber}`,
+          body: `The buyer no longer wants ${items}. If the courier can still stop it, ask for it back; support will confirm (${complaint.complaintId}).`,
+          linkHref: `/seller/orders/${order.id}`,
+        })),
+        ...admins.map((a) => ({
+          userId: a.id,
+          type: 'INTERCEPT_REQUEST',
+          title: `Intercept request ${complaint.complaintId} — ${order.orderNumber}`,
+          body: `Ask the courier to stop ${items}. If it can't be stopped, the buyer may refuse delivery (Cancellation Policy 1.3).`,
+          linkHref: '/admin/support',
+        })),
+      ],
+    });
+    res.json({ success: true, data: { complaintId: complaint.complaintId } });
+  } catch (err) {
+    next(err);
+  }
+});
 
-    // Booked with Delhivery already: cancel the booking too.
-    await cancelShipmentsForLinesSafe(order.items.map((i) => i.id));
-
-    // A paid order is refunded through the gateway, the same path returns use;
-    // the refund is recorded whether it goes through or fails.
-    const refund = await refundCancelledOrder(order.id, 'Order cancelled by customer');
-    // Reward credits earned on it go back too: nothing on it was bought.
-    await settleEarnedCredits(order.id);
-    res.json({ success: true, data: { cancelled: true, refund } });
+// Cancel before dispatch (Cancellation Policy 1.1): free, refunded in full —
+// everything on the order except what was sold non-cancellable.
+ordersRouter.post('/:id/cancel', async (req, res, next) => {
+  try {
+    const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
+    if (!order || order.userId !== req.auth!.userId) throw ApiError.notFound('Order not found');
+    if (order.status === 'CANCELLED') throw ApiError.badRequest('Order is already cancelled');
+    const live = order.items.filter((i) => !isNotASale(i.status));
+    if (!live.every((i) => BUYER_CANCELLABLE.includes(i.status))) {
+      throw ApiError.badRequest(
+        'Order cannot be cancelled after items have shipped — you can ask support to stop the parcel instead',
+        'ALREADY_SHIPPED',
+      );
+    }
+    const lines = live.filter((i) => !lockedByNonCancellable(i));
+    if (lines.length === 0) {
+      throw ApiError.badRequest('These items are non-cancellable once the order is confirmed', 'NON_CANCELLABLE');
+    }
+    const done = await cancelOrderLines({
+      orderId: order.id,
+      lineIds: lines.map((l) => l.id),
+      statuses: BUYER_CANCELLABLE,
+      by: 'CUSTOMER',
+      actorUserId: order.userId,
+      reason: 'Cancelled by customer',
+    });
+    res.json({ success: true, data: { cancelled: true, kept: live.length - lines.length, refund: done.refund } });
   } catch (err) {
     next(err);
   }

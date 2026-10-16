@@ -260,6 +260,7 @@ export default function ProductForm({ initial }: Props) {
   const [isVisible, setIsVisible] = useState(initial?.isVisible ?? true);
   const [tryOnEnabled, setTryOnEnabled] = useState(initial?.tryOnEnabled ?? true);
   const [nonReturnable, setNonReturnable] = useState(initial?.nonReturnable ?? false);
+  const [nonCancellable, setNonCancellable] = useState(initial?.nonCancellable ?? false);
 
   const [aiBusy, setAiBusy] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -559,6 +560,7 @@ export default function ProductForm({ initial }: Props) {
       // Only meaningful in try-on categories; the API enforces the same gate.
       tryOnEnabled: rules.tryOnEligible ? tryOnEnabled : false,
       nonReturnable,
+      nonCancellable,
       lowStockAlert: Math.max(0, Math.round(Number(lowStockAlert) || 0)),
       allowBackorders,
       mode,
@@ -1815,6 +1817,23 @@ export default function ProductForm({ initial }: Props) {
                       {rules.returnable
                         ? 'For pierced jewellery, customised or made-to-measure items, and final-sale stock. Buyers see "Not returnable" before they buy, and get no return button.'
                         : 'Products in this category cannot be returned, so this is always on.'}
+                    </span>
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="nonCancellable"
+                    checked={nonCancellable}
+                    onChange={(e) => setNonCancellable(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-[#B8860B]"
+                  />
+                  <span>
+                    Non-cancellable
+                    <span className="block text-xs text-gray-400">
+                      For customised, made-to-measure, monogrammed or final-sale items. Buyers see &quot;Non-cancellable&quot; before they
+                      order, and cannot cancel it once the order is confirmed.
                     </span>
                   </span>
                 </label>

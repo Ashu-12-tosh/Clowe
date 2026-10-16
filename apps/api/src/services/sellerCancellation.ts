@@ -1,22 +1,19 @@
 import { NOT_A_SALE_STATUSES, type SellerOrderCancelResult } from '@clowe/shared';
-import { cancelShipmentsForLinesSafe } from './shipping/cancellations';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
-import { syncOrderStatus } from './orderStatusService';
-import { settleEarnedCredits } from './purchaseCredits';
-import { refundCancelledOrder, refundOrderPart } from './refundService';
+import { cancelOrderLines } from './lineCancellation';
 import { cancelPenaltyKey, postEntry } from './sellerLedgerService';
 import { getSettings } from './settingsService';
-import { returnStock } from './stockService';
 
 // ---------------------------------------------------------------------------
 // A seller cancelling their part of an order ("can't fulfil"), and the
 // penalty for it.
 //
-// Only lines not yet shipped can be cancelled. The buyer is refunded what
-// they paid for those lines; if nothing else is left on the order it is
-// cancelled whole, exactly as an admin cancellation (coupon and credits come
-// back too). The penalty is charged once per order and seller, and only on
+// Only lines not yet shipped can be cancelled — all of the seller's, or the
+// ones they pick (a partial cancellation, Cancellation Policy 3.1). The buyer
+// is told why and refunded what they paid for those lines; if nothing else
+// is left on the order it is cancelled whole, exactly as an admin
+// cancellation (coupon and credits come back too). The penalty is charged once per order and seller, and only on
 // orders placed after the rule took effect. A buyer's or an admin's
 // cancellation never charges it: they do not come through here.
 // ---------------------------------------------------------------------------
@@ -57,6 +54,8 @@ export async function cancelSellerPart(input: {
   sellerId: string;
   actorUserId: string;
   reason: string;
+  /** Only these of the seller's lines; all of them when absent. */
+  itemIds?: string[];
 }): Promise<SellerOrderCancelResult> {
   const order = await prisma.order.findUnique({
     where: { id: input.orderId },
@@ -66,76 +65,27 @@ export async function cancelSellerPart(input: {
   if (!order || mine.length === 0) throw ApiError.notFound('Order not found');
   if (order.status === 'CANCELLED') throw ApiError.badRequest('This order is already cancelled', 'ALREADY_CANCELLED');
 
-  const lines = mine.filter((i) => (CANCELLABLE as readonly string[]).includes(i.status));
+  const picked = input.itemIds ? mine.filter((i) => input.itemIds!.includes(i.id)) : mine;
+  if (input.itemIds && picked.length !== input.itemIds.length) throw ApiError.notFound('Item not found on this order');
+  const lines = picked.filter((i) => (CANCELLABLE as readonly string[]).includes(i.status));
   if (lines.length === 0) {
     throw ApiError.badRequest(
-      mine.some((i) => !LIVE_EXCLUDED.has(i.status))
+      picked.some((i) => !LIVE_EXCLUDED.has(i.status))
         ? 'Your items on this order have already shipped — it can’t be cancelled now'
         : 'Nothing of yours on this order is left to cancel',
       'NOTHING_TO_CANCEL',
     );
   }
-  const lineIds = new Set(lines.map((l) => l.id));
-  // Whether this empties the order: then it is cancelled whole.
-  const emptiesOrder = order.items.every((i) => lineIds.has(i.id) || LIVE_EXCLUDED.has(i.status));
-  const note = `Cancelled by seller: ${input.reason}`;
-
-  await prisma.$transaction([
-    prisma.orderItem.updateMany({
-      where: { id: { in: [...lineIds] }, status: { in: [...CANCELLABLE] } },
-      data: { status: 'CANCELLED' },
-    }),
-    // Reserved units go back on the variant; the stock ledger follows below.
-    ...lines.map((l) =>
-      prisma.productVariant.update({ where: { id: l.variantId }, data: { stock: { increment: l.quantity } } }),
-    ),
-    ...(emptiesOrder && order.couponCode && order.couponDiscountPaise > 0
-      ? [
-          prisma.coupon.updateMany({
-            where: { code: order.couponCode, usedCount: { gt: 0 } },
-            data: { usedCount: { decrement: 1 } },
-          }),
-        ]
-      : []),
-    ...(emptiesOrder && order.creditsUsed > 0
-      ? [prisma.user.update({ where: { id: order.userId }, data: { creditsBalance: { increment: order.creditsUsed } } })]
-      : []),
-    prisma.notification.create({
-      data: {
-        userId: order.userId,
-        type: 'ORDER_CANCELLED',
-        title: emptiesOrder
-          ? `Order ${order.orderNumber} cancelled by the seller`
-          : `Part of order ${order.orderNumber} cancelled by the seller`,
-        body: `${lines.map((l) => `"${l.title}"`).join(', ')} — ${input.reason}. Anything you paid for ${lines.length === 1 ? 'it' : 'them'} is being refunded.`,
-        linkHref: `/account/orders/${order.id}`,
-      },
-    }),
-  ]);
-
-  await prisma.$transaction(async (tx) => {
-    for (const l of lines) {
-      await returnStock(tx, {
-        variantId: l.variantId,
-        quantity: l.quantity,
-        reason: note,
-        reference: order.orderNumber,
-        actorId: input.actorUserId,
-      });
-    }
+  // Partial or whole, the buyer is refunded what they paid for these lines
+  // and told why (lineCancellation); the penalty is the seller's alone.
+  const done = await cancelOrderLines({
+    orderId: order.id,
+    lineIds: lines.map((l) => l.id),
+    statuses: [...CANCELLABLE],
+    by: 'SELLER',
+    actorUserId: input.actorUserId,
+    reason: input.reason,
   });
-
-  await syncOrderStatus(order.id);
-  // Booked with Delhivery already: cancel the booking too.
-  await cancelShipmentsForLinesSafe([...lineIds]);
-  const refund = emptiesOrder
-    ? await refundCancelledOrder(order.id, note)
-    : await refundOrderPart(
-        order.id,
-        lines.reduce((sum, l) => sum + l.pricePaise * l.quantity - l.promoDiscountPaise, 0),
-        note,
-      );
-  await settleEarnedCredits(order.id);
   const penaltyPaise = await chargeSellerCancelPenalty(order.id, input.sellerId, input.reason);
-  return { cancelledLines: lines.length, refund, penaltyPaise };
+  return { cancelledLines: done.cancelledLines, refund: done.refund, penaltyPaise };
 }

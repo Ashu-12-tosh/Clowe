@@ -68,6 +68,8 @@ export interface CartLine {
   tryOnEligible: boolean;
   /** False: this item cannot be returned (its category says so) — shown before buying. */
   returnable: boolean;
+  /** True: cannot be cancelled once confirmed — shown before buying. */
+  nonCancellable: boolean;
   /** Seller promotion applied to this line, if any. */
   promotion: { id: string; name: string; code: string | null } | null;
   /** What the promotion takes off this line's total (already in the totals). */
@@ -542,6 +544,10 @@ export interface OrderDetailItem {
   /** True while the item is DELIVERED and inside the return window. */
   /** False for an item from a non-returnable category (fixed when it was sold). */
   returnable: boolean;
+  /** Sold as non-cancellable: no cancelling it once confirmed. */
+  nonCancellable: boolean;
+  /** Why a seller or admin cancelled this line, as the buyer was told. */
+  cancelReason: string | null;
   canReturn: boolean;
   /** The courier's scans for this line's parcel, newest first. */
   scans: import('./growth').TrackingScanView[];
@@ -569,6 +575,10 @@ export interface OrderDetailItem {
 }
 
 export interface OrderDetailView {
+  /** Shipped and not yet delivered: the buyer may ask support to stop the parcel (Cancellation Policy 1.2). */
+  canRequestIntercept: boolean;
+  /** The buyer's open request to stop a parcel, if any. */
+  interceptRequest: { complaintId: string; status: string } | null;
   id: string;
   orderNumber: string;
   status: string;

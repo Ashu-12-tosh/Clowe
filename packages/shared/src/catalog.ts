@@ -403,6 +403,8 @@ export interface ProductDetail {
   returnWindowDays: number;
   /** False: this product cannot be returned (its category says so). */
   returnable: boolean;
+  /** True: cannot be cancelled once the order is confirmed (Cancellation Policy 2.1). */
+  nonCancellable: boolean;
   sellerShopName: string;
   /** Who fulfils the order — shown in the "Sold by" card. */
   seller: {

@@ -303,6 +303,12 @@ export type AdminOrderStatusInput = z.infer<typeof adminOrderStatusSchema>;
 export const adminOrderCancelSchema = z.object({
   reason: z.string().trim().min(3, 'Say why this order is being cancelled').max(300),
 });
+
+/** Cancel some lines of an order, with the reason the buyer is told. */
+export const adminOrderLinesCancelSchema = z.object({
+  reason: z.string().trim().min(3, 'Say why these items are being cancelled').max(300),
+  itemIds: z.array(z.string().min(1)).min(1).max(100),
+});
 export type AdminOrderCancelInput = z.infer<typeof adminOrderCancelSchema>;
 
 export const adminOrderNoteSchema = z.object({

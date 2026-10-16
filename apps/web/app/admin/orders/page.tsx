@@ -28,6 +28,7 @@ import {
   type ManualPaymentMethod,
   type OrderChannel,
   type OrderTab,
+  ORDER_CANCEL_REASONS,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
 import { toast } from '@/lib/toast';
@@ -954,6 +955,36 @@ function OrderDrawer({
     }
   }
 
+  /** One line only (Cancellation Policy 3.1): the buyer is told why and refunded for it. */
+  async function cancelLine(itemId: string, title: string) {
+    const reason = window.prompt(
+      `Why is "${title}" being cancelled? The buyer sees this.
+
+For example: ${ORDER_CANCEL_REASONS.slice(0, 3).join('; ')}.`,
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      flash('Give a reason of at least 3 characters.');
+      return;
+    }
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api(`/api/admin/orders/${orderId}/items/cancel`, {
+        method: 'POST',
+        auth: true,
+        body: { reason: reason.trim(), itemIds: [itemId] },
+        success: 'Item cancelled — the customer is told why and refunded for it',
+      });
+      await load();
+      await onChanged();
+    } catch (err) {
+      flash(err instanceof ApiRequestError ? err.message : 'Could not cancel that item.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!detail) {
     return (
       <div className="rounded-2xl border border-gray-100 bg-white p-4">
@@ -1078,6 +1109,15 @@ function OrderDrawer({
                   {formatPaise(i.pricePaise * i.quantity)}
                 </p>
                 <p className="text-[11px] text-gray-400">× {i.quantity}</p>
+                {['PLACED', 'CONFIRMED', 'PACKED', 'SHIPPED'].includes(i.status) && detail.items.length > 1 && (
+                  <button
+                    onClick={() => void cancelLine(i.id, i.title)}
+                    disabled={busy}
+                    className="mt-1 text-[11px] font-semibold text-red-600 hover:underline disabled:opacity-50"
+                  >
+                    Cancel item
+                  </button>
+                )}
               </div>
             </li>
           ))}

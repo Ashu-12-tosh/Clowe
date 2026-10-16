@@ -10,6 +10,16 @@ export const COMPLAINT_CATEGORIES = [
 ] as const;
 export type ComplaintCategory = (typeof COMPLAINT_CATEGORIES)[number];
 
+/**
+ * A request to stop a parcel already dispatched (Cancellation Policy 1.2):
+ * a DELIVERY complaint with this subject, forwarded to the seller and the
+ * courier, accommodated where the parcel can still be intercepted.
+ */
+export const INTERCEPT_SUBJECT = 'Stop my parcel — cancel after dispatch';
+export const interceptRequestSchema = z.object({
+  note: z.string().trim().max(500).optional(),
+});
+
 export const COMPLAINT_CATEGORY_LABELS: Record<ComplaintCategory, string> = {
   ORDER: 'Order issue',
   PAYMENT: 'Payment issue',
