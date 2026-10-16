@@ -61,7 +61,7 @@ function Slide({ slide, icon, eager }: { slide: CategoryBannerSlide; icon?: stri
         <ArtPanel icon={icon ?? '🛍️'} className="absolute inset-y-3 right-3 hidden w-2/5 sm:flex" />
       )}
       {/* sm:pl-16 keeps the words clear of the previous-slide arrow. */}
-      <div className={`relative flex h-full items-center p-6 sm:min-h-[16rem] sm:p-8 sm:pl-16 ${slide.imageUrl ? 'pb-9' : 'min-h-[15rem]'}`}>
+      <div className={`relative flex h-full items-center p-6 sm:min-h-[16rem] sm:p-8 sm:pl-16 ${slide.imageUrl ? 'pb-14 sm:pb-9' : 'min-h-[15rem]'}`}>
         {/* Copy — on the plain side, on a fade so it stays readable. Headline (with its
             highlight) two lines at most, subtext two: every slide fits the same box. */}
         {/* Never wider than half the banner: the products sit in the right half. */}
