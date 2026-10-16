@@ -1,5 +1,6 @@
 import { Prisma, type SellerLedgerBucket, type SellerLedgerType } from '@prisma/client';
 import {
+  cloweGst,
   computeListingEconomics,
   type PenaltyKind,
   type SellerFeesV2,
@@ -279,6 +280,34 @@ export type WaiveOutcome = 'WAIVED' | 'ALREADY_WAIVED' | 'NOT_A_PENALTY';
  * waiver's key, or the (orderItemId, PENALTY_WAIVER) pair, means a penalty
  * can be forgiven once, however many admins click.
  */
+/**
+ * GST on a penalty (owner's Batch 2): 18% (the commercial rules' rate) posted
+ * beside it, from the payout, once per penalty; on Clowe's monthly tax
+ * invoice as its own line. A waiver gives the GST back with the penalty.
+ */
+export async function postPenaltyGst(penaltyEntryId: string, db: Db = prisma): Promise<boolean> {
+  const e = await db.sellerLedgerEntry.findUnique({ where: { id: penaltyEntryId } });
+  if (!e || e.amountPaise >= 0 || !PENALTY_TYPES.includes(e.type)) return false;
+  const { fees } = await (await import('./commercial')).getCommercial();
+  const base = -e.amountPaise;
+  const gst = cloweGst(base, fees.gstPercent);
+  if (gst <= 0) return false;
+  return postEntry(
+    {
+      sellerId: e.sellerId,
+      type: 'CLOWE_FEE_GST',
+      bucket: 'SETTLEMENT',
+      amountPaise: -gst,
+      orderId: e.orderId,
+      note: `GST ${fees.gstPercent}% on the penalty`,
+      taxablePaise: base,
+      chargeType: e.type,
+      idempotencyKey: `penalty-gst:${e.id}`,
+    },
+    db,
+  );
+}
+
 export async function waivePenalty(
   entryId: string,
   sellerId: string,
@@ -306,6 +335,25 @@ export async function waivePenalty(
     },
     db,
   );
+  // The GST charged on it comes back too.
+  const gst = await db.sellerLedgerEntry.findFirst({ where: { idempotencyKey: `penalty-gst:${entry.id}` } });
+  if (posted && gst) {
+    await postEntry(
+      {
+        sellerId,
+        type: 'CLOWE_FEE_GST',
+        bucket: 'SETTLEMENT',
+        amountPaise: -gst.amountPaise,
+        orderId: entry.orderId,
+        note: `GST on the waived penalty returned`,
+        taxablePaise: gst.taxablePaise === null ? null : -gst.taxablePaise,
+        chargeType: gst.chargeType,
+        idempotencyKey: `penalty-gst:${entry.id}:waived`,
+        createdById: adminId,
+      },
+      db,
+    );
+  }
   return {
     outcome: posted ? 'WAIVED' : 'ALREADY_WAIVED',
     amountPaise: -entry.amountPaise,

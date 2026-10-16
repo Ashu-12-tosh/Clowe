@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { DEFAULT_LEGAL_ENTITY } from '@clowe/shared';
+import { DEFAULT_LEGAL_ENTITY, panFromGstin } from '@clowe/shared';
 import { serverPublicSettings } from '@/lib/serverSettings';
 
 export const metadata: Metadata = {
@@ -20,7 +20,8 @@ export default async function ContactPage() {
   const business = [
     { label: 'Legal name', value: legal.name },
     { label: 'Registered address', value: legal.registeredAddress },
-    { label: 'LLPIN', value: legal.llpin },
+    // The LLPIN is not shown until the owner confirms it; the PAN is the GSTIN's.
+    { label: 'PAN', value: panFromGstin(legal.gstin) ?? '' },
     { label: 'GSTIN', value: legal.gstin },
   ].filter((row) => row.value.trim());
 

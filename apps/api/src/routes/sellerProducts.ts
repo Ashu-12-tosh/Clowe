@@ -365,7 +365,9 @@ sellerProductsRouter.get('/export', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
-// PUT /:id/spin-images — the 360° view (Pro and Premium plans)
+// PUT /:id/spin-images — the 360° view (Pro and Premium plans). New photos
+// wait for an admin's review, like product images; the live view stays until
+// then. Removing the view takes effect at once.
 // ---------------------------------------------------------------------------
 
 sellerProductsRouter.put('/:id/spin-images', async (req, res, next) => {
@@ -373,10 +375,18 @@ sellerProductsRouter.put('/:id/spin-images', async (req, res, next) => {
     const { imageUrls } = spinImagesSchema.parse(req.body);
     if (imageUrls.length > 0) await requirePlanFeature(req.seller!.id, 'SPIN_360');
     if (imageUrls.length === 1) throw ApiError.badRequest('A 360° view needs at least 2 images, taken around the product in order', 'SPIN_TOO_FEW');
-    const product = await prisma.product.findFirst({ where: { id: req.params.id, sellerId: req.seller!.id }, select: { id: true } });
+    const product = await prisma.product.findFirst({ where: { id: req.params.id, sellerId: req.seller!.id }, select: { id: true, title: true, spinImages: true } });
     if (!product) throw ApiError.notFound('Product not found');
-    await prisma.product.update({ where: { id: product.id }, data: { spinImages: imageUrls } });
-    res.json({ success: true, data: { spinImages: imageUrls } });
+    if (imageUrls.length === 0) {
+      await prisma.product.update({ where: { id: product.id }, data: { spinImages: [], spinImagesPending: [], spinImagesSubmittedAt: null } });
+      return res.json({ success: true, data: { spinImages: [], spinImagesPending: [] } });
+    }
+    await prisma.product.update({ where: { id: product.id }, data: { spinImagesPending: imageUrls, spinImagesSubmittedAt: new Date() } });
+    const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+    await prisma.notification.createMany({
+      data: admins.map((a) => ({ userId: a.id, type: 'PRODUCT_REVIEW', title: '360° view to review', body: product.title.slice(0, 120), linkHref: '/admin/products' })),
+    });
+    res.json({ success: true, data: { spinImages: product.spinImages, spinImagesPending: imageUrls } });
   } catch (err) {
     next(err);
   }

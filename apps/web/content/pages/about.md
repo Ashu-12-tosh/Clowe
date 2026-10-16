@@ -21,7 +21,7 @@ Clowe started in 2026 as a simple experiment: could AI make "how will this look 
 cloweshop.com is owned and operated by **{{legal.name}}**.
 
 - Registered address: {{legal.registeredAddress}}
-- LLPIN: {{legal.llpin}}
+- PAN: {{legal.pan}}
 - GSTIN: {{legal.gstin}}
 - Email: {{legal.supportEmail}}
 - Phone: {{legal.supportPhone}}

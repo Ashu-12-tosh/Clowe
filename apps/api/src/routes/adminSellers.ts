@@ -47,7 +47,7 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { sendToUserSafe } from '../services/messaging';
 import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
-import { history, waivePenalty } from '../services/sellerLedgerService';
+import { history, postPenaltyGst, waivePenalty } from '../services/sellerLedgerService';
 import { kycAdminRunLimiter } from '../middleware/rateLimits';
 import {
   KycCheckRunningError,
@@ -840,12 +840,13 @@ adminSellersRouter.post('/:id/penalties', async (req, res, next) => {
         createdById: req.auth!.userId,
       },
     });
+    await postPenaltyGst(entry.id);
     await prisma.notification.create({
       data: {
         userId: seller.userId,
         type: 'SELLER_PENALTY',
-        title: `Penalty: ${label} (₹${(amountPaise / 100).toLocaleString('en-IN')})`,
-        body: `${input.reason} It is deducted from your next payout. If you disagree, raise it with seller support.`,
+        title: `Penalty: ${label} (₹${(amountPaise / 100).toLocaleString('en-IN')} + GST)`,
+        body: `${input.reason} It is deducted, with GST, from your next payout and shown on Clowe's monthly tax invoice. If you disagree, raise it with seller support.`,
         linkHref: '/seller/penalties',
       },
     });
@@ -1050,6 +1051,34 @@ adminSellersRouter.post('/:id/tryon-credits', async (req, res, next) => {
       ipAddress: ipFrom(req),
     });
     res.json({ success: true, data: r });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// A message from Clowe to one seller (a change to their terms, a notice):
+// their dashboard now, and SMS and e-mail through the messaging provider.
+// Audit-logged with what was said.
+adminSellersRouter.post('/:id/notify', async (req, res, next) => {
+  try {
+    const input = z.object({ title: z.string().trim().min(3).max(120), body: z.string().trim().min(3).max(1000), auditNote: z.string().trim().max(500).optional() }).parse(req.body);
+    const seller = await prisma.sellerProfile.findUnique({ where: { id: req.params.id }, select: { id: true, shopName: true, user: { select: { id: true, phone: true, email: true } } } });
+    if (!seller) throw ApiError.notFound('Seller not found');
+    await prisma.notification.create({ data: { userId: seller.user.id, type: 'SELLER_NOTICE', title: input.title, body: input.body, linkHref: '/seller/billing' } });
+    sendToUserSafe(seller.user.id, { channel: 'sms', to: `+91${seller.user.phone}`, body: `Clowe: ${input.title}. Details in your seller dashboard.` }, { critical: true });
+    if (seller.user.email) sendToUserSafe(seller.user.id, { channel: 'email', to: seller.user.email, subject: `Clowe — ${input.title}`, body: input.body }, { critical: true });
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'SELLERS',
+      action: 'Seller notified',
+      entityType: 'SellerProfile',
+      entityId: seller.id,
+      summary: `${seller.shopName}: ${input.title}${input.auditNote ? ` — ${input.auditNote}` : ''}`,
+      metadata: { title: input.title, body: input.body, ...(input.auditNote ? { note: input.auditNote } : {}) },
+      ipAddress: ipFrom(req),
+    });
+    res.json({ success: true, data: { ok: true } });
   } catch (err) {
     next(err);
   }

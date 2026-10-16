@@ -64,3 +64,11 @@ describe('fillLegalEntity', () => {
     expect(out).toBe('- Address: click(javascript:alert(1)) bold x');
   });
 });
+
+describe('the PAN shown in place of a CIN', () => {
+  it('is the GSTIN’s own, or nothing', async () => {
+    const fill = fillLegalEntity;
+    const out = fill('Operated by X (GSTIN {{legal.gstin}}, PAN {{legal.pan}}).', { ...DEFAULT_LEGAL_ENTITY, gstin: '07AAWFC9519L1ZL' });
+    expect(out).toBe('Operated by X (GSTIN 07AAWFC9519L1ZL, PAN AAWFC9519L).');
+  });
+});

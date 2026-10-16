@@ -1,3 +1,4 @@
+import { panFromGstin } from './kyc';
 /**
  * The version of the Terms and Conditions of Use and the Privacy Policy a
  * person accepts when they sign in ("By continuing you confirm you are 18+
@@ -12,7 +13,7 @@ export const TERMS_VERSION = '2026-10-16';
  * updated" date. Raise it when the document changes in a way that needs
  * accepting again: every seller is then asked once more on their next visit.
  */
-export const VENDOR_TERMS_VERSION = '2026-10-12';
+export const VENDOR_TERMS_VERSION = '2026-10-16';
 
 export const VENDOR_TERMS_ACCEPT_TEXT =
   'I have read and accept the Vendor Terms & Seller Agreement, the Terms & Conditions and the Privacy Policy';
@@ -66,7 +67,7 @@ export function legalDisplayName(name: string): string {
     .join('');
 }
 
-const TOKEN = /\{\{legal\.(name|displayName|registeredAddress|llpin|gstin|supportEmail|supportPhoneAlt|supportPhone)\}\}/g;
+const TOKEN = /\{\{legal\.(name|displayName|registeredAddress|llpin|gstin|pan|supportEmail|supportPhoneAlt|supportPhone)\}\}/g;
 
 /**
  * Fill {{legal.*}} tokens in a policy page's markdown. A line naming a field
@@ -79,6 +80,7 @@ export function fillLegalEntity(markdown: string, legal: LegalEntity | null | un
   const values: Record<string, string> = {
     ...entity,
     displayName: legalDisplayName(entity.name),
+    pan: panFromGstin(entity.gstin) ?? '',
   };
   // A multi-line address reads as one line, without doubling a comma the line already ends with.
   const clean = (v: string) => v.replace(/[[\]*`]/g, '').replace(/\s*,?\s*\n\s*/g, ', ').trim();

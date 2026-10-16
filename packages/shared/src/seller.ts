@@ -287,6 +287,8 @@ export interface SellerProductDetail {
   nonCancellable: boolean;
   /** The 360° view's images, in order (Pro and Premium). */
   spinImages: string[];
+  /** A new 360° view waiting for admin review. */
+  spinImagesPending: string[];
   lowStockAlert: number;
   allowBackorders: boolean;
   variants: {

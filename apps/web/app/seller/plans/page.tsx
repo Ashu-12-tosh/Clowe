@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { PLAN_FEATURE_LABELS, SELLER_PLANS, type SellerPlan, type SellerPlanView } from '@clowe/shared';
+import { PLAN_FEATURE_LABELS, PLAN_FEATURES_COMING_SOON, SELLER_PLANS, type SellerPlan, type SellerPlanView } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 
@@ -120,7 +120,13 @@ export default function SellerPlansPage() {
                 <li>{rules.maxLiveProducts === null ? 'Unlimited live products' : `Up to ${rules.maxLiveProducts} live products`}</li>
                 <li>Listing, dashboard, order management and basic analytics</li>
                 {rules.features.map((f) => (
-                  <li key={f}>✓ {PLAN_FEATURE_LABELS[f]}</li>
+                  PLAN_FEATURES_COMING_SOON.includes(f) ? (
+                    <li key={f} className="text-gray-400" data-coming-soon>
+                      ◷ {PLAN_FEATURE_LABELS[f]} <span className="rounded bg-gray-100 px-1.5 py-px text-[10px] font-semibold uppercase text-gray-500">Coming soon</span>
+                    </li>
+                  ) : (
+                    <li key={f}>✓ {PLAN_FEATURE_LABELS[f]}</li>
+                  )
                 ))}
                 {rules.monthlyAdCreditPaise > 0 && <li>✓ {formatPaise(rules.monthlyAdCreditPaise)} advertising credit every month</li>}
                 {rules.waivesHandlingFee && <li>✓ No handling fee on your orders</li>}

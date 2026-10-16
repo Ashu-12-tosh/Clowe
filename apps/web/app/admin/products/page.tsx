@@ -7,6 +7,7 @@ import { api, ApiRequestError } from '@/lib/api';
 import { usePending } from '@/lib/usePending';
 import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
+import SpinReviews from '@/components/admin/SpinReviews';
 
 // REVISION: live listings with an edit waiting for review.
 const TABS = ['PENDING', 'REVISION', 'APPROVED', 'REJECTED'] as const;
@@ -283,6 +284,7 @@ export default function AdminProductsPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold">Product Listings</h1>
+      <SpinReviews />
 
       <div className="mt-4 flex gap-2">
         {TABS.map((t) => (

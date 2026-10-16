@@ -204,7 +204,24 @@ describe('features by plan', () => {
     const [q] = await products(pro.id, 1);
     expect((await call('PUT', `/api/seller/products/${q}/spin-images`, pro.token, { imageUrls: ['https://cdn.example/a.jpg', 'https://cdn.example/b.jpg'] })).status).toBe(200);
     const slug = (await prisma.product.findUniqueOrThrow({ where: { id: q! } })).slug;
-    expect(((await (await fetch(`${base}/api/products/${slug}`)).json()) as { data: { spinImages: string[] } }).data.spinImages).toHaveLength(2);
+    const spinOnPage = async () => ((await (await fetch(`${base}/api/products/${slug}`)).json()) as { data: { spinImages: string[] } }).data.spinImages;
+    // Reviewed like product photos before shoppers see it.
+    expect(await spinOnPage()).toHaveLength(0);
+    const adminUser = await prisma.user.create({ data: { phone: `91965${String(++seq).padStart(5, '0')}`, name: 'Spin Admin', role: Role.ADMIN, referralCode: `SPIN-A-${seq}` } });
+    const adminToken = signAccessToken({ sub: adminUser.id, role: 'ADMIN' });
+    const queue = await call<{ id: string; pending: string[] }[]>('GET', '/api/admin/spin-reviews', adminToken);
+    expect(queue.json.data.find((r) => r.id === q)?.pending).toHaveLength(2);
+    expect((await call('POST', `/api/admin/spin-reviews/${q}`, adminToken, { action: 'reject' })).status).toBe(400);
+    expect((await call('POST', `/api/admin/spin-reviews/${q}`, adminToken, { action: 'approve' })).status).toBe(200);
+    expect(await spinOnPage()).toHaveLength(2);
+    // A new set waits again; rejected, the approved one stays.
+    await call('PUT', `/api/seller/products/${q}/spin-images`, pro.token, { imageUrls: ['https://cdn.example/c.jpg', 'https://cdn.example/d.jpg', 'https://cdn.example/e.jpg'] });
+    expect(await spinOnPage()).toHaveLength(2);
+    expect((await call('POST', `/api/admin/spin-reviews/${q}`, adminToken, { action: 'reject', reason: 'Blurred photos' })).status).toBe(200);
+    expect(await spinOnPage()).toHaveLength(2);
+    // Removing it takes effect at once.
+    await call('PUT', `/api/seller/products/${q}/spin-images`, pro.token, { imageUrls: [] });
+    expect(await spinOnPage()).toHaveLength(0);
 
     expect((await call('POST', '/api/ai/marketing', pro.token, { productId: q })).json.error?.code).toBe('PLAN_REQUIRED');
     const [r] = await products(premium.id, 1);

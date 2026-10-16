@@ -41,7 +41,7 @@ Plans renew every month on the same date and are paid from your Seller Wallet fi
 - **Counterfeit or non-compliant listing:** {{counterfeitPenalty}} per instance.
 - **Inaccurate product data supplied for AI Try-On:** {{tryonDataPenalty}} per instance.
 
-Each penalty is applied with its reason, shown on your Penalties page, and deducted from your next payout.
+Each penalty is applied with its reason, shown on your Penalties page, and deducted from your next payout, plus GST at {{cloweGst}}, which appears on Clowe's monthly tax invoice. A waived penalty's GST is returned with it.
 
 ## Tax deducted by law
 

@@ -30,6 +30,8 @@ let seq = 0;
 
 const HOUR = 3_600_000;
 const PENALTY = DEFAULT_SETTINGS.lateDispatchPenaltyPaise;
+/** With the 18% GST posted beside it (owner's Batch 2). */
+const PENALTY_WITH_GST = Math.round(PENALTY * 1.18);
 
 /**
  * The migrated test database carries lateDispatchPenaltyEffectiveFrom = the
@@ -232,7 +234,7 @@ describe('shipping', () => {
     const { order, items } = await makeOrder(s, 30, { lines: 3 });
     for (const item of items) expect((await ship(s, item.id)).status).toBe(200);
     expect(await penaltiesOf(order.id)).toHaveLength(1);
-    expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(-PENALTY);
+    expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(-PENALTY_WITH_GST);
   });
 });
 
@@ -250,7 +252,7 @@ describe('the sweep', () => {
     expect((await ship(s, items[0].id)).status).toBe(200);
     expect(await chargeLateDispatchIfDue(order.id, s.sellerId)).toBe(false);
     expect(await penaltiesOf(order.id)).toHaveLength(1);
-    expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(-PENALTY);
+    expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(-PENALTY_WITH_GST);
   });
 
   it('leaves orders still inside the penalty time alone', async () => {
@@ -427,8 +429,9 @@ describe('what the seller sees', () => {
     await sweepLateDispatch();
     const page = await call('GET', '/api/seller/ledger?bucket=SETTLEMENT', s.token);
     const rows = (page.json.data as unknown as { rows: { type: string; note: string; reference: { orderNumber: string } }[] }).rows;
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ type: 'LATE_DISPATCH_PENALTY', reference: { orderNumber: order.orderNumber } });
+    // The penalty and, beside it, the 18% GST on it (Batch 2).
+    expect(rows.map((r) => r.type).sort()).toEqual(['CLOWE_FEE_GST', 'LATE_DISPATCH_PENALTY']);
+    expect(rows.find((r) => r.type === 'LATE_DISPATCH_PENALTY')).toMatchObject({ reference: { orderNumber: order.orderNumber } });
 
     const view = (await call('GET', '/api/seller/ledger/penalties', s.token)).json.data as unknown as {
       rule: Record<string, unknown>;
@@ -496,7 +499,7 @@ describe('the effective time', () => {
     expect((await ship(s, old.items[0].id)).status).toBe(200);
     expect(await chargeLateDispatchIfDue(old.order.id, s.sellerId)).toBe(false);
     expect(await penaltiesOf(old.order.id)).toHaveLength(0);
-    expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(-PENALTY);
+    expect(await balance(s.sellerId, 'SETTLEMENT')).toBe(-PENALTY_WITH_GST);
 
     const view = (await call('GET', '/api/seller/ledger/penalties', s.token)).json.data as unknown as {
       rule: { effectiveFrom: string | null };

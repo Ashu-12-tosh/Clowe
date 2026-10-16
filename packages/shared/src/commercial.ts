@@ -42,6 +42,12 @@ export const PLAN_FEATURES = [
 ] as const;
 export type PlanFeature = (typeof PLAN_FEATURES)[number];
 
+/**
+ * Plan features whose part of the site is not built yet (AI search and AI
+ * compare): shown as "Coming soon", never promised as working.
+ */
+export const PLAN_FEATURES_COMING_SOON: readonly PlanFeature[] = ['AI_SEARCH_VISIBILITY'];
+
 export const PLAN_FEATURE_LABELS: Record<PlanFeature, string> = {
   AI_LISTING: 'AI listing generation',
   AI_SEARCH_VISIBILITY: 'Products in AI search and compare',

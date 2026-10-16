@@ -42,6 +42,9 @@ function spread(total: number, weights: number[]): number[] {
   return out;
 }
 
+/** Penalties carry GST from Batch 2 on; each is its own invoice line. */
+const PENALTY_INVOICE_TYPES = ['LATE_DISPATCH_PENALTY', 'ADMIN_PENALTY'] as const;
+
 export async function buildMonthlyInvoice(sellerId: string, month: string): Promise<SellerMonthlyInvoice> {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw ApiError.badRequest('Month looks like 2026-10');
   const [seller, settings, c] = await Promise.all([
@@ -52,16 +55,20 @@ export async function buildMonthlyInvoice(sellerId: string, month: string): Prom
   const { from, to } = istMonthBounds(month);
   const rows = await prisma.sellerLedgerEntry.findMany({
     where: { sellerId, createdAt: { gte: from, lt: to }, bucket: { not: 'AD_CREDIT' } },
-    select: { type: true, amountPaise: true, chargeType: true, orderItemId: true },
+    select: { type: true, amountPaise: true, chargeType: true, orderItemId: true, taxablePaise: true },
   });
 
   // Charges and their GST, per charge type (order fees grouped for the GST).
   const taxable = new Map<SellerLedgerTypeValue, number>();
   const gstByGroup = new Map<string, number>();
+  const penaltyBase = new Map<string, number>();
   const add = <K>(m: Map<K, number>, k: K, v: number) => m.set(k, (m.get(k) ?? 0) + v);
   for (const r of rows) {
     if ((CLOWE_CHARGE_TYPES as readonly string[]).includes(r.type)) add(taxable, r.type as SellerLedgerTypeValue, -r.amountPaise);
     if (r.type === 'CLOWE_FEE_GST') add(gstByGroup, r.chargeType ?? 'ORDER_FEES', -r.amountPaise);
+    // Penalties are on the invoice through their GST lines (the taxable amount rides on them),
+    // so penalties from before GST applied to them, and waived ones, add up right.
+    if (r.type === 'CLOWE_FEE_GST' && r.chargeType && PENALTY_INVOICE_TYPES.includes(r.chargeType as never)) add(penaltyBase, r.chargeType, r.taxablePaise ?? 0);
   }
   // Returns in the month: the order fees on those lines come back (a credit).
   const reversedItems = rows.filter((r) => r.type === 'RETURN_REVERSAL' && r.orderItemId).map((r) => r.orderItemId!);
@@ -101,6 +108,9 @@ export async function buildMonthlyInvoice(sellerId: string, month: string): Prom
   feeTypes.forEach((t, i) => push(t, LABELS[t] ?? SELLER_LEDGER_TYPE_LABELS[t], taxable.get(t) ?? 0, feeGst[i]!));
   for (const t of ['SUBSCRIPTION_FEE', 'AD_SPEND', 'SPONSORSHIP_FEE', 'TRYON_CREDITS'] as const) {
     push(t, SELLER_LEDGER_TYPE_LABELS[t], taxable.get(t) ?? 0, gstByGroup.get(t) ?? 0);
+  }
+  for (const t of PENALTY_INVOICE_TYPES) {
+    push(t, SELLER_LEDGER_TYPE_LABELS[t], penaltyBase.get(t) ?? 0, gstByGroup.get(t) ?? 0);
   }
   const sum = (k: keyof SellerInvoiceLine) => lines.reduce((s, l) => s + (l[k] as number), 0);
   const address = (parts: (string | null)[]) => parts.filter(Boolean).join(', ');

@@ -2,7 +2,7 @@
 
 CLOWE SHOP — www.cloweshop.com
 
-Operated by CLOWE PARTNERS LLP, CIN: DLC30330G, registered office at {{legal.registeredAddress}}
+Operated by CLOWE PARTNERS LLP (GSTIN {{legal.gstin}}, PAN {{legal.pan}}), registered office at {{legal.registeredAddress}}
 
 *Last updated: 16 October 2026*
 

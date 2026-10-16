@@ -988,6 +988,9 @@ model Product {
   // 360° view (Pro and Premium plans): images taken around the product, in
   // order; the product page spins through them as the shopper drags.
   spinImages      String[]      @default([])
+  /// A new 360° view waiting for admin review; the live one stays until approved.
+  spinImagesPending String[]    @default([])
+  spinImagesSubmittedAt DateTime?
   adCampaigns     AdCampaign[]
   // Seller opt-in for AI Try-On; only honoured in try-on eligible categories.
   tryOnEnabled    Boolean       @default(false)

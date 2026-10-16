@@ -165,6 +165,9 @@ describe('admin penalties', () => {
 
     const entry = await prisma.sellerLedgerEntry.findUniqueOrThrow({ where: { id: one.json.data.entryId } });
     expect(entry).toMatchObject({ type: 'ADMIN_PENALTY', bucket: 'SETTLEMENT', amountPaise: -15_000 });
+    // 18% GST beside it, from the payout.
+    const gst = await prisma.sellerLedgerEntry.findFirstOrThrow({ where: { idempotencyKey: `penalty-gst:${entry.id}` } });
+    expect(gst).toMatchObject({ type: 'CLOWE_FEE_GST', bucket: 'SETTLEMENT', amountPaise: -2_700, taxablePaise: 15_000, chargeType: 'ADMIN_PENALTY' });
     expect(entry.note).toContain('another brand');
     expect(await prisma.notification.count({ where: { userId: sellerUserId, type: 'SELLER_PENALTY' } })).toBe(2);
     await new Promise((r) => setTimeout(r, 100));
@@ -180,6 +183,24 @@ describe('admin penalties', () => {
     const after = await call<{ rows: { entryId: string; waived: boolean }[] }>('GET', '/api/seller/ledger/penalties', sellerToken);
     expect(after.json.data.rows.find((r) => r.entryId === entry.id)?.waived).toBe(true);
     expect(after.json.data.rows.find((r) => r.entryId === two.json.data.entryId)?.waived).toBe(false);
+    // The waiver gives the GST back too, once.
+    const back = await prisma.sellerLedgerEntry.findFirstOrThrow({ where: { idempotencyKey: `penalty-gst:${entry.id}:waived` } });
+    expect(back).toMatchObject({ amountPaise: 2_700, taxablePaise: -15_000 });
+    // On the month's invoice: only the ₹1,000 penalty stands, with its GST.
+    const month = new Date(Date.now() + 5.5 * 3_600_000).toISOString().slice(0, 7);
+    const inv = await call<{ lines: { key: string; taxablePaise: number; sac: string; cgstPaise: number; sgstPaise: number; igstPaise: number }[] }>('GET', `/api/seller/billing/invoices/${month}`, sellerToken);
+    const line = inv.json.data.lines.find((l) => l.key === 'ADMIN_PENALTY');
+    expect(line).toMatchObject({ taxablePaise: 100_000, sac: '998599' });
+    expect(line!.cgstPaise + line!.sgstPaise + line!.igstPaise).toBe(18_000);
+  });
+});
+
+describe('a message to one seller', () => {
+  it('reaches the dashboard and the audit log says what was said', async () => {
+    const r = await call('POST', `/api/admin/sellers/${sellerId}/notify`, adminToken, { title: 'New Clowe fees from today', body: 'Referral 2%, GT 1.5%…', auditNote: 'Lower for the seller' });
+    expect(r.status).toBe(200);
+    expect(await prisma.notification.count({ where: { userId: sellerUserId, type: 'SELLER_NOTICE' } })).toBe(1);
+    await expect.poll(() => prisma.auditLog.count({ where: { action: 'Seller notified', entityId: sellerId } })).toBe(1);
   });
 });
 

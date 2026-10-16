@@ -9,8 +9,11 @@ import SpinViewer from '@/components/SpinViewer';
  * The 360° view for one product (Pro and Premium plans): upload photos taken
  * all the way around it, in order — 24 to 36 work best — and preview the spin.
  */
-export function SpinImagesPanel({ productId, initial }: { productId: string; initial: string[] }) {
-  const [images, setImages] = useState<string[]>(initial);
+export function SpinImagesPanel({ productId, initial, pending: pendingAtLoad = [] }: { productId: string; initial: string[]; pending?: string[] }) {
+  const [live, setLive] = useState<string[]>(initial);
+  // New photos wait for Clowe's review; the live view stays until then.
+  const [pending, setPending] = useState<string[]>(pendingAtLoad);
+  const images = pending.length ? pending : live;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -18,8 +21,12 @@ export function SpinImagesPanel({ productId, initial }: { productId: string; ini
     setBusy(true);
     setError('');
     try {
-      await api(`/api/seller/products/${productId}/spin-images`, { method: 'PUT', auth: true, quiet: true, body: { imageUrls: next }, success: next.length ? '360° view saved' : '360° view removed' });
-      setImages(next);
+      await api(`/api/seller/products/${productId}/spin-images`, { method: 'PUT', auth: true, quiet: true, body: { imageUrls: next }, success: next.length ? '360° view sent for review' : '360° view removed' });
+      if (next.length) setPending(next);
+      else {
+        setLive([]);
+        setPending([]);
+      }
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not save the 360° view');
     } finally {
@@ -52,6 +59,11 @@ export function SpinImagesPanel({ productId, initial }: { productId: string; ini
         .
       </p>
       {error && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
+      {pending.length > 0 && (
+        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900" data-spin-pending>
+          Waiting for review — checked like product photos before shoppers see it.{live.length ? ' Your current 360° view stays live until then.' : ''}
+        </p>
+      )}
       {images.length >= 2 && (
         <div className="mt-3 max-w-xs">
           <SpinViewer images={images} alt="Preview" />

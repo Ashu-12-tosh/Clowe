@@ -61,7 +61,7 @@ export default function EditProductPage({ params: paramsPromise }: { params: Pro
       <div className="mt-5">
         <ProductForm initial={product} />
       </div>
-      <SpinImagesPanel productId={product.id} initial={product.spinImages} />
+      <SpinImagesPanel productId={product.id} initial={product.spinImages} pending={product.spinImagesPending} />
     </div>
   );
 }

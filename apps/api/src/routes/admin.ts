@@ -317,6 +317,67 @@ async function revisionView(p: {
   };
 }
 
+// 360° views waiting for review: approved, they replace the live view; rejected,
+// the seller is told why and the live view stays.
+adminRouter.get('/spin-reviews', async (_req, res, next) => {
+  try {
+    const rows = await prisma.product.findMany({
+      where: { NOT: { spinImagesPending: { isEmpty: true } } },
+      orderBy: { spinImagesSubmittedAt: 'asc' },
+      take: 50,
+      select: { id: true, title: true, slug: true, spinImages: true, spinImagesPending: true, spinImagesSubmittedAt: true, seller: { select: { shopName: true } } },
+    });
+    res.json({
+      success: true,
+      data: rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        slug: r.slug,
+        shopName: r.seller.shopName,
+        live: r.spinImages,
+        pending: r.spinImagesPending,
+        submittedAt: r.spinImagesSubmittedAt?.toISOString() ?? null,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminRouter.post('/spin-reviews/:id', async (req, res, next) => {
+  try {
+    const { action, reason } = z.object({ action: z.enum(['approve', 'reject']), reason: z.string().trim().max(300).optional() }).parse(req.body);
+    const p = await prisma.product.findUnique({ where: { id: req.params.id }, select: { id: true, title: true, spinImagesPending: true, seller: { select: { userId: true } } } });
+    if (!p || p.spinImagesPending.length === 0) throw ApiError.notFound('No 360° view waiting for review');
+    if (action === 'reject' && (!reason || reason.length < 3)) throw ApiError.badRequest('Say why — the seller sees it');
+    await prisma.product.update({
+      where: { id: p.id },
+      data: action === 'approve' ? { spinImages: p.spinImagesPending, spinImagesPending: [], spinImagesSubmittedAt: null } : { spinImagesPending: [], spinImagesSubmittedAt: null },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: p.seller.userId,
+        type: 'PRODUCT_REVIEW',
+        title: action === 'approve' ? `360° view approved: ${p.title.slice(0, 60)}` : `360° view not approved: ${p.title.slice(0, 60)}`,
+        body: action === 'approve' ? 'Shoppers can now turn your product around on its page.' : `${reason} Your previous 360° view (if any) stays.`,
+        linkHref: `/seller/products/${p.id}/edit`,
+      },
+    });
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'PRODUCTS',
+      action: action === 'approve' ? '360° view approved' : '360° view rejected',
+      entityType: 'Product',
+      entityId: p.id,
+      summary: `${action === 'approve' ? 'Approved' : 'Rejected'} the 360° view of "${p.title}"${reason ? `: ${reason}` : ''}`,
+    });
+    res.json({ success: true, data: { id: p.id, action } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Approve or reject an edit to a live listing. The listing was live the whole
 // time; approval puts the edit on it, rejection leaves it as it is.
 adminRouter.patch('/products/:id/revision', async (req, res, next) => {

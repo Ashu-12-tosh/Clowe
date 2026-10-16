@@ -10,7 +10,7 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { getSettings } from './settingsService';
-import { latePenaltyKey, postEntry } from './sellerLedgerService';
+import { latePenaltyKey, postEntry, postPenaltyGst } from './sellerLedgerService';
 
 // ---------------------------------------------------------------------------
 // The late-dispatch penalty.
@@ -84,7 +84,7 @@ export async function chargeLateDispatchIfDue(orderId: string, sellerId: string,
   const lastLeft = allLeft ? new Date(Math.max(...owed.map((l) => l.shippedAt!.getTime()))) : null;
   const pausedHours = (deadline.getTime() - order.createdAt.getTime()) / HOUR_MS - afterHours;
 
-  return postEntry({
+  const posted = await postEntry({
     sellerId,
     type: 'LATE_DISPATCH_PENALTY',
     bucket: 'SETTLEMENT',
@@ -93,6 +93,11 @@ export async function chargeLateDispatchIfDue(orderId: string, sellerId: string,
     idempotencyKey: latePenaltyKey(orderId, sellerId),
     note: lateDispatchNote({ placedAt: order.createdAt, shippedAt: lastLeft, afterHours, pausedHours }),
   });
+  if (posted) {
+    const entry = await prisma.sellerLedgerEntry.findFirst({ where: { idempotencyKey: latePenaltyKey(orderId, sellerId) }, select: { id: true } });
+    if (entry) await postPenaltyGst(entry.id);
+  }
+  return posted;
 }
 
 /**
