@@ -16,6 +16,7 @@ import { DispatchCountdown } from '@/components/seller/orders/DispatchCountdown'
 import { PackingVideoPanel } from '@/components/seller/orders/PackingVideoPanel';
 import { CancelOrderPanel } from '@/components/seller/orders/CancelOrderPanel';
 import { BookingConfirm } from '@/components/seller/orders/BookingConfirm';
+import { announceBooking } from '@/components/seller/orders/bookingNotice';
 import { ParcelIssues } from '@/components/seller/orders/ParcelIssues';
 import { ExternalLink } from '@/components/ExternalLink';
 
@@ -412,10 +413,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
               onClose={() => setBooking(null)}
               onBooked={(r) => {
                 setBooking(null);
-                flash(
-                  `${r.updated} item(s) booked with Delhivery — the label now carries the AWB` +
-                    (r.skipped.length > 0 ? ` · ${r.skipped.length} skipped (${r.skipped[0]!.reason})` : ''),
-                );
+                flash(announceBooking(r));
                 load();
               }}
             />
