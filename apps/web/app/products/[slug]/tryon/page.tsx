@@ -13,6 +13,7 @@ import {
   type TryOnResult,
 } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser, uploadPrivateImages } from '@/lib/api';
+import { TryOnConsentBox, useTryOnConsent } from '@/components/TryOnConsent';
 import { getPublicSettings } from '@/lib/settings';
 import { discountPercent, formatPaise } from '@/lib/format';
 import { colorToHex } from '@/lib/colors';
@@ -126,6 +127,7 @@ export default function TryOnPage({ params: paramsPromise }: { params: Promise<{
   const [runs, setRuns] = useState<TryOnHistoryRow[]>([]);
   const [activeRun, setActiveRun] = useState(0);
   const [generating, setGenerating] = useState(false);
+  const consent = useTryOnConsent();
   const [error, setError] = useState('');
   const [sizeGuideOpen, setSizeGuideOpen] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
@@ -204,6 +206,7 @@ export default function TryOnPage({ params: paramsPromise }: { params: Promise<{
     setError('');
     setGenerating(true);
     try {
+      await consent.ensure();
       let photoRef = quota?.savedPhotoRef ?? '';
       if (photoFile) {
         [{ ref: photoRef }] = await uploadPrivateImages([photoFile], 'TRYON_PHOTO');
@@ -600,9 +603,10 @@ export default function TryOnPage({ params: paramsPromise }: { params: Promise<{
             </div>
           )}
 
+          {consent.consented === false && <TryOnConsentBox ticked={consent.ticked} onChange={consent.setTicked} />}
           <button
             onClick={() => void generate()}
-            disabled={generating || (!photoFile && !savedPhotoUrl) || remaining === 0}
+            disabled={generating || (!photoFile && !savedPhotoUrl) || remaining === 0 || !consent.ready}
             className="mt-4 w-full rounded-lg bg-brand-600 py-3 text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-50"
           >
             {generating

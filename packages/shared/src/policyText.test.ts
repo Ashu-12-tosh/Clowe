@@ -36,7 +36,7 @@ describe('policy text', () => {
   });
 
   it('quotes the retention the code uses for try-on photos and packing videos', () => {
-    expect(fillPolicyText('{{tryonPhotoDays}} / {{packingVideoDays}}', null)).toBe('30 days / 45 days');
+    expect(fillPolicyText('{{tryonPhotoRetention}} / {{packingVideoDays}}', null)).toBe('24 hours / 45 days');
   });
 
   it('reads true without settings, with no number and no token left', () => {

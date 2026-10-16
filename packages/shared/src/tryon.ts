@@ -2,10 +2,17 @@ import { z } from 'zod';
 import { assetRefSchema } from './assets';
 
 /**
- * Days a shopper's try-on photo is kept after upload, unless they save it to
- * reuse: the API's sweep deletes it then, and the privacy policy quotes it.
+ * Hours a shopper's try-on photo is kept after upload — saved or not — before
+ * the API's sweep deletes it (Privacy Policy 3.7, Terms 9.6).
  */
-export const TRYON_PHOTO_RETENTION_DAYS = 30;
+export const TRYON_PHOTO_RETENTION_HOURS = 24;
+
+/** The consent a shopper gives before their first try-on photo, word for word. */
+export const TRYON_CONSENT_TEXT = 'I am 18+ and this photo is of me or of an adult who has consented';
+/** Stored with the consent, so a change of wording can ask again. */
+export const TRYON_CONSENT_VERSION = '2026-10-16';
+
+export const tryOnConsentSchema = z.object({ accepted: z.literal(true) });
 
 export const tryOnRequestSchema = z.object({
   productId: z.string().min(1),
@@ -61,6 +68,8 @@ export interface TryOnQuota {
   savedPhotoUrl: string | null;
   /** …and the reference to send with a try-on. */
   savedPhotoRef: string | null;
+  /** The shopper has given the try-on consent (current wording). */
+  consented: boolean;
 }
 
 export const saveTryOnPhotoSchema = z.object({

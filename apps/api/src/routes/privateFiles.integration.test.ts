@@ -12,7 +12,7 @@ import { signAccessToken } from '../utils/jwt';
 import { resolveFileUrls, storePrivateFile } from '../services/assets';
 import { localFiles } from '../services/storage';
 import { signLocalFile } from '../services/storage/LocalStorageProvider';
-import { sweepExpiredTryOnPhotos, TRYON_PHOTO_RETENTION_DAYS } from '../services/tryonPhotoRetention';
+import { sweepExpiredTryOnPhotos, TRYON_PHOTO_RETENTION_HOURS } from '../services/tryonPhotoRetention';
 import { uploadDir } from './uploads';
 import { backfillPrivateFiles } from '../../prisma/backfillPrivateFiles';
 
@@ -160,8 +160,8 @@ describe('resolving stored values', () => {
 });
 
 describe('try-on photo retention', () => {
-  it('deletes unsaved photos past retention, keeps saved and recent ones, and never touches rows that are not ours', async () => {
-    const old = new Date(Date.now() - (TRYON_PHOTO_RETENTION_DAYS + 1) * 24 * 60 * 60 * 1000);
+  it('deletes every photo past 24 hours — saved ones too (Privacy Policy 3.7) — keeps recent ones, never touches rows that are not ours', async () => {
+    const old = new Date(Date.now() - (TRYON_PHOTO_RETENTION_HOURS + 1) * 60 * 60 * 1000);
     const expired = await storePrivateFile({ purpose: 'TRYON_PHOTO', ownerId: buyer.id, body: TINY_PNG, contentType: 'image/png' });
     const saved = await storePrivateFile({ purpose: 'TRYON_PHOTO', ownerId: other.id, body: TINY_PNG, contentType: 'image/png' });
     const recent = await storePrivateFile({ purpose: 'TRYON_PHOTO', ownerId: buyer.id, body: TINY_PNG, contentType: 'image/png' });
@@ -176,13 +176,15 @@ describe('try-on photo retention', () => {
       data: { userId: buyer.id, productId: product.id, inputImageUrl: 'https://picsum.photos/seed/demo/400/600', provider: 'mock', status: 'SUCCESS' },
     });
 
-    expect(await sweepExpiredTryOnPhotos()).toBe(2);
+    expect(await sweepExpiredTryOnPhotos()).toBe(3);
 
     const after = await prisma.asset.findMany({ where: { id: { in: [expired.id, saved.id, recent.id, fileless.id] } } });
     const byId = new Map(after.map((a) => [a.id, a]));
     expect(byId.get(expired.id)!.deletedAt).not.toBeNull();
     expect(byId.get(fileless.id)!.deletedAt).not.toBeNull();
-    expect(byId.get(saved.id)!.deletedAt).toBeNull();
+    expect(byId.get(saved.id)!.deletedAt).not.toBeNull();
+    // The saved reference goes with it.
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: other.id } })).tryOnPhotoUrl).toBeNull();
     expect(byId.get(recent.id)!.deletedAt).toBeNull();
     await expect(localFiles.get(byId.get(expired.id)!.key)).rejects.toThrow();
     expect((await prisma.tryOnHistory.findUniqueOrThrow({ where: { id: demoRow.id } })).inputImageUrl).toBe(

@@ -600,7 +600,7 @@ export default function AccountSettingsPage() {
                 </div>
               </Card>
 
-              <Card title="AI Try-On photo" subtitle="Saved so you don't have to upload it every time.">
+              <Card title="AI Try-On photos" subtitle="Used only to make your try-on images, and deleted 24 hours after upload.">
                 {quota?.savedPhotoUrl ? (
                   <div className="flex items-center gap-4">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -628,6 +628,21 @@ export default function AccountSettingsPage() {
                   </div>
                 ) : (
                   <p className="t-caption text-gray-500">No try-on photo saved.</p>
+                )}
+                {quota?.consented && (
+                  <button
+                    onClick={() => {
+                      if (!window.confirm('Delete all your try-on photos and withdraw your consent? AI Try-On will ask again before you use it.')) return;
+                      void api('/api/tryon/consent', { method: 'DELETE', auth: true }).then(() => {
+                        setQuota((q) => (q ? { ...q, savedPhotoUrl: null, savedPhotoRef: null, consented: false } : q));
+                        flash('Your try-on photos are deleted and your consent withdrawn');
+                      });
+                    }}
+                    className="t-caption mt-3 block font-semibold text-red-600 underline"
+                    data-withdraw-tryon-consent
+                  >
+                    Delete my try-on photos / withdraw consent
+                  </button>
                 )}
               </Card>
 

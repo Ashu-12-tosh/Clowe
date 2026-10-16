@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react';
 import type { TryOnQuota } from '@clowe/shared';
 import { api, ApiRequestError, uploadPrivateImages } from '@/lib/api';
+import { toast } from '@/lib/toast';
+import { TryOnConsentBox, useTryOnConsent } from '@/components/TryOnConsent';
 
 /**
  * Account-page card: upload your try-on photo once — every "✨ Try On Me"
  * then uses it automatically.
  */
 export default function TryOnPhotoCard() {
+  const consent = useTryOnConsent();
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -25,11 +28,28 @@ export default function TryOnPhotoCard() {
     setError('');
     setBusy(true);
     try {
+      await consent.ensure();
       const [photo] = await uploadPrivateImages([file], 'TRYON_PHOTO');
       await api('/api/tryon/photo', { body: { photoRef: photo.ref }, auth: true });
       setPhotoUrl(photo.url);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Upload failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Withdraw the try-on consent: every try-on photo is deleted now. */
+  async function withdraw() {
+    if (!window.confirm('Delete all your try-on photos and withdraw your consent? AI Try-On will ask again before you use it.')) return;
+    setBusy(true);
+    try {
+      await api('/api/tryon/consent', { method: 'DELETE', auth: true, success: 'Your try-on photos are deleted and your consent withdrawn' });
+      setPhotoUrl(null);
+      consent.setTicked(false);
+      window.location.reload();
+    } catch {
+      toast.error('Could not delete your try-on photos — try again');
     } finally {
       setBusy(false);
     }
@@ -56,7 +76,7 @@ export default function TryOnPhotoCard() {
         )}
       </div>
       <p className="mt-1 text-xs text-gray-500">
-        Upload once — every &ldquo;Try On Me&rdquo; uses this photo automatically.
+        Upload a photo — every &ldquo;Try On Me&rdquo; uses it for the next 24 hours.
       </p>
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
 
@@ -76,7 +96,7 @@ export default function TryOnPhotoCard() {
             accept="image/jpeg,image/png,image/webp"
             capture="user"
             className="hidden"
-            disabled={busy}
+            disabled={busy || !consent.ready}
             onChange={(e) => {
               void upload(e.target.files);
               e.target.value = '';
@@ -84,6 +104,17 @@ export default function TryOnPhotoCard() {
           />
         </label>
       </div>
+      {consent.consented === false && <TryOnConsentBox ticked={consent.ticked} onChange={consent.setTicked} />}
+      <p className="mt-3 text-[11px] text-gray-500">Try-on photos are deleted 24 hours after upload.</p>
+      {consent.consented && (
+        <button
+          onClick={() => void withdraw()}
+          disabled={busy}
+          className="mt-2 text-xs font-semibold text-red-600 hover:underline disabled:opacity-50"
+        >
+          Delete my try-on photos / withdraw consent
+        </button>
+      )}
     </div>
   );
 }

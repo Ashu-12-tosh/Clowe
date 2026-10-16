@@ -271,8 +271,13 @@ model User {
   premiumSince   DateTime?
   // Set the first time the shopper shares their wishlist; revoking clears it.
   wishlistShareToken String?  @unique
-  // Saved photo for AI try-on — uploaded once, reused on every "Try On Me".
+  // Saved photo for AI try-on — uploaded once, reused on every "Try On Me"
+  // (deleted with every try-on photo 24 hours after upload).
   tryOnPhotoUrl String?
+  // Consent to use AI Try-On (18+, the photo is of them or of a consenting
+  // adult): when, and which wording. Null = not given, or withdrawn.
+  tryOnConsentAt      DateTime?
+  tryOnConsentVersion String?
   referredById String?
   referredBy   User?    @relation("UserReferrals", fields: [referredById], references: [id])
   referrals    User[]   @relation("UserReferrals")

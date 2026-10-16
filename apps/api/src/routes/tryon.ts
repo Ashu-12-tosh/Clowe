@@ -10,6 +10,8 @@ import {
   type TryOnResult,
   istMonthStart,
   istStartOfDay,
+  TRYON_CONSENT_VERSION,
+  tryOnConsentSchema,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -23,6 +25,8 @@ import {
   tryOnProvider,
 } from '../services/tryon';
 import { getSettings } from '../services/settingsService';
+import { assertTryOnConsent } from '../services/tryonConsent';
+import { deleteTryOnPhotosOf } from '../services/tryonPhotoRetention';
 import { assertOwnAssets, resolveFileUrl, resolveFileUrls, storePrivateFile } from '../services/assets';
 import { categoryRulesFor } from '../services/categoryRules';
 
@@ -61,7 +65,7 @@ tryonRouter.get('/quota', async (req, res, next) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.auth!.userId },
-      select: { tryOnPhotoUrl: true },
+      select: { tryOnPhotoUrl: true, tryOnConsentVersion: true },
     });
     const { tryonDailyLimit } = await getSettings();
     const body: TryOnQuota = {
@@ -70,6 +74,7 @@ tryonRouter.get('/quota', async (req, res, next) => {
       provider: tryOnProvider.name,
       savedPhotoUrl: await resolveFileUrl(user?.tryOnPhotoUrl),
       savedPhotoRef: user?.tryOnPhotoUrl ?? null,
+      consented: user?.tryOnConsentVersion === TRYON_CONSENT_VERSION,
     };
     res.json({ success: true, data: body });
   } catch (err) {
@@ -85,6 +90,36 @@ tryonRouter.get('/quota', async (req, res, next) => {
 async function assertOwnPhoto(photoRef: string, userId: string): Promise<void> {
   await assertOwnAssets([photoRef], { ownerId: userId, purpose: 'TRYON_PHOTO' });
 }
+
+// Give the try-on consent (Privacy Policy 3): "I am 18+ and this photo is of
+// me or of an adult who has consented". Stored with its time and wording.
+tryonRouter.post('/consent', async (req, res, next) => {
+  try {
+    tryOnConsentSchema.parse(req.body);
+    await prisma.user.update({
+      where: { id: req.auth!.userId },
+      data: { tryOnConsentAt: new Date(), tryOnConsentVersion: TRYON_CONSENT_VERSION },
+    });
+    res.json({ success: true, data: { consented: true } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Withdraw the consent: every try-on photo of this shopper is deleted now,
+// the saved one forgotten, and try-on asks again before the next upload.
+tryonRouter.delete('/consent', async (req, res, next) => {
+  try {
+    const removed = await deleteTryOnPhotosOf(req.auth!.userId);
+    await prisma.user.update({
+      where: { id: req.auth!.userId },
+      data: { tryOnPhotoUrl: null, tryOnConsentAt: null, tryOnConsentVersion: null },
+    });
+    res.json({ success: true, data: { consented: false, photosDeleted: removed } });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Save (or replace) the user's try-on photo — uploaded once, reused after.
 tryonRouter.post('/photo', async (req, res, next) => {
@@ -119,6 +154,7 @@ tryonRouter.post('/', async (req, res, next) => {
   try {
     const input = tryOnRequestSchema.parse(req.body);
     const userId = req.auth!.userId;
+    await assertTryOnConsent(userId);
     await assertOwnPhoto(input.photoRef, userId);
 
     // Live controls from the admin monitor (kill switch, quota, spend cap).

@@ -73,7 +73,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     label: 'How does AI Try-On work?',
     keywords: ['try on', 'tryon', 'try-on', 'virtual', 'photo', 'ai photo', 'dekh'],
     answer:
-      'AI Try-On ✨ lets you see clothes on yourself before buying:\n\n1. Upload one full-body photo (Account → My Try-On Photo)\n2. Open any product and tap "Try On Me"\n3. Our AI generates a preview of you wearing it — a guide, not an exact fit\n\nPhoto tips: front-facing, full body, good lighting, plain background, no sunglasses. There is a daily limit on try-ons; the try-on page shows how many you have left.\n\nYour photo is used only to make your try-on images and is deleted {{tryonPhotoDays}} after upload, unless you save it for next time.',
+      'AI Try-On ✨ lets you see clothes on yourself before buying:\n\n1. Upload one full-body photo (Account → My Try-On Photo)\n2. Open any product and tap "Try On Me"\n3. Our AI generates a preview of you wearing it — a guide, not an exact fit\n\nPhoto tips: front-facing, full body, good lighting, plain background, no sunglasses. There is a daily limit on try-ons; the try-on page shows how many you have left.\n\nYour photo is used only to make your try-on images and is deleted {{tryonPhotoRetention}} after upload.',
     links: [{ label: 'Set my try-on photo', href: '/account' }],
     followUps: ['helped', 'menu'],
   },

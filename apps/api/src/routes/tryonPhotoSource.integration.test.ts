@@ -1,3 +1,4 @@
+import { TRYON_CONSENT_VERSION } from '@clowe/shared';
 import http, { type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient } from '@prisma/client';
@@ -15,6 +16,8 @@ import { TINY_PNG } from '../test/images';
  * be the shopper's own private upload.
  */
 
+// Both have given the try-on consent (tryonConsent.integration.test.ts covers its absence).
+const CONSENTED = { tryOnConsentAt: new Date(), tryOnConsentVersion: TRYON_CONSENT_VERSION };
 const prisma = new PrismaClient();
 let server: Server;
 let base: string;
@@ -24,8 +27,8 @@ let otherUserId: string;
 
 beforeAll(async () => {
   await seedFixture(prisma);
-  const user = await prisma.user.create({ data: { phone: '9600000001', name: 'Photo Source', referralCode: 'PHOTO-SRC-1' } });
-  const other = await prisma.user.create({ data: { phone: '9600000002', name: 'Someone Else', referralCode: 'PHOTO-SRC-2' } });
+  const user = await prisma.user.create({ data: { phone: '9600000001', name: 'Photo Source', referralCode: 'PHOTO-SRC-1', ...CONSENTED } });
+  const other = await prisma.user.create({ data: { phone: '9600000002', name: 'Someone Else', referralCode: 'PHOTO-SRC-2', ...CONSENTED } });
   userId = user.id;
   otherUserId = other.id;
   token = signAccessToken({ sub: user.id, role: 'CUSTOMER' });

@@ -18,6 +18,7 @@ import {
   setStoredUser,
   uploadPrivateImages,
 } from '@/lib/api';
+import { TryOnConsentBox, useTryOnConsent } from '@/components/TryOnConsent';
 
 type Step = 'phone' | 'pin' | 'otp' | 'profile' | 'photo' | 'setpin' | 'newpin';
 
@@ -164,6 +165,7 @@ export default function LoginPage() {
   const [pincode, setPincode] = useState('');
   const [altPhone, setAltPhone] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const consent = useTryOnConsent();
   const [photoPreview, setPhotoPreview] = useState('');
 
   // Already logged in? This page is auth-only — send them to their account.
@@ -328,6 +330,7 @@ export default function LoginPage() {
     setBusy(true);
     try {
       if (photoFile) {
+        await consent.ensure();
         const [photo] = await uploadPrivateImages([photoFile], 'TRYON_PHOTO');
         await api('/api/tryon/photo', { body: { photoRef: photo.ref }, auth: true });
       }
@@ -678,9 +681,12 @@ export default function LoginPage() {
                     <input type="file" accept="image/jpeg,image/png,image/webp" capture="user" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)} />
                   </label>
                 )}
+                {photoFile && consent.consented === false && (
+                  <TryOnConsentBox ticked={consent.ticked} onChange={consent.setTicked} />
+                )}
                 <button
                   onClick={() => void savePhotoAndContinue()}
-                  disabled={busy}
+                  disabled={busy || (!!photoFile && !consent.ready)}
                   className="w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:bg-brand-700 disabled:opacity-50"
                 >
                   {busy ? 'Saving…' : photoFile ? 'Save & Continue →' : 'Skip for now →'}

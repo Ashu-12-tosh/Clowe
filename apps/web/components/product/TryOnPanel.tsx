@@ -24,6 +24,7 @@ import {
   type TryOnResult,
 } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser, uploadPrivateImages } from '@/lib/api';
+import { TryOnConsentBox, useTryOnConsent } from '@/components/TryOnConsent';
 
 const PHOTO_TIPS = ['Good lighting', 'Face the camera', 'Arms visible', 'Plain background'];
 
@@ -43,6 +44,7 @@ export default function TryOnPanel({
   const [runs, setRuns] = useState<TryOnHistoryRow[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const consent = useTryOnConsent();
   const [error, setError] = useState('');
   const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
   const [pendingPreview, setPendingPreview] = useState('');
@@ -115,6 +117,7 @@ export default function TryOnPanel({
     setError('');
     setGenerating(true);
     try {
+      await consent.ensure();
       let photoRef = quota?.savedPhotoRef ?? '';
       if (pendingPhoto) {
         [{ ref: photoRef }] = await uploadPrivateImages([pendingPhoto], 'TRYON_PHOTO');
@@ -332,9 +335,10 @@ export default function TryOnPanel({
         {/* Footer action */}
         {loggedIn && (
           <footer className="shrink-0 border-t border-gray-100 px-5 py-3">
+            {consent.consented === false && <TryOnConsentBox ticked={consent.ticked} onChange={consent.setTicked} />}
             <button
               onClick={() => void generate()}
-              disabled={generating || outOfRuns || (!showPhoto && !pendingPhoto)}
+              disabled={generating || outOfRuns || (!showPhoto && !pendingPhoto) || !consent.ready}
               className="w-full rounded-xl bg-ink-900 py-3 text-sm font-bold uppercase tracking-wide text-white transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {generating

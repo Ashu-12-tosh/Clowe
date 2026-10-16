@@ -1,7 +1,7 @@
 import { fillReturnWindow } from './returnWindow';
 import { PACKING_VIDEO_RETENTION_DAYS } from './sellerOrders';
 import type { SellerFeeSchedule } from './settings';
-import { TRYON_PHOTO_RETENTION_DAYS } from './tryon';
+import { TRYON_PHOTO_RETENTION_HOURS } from './tryon';
 
 // ---------------------------------------------------------------------------
 // Platform rules in copy.
@@ -70,7 +70,7 @@ function tokens(v: PolicyValues): Record<string, string> {
     '{{tcs}}': fee('tcsPercent', percent, 'the rate set by law'),
     '{{payoutHold}}': fee('payoutHoldDays', days, 'the clearing period shown on your Payouts page'),
     '{{payoutMin}}': fee('payoutMinPaise', rupees, onPayouts),
-    '{{tryonPhotoDays}}': days(TRYON_PHOTO_RETENTION_DAYS),
+    '{{tryonPhotoRetention}}': hours(TRYON_PHOTO_RETENTION_HOURS),
     '{{packingVideoDays}}': days(PACKING_VIDEO_RETENTION_DAYS),
     '{{customerSupportEmail}}': v.supportEmails?.customer || 'our customer support email',
     '{{vendorSupportEmail}}': v.supportEmails?.vendor || 'our seller support email',

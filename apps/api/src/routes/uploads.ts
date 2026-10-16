@@ -8,6 +8,7 @@ import { env } from '../env';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { uploadLimiter } from '../middleware/rateLimits';
+import { assertTryOnConsent } from '../services/tryonConsent';
 import { deleteFileRef, resolveFileUrl, storePrivateFile } from '../services/assets';
 import { storeImageVariants } from '../services/imageVariants';
 
@@ -117,6 +118,8 @@ uploadsRouter.post('/private', requireAuth, uploadLimiter, privateImageUpload.ar
     if (!(UPLOADABLE_IMAGE_PURPOSES as readonly string[]).includes(purpose)) {
       throw ApiError.badRequest('Say what the photo is for', 'INVALID_PURPOSE');
     }
+    // A try-on photo needs the shopper's consent first (Privacy Policy 3).
+    if (purpose === 'TRYON_PHOTO') await assertTryOnConsent(req.auth!.userId);
     const files = (req.files ?? []) as Express.Multer.File[];
     if (files.length === 0) throw ApiError.badRequest('No images uploaded. Use multipart field name "images".');
     const types = files.map((f) => imageTypeOf(f.buffer.subarray(0, 12)));
