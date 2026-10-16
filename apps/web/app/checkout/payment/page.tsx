@@ -9,6 +9,8 @@ import {
   CREDIT_VALUE_PAISE,
   creditsToPaise,
   EMI_MIN_PAISE,
+  GSTIN_EXAMPLE,
+  gstinProblem,
   PAYMENT_METHOD_META,
   PAYMENT_METHODS,
   type AddressInfo,
@@ -93,6 +95,8 @@ function PaymentPageInner() {
 
   const [method, setMethod] = useState<PaymentMethod>('UPI');
   const [billingId, setBillingId] = useState('');
+  const [buyerGstin, setBuyerGstin] = useState('');
+  const gstinError = buyerGstin.trim() ? gstinProblem(buyerGstin) : null;
   const [upiId, setUpiId] = useState('');
   const [upiState, setUpiState] = useState<'idle' | 'ok' | 'bad'>('idle');
   const [bank, setBank] = useState(BANKS[0]);
@@ -101,9 +105,13 @@ function PaymentPageInner() {
   // The COD ceiling is a platform setting; until it loads, nothing is greyed
   // out on its account — the server enforces it regardless.
   const [codMaxPaise, setCodMaxPaise] = useState<number | null>(null);
+  const [codMinPaise, setCodMinPaise] = useState<number | null>(null);
   useEffect(() => {
     getPublicSettings()
-      .then((s) => setCodMaxPaise(s.codMaxOrderPaise))
+      .then((s) => {
+        setCodMaxPaise(s.codMaxOrderPaise);
+        setCodMinPaise(s.codMinOrderPaise);
+      })
       .catch(() => {});
   }, []);
 
@@ -170,6 +178,9 @@ function PaymentPageInner() {
     if (m === 'COD' && codMaxPaise !== null && totalPaise > codMaxPaise) {
       return `Not available above ${formatPaise(codMaxPaise)}`;
     }
+    if (m === 'COD' && codMinPaise !== null && totalPaise < codMinPaise) {
+      return `Available on orders from ${formatPaise(codMinPaise)}`;
+    }
     if (m === 'COD' && codHere && !codHere.available) return codHere.reason;
     return null;
   }
@@ -178,6 +189,10 @@ function PaymentPageInner() {
     setError('');
     if (method === 'UPI' && upiId.trim() && upiState !== 'ok') {
       setError('Check your UPI ID before continuing');
+      return;
+    }
+    if (gstinError) {
+      setError(`GSTIN: ${gstinError}`);
       return;
     }
     setPlacing(true);
@@ -191,6 +206,7 @@ function PaymentPageInner() {
           ...(isGift && giftMessage ? { giftMessage } : {}),
           paymentMethod: method,
           ...(billingId && billingId !== addressId ? { billingAddressId: billingId } : {}),
+          ...(buyerGstin.trim() ? { buyerGstin: buyerGstin.trim() } : {}),
         },
         auth: true,
       });
@@ -591,9 +607,9 @@ function PaymentPageInner() {
                     <p className="t-card-label mt-4 rounded-lg bg-cream-50 px-3 py-3 text-ink-900">
                       Keep {formatPaise(totalPaise)} ready at handover.
                     </p>
-                    {codMaxPaise !== null && (
+                    {codMaxPaise !== null && codMinPaise !== null && (
                       <p className="t-caption mt-2 text-gray-500">
-                        Available on orders up to {formatPaise(codMaxPaise)}.
+                        Available on orders from {formatPaise(codMinPaise)} to {formatPaise(codMaxPaise)}.
                       </p>
                     )}
                   </>
@@ -682,6 +698,28 @@ function PaymentPageInner() {
                 </span>
                 <span className="t-caption font-semibold">Add New Billing Address</span>
               </Link>
+            </div>
+            <div className="mt-4 max-w-sm">
+              <label htmlFor="buyerGstin" className="t-caption font-semibold text-ink-900">
+                GSTIN for a business purchase (optional)
+              </label>
+              <input
+                id="buyerGstin"
+                name="buyerGstin"
+                value={buyerGstin}
+                onChange={(e) => setBuyerGstin(e.target.value.toUpperCase())}
+                maxLength={20}
+                placeholder={GSTIN_EXAMPLE}
+                autoComplete="off"
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase tracking-wide focus:border-brand-600 focus:outline-none"
+              />
+              {gstinError ? (
+                <p className="t-caption mt-1 text-red-600">{gstinError}</p>
+              ) : (
+                <p className="t-caption mt-1 text-gray-500">
+                  Printed on your invoice. It can&apos;t be added after the order is placed.
+                </p>
+              )}
             </div>
           </section>
         </div>

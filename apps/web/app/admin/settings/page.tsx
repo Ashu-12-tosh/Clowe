@@ -32,6 +32,8 @@ export default function AdminSettingsPage() {
   const [supportEmails, setSupportEmails] = useState({ customer: '', vendor: '' });
   const [legal, setLegal] = useState<LegalEntity>(DEFAULT_LEGAL_ENTITY);
   const [codMaxRupees, setCodMaxRupees] = useState('');
+  const [codMinRupees, setCodMinRupees] = useState('');
+  const [prepaidOnly, setPrepaidOnly] = useState('');
   const [adPrices, setAdPrices] = useState<Record<string, string>>({});
   const [payout, setPayout] = useState({
     commission: '',
@@ -75,6 +77,8 @@ export default function AdminSettingsPage() {
         setSupportEmails(s.supportEmails);
         setLegal(s.legalEntity);
         setCodMaxRupees(toRupees(s.codMaxOrderPaise));
+        setCodMinRupees(toRupees(s.codMinOrderPaise));
+        setPrepaidOnly(s.prepaidOnlyPincodes.join(', '));
         const prices: Record<string, string> = {};
         for (const pl of AD_PLACEMENTS)
           for (const d of AD_DURATIONS)
@@ -130,6 +134,8 @@ export default function AdminSettingsPage() {
           supportEmails,
           legalEntity: legal,
           codMaxOrderPaise: toPaise(codMaxRupees),
+          codMinOrderPaise: toPaise(codMinRupees),
+          prepaidOnlyPincodes: prepaidOnly.split(/[\s,]+/).filter(Boolean),
           adPricing,
           payoutCommissionPercent: Number(payout.commission) || 0,
           payoutGatewayPercent: Number(payout.gateway) || 0,
@@ -405,6 +411,30 @@ export default function AdminSettingsPage() {
             name={'codMaxOrderPaise'}
           />
           <FieldError message={fieldErrors['codMaxOrderPaise']} />
+        </div>
+        <div>
+          <label className="text-xs text-gray-500">Minimum COD order (₹)</label>
+          <input
+            type="number"
+            min={0}
+            value={codMinRupees}
+            onChange={(e) => setCodMinRupees(e.target.value)}
+            className={field}
+            name={'codMinOrderPaise'}
+          />
+          <FieldError message={fieldErrors['codMinOrderPaise']} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="text-xs text-gray-500">Prepaid-only PIN codes (no COD there) — separated by commas or spaces</label>
+          <textarea
+            rows={2}
+            value={prepaidOnly}
+            onChange={(e) => setPrepaidOnly(e.target.value)}
+            className={field}
+            name={'prepaidOnlyPincodes'}
+            placeholder="e.g. 744101, 682555"
+          />
+          <FieldError message={fieldErrors['prepaidOnlyPincodes']} />
         </div>
       </div>
 

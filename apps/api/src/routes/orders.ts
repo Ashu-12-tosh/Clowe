@@ -15,6 +15,7 @@ import {
   type OrderDetailView,
   type OrderListRow,
   type TaxInvoice,
+  codPlatformRefusal,
 } from '@clowe/shared';
 import { scanViews } from './track';
 import { cancelShipmentsForLinesSafe } from '../services/shipping/cancellations';
@@ -66,6 +67,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
       giftMessage,
       paymentMethod,
       billingAddressId,
+      buyerGstin,
     } = checkoutSchema.parse(req.body);
     const userId = req.auth!.userId;
 
@@ -190,13 +192,9 @@ ordersRouter.post('/checkout', async (req, res, next) => {
       );
     }
     if (paymentMethod === 'COD') {
-      const { codMaxOrderPaise } = await getSettings();
-      if (totalPaise > codMaxOrderPaise) {
-        throw ApiError.badRequest(
-          `Cash on Delivery is available up to ₹${codMaxOrderPaise / 100}`,
-          'COD_NOT_ELIGIBLE',
-        );
-      }
+      const s = await getSettings();
+      const refused = codPlatformRefusal({ totalPaise, pincode: address.pincode, ...s });
+      if (refused) throw ApiError.badRequest(refused, 'COD_NOT_ELIGIBLE');
     }
     if (paymentMethod === 'COD') {
       const noCodHere = codRefusal(address.pincode, totalPaise, pincodeCheck);
@@ -298,6 +296,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
           etaTo: eta.to,
           isGift: isGift ?? false,
           giftMessage: isGift ? (giftMessage ?? null) : null,
+          buyerGstin: buyerGstin || null,
           paymentMethod,
           billName: billing.name,
           billLine1: billing.line1,

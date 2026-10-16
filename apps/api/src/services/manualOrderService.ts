@@ -1,4 +1,4 @@
-import type { ManualPaymentMethod } from '@clowe/shared';
+import { codPlatformRefusal, type ManualPaymentMethod } from '@clowe/shared';
 import { prisma } from '../db';
 import { getSettings } from './settingsService';
 import { saleReturnWindows } from './categoryRules';
@@ -97,10 +97,11 @@ export async function createManualOrder(input: {
   // The COD rules a shopper faces at checkout apply to a phone order too —
   // the cap and each seller's own opt-out.
   if (input.paymentMethod === 'COD') {
-    const { codMaxOrderPaise } = await getSettings();
-    if (totalPaise > codMaxOrderPaise) {
+    const s = await getSettings();
+    const refused = codPlatformRefusal({ totalPaise, pincode: address.pincode, ...s });
+    if (refused) {
       throw ApiError.badRequest(
-        `Cash on Delivery is available up to ₹${codMaxOrderPaise / 100}`,
+        refused,
         'COD_NOT_ELIGIBLE',
       );
     }

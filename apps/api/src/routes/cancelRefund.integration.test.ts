@@ -4,6 +4,7 @@ import { PrismaClient, ProductStatus, Role } from '@prisma/client';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
+import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
 import { paymentProvider } from '../services/payments';
 import { signAccessToken } from '../utils/jwt';
 
@@ -55,6 +56,8 @@ async function orderAs(method: 'UPI' | 'COD') {
 
 beforeAll(async () => {
   await seedFixture(prisma);
+  // These carts are under ₹1,000; the COD floor itself is codCap's test.
+  await setSetting('codMinOrderPaise', 0);
   const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { slug: 'fixture-store' } });
   const category = await prisma.category.findFirstOrThrow({ where: { slug: 'books' } });
   const product = await prisma.product.create({
@@ -74,6 +77,7 @@ beforeAll(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 afterAll(async () => {
+  await setSetting('codMinOrderPaise', DEFAULT_SETTINGS.codMinOrderPaise);
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await prisma.$disconnect();
 });

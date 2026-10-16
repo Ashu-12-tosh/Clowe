@@ -91,6 +91,7 @@ export async function buildTaxInvoice(orderId: string, sellerId: string): Promis
       gstin: legal.gstin.trim() || null,
       address: legal.registeredAddress.trim() || null,
     },
+    buyerGstin: order.buyerGstin ?? null,
     billTo: {
       name: order.billName ?? order.shipName,
       line1: order.billLine1 ?? order.shipLine1,

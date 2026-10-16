@@ -2,7 +2,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { GSTIN_APPROVAL_BLOCKER, type TaxInvoice } from '@clowe/shared';
+import { GSTIN_APPROVAL_BLOCKER, GSTIN_EXAMPLE, type TaxInvoice } from '@clowe/shared';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
 import { signAccessToken } from '../utils/jwt';
@@ -124,6 +124,26 @@ describe("the buyer's tax invoice", () => {
     // Issued-at is the moment each was built; the QR is the seller's alone.
     const without = (o: object, keys: string[]) => Object.fromEntries(Object.entries(o).filter(([k]) => !keys.includes(k)));
     expect(without(mine, ['issuedAt'])).toEqual(without(theirs, ['issuedAt', 'qr']));
+  });
+
+  it("prints the buyer's GSTIN given at checkout, and refuses a malformed one", async () => {
+    const b = await buyer('Karnataka');
+    expect((await call('POST', '/api/cart/items', b.token, { variantId: variantA, quantity: 1 })).status).toBe(200);
+    const bad = await call('POST', '/api/orders/checkout', b.token, { addressId: b.addressId, paymentMethod: 'COD', buyerGstin: '29ABCDE1234F1ZX' });
+    expect(bad.status).toBe(400);
+    const co = await call<{ orderId: string }>('POST', '/api/orders/checkout', b.token, { addressId: b.addressId, paymentMethod: 'COD', buyerGstin: ' 29abcde1234f1zw ' });
+    expect(co.status).toBe(200);
+    const orderId = co.json.data.orderId;
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: orderId } })).buyerGstin).toBe(GSTIN_EXAMPLE);
+    const inv = (await call<TaxInvoice[]>('GET', `/api/orders/${orderId}/invoices`, b.token)).json.data[0]!;
+    expect(inv.buyerGstin).toBe(GSTIN_EXAMPLE);
+  });
+
+  it('has no GSTIN when none was given (and it cannot be added later: no route takes it)', async () => {
+    const b = await buyer('Maharashtra');
+    const orderId = await orderOf(b, [variantA]);
+    const inv = (await call<TaxInvoice[]>('GET', `/api/orders/${orderId}/invoices`, b.token)).json.data[0]!;
+    expect(inv.buyerGstin).toBeNull();
   });
 
   it('leaves cancelled lines out', async () => {

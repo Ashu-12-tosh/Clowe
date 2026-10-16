@@ -1269,6 +1269,9 @@ model Order {
   // Gift wrap / message chosen at checkout.
   isGift      Boolean @default(false)
   giftMessage String?
+  // The buyer's own GSTIN for a business purchase (Payment Policy): given at
+  // checkout only, printed on the invoice, never added afterwards.
+  buyerGstin  String?
 
   // How the shopper chose to pay: UPI | CARD | NETBANKING | WALLET | EMI | COD.
   paymentMethod    String  @default("UPI")

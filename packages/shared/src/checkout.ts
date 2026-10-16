@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { phoneSchema } from './auth';
 import { assetRefSchema } from './assets';
 import { codRefundAccountSchema } from './codRefund';
+import { gstNumberField } from './taxIds';
 
 // ---------------------------------------------------------------------------
 // Cart
@@ -234,7 +235,33 @@ export const PAYMENT_METHOD_META: Record<
 
 /** Minimum order value before EMI is offered. */
 export const EMI_MIN_PAISE = 300000;
-// The COD ceiling is PlatformSettings.codMaxOrderPaise, not a constant here.
+// The COD range is PlatformSettings.codMinOrderPaise..codMaxOrderPaise, not a constant here.
+
+/**
+ * Why Cash on Delivery is not offered for this order by the platform's own
+ * rules (Payment Policy 6.1, Shipping Policy 2.2), or null: the order total
+ * must be within the COD range, and the PIN code not a prepaid-only one. The
+ * courier's own serviceability is checked separately.
+ */
+export function codPlatformRefusal(input: {
+  totalPaise: number;
+  pincode: string;
+  codMinOrderPaise: number;
+  codMaxOrderPaise: number;
+  prepaidOnlyPincodes: readonly string[];
+}): string | null {
+  const rupees = (p: number) => `₹${(p / 100).toLocaleString('en-IN')}`;
+  if (input.totalPaise < input.codMinOrderPaise) {
+    return `Cash on Delivery is available on orders from ${rupees(input.codMinOrderPaise)} — please pay online`;
+  }
+  if (input.totalPaise > input.codMaxOrderPaise) {
+    return `Cash on Delivery is available up to ${rupees(input.codMaxOrderPaise)} — please pay online`;
+  }
+  if (input.prepaidOnlyPincodes.includes(input.pincode)) {
+    return `Deliveries to ${input.pincode} are prepaid only — please pay online`;
+  }
+  return null;
+}
 
 export const checkoutSchema = z.object({
   addressId: z.string().min(1, 'Pick a delivery address'),
@@ -246,6 +273,8 @@ export const checkoutSchema = z.object({
   deliveryMethod: z.enum(DELIVERY_METHODS).default('STANDARD'),
   isGift: z.boolean().optional(),
   giftMessage: z.string().trim().max(200).optional(),
+  /** Optional GSTIN for a business purchase, printed on the invoice. Only at checkout. */
+  buyerGstin: gstNumberField.optional(),
 });
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
 

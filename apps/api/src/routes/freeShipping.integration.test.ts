@@ -4,7 +4,7 @@ import { PrismaClient, ProductStatus, Role } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
-import { setSetting } from '../services/settingsService';
+import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
 import { signAccessToken } from '../utils/jwt';
 
 /**
@@ -39,6 +39,8 @@ const options = async () =>
 
 beforeAll(async () => {
   await seedFixture(prisma);
+  // These carts are under ₹1,000; the COD floor itself is codCap's test.
+  await setSetting('codMinOrderPaise', 0);
   // A threshold saved before stays in the database, and is ignored.
   await setSetting('freeShippingThresholdPaise', 99_900);
   const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { slug: 'fixture-store' } });
@@ -72,6 +74,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await setSetting('codMinOrderPaise', DEFAULT_SETTINGS.codMinOrderPaise);
   await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await prisma.$disconnect();

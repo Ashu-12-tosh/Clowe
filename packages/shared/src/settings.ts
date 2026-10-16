@@ -136,6 +136,10 @@ export interface PlatformSettings {
    * anyone tries. Sellers can still switch COD off for their own goods.
    */
   codMaxOrderPaise: number;
+  /** Cash on Delivery starts at this order total (Payment Policy 6.1: INR 1,000). */
+  codMinOrderPaise: number;
+  /** PIN codes served on a prepaid basis only (Shipping Policy 2.2): no COD there. */
+  prepaidOnlyPincodes: string[];
   // Delivery is free on every order. The old freeShippingThresholdPaise row
   // stays in the database, unread.
   adPricing: AdPricing;
@@ -198,6 +202,7 @@ export interface PublicSettings {
   socialLinks: PlatformSettings['socialLinks'];
   supportEmails: PlatformSettings['supportEmails'];
   codMaxOrderPaise: number;
+  codMinOrderPaise: number;
   pdpOffers: PdpOffer[];
   couponsEnabled: boolean;
   /** Public by nature: every page that names the business reads it. */
@@ -305,6 +310,11 @@ export const updateSettingsSchema = z.object({
     })
     .optional(),
   codMaxOrderPaise: z.number().int().min(0).optional(),
+  codMinOrderPaise: z.number().int().min(0).optional(),
+  prepaidOnlyPincodes: z
+    .array(z.string().trim().regex(/^\d{6}$/, 'A PIN code is 6 digits'))
+    .max(20000)
+    .optional(),
   adPricing: z.object({ HOME_BANNER: adPriceRow, CATEGORY_SPONSORED: adPriceRow }).optional(),
   pdpOffers: z
     .array(

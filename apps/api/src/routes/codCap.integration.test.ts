@@ -30,6 +30,8 @@ beforeAll(async () => {
 
 afterEach(async () => {
   await setSetting('codMaxOrderPaise', DEFAULT_SETTINGS.codMaxOrderPaise);
+  await setSetting('codMinOrderPaise', DEFAULT_SETTINGS.codMinOrderPaise);
+  await setSetting('prepaidOnlyPincodes', DEFAULT_SETTINGS.prepaidOnlyPincodes);
 });
 
 afterAll(async () => {
@@ -94,7 +96,7 @@ describe('the COD ceiling', () => {
     const { status, json } = await checkout(s.token, s.addressId, 'COD');
     expect(status).toBe(400);
     expect(json.error?.code).toBe('COD_NOT_ELIGIBLE');
-    expect(json.error?.message).toContain('₹5000');
+    expect(json.error?.message).toContain('₹5,000');
     expect(await prisma.order.count({ where: { userId: s.userId } })).toBe(0);
   });
 
@@ -132,6 +134,44 @@ describe('the COD ceiling', () => {
     const { status, json } = await checkout(s.token, s.addressId, 'COD');
     expect(status).toBe(400);
     expect(json.error?.code).toBe('COD_NOT_ELIGIBLE');
-    expect(json.error?.message).toContain('₹2000');
+    expect(json.error?.message).toContain('₹2,000');
+  });
+});
+
+describe('the COD floor and prepaid-only PIN codes (Payment Policy 6.1, Shipping Policy 2.2)', () => {
+  it('refuses COD under ₹1,000 and creates no order; paying online is fine', async () => {
+    const s = await shopperWithCart([FIXTURE.book]); // ₹600
+    const { status, json } = await checkout(s.token, s.addressId, 'COD');
+    expect(status).toBe(400);
+    expect(json.error?.code).toBe('COD_NOT_ELIGIBLE');
+    expect(json.error?.message).toContain('from ₹1,000');
+    expect(await prisma.order.count({ where: { userId: s.userId } })).toBe(0);
+    expect((await checkout(s.token, s.addressId, 'UPI')).status).toBe(200);
+  });
+
+  it('publishes the floor to the payment step', async () => {
+    const res = await fetch(`${base}/api/settings/public`);
+    const json = (await res.json()) as { data: { codMinOrderPaise: number } };
+    expect(json.data.codMinOrderPaise).toBe(100000);
+  });
+
+  it('refuses COD to a prepaid-only PIN code, inside the range', async () => {
+    await setSetting('prepaidOnlyPincodes', ['400001']);
+    const s = await shopperWithCart(UNDER_CAP);
+    const { status, json } = await checkout(s.token, s.addressId, 'COD');
+    expect(status).toBe(400);
+    expect(json.error?.code).toBe('COD_NOT_ELIGIBLE');
+    expect(json.error?.message).toContain('400001');
+  });
+
+  it("says so on the cart's COD check too", async () => {
+    await setSetting('prepaidOnlyPincodes', ['400001']);
+    const s = await shopperWithCart(UNDER_CAP);
+    const res = await fetch(`${base}/api/cart/cod-availability?addressId=${s.addressId}`, {
+      headers: { authorization: `Bearer ${s.token}` },
+    });
+    const json = (await res.json()) as { data?: { available: boolean; reason: string | null } };
+    expect(json.data?.available).toBe(false);
+    expect(json.data?.reason).toContain('prepaid only');
   });
 });

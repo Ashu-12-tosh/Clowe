@@ -71,6 +71,7 @@ export default function TaxInvoiceDocument({
             <br />
             {invoice.billTo.city}, {invoice.billTo.state} — {invoice.billTo.pincode}
           </p>
+          {invoice.buyerGstin && <p className="mt-1 text-xs font-semibold text-gray-700">GSTIN: {invoice.buyerGstin}</p>}
         </div>
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Payment</p>

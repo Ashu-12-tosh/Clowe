@@ -9,6 +9,7 @@ import { type CodAvailability,
   type AppliedCoupon,
   type CartView,
   type CouponOffer,
+  codPlatformRefusal,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { hiddenProductTest, isHiddenProduct } from '../services/shopperVisibility';
@@ -484,7 +485,10 @@ cartRouter.get('/cod-availability', async (req, res, next) => {
     if (!address || address.userId !== req.auth!.userId) throw ApiError.badRequest('Address not found');
     const { totalPaise } = await buildCartView(req.auth!.userId);
     const check = await pincodeServiceability(address.pincode);
-    const reason = deliveryRefusal(address.pincode, check) ?? codRefusal(address.pincode, totalPaise, check);
+    const reason =
+      deliveryRefusal(address.pincode, check) ??
+      codPlatformRefusal({ totalPaise, pincode: address.pincode, ...(await getSettings()) }) ??
+      codRefusal(address.pincode, totalPaise, check);
     const body: CodAvailability = { available: reason === null, reason };
     res.json({ success: true, data: body });
   } catch (err) {

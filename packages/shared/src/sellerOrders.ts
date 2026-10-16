@@ -357,6 +357,8 @@ export interface SellerInvoice {
   /** The e-commerce operator the sale went through (Clowe Partners LLP), from settings. */
   marketplace: { name: string; gstin: string | null; address: string | null };
   billTo: SellerShipTo;
+  /** The buyer's GSTIN, when they gave one at checkout (a business purchase). */
+  buyerGstin: string | null;
   /** Buyer name only - no contact details reach sellers. */
   customer: { name: string };
   lines: {
