@@ -100,7 +100,7 @@ const inputCls = 'mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-s
 export function ContactVendorSupport({ topic }: { topic: string }) {
   const [legal, setLegal] = useState<LegalEntity | null>(null);
   useEffect(() => {
-    getPublicSettings().then((s) => setLegal(s.legalEntity)).catch(() => {});
+    getPublicSettings().then((s) => setLegal({ ...s.legalEntity, supportEmail: s.supportEmails?.vendor || s.legalEntity.supportEmail }) /* seller help: vendor-support@ */).catch(() => {});
   }, []);
   const phone = (legal?.supportPhone ?? '').replace(/\D/g, '').slice(-10);
   const text = encodeURIComponent(`Hello Clowe vendor support — ${topic}`);

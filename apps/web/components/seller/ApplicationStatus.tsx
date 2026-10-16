@@ -25,7 +25,7 @@ export function ApplicationStatus({ profile, onChanged }: { profile: SellerProfi
 
   useEffect(() => {
     getPublicSettings()
-      .then((s) => setLegal(s.legalEntity))
+      .then((s) => setLegal({ ...s.legalEntity, supportEmail: s.supportEmails?.vendor || s.legalEntity.supportEmail }) /* seller help: vendor-support@ */)
       .catch(() => {});
   }, []);
 

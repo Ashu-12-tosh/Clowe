@@ -4,7 +4,7 @@ CLOWE SHOP— www.cloweshop.com
 
 Operated by CLOWE PARTNERS LLP, registered office at {{legal.registeredAddress}}
 
-*Last updated: 16 October 2026*
+*Last updated: 17 October 2026*
 
 This Policy is published under Rule 3(2) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021, Rule 4(4) and 4(5) of the Consumer Protection (E-Commerce) Rules, 2020, and Section 13 of the Digital Personal Data Protection Act, 2023.
 
@@ -14,7 +14,7 @@ This Policy is published under Rule 3(2) of the Information Technology (Intermed
 
 - Help Centre — “Help” / “My Orders” on www.cloweshop.com and the app — 24x7
 - E-mail — support@cloweshop.com — 24x7 (responses in working hours)
-- Telephone — 8929316316 — 24x7 (responses in working hours)
+- Telephone — 8929316316, 8929314314 — 24x7 (responses in working hours)
 - WhatsApp — 8929316316 — 24x7 (responses in working hours)
 
 1.1 Please keep Your order number ready. For AI Try-On and data-related queries, please state the registered mobile number or e-mail address.
@@ -41,7 +41,7 @@ This Policy is published under Rule 3(2) of the Information Technology (Intermed
 
 3.1 Where a Customer is not satisfied with the resolution offered at the first level, the matter may be escalated as follows:
 
-Level 1 — Customer Support: support@cloweshop.com/8929316316. Response within 24 hours.
+Level 1 — Customer Support: support@cloweshop.com/8929316316, 8929314314. Response within 24 hours.
 
 Level 2 — Nodal Officer
 

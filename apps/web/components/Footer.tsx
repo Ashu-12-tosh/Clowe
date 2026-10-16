@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { getPublicSettings, onPublicSettingsChanged } from '@/lib/settings';
 import { ExternalLink } from '@/components/ExternalLink';
 import { openCookieSettings } from '@/lib/cookieConsent';
-import { DEFAULT_LEGAL_ENTITY, legalDisplayName, safeHref } from '@clowe/shared';
+import { DEFAULT_LEGAL_ENTITY, legalAddressDisplay, legalDisplayName, safeHref, type LegalEntity } from '@clowe/shared';
 
 const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -125,6 +125,7 @@ export default function Footer() {
   });
   // The registered name until settings arrive, so the line never flashes empty.
   const [legalName, setLegalName] = useState(DEFAULT_LEGAL_ENTITY.name);
+  const [legal, setLegal] = useState<LegalEntity | null>(null);
 
   useEffect(() => {
     const load = () =>
@@ -132,6 +133,7 @@ export default function Footer() {
         .then((s) => {
           setSocial(s.socialLinks);
           setLegalName(s.legalEntity.name);
+          setLegal(s.legalEntity);
         })
         .catch(() => {});
     load();
@@ -230,6 +232,25 @@ export default function Footer() {
             © {new Date().getFullYear()} {legalDisplayName(legalName)}. All rights reserved.
           </p>
         </div>
+        {/* Who runs the site, from the legal settings: one line on a computer, one item per line on a phone. */}
+        {legal && (
+          <ul className="mt-4 flex flex-col items-center gap-y-1 border-t border-gray-100 pt-4 text-center text-[11px] leading-relaxed text-gray-500 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-2" data-legal-line>
+            {[
+              legal.name,
+              legal.registeredAddress ? legalAddressDisplay(legal.registeredAddress) : '',
+              legal.gstin ? `GSTIN ${legal.gstin}` : '',
+              legal.supportEmail,
+              legal.supportPhone.replace(/^\+?91[\s-]*/, ''),
+            ]
+              .filter(Boolean)
+              .map((part, i) => (
+                <li key={part} className="flex items-center gap-x-2">
+                  {i > 0 && <span aria-hidden className="hidden text-gray-300 sm:inline">·</span>}
+                  <span>{part}</span>
+                </li>
+              ))}
+          </ul>
+        )}
       </div>
     </footer>
   );

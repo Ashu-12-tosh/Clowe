@@ -72,3 +72,13 @@ describe('the PAN shown in place of a CIN', () => {
     expect(out).toBe('Operated by X (GSTIN 07AAWFC9519L1ZL, PAN AAWFC9519L).');
   });
 });
+
+describe('the registered address in running text', () => {
+  it('reads as the owner writes it', async () => {
+    const { legalAddressDisplay } = await import('./legal');
+    expect(legalAddressDisplay('A22, STREET NO. 21, MD MARG, GOPAL NAGAR, NAJAFGARH, NEW DELHI 110073')).toBe(
+      'A22, Street No. 21, MD Marg, Gopal Nagar, Najafgarh, New Delhi 110073',
+    );
+    expect(legalAddressDisplay('12 Park Lane, Delhi')).toBe('12 Park Lane, Delhi');
+  });
+});

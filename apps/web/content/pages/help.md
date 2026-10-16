@@ -2,7 +2,7 @@
 
 *Last updated: 16 October 2026*
 
-For anything about an order, open it in **My Orders**, or use the **Support chat** (bottom-right). You can also write to support@cloweshop.com.
+For anything about an order, open it in **My Orders**, or use the **Support chat** (bottom-right). You can also write to {{customerSupportEmail}}.
 
 ## Shopping on Clowe
 
