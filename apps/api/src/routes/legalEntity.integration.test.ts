@@ -51,6 +51,7 @@ describe('legal entity settings', () => {
       gstin: '',
       supportEmail: '',
       supportPhone: '',
+      supportPhoneAlt: '',
     });
   });
 
@@ -72,6 +73,7 @@ describe('legal entity settings', () => {
       gstin: '29ABCDE1234F1Z5',
       supportEmail: 'help@cloweshop.com',
       supportPhone: '',
+      supportPhoneAlt: '',
     });
   });
 
