@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import type { CompareView } from '@clowe/shared';
 import { api } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
-import { toggleCompare } from '@/lib/compare';
+import { readCompare, toggleCompare } from '@/lib/compare';
 import ProductCard from '@/components/ProductCard';
 import { trackAd, useAds } from '@/components/AdSlots';
 
@@ -33,9 +33,15 @@ function ComparePage() {
   const ads = useAds(ids.length ? 'COMPARE' : null, { productId: ids[0] });
 
   useEffect(() => {
-    if (!ids.length) return setView({ products: [], attributeLabels: [] });
+    // Opened without a list in the address (from the menu, a bookmark): the
+    // products picked in this browser.
+    if (!ids.length) {
+      const saved = readCompare();
+      if (saved.length) return router.replace(`/compare?ids=${saved.join(',')}`);
+      return setView({ products: [], attributeLabels: [] });
+    }
     api<CompareView>(`/api/ai/compare?ids=${ids.join(',')}`).then(setView).catch(() => setView({ products: [], attributeLabels: [] }));
-  }, [ids]);
+  }, [ids, router]);
 
   async function summarise() {
     setBusy(true);
