@@ -66,7 +66,7 @@ import { sellerKycRouter } from './routes/sellerKyc';
 import { storesRouter } from './routes/stores';
 import { adminSupportRouter } from './routes/adminSupport';
 import { errorHandler } from './middleware/error';
-import { globalLimiter, trackLimiter } from './middleware/rateLimits';
+import { catalogReadLimiter, globalLimiter, trackLimiter } from './middleware/rateLimits';
 import { auditLogger } from './middleware/audit';
 import { stockPhotoGuard } from './middleware/stockPhotos';
 
@@ -80,8 +80,11 @@ export function createApp() {
   // crossOriginResourcePolicy relaxed so the web app (port 3000) can embed
   // uploaded images served from this API (port 4000).
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-  app.use('/api', globalLimiter);
+  // CORS before the rate limits: a 429 has to carry the same CORS headers as
+  // any other reply, or the browser hides it and the shopper sees "Could not
+  // reach Clowe" instead of "Too many requests".
   app.use(cors({ origin: corsOrigins, credentials: true }));
+  app.use('/api', catalogReadLimiter, globalLimiter);
   app.use(cookieParser());
   // Keep the raw body around for webhook signature verification (Razorpay).
   app.use(

@@ -1,3 +1,4 @@
+import type { Request } from 'express';
 import rateLimit from 'express-rate-limit';
 
 const limitError = (message: string) => ({
@@ -7,12 +8,40 @@ const limitError = (message: string) => ({
 
 const common = { standardHeaders: true, legacyHeaders: false } as const;
 
+/** Worded for the shopper: the web app shows it as is. */
+export const TOO_MANY_REQUESTS = 'Too many requests, please try again in a moment';
+
+/** Requests per minute per address: browsing the catalog, and everything else. */
+export const CATALOG_READ_LIMIT = 1200;
+export const GLOBAL_LIMIT = 300;
+
+/**
+ * Public catalog reads — the home page, categories, products and search. One
+ * busy page fires a burst of these (and a shared office or mobile carrier
+ * puts many shoppers behind one address), so they get their own, higher
+ * allowance instead of eating into the one for changes. Mounted at /api, so
+ * req.path has no /api prefix.
+ */
+export function isCatalogRead(req: Pick<Request, 'method' | 'path'>) {
+  return (req.method === 'GET' || req.method === 'HEAD') && /^\/(home|categories|products|search)(\/|$)/.test(req.path);
+}
+
 /** Whole-API safety net. Generous — normal browsing never hits it. */
 export const globalLimiter = rateLimit({
   ...common,
   windowMs: 60 * 1000,
-  limit: 300,
-  message: limitError('Too many requests — please slow down.'),
+  limit: GLOBAL_LIMIT,
+  skip: isCatalogRead,
+  message: limitError(TOO_MANY_REQUESTS),
+});
+
+/** The catalog's own allowance (see isCatalogRead). */
+export const catalogReadLimiter = rateLimit({
+  ...common,
+  windowMs: 60 * 1000,
+  limit: CATALOG_READ_LIMIT,
+  skip: (req) => !isCatalogRead(req),
+  message: limitError(TOO_MANY_REQUESTS),
 });
 
 /** OTP request: main brute-force/SMS-abuse target. */

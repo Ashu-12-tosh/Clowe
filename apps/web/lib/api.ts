@@ -146,6 +146,10 @@ export interface ApiOptions {
   quiet?: boolean;
 }
 
+export const TOO_MANY_REQUESTS = 'Too many requests, please try again in a moment';
+/** How long a rate-limited request waits before its one retry. */
+export const RATE_LIMIT_RETRY_MS = 1500;
+
 /** fetch, with a dropped connection or a non-JSON reply (a proxy's error page) turned into a readable error. */
 async function send(url: string, init: RequestInit) {
   let res: Response;
@@ -158,6 +162,9 @@ async function send(url: string, init: RequestInit) {
   try {
     return { res, json: await res.json() };
   } catch {
+    if (res.status === 429) {
+      return { res, json: { success: false, error: { code: 'TOO_MANY_REQUESTS', message: TOO_MANY_REQUESTS } } };
+    }
     throw new ApiRequestError(
       'BAD_RESPONSE',
       `The server did not answer properly (HTTP ${res.status}) — try again in a minute`,
@@ -194,8 +201,29 @@ async function rawRequest(path: string, options: ApiOptions) {
 
 const methodOf = (options: ApiOptions) => options.method ?? (options.body ? 'POST' : 'GET');
 
+function pause(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        reject(new DOMException('Aborted', 'AbortError'));
+      },
+      { once: true },
+    );
+  });
+}
+
 async function request<T>(path: string, options: ApiOptions): Promise<T> {
   let { res, json } = await rawRequest(path, options);
+
+  // Rate limited: the API refused before doing anything, so one more try
+  // after a short pause is safe, changes included. A second refusal is shown.
+  if (res.status === 429) {
+    await pause(RATE_LIMIT_RETRY_MS, options.signal);
+    ({ res, json } = await rawRequest(path, options));
+  }
 
   // Access token expired? Silently rotate via the refresh cookie and retry
   // once — active users never see a login screen.
@@ -206,7 +234,7 @@ async function request<T>(path: string, options: ApiOptions): Promise<T> {
     }
   }
 
-  if (!json.success) throw errorFrom(json, 'Something went wrong');
+  if (!json.success) throw errorFrom(json, res.status === 429 ? TOO_MANY_REQUESTS : 'Something went wrong');
   return json.data as T;
 }
 
