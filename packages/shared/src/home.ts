@@ -38,7 +38,15 @@ const bannerImageFields = {
   altText: z.string().trim().max(200).nullable().optional(),
   /** Shown instead of imageUrl on phones; null: imageUrl everywhere. */
   mobileImageUrl: imageUrlSchema.nullable().optional(),
+  /** The point that must stay in view when the picture is cropped, in percent. */
+  focalX: z.number().int().min(0).max(100).optional(),
+  focalY: z.number().int().min(0).max(100).optional(),
 };
+
+/** CSS object-position for a focal point (50/50, the centre, when unset). */
+export function focalPosition(p: { focalX?: number | null; focalY?: number | null }): string {
+  return `${p.focalX ?? 50}% ${p.focalY ?? 50}%`;
+}
 
 /**
  * Why a banner can't be saved as it stands, if it can't: a full-image banner
@@ -72,6 +80,8 @@ export interface HomeBannerView {
   altText: string | null;
   /** On phones instead of imageUrl, when set. */
   mobileImageUrl: string | null;
+  focalX: number;
+  focalY: number;
 }
 
 export interface PromoTileView {
@@ -83,6 +93,8 @@ export interface PromoTileView {
   imageMode: BannerImageModeValue;
   altText: string | null;
   mobileImageUrl: string | null;
+  focalX: number;
+  focalY: number;
 }
 
 export interface HomeCategoryTile {
@@ -248,6 +260,8 @@ export interface AdminCategoryBannerRow {
   imageMode: BannerImageModeValue;
   altText: string | null;
   mobileImageUrl: string | null;
+  focalX: number;
+  focalY: number;
   sortOrder: number;
   isActive: boolean;
 }

@@ -902,6 +902,9 @@ model CategoryBanner {
   imageMode    BannerImageMode @default(DESIGNED)
   altText      String?
   mobileImageUrl String?
+  /// The point (percent across, percent down) that must stay in view at every width.
+  focalX         Int      @default(50)
+  focalY         Int      @default(50)
   sortOrder    Int      @default(0)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -2180,6 +2183,9 @@ model HomeBanner {
   altText        String?
   // Shown instead of imageUrl on phones (below 640px); null: imageUrl everywhere.
   mobileImageUrl String?
+  /// The point (percent across, percent down) that must stay in view at every width.
+  focalX         Int      @default(50)
+  focalY         Int      @default(50)
   sortOrder      Int      @default(0)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -2209,6 +2215,9 @@ model PromoTile {
   imageMode BannerImageMode @default(DESIGNED)
   altText   String?
   mobileImageUrl String?
+  /// The point (percent across, percent down) that must stay in view at every width.
+  focalX         Int      @default(50)
+  focalY         Int      @default(50)
   sortOrder Int            @default(0)
   isActive  Boolean        @default(true)
   createdAt DateTime       @default(now())

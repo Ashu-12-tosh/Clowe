@@ -113,6 +113,8 @@ categoriesRouter.get('/:slug', async (req, res, next) => {
         imageMode: b.imageMode,
         altText: b.altText,
         mobileImageUrl: b.mobileImageUrl,
+        focalX: b.focalX,
+        focalY: b.focalY,
       })),
       highlights: asCallouts(category.highlights),
       features: asCallouts(category.features),

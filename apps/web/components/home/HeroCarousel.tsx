@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HomeBannerView } from '@clowe/shared';
-import { safeHref } from '@clowe/shared';
+import { safeHref, focalPosition } from '@clowe/shared';
 import { ArtPanel } from '@/components/DesignedArt';
 import BannerPicture from '@/components/BannerPicture';
 
@@ -144,6 +144,7 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
               <BannerPicture
                 src={banner.imageUrl}
                 mobileSrc={banner.mobileImageUrl}
+                style={{ objectPosition: focalPosition(banner) }}
                 alt={banner.altText ?? banner.headline}
                 loading={i === 0 ? 'eager' : 'lazy'}
                 // Phones: the 4:5 phone image, or the computer image whole. From 768px the slide's height, anchored right.
@@ -158,6 +159,7 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
                   <BannerPicture
                     src={banner.imageUrl}
                     mobileSrc={banner.mobileImageUrl}
+                    style={{ objectPosition: focalPosition(banner) }}
                     alt=""
                     loading={i === 0 ? 'eager' : 'lazy'}
                     className={heroPictureClass(banner.mobileImageUrl)}

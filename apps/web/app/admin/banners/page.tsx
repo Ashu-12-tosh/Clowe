@@ -17,6 +17,7 @@ import Spinner from '@/components/Spinner';
 import ImageUploadField from '@/components/admin/ImageUploadField';
 import BannerModeFields from '@/components/admin/BannerModeFields';
 import BannerPreview from '@/components/admin/BannerPreview';
+import FocalPointPicker from '@/components/admin/FocalPointPicker';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -34,6 +35,8 @@ const EMPTY = {
   imageMode: 'DESIGNED' as BannerImageModeValue,
   altText: '',
   mobileImageUrl: '',
+  focalX: 50,
+  focalY: 50,
 };
 type Form = typeof EMPTY;
 
@@ -50,6 +53,8 @@ function formOf(row: AdminBannerRow): Form {
     imageMode: row.imageMode,
     altText: row.altText ?? '',
     mobileImageUrl: row.mobileImageUrl ?? '',
+    focalX: row.focalX ?? 50,
+    focalY: row.focalY ?? 50,
   };
 }
 
@@ -96,6 +101,8 @@ export default function AdminBannersPage() {
       imageMode: form.imageMode,
       altText: form.altText.trim() || null,
       mobileImageUrl: form.mobileImageUrl.trim() || null,
+      focalX: form.focalX,
+      focalY: form.focalY,
       ...(editing === 'new' ? { sortOrder: rows?.length ?? 0 } : {}),
     };
     const checked = bannerUpsertSchema.safeParse(body);
@@ -249,6 +256,11 @@ export default function AdminBannersPage() {
             <input value={form.secondaryHref} name="secondaryHref" onChange={set('secondaryHref')} className={`mt-1 ${field}`} />
             <FieldError message={fieldErrors.secondaryHref} />
           </div>
+          {form.imageUrl.trim() && (
+            <div className="sm:col-span-2">
+              <FocalPointPicker imageUrl={form.imageUrl.trim()} mobileImageUrl={form.mobileImageUrl.trim()} x={form.focalX} y={form.focalY} onChange={(focalX, focalY) => setForm((f) => ({ ...f, focalX, focalY }))} />
+            </div>
+          )}
           <div className="sm:col-span-2">
             <BannerPreview
               kind="HOME_HERO"
@@ -265,6 +277,8 @@ export default function AdminBannersPage() {
                 imageMode: form.imageMode,
                 altText: form.altText.trim() || null,
                 mobileImageUrl: form.mobileImageUrl.trim() || null,
+                focalX: form.focalX,
+                focalY: form.focalY,
               }}
             />
           </div>

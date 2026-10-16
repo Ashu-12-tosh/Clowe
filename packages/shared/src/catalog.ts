@@ -101,6 +101,8 @@ export interface CategoryBannerSlide {
   altText: string | null;
   /** On phones instead of imageUrl, when set. */
   mobileImageUrl: string | null;
+  focalX: number;
+  focalY: number;
 }
 
 /** An icon + two lines, used by the hero side card and the feature strip. */

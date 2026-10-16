@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { CategoryCallout, CategoryBannerSlide } from '@clowe/shared';
-import { safeHref } from '@clowe/shared';
+import { safeHref, focalPosition } from '@clowe/shared';
 import { ArtPanel } from '@/components/DesignedArt';
 import BannerPicture from '@/components/BannerPicture';
 
@@ -36,6 +36,7 @@ function Slide({ slide, icon, eager }: { slide: CategoryBannerSlide; icon?: stri
         <BannerPicture
           src={slide.imageUrl}
           mobileSrc={slide.mobileImageUrl}
+          style={{ objectPosition: focalPosition(slide) }}
           alt={slide.altText ?? slide.headline}
           loading={eager ? 'eager' : 'lazy'}
           // A phone image is square; without one the computer image shows whole.
@@ -50,6 +51,7 @@ function Slide({ slide, icon, eager }: { slide: CategoryBannerSlide; icon?: stri
         <BannerPicture
           src={slide.imageUrl}
           mobileSrc={slide.mobileImageUrl}
+          style={{ objectPosition: focalPosition(slide) }}
           alt=""
           loading={eager ? 'eager' : 'lazy'}
           className={categoryPictureClass(slide.mobileImageUrl)}

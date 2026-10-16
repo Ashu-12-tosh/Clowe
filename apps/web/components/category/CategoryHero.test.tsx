@@ -15,6 +15,8 @@ const slide = (id: string, headline: string): CategoryBannerSlide => ({
   imageMode: 'DESIGNED',
   altText: null,
   mobileImageUrl: null,
+  focalX: 50,
+  focalY: 50,
 });
 
 describe('category banner carousel', () => {

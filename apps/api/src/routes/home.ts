@@ -190,6 +190,8 @@ async function buildHomePayload(): Promise<HomePayload> {
       imageMode: b.imageMode,
       altText: b.altText,
       mobileImageUrl: b.mobileImageUrl,
+      focalX: b.focalX,
+      focalY: b.focalY,
     })),
     promoCards: promoTiles
       .filter((t) => t.placement === 'PROMO_CARD' && !opensHidden(t.href))
@@ -202,6 +204,8 @@ async function buildHomePayload(): Promise<HomePayload> {
         imageMode: t.imageMode,
         altText: t.altText,
         mobileImageUrl: t.mobileImageUrl,
+        focalX: t.focalX,
+        focalY: t.focalY,
       })),
     deal: deal
       ? {
@@ -234,6 +238,8 @@ async function buildHomePayload(): Promise<HomePayload> {
         imageMode: t.imageMode,
         altText: t.altText,
         mobileImageUrl: t.mobileImageUrl,
+        focalX: t.focalX,
+        focalY: t.focalY,
       })),
     brands: brands.map((b) => ({ id: b.id, name: b.name, slug: b.slug, logoUrl: b.logoUrl })),
   };

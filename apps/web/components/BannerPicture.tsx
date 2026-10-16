@@ -14,6 +14,7 @@ export default function BannerPicture({
   className,
   loading = 'lazy',
   sizes = '100vw',
+  style,
 }: {
   src: string;
   mobileSrc?: string | null;
@@ -22,6 +23,8 @@ export default function BannerPicture({
   loading?: 'eager' | 'lazy';
   /** The CSS width the image is shown at, so the browser picks the right copy. */
   sizes?: string;
+  /** e.g. the banner's focal point as objectPosition, which wins over any class. */
+  style?: React.CSSProperties;
 }) {
   return (
     <picture>
@@ -33,6 +36,7 @@ export default function BannerPicture({
         alt={alt}
         loading={loading}
         className={className}
+        style={style}
       />
     </picture>
   );

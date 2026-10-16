@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { safeHref, type PromoTileView } from '@clowe/shared';
+import { safeHref, type PromoTileView, focalPosition } from '@clowe/shared';
 import BannerPicture from '@/components/BannerPicture';
 import { TileMark } from '@/components/DesignedArt';
 
@@ -22,6 +22,7 @@ export function PromoCard({ card, index, icon, label }: { card: PromoTileView; i
         <BannerPicture
           src={card.imageUrl}
           mobileSrc={card.mobileImageUrl}
+          style={{ objectPosition: focalPosition(card) }}
           alt={card.altText ?? card.title}
           loading="lazy"
           className="block aspect-[4/3] w-full object-cover transition duration-300 hover:scale-[1.02]"
@@ -39,6 +40,7 @@ export function PromoCard({ card, index, icon, label }: { card: PromoTileView; i
           <BannerPicture
             src={card.imageUrl}
             mobileSrc={card.mobileImageUrl}
+            style={{ objectPosition: focalPosition(card) }}
             alt=""
             loading="lazy"
             sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
@@ -85,6 +87,7 @@ export function PromoStrip({ strip, icon }: { strip: PromoTileView; icon: string
         <BannerPicture
           src={strip.imageUrl}
           mobileSrc={strip.mobileImageUrl}
+          style={{ objectPosition: focalPosition(strip) }}
           alt={strip.altText ?? strip.title}
           loading="lazy"
           className="block aspect-[8/3] w-full object-cover transition duration-300 hover:scale-[1.02]"
@@ -98,6 +101,7 @@ export function PromoStrip({ strip, icon }: { strip: PromoTileView; icon: string
         <BannerPicture
           src={strip.imageUrl}
           mobileSrc={strip.mobileImageUrl}
+          style={{ objectPosition: focalPosition(strip) }}
           alt=""
           loading="lazy"
           className="absolute inset-0 h-full w-full object-cover opacity-40 transition duration-300 group-hover:scale-105"

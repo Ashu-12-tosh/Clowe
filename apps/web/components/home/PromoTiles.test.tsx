@@ -12,6 +12,8 @@ const card = (over: Partial<PromoTileView> = {}): PromoTileView => ({
   imageMode: 'DESIGNED',
   altText: null,
   mobileImageUrl: null,
+  focalX: 50,
+  focalY: 50,
   ...over,
 });
 
