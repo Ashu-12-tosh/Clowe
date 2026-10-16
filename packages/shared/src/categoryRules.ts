@@ -92,6 +92,7 @@ export interface CategoryRuleFields {
   defaultTaxRatePercent: number | null;
   hsnCode: string | null;
   returnWindowDays: number | null;
+  returnable: boolean | null;
 }
 
 /** Fully resolved rules for a category (own → parent → root → platform default). */
@@ -106,6 +107,8 @@ export interface CategoryRules {
   hsnCode: string | null;
   /** null = platform-wide default from settings. */
   returnWindowDays: number | null;
+  /** False: products here can never be returned (innerwear, say). Defaults to true. */
+  returnable: boolean;
 }
 
 /** Admin input for the rule fields (all optional; null clears = inherit). */
@@ -125,6 +128,7 @@ export const categoryRulesInputSchema = z.object({
     .optional(),
   hsnCode: z.string().trim().max(12).nullable().optional(),
   returnWindowDays: z.number().int().min(0).max(90).nullable().optional(),
+  returnable: z.boolean().nullable().optional(),
 });
 export type CategoryRulesInput = z.infer<typeof categoryRulesInputSchema>;
 
@@ -137,6 +141,7 @@ const EMPTY_RULES: CategoryRules = {
   defaultTaxRatePercent: null,
   hsnCode: null,
   returnWindowDays: null,
+  returnable: true,
 };
 
 function isSet<T>(value: T | null | undefined): value is T {
@@ -167,6 +172,7 @@ export function resolveCategoryRules(chain: CategoryRuleFields[]): CategoryRules
     defaultTaxRatePercent: taxNode?.defaultTaxRatePercent ?? null,
     hsnCode: first('hsnCode'),
     returnWindowDays: first('returnWindowDays'),
+    returnable: first('returnable') ?? EMPTY_RULES.returnable,
   };
 }
 
@@ -180,6 +186,7 @@ export function categoryRuleFieldsFromRow(row: {
   defaultTaxRatePercent: number | null;
   hsnCode: string | null;
   returnWindowDays: number | null;
+  returnable?: boolean | null;
 }): CategoryRuleFields {
   const axes = z.array(variantAxisSchema).safeParse(row.variantAxes);
   const attrs = z.array(attributeDefSchema).safeParse(row.attributeSchema);
@@ -194,6 +201,7 @@ export function categoryRuleFieldsFromRow(row: {
     defaultTaxRatePercent: row.defaultTaxRatePercent,
     hsnCode: row.hsnCode,
     returnWindowDays: row.returnWindowDays,
+    returnable: row.returnable ?? null,
   };
 }
 

@@ -32,6 +32,7 @@ const RULE_SELECT = {
   defaultTaxRatePercent: true,
   hsnCode: true,
   returnWindowDays: true,
+  returnable: true,
   facets: true,
 } satisfies Prisma.CategorySelect;
 

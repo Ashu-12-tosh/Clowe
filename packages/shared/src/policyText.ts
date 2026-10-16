@@ -25,6 +25,7 @@ export interface PolicyValues {
   gstUniformPercent?: number | null;
   sellerFees?: Partial<SellerFeeSchedule> | null;
   supportEmails?: { customer?: string; vendor?: string } | null;
+  nonReturnableCategories?: string[] | null;
 }
 
 function hours(n: number): string {
@@ -73,6 +74,11 @@ function tokens(v: PolicyValues): Record<string, string> {
     '{{packingVideoDays}}': days(PACKING_VIDEO_RETENTION_DAYS),
     '{{customerSupportEmail}}': v.supportEmails?.customer || 'our customer support email',
     '{{vendorSupportEmail}}': v.supportEmails?.vendor || 'our seller support email',
+    '{{nonReturnableCategories}}': !v.nonReturnableCategories
+      ? 'the categories whose products say "Not returnable"'
+      : v.nonReturnableCategories.length
+        ? v.nonReturnableCategories.join(', ')
+        : 'none at the moment',
   };
 }
 

@@ -402,6 +402,7 @@ function ruleDataFrom(input: Partial<z.infer<typeof categoryUpsertSchema>>) {
     defaultTaxRatePercent: input.defaultTaxRatePercent,
     hsnCode: input.hsnCode,
     returnWindowDays: input.returnWindowDays,
+    returnable: input.returnable,
   };
 }
 

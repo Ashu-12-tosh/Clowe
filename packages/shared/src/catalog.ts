@@ -401,6 +401,8 @@ export interface ProductDetail {
   sizeGuide: boolean;
   /** Days after delivery a return can be requested. */
   returnWindowDays: number;
+  /** False: this product cannot be returned (its category says so). */
+  returnable: boolean;
   sellerShopName: string;
   /** Who fulfils the order — shown in the "Sold by" card. */
   seller: {

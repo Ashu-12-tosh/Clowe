@@ -208,6 +208,8 @@ export async function getSettings(): Promise<PlatformSettings> {
 
 export async function getPublicSettings(): Promise<PublicSettings> {
   const s = await getSettings();
+  // Loaded here, not at the top: returnability reads the category rules, which read settings.
+  const { nonReturnableCategoryNames } = await import('./returnability');
   return {
     tryonMinPricePaise: s.tryonMinPricePaise,
     dispatchSlaHours: s.dispatchSlaHours,
@@ -234,6 +236,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
       payoutHoldDays: s.payoutHoldDays,
       payoutMinPaise: s.payoutMinPaise,
     },
+    nonReturnableCategories: await nonReturnableCategoryNames(),
   };
 }
 

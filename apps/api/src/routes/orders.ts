@@ -26,6 +26,7 @@ import { hiddenProductTest } from '../services/shopperVisibility';
 import { getSettings } from '../services/settingsService';
 import { recordRedemptions } from '../services/promotionService';
 import { orderLineReturnWindowDays, saleReturnWindows } from '../services/categoryRules';
+import { orderLineReturnable, saleReturnability } from '../services/returnability';
 import { saleGstRates } from '../services/sellerPricing';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -214,8 +215,10 @@ ordersRouter.post('/checkout', async (req, res, next) => {
       }
     }
 
-    // Each line keeps the return window and the GST rate it is sold with.
+    // Each line keeps the return window, whether it can be returned at all,
+    // and the GST rate it is sold with.
     const windowByProduct = await saleReturnWindows(orderLines.map((l) => l.productId));
+    const returnableByProduct = await saleReturnability(orderLines.map((l) => l.productId));
     const gstRates = await saleGstRates(
       orderLines.map((l) => ({ productId: l.productId, unitPaise: l.pricePaise - Math.floor(l.promoDiscountPaise / l.quantity) })),
     );
@@ -320,6 +323,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
               promotionId: line.promotion?.id ?? null,
               promoDiscountPaise: line.promoDiscountPaise,
               returnWindowDays: windowByProduct.get(line.productId) ?? null,
+              returnable: returnableByProduct.get(line.productId) ?? true,
               gstRatePercent: gstRates[i],
             })),
           },
@@ -660,8 +664,10 @@ ordersRouter.get('/:id', async (req, res, next) => {
     const cancellable = ['PLACED', 'CONFIRMED', 'PACKED'];
     // Return window per item: the one it was sold with.
     const windowDaysByItem = new Map<string, number>();
+    const returnableByItem = new Map<string, boolean>();
     for (const i of order.items) {
       windowDaysByItem.set(i.id, await orderLineReturnWindowDays(i));
+      returnableByItem.set(i.id, await orderLineReturnable(i));
     }
     const platformWindowDays = (await getSettings()).returnWindowDays;
     const windowMsFor = (itemId: string) =>
@@ -735,7 +741,9 @@ ordersRouter.get('/:id', async (req, res, next) => {
                 : null,
             }
           : null,
+        returnable: returnableByItem.get(i.id) ?? true,
         canReturn:
+          (returnableByItem.get(i.id) ?? true) &&
           i.status === 'DELIVERED' &&
           !i.return &&
           !!i.deliveredAt &&
@@ -901,6 +909,9 @@ ordersRouter.post('/items/:itemId/return', async (req, res, next) => {
       throw ApiError.badRequest('Only delivered items can be returned');
     }
     if (item.return) throw ApiError.badRequest('Return already requested for this item');
+    if (!(await orderLineReturnable(item))) {
+      throw ApiError.badRequest('This item cannot be returned', 'NOT_RETURNABLE');
+    }
 
     // Return window enforced server-side (UI hides the button, this is the law):
     // the window this line was sold with, whatever the setting says today.

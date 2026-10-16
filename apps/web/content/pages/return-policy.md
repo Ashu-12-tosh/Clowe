@@ -9,6 +9,10 @@ This policy applies to orders placed on cloweshop.com, run by **{{legal.name}}**
 - Most items can be returned within **{{returnWindow}}** of delivery.
 - Some categories have a shorter window — grocery, for example. Each product page shows the window for that item, and your order keeps the window it was bought with.
 
+## Items that cannot be returned
+
+Products in these categories cannot be returned: **{{nonReturnableCategories}}**. Their product page, the cart and checkout all say "Not returnable", and their orders have no return button.
+
 ## How to return
 
 1. Go to **My Orders**, open the order and choose **Return** on the item.

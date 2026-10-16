@@ -212,6 +212,8 @@ export interface PublicSettings {
   gstUniformPercent: number | null;
   /** What a seller is charged, as published on the seller fee page and Seller Terms. */
   sellerFees: SellerFeeSchedule;
+  /** Categories where nothing can be returned, by name ("Fashion › Innerwear"). */
+  nonReturnableCategories: string[];
 }
 
 /** The marketplace's charges to sellers, read from platform settings. */

@@ -2,6 +2,7 @@ import type { ManualPaymentMethod } from '@clowe/shared';
 import { prisma } from '../db';
 import { getSettings } from './settingsService';
 import { saleReturnWindows } from './categoryRules';
+import { saleReturnability } from './returnability';
 import { saleGstRates } from './sellerPricing';
 import { ApiError } from '../utils/ApiError';
 import { codRefusal, deliveryRefusal, pincodeServiceability } from './shipping/serviceability';
@@ -119,6 +120,7 @@ export async function createManualOrder(input: {
 
   // Each line keeps the return window it is sold with, as at checkout.
   const windowByProduct = await saleReturnWindows(lines.map((l) => l.productId));
+  const returnableByProduct = await saleReturnability(lines.map((l) => l.productId));
   const gstRates = await saleGstRates(lines.map((l) => ({ productId: l.productId, unitPaise: l.pricePaise })));
 
   const order = await prisma.$transaction(async (tx) => {
@@ -181,6 +183,7 @@ export async function createManualOrder(input: {
             quantity: l.quantity,
             status: 'PLACED',
             returnWindowDays: windowByProduct.get(l.productId) ?? null,
+            returnable: returnableByProduct.get(l.productId) ?? true,
             gstRatePercent: gstRates[i],
           })),
         },

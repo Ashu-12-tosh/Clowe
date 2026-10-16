@@ -82,6 +82,7 @@ const MAX_VARIANTS = 60;
 
 /** Rules used until a category is picked / the tree has loaded. */
 const NO_RULES: CategoryRules = {
+  returnable: true,
   variantAxes: [],
   attributeSchema: [],
   tryOnEligible: false,

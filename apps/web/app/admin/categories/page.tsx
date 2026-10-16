@@ -139,6 +139,7 @@ function RulesEditor({
   const [returnDays, setReturnDays] = useState(
     own.returnWindowDays === null ? '' : String(own.returnWindowDays),
   );
+  const [returnable, setReturnable] = useState(own.returnable === null ? '' : String(own.returnable));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const { errors: fieldErrors, show: showFieldErrors, fromError } = useFieldErrors();
@@ -158,6 +159,7 @@ function RulesEditor({
       defaultTaxRatePercent: tax !== '' && tax !== 'VALUE_SLAB' ? Number(tax) : null,
       hsnCode: hsn.trim() || null,
       returnWindowDays: returnDays.trim() === '' ? null : Number(returnDays),
+      returnable: bool(returnable),
     };
     const checked = categoryRulesInputSchema.safeParse(body);
     if (showFieldErrors(checked.success ? {} : issuesToFieldErrors(checked.error.issues))) {
@@ -298,6 +300,22 @@ function RulesEditor({
             className={`mt-1 w-full ${field}`}
           />
           <FieldError message={fieldErrors.returnWindowDays} />
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-700">Returnable</label>
+          <select
+            value={returnable}
+            name="returnable"
+            onChange={(e) => setReturnable(e.target.value)}
+            className={`mt-1 w-full ${field}`}
+          >
+            <option value="">Inherit ({inherited.returnable ? 'yes' : 'no'})</option>
+            <option value="true">Yes</option>
+            <option value="false">No — never returnable (e.g. innerwear)</option>
+          </select>
+          <p className="mt-1 text-[11px] text-gray-500">
+            No: products here say &ldquo;Not returnable&rdquo; on their page and at checkout, and have no return button.
+          </p>
         </div>
       </div>
 

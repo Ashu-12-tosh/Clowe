@@ -824,6 +824,9 @@ model Category {
   hsnCode               String?
   // Days after delivery a return can be requested (null = platform default).
   returnWindowDays Int?
+  // Whether products here can be returned at all (null = as the parent; the
+  // root default is yes). Innerwear, for one, is not.
+  returnable Boolean?
   isActive  Boolean    @default(true)
   parentId  String?
   parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
@@ -1319,6 +1322,9 @@ model OrderItem {
   // change to the platform, category or seller window never moves it. Null
   // only on rows written without checkout (tests): those use today's rule.
   returnWindowDays Int?
+  // Whether this line could be returned when it was sold, fixed at checkout
+  // like the window. Null: rows written without checkout use today's rule.
+  returnable Boolean?
   // The GST rate this line was sold at, likewise fixed at checkout: invoices,
   // the ledger, payouts and GSTR-8 read it, so a later GST change (the flat
   // 18%) never rewrites a past sale. Null as above.
@@ -1527,6 +1533,8 @@ model Return {
   qcNote            String?
   // How the shopper gets their money back.
   resolution        ReturnResolution @default(REFUND)
+  // Cash on Delivery returns only: where the buyer wants the money sent.
+  codRefundAccount  CodRefundAccount?
   // Admin dispute-resolution override (approving a seller-rejected return).
   adminOverrideAt   DateTime?
   adminOverrideNote String?
@@ -1542,6 +1550,28 @@ model Return {
 }
 
 // Every refund attempt is logged here (amount, gateway id, status, timestamps).
+enum CodRefundMethod {
+  UPI
+  BANK
+}
+
+// Where a Cash on Delivery buyer wants a return's refund sent: there is no
+// online payment to refund to, so an admin pays it by hand. The details are
+// encrypted (AES-256-GCM); only the last four characters are kept readable,
+// for the masked view. Sellers never see this table.
+model CodRefundAccount {
+  id        String          @id @default(cuid())
+  returnId  String          @unique
+  return    Return          @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  method    CodRefundMethod
+  last4     String
+  // "v1:<iv>:<tag>:<ciphertext>", base64 — JSON of the UPI ID or the bank account.
+  cipher    String
+  createdAt DateTime        @default(now())
+
+  @@map("cod_refund_accounts")
+}
+
 model Refund {
   id               String       @id @default(cuid())
   // Null for a goodwill refund an admin issued without a return behind it.

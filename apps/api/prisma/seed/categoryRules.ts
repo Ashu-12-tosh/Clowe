@@ -15,6 +15,8 @@ export interface RootRules {
   hsnCode: string | null;
   /** Null: follow the platform return window setting. Set only where a category truly differs. */
   returnWindowDays: number | null;
+  /** False where nothing may be returned at all; unset everywhere else (returnable). */
+  returnable?: boolean;
 }
 
 const COLOR: VariantAxis = { key: 'color', label: 'Colour' };
@@ -251,7 +253,8 @@ export const CHILD_RULE_OVERRIDES: Record<string, Partial<RootRules>> = {
   // Try-on would render a customer in underwear from a photo they uploaded
   // to shop with. Off at the department level, and isSensitiveForTryOn()
   // catches the same garments listed under any other category.
-  'fashion-innerwear': { tryOnEligible: false },
+  // Not returnable either: worn-close garments are not resold.
+  'fashion-innerwear': { tryOnEligible: false, returnable: false },
   'fashion-accessories': { tryOnEligible: false },
   // Electronics: the option axes each department actually varies on. The
   // root declares only colour, so a category not listed here offers colour

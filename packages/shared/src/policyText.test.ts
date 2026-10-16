@@ -46,3 +46,16 @@ describe('policy text', () => {
     expect(fillPolicyText('{{commission}} · {{codMax}}', null)).toBe('the rate shown on your Payouts page · the limit shown at checkout');
   });
 });
+
+describe('non-returnable categories in the Return Policy', () => {
+  it('lists them from the category setting', () => {
+    expect(fillPolicyText('{{nonReturnableCategories}}', { nonReturnableCategories: ['Fashion › Innerwear', 'Beauty'] })).toBe(
+      'Fashion › Innerwear, Beauty',
+    );
+  });
+
+  it('says none, or points at the product pages when unknown', () => {
+    expect(fillPolicyText('{{nonReturnableCategories}}', { nonReturnableCategories: [] })).toBe('none at the moment');
+    expect(fillPolicyText('{{nonReturnableCategories}}', null)).toBe('the categories whose products say "Not returnable"');
+  });
+});

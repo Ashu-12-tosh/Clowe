@@ -32,6 +32,7 @@ import {
   resolveCategory,
   returnWindowDaysFor,
 } from '../services/categoryRules';
+import { returnableFor } from '../services/returnability';
 import { isHiddenCategory, isHiddenProduct, visibleProductWhere } from '../services/shopperVisibility';
 import {
   ENGINE_SELECT,
@@ -399,6 +400,7 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
         (product.tryOnLimit == null || product.tryOnUsed < product.tryOnLimit),
       sizeGuide: resolved.rules.sizeGuide && variantAxes.some((a) => a.key === 'size'),
       returnWindowDays: await returnWindowDaysFor(product.categoryId, product.seller.returnWindowDays),
+      returnable: await returnableFor(product.categoryId),
       sellerShopName: product.seller.shopName,
       seller: {
         shopName: product.seller.shopName,

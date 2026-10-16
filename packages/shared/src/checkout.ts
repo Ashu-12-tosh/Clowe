@@ -63,6 +63,8 @@ export interface CartLine {
   rootCategorySlug: string;
   /** Category allows AI Try-On and the seller has it on. */
   tryOnEligible: boolean;
+  /** False: this item cannot be returned (its category says so) — shown before buying. */
+  returnable: boolean;
   /** Seller promotion applied to this line, if any. */
   promotion: { id: string; name: string; code: string | null } | null;
   /** What the promotion takes off this line's total (already in the totals). */
@@ -504,6 +506,8 @@ export interface OrderDetailItem {
   returnStatus: string | null;
   returnInfo: ReturnInfo | null;
   /** True while the item is DELIVERED and inside the return window. */
+  /** False for an item from a non-returnable category (fixed when it was sold). */
+  returnable: boolean;
   canReturn: boolean;
   /** The courier's scans for this line's parcel, newest first. */
   scans: import('./growth').TrackingScanView[];

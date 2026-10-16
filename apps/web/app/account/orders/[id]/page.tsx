@@ -18,6 +18,7 @@ import { Scroller } from '@/components/home/HomeBits';
 import ProductCard from '@/components/ProductCard';
 import { ReturnModal, ReturnTimeline } from '@/components/orders/ReturnBits';
 import ReviewModal from '@/components/orders/ReviewModal';
+import NotReturnable from '@/components/NotReturnable';
 import { CheckIcon, HeadsetIcon, MapPinIcon, ReturnIcon } from '@/components/cart/CartIcons';
 
 const DELIVERY_LABEL: Record<DeliveryMethod, string> = {
@@ -374,6 +375,7 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
                         Return item
                       </button>
                     )}
+                    {!item.returnable && item.status === 'DELIVERED' && <NotReturnable className="self-center" />}
                   </div>
                 </li>
               ))}
