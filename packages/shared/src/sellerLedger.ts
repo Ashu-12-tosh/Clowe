@@ -62,6 +62,14 @@ export const SELLER_LEDGER_TYPE_LABELS: Record<SellerLedgerTypeValue, string> = 
   RETURN_FREIGHT: 'Return pickup freight (Delhivery)',
 };
 
+/**
+ * Who pays for a return's pickup, as Store Settings → Returns says it. The
+ * seller does: the trip is charged to their ledger as RETURN_FREIGHT.
+ */
+export const RETURN_PICKUP_NOTE =
+  `Return pickup is booked through Delhivery and paid for by you: when a return reaches you, Delhivery's charge for the trip ` +
+  `is posted to your ledger as "${SELLER_LEDGER_TYPE_LABELS.RETURN_FREIGHT}". Decide on requests within 48 hours — see the Returns page.`;
+
 /** The two penalties a seller can be charged, once per order each. */
 export const PENALTY_KINDS = ['LATE_DISPATCH', 'SELLER_CANCEL'] as const;
 export type PenaltyKind = (typeof PENALTY_KINDS)[number];

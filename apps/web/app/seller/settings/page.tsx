@@ -19,6 +19,7 @@ import {
   type StoreHighlight,
   type StoreTab,
   IMAGE_SLOTS,
+  RETURN_PICKUP_NOTE,
   sizeHint
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadImages } from '@/lib/api';
@@ -972,10 +973,7 @@ export default function SellerStoreSettingsPage() {
                   </Field>
                 </div>
               )}
-              <p className="mt-3 rounded-lg bg-cream-50 px-3 py-2 text-[11px] text-gray-600">
-                Return pickup is arranged and paid for by the marketplace. Decide on requests within
-                48 hours — see the Returns page.
-              </p>
+              <p className="mt-3 rounded-lg bg-cream-50 px-3 py-2 text-[11px] text-gray-600">{RETURN_PICKUP_NOTE}</p>
             </Section>
           )}
 
