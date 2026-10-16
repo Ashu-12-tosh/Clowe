@@ -14,7 +14,7 @@ If your complaint is not resolved, or it is about content on the site or how we 
 
 - **Name:** Shubham
 - **Designation:** Designated Partner, {{legal.name}}
-- **Email:** grievance@cloweshop.com
+- **Email:** support@cloweshop.com
 - **Phone:** {{legal.supportPhone}}
 - **Address:** {{legal.name}}, {{legal.registeredAddress}}
 
