@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getPublicSettings, onPublicSettingsChanged } from '@/lib/settings';
 import { ExternalLink } from '@/components/ExternalLink';
+import { openCookieSettings } from '@/lib/cookieConsent';
 import { DEFAULT_LEGAL_ENTITY, legalDisplayName, safeHref } from '@clowe/shared';
 
 const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
@@ -190,6 +191,19 @@ export default function Footer() {
                   </Link>
                 </li>
               ))}
+              {col.title === 'Policies' && (
+                <li>
+                  {/* Cookie Policy 4.3: withdraw or vary consent as easily as it was given. */}
+                  <button
+                    type="button"
+                    onClick={openCookieSettings}
+                    className="t-footer-link text-gray-500 hover:text-brand-600 hover:underline"
+                    data-cookie-settings-link
+                  >
+                    Cookie Settings
+                  </button>
+                </li>
+              )}
             </ul>
           </div>
         ))}

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
+import CookieConsent from '@/components/CookieConsent';
 import AppShell from '@/components/AppShell';
 import SupportChat from '@/components/SupportChat';
 import Toaster from '@/components/Toaster';
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AppShell>{children}</AppShell>
         <SupportChat />
         <Toaster />
+        <CookieConsent />
       </body>
     </html>
   );

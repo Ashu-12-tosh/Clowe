@@ -1,5 +1,6 @@
 'use client';
 
+import { setFunctional } from '@/lib/cookieConsent';
 import { useCallback, useEffect, useState } from 'react';
 import type { DeliveryMethod, DeliveryQuote } from '@clowe/shared';
 import { api } from '@/lib/api';
@@ -59,7 +60,7 @@ export default function DeliveryCard({ subtotalPaise }: Props) {
       setQuote({ pincode: pin, serviceable: false, message: 'Enter a valid 6-digit pincode', options: [] });
       return;
     }
-    localStorage.setItem(PINCODE_KEY, pin);
+    setFunctional(PINCODE_KEY, pin);
     setPincode(pin);
     setEditing(false);
   }

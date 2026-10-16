@@ -1,3 +1,5 @@
+import { setFunctional } from '@/lib/cookieConsent';
+
 /**
  * The last few things this browser searched for.
  *
@@ -26,7 +28,7 @@ export function recordRecentSearch(query: string): void {
   if (!trimmed) return;
   try {
     const existing = getRecentSearches().filter((q) => q.toLowerCase() !== trimmed.toLowerCase());
-    window.localStorage.setItem(KEY, JSON.stringify([trimmed, ...existing].slice(0, MAX)));
+    setFunctional(KEY, JSON.stringify([trimmed, ...existing].slice(0, MAX)));
   } catch {
     // Nothing to do — the list simply stays empty for this visitor.
   }

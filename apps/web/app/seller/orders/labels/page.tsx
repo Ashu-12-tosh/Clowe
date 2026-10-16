@@ -1,5 +1,6 @@
 'use client';
 
+import { setFunctional } from '@/lib/cookieConsent';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { SellerShippingLabel } from '@clowe/shared';
@@ -157,7 +158,7 @@ function LabelsView() {
   function pick(next: LabelSize) {
     setSize(next);
     try {
-      localStorage.setItem(SIZE_KEY, next);
+      setFunctional(SIZE_KEY, next);
     } catch {
       // Not remembered; still used for this print.
     }

@@ -1,3 +1,5 @@
+import { setFunctional } from '@/lib/cookieConsent';
+
 /**
  * How this device last signed in: PIN or OTP. Only the device remembers it;
  * the pages never ask the server whether a number has an account or a PIN.
@@ -17,7 +19,7 @@ export function lastLoginMethod(): LoginMethod | null {
 
 export function rememberLoginMethod(method: LoginMethod): void {
   try {
-    localStorage.setItem(LOGIN_METHOD_KEY, method);
+    setFunctional(LOGIN_METHOD_KEY, method);
   } catch {
     // Storage blocked (private window): the choice just isn't remembered.
   }

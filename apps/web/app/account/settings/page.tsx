@@ -1,5 +1,6 @@
 'use client';
 
+import { setFunctional } from '@/lib/cookieConsent';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useCouponsEnabled } from '@/lib/coupons';
@@ -704,7 +705,7 @@ export default function AccountSettingsPage() {
                         setError('Enter a valid 6-digit pincode');
                         return;
                       }
-                      localStorage.setItem(PINCODE_KEY, pincode);
+                      setFunctional(PINCODE_KEY, pincode);
                       setError('');
                       flash('Delivery pincode saved');
                     }}

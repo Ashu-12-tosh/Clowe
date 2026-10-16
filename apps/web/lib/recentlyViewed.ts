@@ -1,3 +1,5 @@
+import { setFunctional } from '@/lib/cookieConsent';
+
 /**
  * Recently viewed products, remembered in the visitor's own browser.
  *
@@ -28,7 +30,7 @@ export function recordRecentlyViewed(productId: string): void {
   if (!productId) return;
   try {
     const next = [productId, ...getRecentlyViewedIds().filter((id) => id !== productId)].slice(0, MAX);
-    window.localStorage.setItem(KEY, JSON.stringify(next));
+    setFunctional(KEY, JSON.stringify(next));
   } catch {
     // Nothing to do — the rail simply stays empty for this visitor.
   }
