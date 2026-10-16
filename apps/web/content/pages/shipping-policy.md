@@ -2,7 +2,7 @@
 
 CLOWE SHOP— www.cloweshop.com
 
-*Last updated: 12 October 2026*
+*Last updated: 16 October 2026*
 
 This Policy forms part of the Terms and Conditions of Use and the Customer Terms of Sale, and is published in compliance with Rule 5(3)(d) of the Consumer Protection (E-Commerce) Rules, 2020.
 
@@ -38,9 +38,9 @@ This Policy forms part of the Terms and Conditions of Use and the Customer Terms
 
 ## 4. Shipping Charges
 
-4.1 Shipping, handling and cash-on-delivery charges, where applicable, are displayed before the order is placed and are included in the total price shown at checkout, in compliance with Rule 4(3) of the Consumer Protection (E-Commerce) Rules, 2020.
+4.1 No shipping, handling or cash-on-delivery charge is levied on the Customer. The total price shown at checkout is the full amount payable, in compliance with Rule 4(3) of the Consumer Protection (E-Commerce) Rules, 2020.
 
-4.2 Free shipping may be offered above an order value of INR 3000 or under a promotion, subject to the terms of that promotion.
+4.2 Delivery is free on every order, whatever its value.
 
 4.3 Where an order containing multiple items is shipped in separate consignments from different Vendors, no additional shipping charge is levied beyond that disclosed at checkout.
 
@@ -74,7 +74,7 @@ This Policy forms part of the Terms and Conditions of Use and the Customer Terms
 
 8.1 A consignment is returned to origin where the address is incorrect or incomplete, the recipient is unreachable or unavailable on all attempts, the recipient refuses acceptance without cause, the OTP or identity verification fails, or the location becomes unserviceable.
 
-8.2 For prepaid orders so returned, the Product value shall be refunded in accordance with the Cancellation Policy, less the forward and return shipping charges actually incurred where the failure is attributable to the Customer.
+8.2 For prepaid orders so returned, the Product value shall be refunded in full in accordance with the Cancellation Policy; no shipping charge is deducted.
 
 8.3 Repeated refusal to accept cash-on-delivery consignments may result in withdrawal of the cash-on-delivery facility and suspension of the account.
 

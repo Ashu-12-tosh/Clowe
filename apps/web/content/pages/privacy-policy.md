@@ -4,7 +4,7 @@ CLOWE SHOP — www.cloweshop.com
 
 Operated by CLOWE PARTNERS LLP, CIN: DLC30330G, registered office at A22, STREET NO. 21, MD MARG, GOPAL NAGAR, NAJAFGARH, NEW DELHI 110073
 
-*Last updated: 12 October 2026*
+*Last updated: 16 October 2026*
 
 This Privacy Policy is published under Rule 3(1)(a) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021 and Rule 4 of the Information Technology (Reasonable Security Practices and Procedures and Sensitive Personal Data or Information) Rules, 2011, and constitutes the notice required under Sections 5 and 6 of the Digital Personal Data Protection Act, 2023.
 
@@ -79,7 +79,7 @@ In relation to the personal data described here, the Company acts as a Data Fidu
 
 3.6 Processing. Processing is automated and consists of image segmentation, body-shape estimation and synthesis of the rendering. No human review is undertaken save where necessary to investigate a complaint, a suspected contravention of the Terms of Use, or a direction of an authority.
 
-3.7 Retention. User Images are retained only so long as necessary for the purpose in Clause 3.3 and in any event not beyond 30 days from upload, or until withdrawal of consent, whichever is earlier, whereafter they are erased, save where retention is required by Applicable Law or for the establishment, exercise or defence of legal claims. Derived measurement estimates, where retained, are retained in a form not linked to the original image for a period not exceeding [INSERT] days.
+3.7 Retention. User Images are retained only so long as necessary for the purpose in Clause 3.3 and in any event not beyond 24 hours from upload, or until withdrawal of consent, whichever is earlier, whereafter they are erased, save where retention is required by Applicable Law or for the establishment, exercise or defence of legal claims.
 
 3.8 Withdrawal of consent. You may withdraw consent at any time through Platform settings or by writing to the Grievance Officer. On withdrawal We shall cease further processing and cause erasure in accordance with Clause 3.7. Withdrawal does not affect the lawfulness of processing carried out before it. The consequence of withdrawal is that the AI Virtual Try-On will cease to be available to You.
 

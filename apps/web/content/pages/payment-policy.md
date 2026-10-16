@@ -2,7 +2,7 @@
 
 CLOWE SHOP — www.cloweshop.com
 
-*Last updated: 12 October 2026*
+*Last updated: 16 October 2026*
 
 This Policy forms part of the Terms and Conditions of Use, the Customer Terms of Sale and the Vendor Terms and Seller Agreement.
 
@@ -13,9 +13,7 @@ This Policy forms part of the Terms and Conditions of Use, the Customer Terms of
 - Credit cards and debit cards (Visa, Mastercard, RuPay, American Express);
 - Net banking;
 - Unified Payments Interface (UPI);
-- Prepaid wallets and prepaid instruments;
-- EMI and pay-later facilities offered by banks and regulated lenders;
-- Platform wallet or store credit, where offered; and
+- other modes as offered by our payment partner from time to time; and
 - Cash on Delivery (COD), where available for the destination PIN code and the order value, subject to Clause 6.
 
 1.2 The Company may add, modify, suspend or withdraw any payment mode at any time without liability.
@@ -54,7 +52,7 @@ This Policy forms part of the Terms and Conditions of Use, the Customer Terms of
 
 ## 5. Price, Taxes and Invoicing
 
-5.1 The total price displayed includes all compulsory and ancillary charges, in compliance with Rule 4(3) of the Consumer Protection (E-Commerce) Rules, 2020. Platform fees, Shipping, handling and COD charges are disclosed separately before confirmation.
+5.1 The total price displayed includes all compulsory and ancillary charges, in compliance with Rule 4(3) of the Consumer Protection (E-Commerce) Rules, 2020. No shipping, handling or COD charge is levied on the Customer.
 
 5.2 Prices are inclusive of applicable Goods and Services Tax, unless stated otherwise on the product page.
 
@@ -66,9 +64,9 @@ This Policy forms part of the Terms and Conditions of Use, the Customer Terms of
 
 ## 6. Cash on Delivery
 
-6.1 COD is available only for selected PIN codes and order values above INR 1000 up to INR 5000. Availability is displayed at checkout.
+6.1 COD is available only for selected PIN codes and order values from INR 1,000 up to INR 5,000. Availability is displayed at checkout.
 
-6.2 A COD handling charge of 2.5% of the declared order value may apply and is disclosed before the order is placed.
+6.2 No COD handling charge is levied.
 
 6.3 The exact amount shown on the invoice must be paid to the delivery agent at the time of delivery. The delivery agent is not obliged to carry change.
 

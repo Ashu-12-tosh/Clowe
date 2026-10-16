@@ -4,7 +4,7 @@ CLOWE SHOP— www.cloweshop.com
 
 Operated by CLOWE PARTNERS LLP
 
-*Last updated: 12 October 2026*
+*Last updated: 16 October 2026*
 
 This Cancellation Policy forms part of the Terms and Conditions of Use and the Customer Terms of Sale. It is displayed before an order is placed, in compliance with Rule 5(3)(d) of the Consumer Protection (E-Commerce) Rules, 2020.
 
@@ -14,11 +14,11 @@ This Cancellation Policy forms part of the Terms and Conditions of Use and the C
 
 1.2 After dispatch and before delivery. Once a Product has been dispatched, cancellation is not permitted as a matter of right. A request may be made to Customer Support, which shall be forwarded to the Vendor and the logistics partner, and may be accommodated where the consignment can still be intercepted. Where the consignment cannot be intercepted, the Customer may refuse delivery, in which case Clause 1.3 applies.
 
-1.3 Refusal of delivery. Where a Customer refuses to accept delivery of a prepaid order without any defect or deficiency in the Product, the consignment is returned to origin. Refund of the Product value shall be made in accordance with Clause 4, less the forward and return shipping charges actually incurred, which are disclosed at checkout.
+1.3 Refusal of delivery. Where a Customer refuses to accept delivery of a prepaid order without any defect or deficiency in the Product, the consignment is returned to origin. Refund of the Product value shall be made in full in accordance with Clause 4; no shipping charge is deducted.
 
 1.4 After delivery. An order cannot be cancelled after delivery. Remedies after delivery, where available, are governed solely by the Return, Exchange and Refund Policy.
 
-1.5 No cancellation charge is levied on a Customer for cancellation after confirmation of an order, save as stated in Clause 1.3, and no charge is levied unless a similar charge is borne by the Company or the Vendor on cancellation by them, in accordance with Rule 4(10) of the Consumer Protection (E-Commerce) Rules, 2020.
+1.5 No cancellation charge is levied on a Customer for cancellation after confirmation of an order, and no charge is levied unless a similar charge is borne by the Company or the Vendor on cancellation by them, in accordance with Rule 4(10) of the Consumer Protection (E-Commerce) Rules, 2020.
 
 ## 2. Orders Not Capable of Cancellation
 
@@ -53,7 +53,7 @@ This Cancellation Policy forms part of the Terms and Conditions of Use and the C
 
 4.3 Where a discount, coupon, promotional code, loyalty credit or bank offer was applied, refund shall be of the net amount actually paid. A single-use coupon consumed on a cancelled order may be reinstated at the Company’s discretion, and may not be reinstated where it has expired.
 
-4.4 Where only part of an order is cancelled, any shipping or handling charge attributable to the remaining items shall continue to apply.
+4.4 Where only part of an order is cancelled, no shipping or handling charge applies to the remaining items.
 
 ## 5. Grievances
 

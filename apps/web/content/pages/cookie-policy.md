@@ -2,7 +2,7 @@
 
 CLOWE SHOP — www.cloweshop.com
 
-*Last updated: 12 October 2026*
+*Last updated: 16 October 2026*
 
 This Cookie Policy explains how We use cookies and similar technologies on the Platform. It forms part of the Privacy Policy and is to be read with it.
 
@@ -56,7 +56,7 @@ These are set only with Your consent.
 
 4.3 You may withdraw or vary Your consent at any time through the “Cookie Settings” link in the footer of the Platform, with the same ease with which it was given.
 
-4.4 Your preference is recorded for [INSERT: 6/12] months, after which You will be asked again.
+4.4 Your preference is recorded for 12 months, after which You will be asked again.
 
 ## 5. Managing Cookies Through Your Browser
 

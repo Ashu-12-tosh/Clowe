@@ -4,7 +4,7 @@ CLOWE SHOP— www.cloweshop.com
 
 Operated by CLOWE PARTNERS LLP, registered office at A22, STREET NO. 21, MD MARG, GOPAL NAGAR, NAJAFGARH, NEW DELHI 110073
 
-*Last updated: 12 October 2026*
+*Last updated: 16 October 2026*
 
 These Customer Terms of Sale govern the purchase of Products by a Customer through the Platform. They are to be read with the Terms and Conditions of Use, the Payment Policy, the Shipping and Delivery Policy, the Cancellation Policy, the Return, Exchange and Refund Policy, the Privacy Policy and the Cookie Policy, all of which form part of the contract between You and Us.
 
@@ -28,7 +28,7 @@ These Customer Terms of Sale govern the purchase of Products by a Customer throu
 
 3.1 All descriptions, images, size charts, fabric compositions, care instructions, country of origin, warranty terms and prices are furnished and warranted by the Vendor. The Company does not independently verify them.
 
-3.2 The total price displayed includes all compulsory and ancillary charges. Any shipping, handling, convenience or cash-on-delivery charge is disclosed separately before confirmation of the order.
+3.2 The total price displayed includes all compulsory and ancillary charges. No shipping, handling, convenience or cash-on-delivery charge is levied on the Customer.
 
 3.3 Colour and appearance. Colours, shades, textures and finishes may vary on account of photography, lighting, screen calibration and device settings. Minor variation is not by itself a defect.
 

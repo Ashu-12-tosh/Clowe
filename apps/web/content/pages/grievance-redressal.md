@@ -4,7 +4,7 @@ CLOWE SHOP— www.cloweshop.com
 
 Operated by CLOWE PARTNERS LLP, registered office at A22, STREET NO. 21, MD MARG, GOPAL NAGAR, NAJAFGARH, NEW DELHI 110073
 
-*Last updated: 12 October 2026*
+*Last updated: 16 October 2026*
 
 This Policy is published under Rule 3(2) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021, Rule 4(4) and 4(5) of the Consumer Protection (E-Commerce) Rules, 2020, and Section 13 of the Digital Personal Data Protection Act, 2023.
 
@@ -100,4 +100,4 @@ Name: Amit Designation: Grievance officer Address: A22, STREET NO. 21, MD MARG, 
 
 ## 9. Records
 
-9.1 Complaints, ticket records and the action taken are retained for [INSERT: 3] years for audit and compliance purposes.
+9.1 Complaints, ticket records and the action taken are retained for 3 years for audit and compliance purposes.

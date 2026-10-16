@@ -2,13 +2,13 @@
 
 CLOWE SHOP — www.cloweshop.com
 
-*Last updated: 12 October 2026*
+*Last updated: 16 October 2026*
 
 These FAQs are provided for convenience and ease of understanding. They summarise Our policies in plain language. In the event of any inconsistency between an answer below and the corresponding policy document, the policy document shall prevail.
 
 ## A. About the Platform
 
-1. Who sells the products on cloweshop.com? Products are sold by independent third-party vendors registered on Our marketplace. We provide the technology platform, payment facilitation and logistics coordination. The sale contract is between Clowe Shop and the vendor. The vendor’s name, address and contact details are shown on every product page.
+1. Who sells the products on cloweshop.com? Products are sold by independent third-party vendors registered on Our marketplace. We provide the technology platform, payment facilitation and logistics coordination. The sale contract is between You (the customer) and the vendor. The vendor’s name, address and contact details are shown on every product page.
 
 2. Is the Company the seller? No. We are a marketplace e-commerce entity and an intermediary. We do not own or stock inventory and do not sell on Our own account.
 
@@ -50,7 +50,7 @@ These FAQs are provided for convenience and ease of understanding. They summaris
 
 18. Which orders cannot be cancelled? Customised, made-to-measure, monogrammed or altered products, and products marked non-cancellable or sold in a clearance or final-sale event.
 
-19. Will I be charged a cancellation fee? No, except where You refuse delivery of a prepaid order without any defect in the product, in which case the shipping charges actually incurred are deducted.
+19. Will I be charged a cancellation fee? No. Even where You refuse delivery of a prepaid order, You are refunded in full; no shipping charge is deducted.
 
 ## E. Returns, Exchange and Refund
 
@@ -82,13 +82,13 @@ These FAQs are provided for convenience and ease of understanding. They summaris
 
 32. Can I track my order? Yes, under “My Orders”, once a tracking number is issued on dispatch.
 
-33. What if nobody is home? Up to two delivery attempts are made. If all fail, the parcel returns to origin and a prepaid order is refunded after deduction of shipping charges actually incurred.
+33. What if nobody is home? Up to three delivery attempts are made. If all fail, the parcel returns to origin and a prepaid order is refunded in full.
 
 34. My parcel is lost. What happens? If undelivered and untraceable for 15 days beyond the estimated date, it is treated as lost in transit and You receive a replacement or a full refund, at Your election.
 
 ## G. Payment
 
-35. What payment methods do you accept? Credit and debit cards, net banking, UPI, wallets, EMI and pay-later options, and cash on delivery where available only for INR 1000.
+35. What payment methods do you accept? Credit and debit cards, net banking and UPI, other modes as offered by our payment partner from time to time, and cash on delivery for orders from INR 1,000 to INR 5,000 where available.
 
 36. Is my card data safe? We do not store complete card numbers or CVV. Cards are tokenised in accordance with Reserve Bank of India directions, and payments are processed by RBI-authorised payment aggregators.
 
