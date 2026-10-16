@@ -5,6 +5,7 @@ import { postForwardFreight, postReturnFreight, postRtoFreight } from './freight
 import { syncOrderStatus } from '../orderStatusService';
 import { settleEarnedCredits } from '../purchaseCredits';
 import { markLineDelivered, markLineShipped } from './lineTransitions';
+import { flagShipmentLost } from './lostParcels';
 import { notifyFailedAttempt, notifyRtoArrived, startRto } from './rto';
 import { applyReverseScan } from './reversePickup';
 import { syncShipmentsFromLines } from './shipments';
@@ -134,7 +135,13 @@ export async function applyTracking(result: TrackingResult, source: TrackingSour
       await prisma.shipment.update({ where: { id: shipment.id }, data: { deliveredAt: at } });
     }
     if (next === 'DELIVERY_FAILED') {
-      await notifyFailedAttempt(shipment, result.statusText || 'Delivery attempt failed');
+      // Counted per failed attempt; up to three are made (Shipping Policy 6.5).
+      const { deliveryAttempts } = await prisma.shipment.update({
+        where: { id: shipment.id },
+        data: { deliveryAttempts: { increment: 1 } },
+        select: { deliveryAttempts: true },
+      });
+      await notifyFailedAttempt(shipment, result.statusText || 'Delivery attempt failed', deliveryAttempts);
     }
     if ((next === 'RTO_IN_TRANSIT' || next === 'RTO_DELIVERED') && live.length === 0) {
       // Every line was cancelled after pickup (an admin's cancellation): the
@@ -165,16 +172,8 @@ export async function applyTracking(result: TrackingResult, source: TrackingSour
       if (next === 'RTO_DELIVERED') await notifyRtoArrived(shipment);
     }
     if (next === 'LOST') {
-      const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
-      await prisma.notification.createMany({
-        data: admins.map((a) => ({
-          userId: a.id,
-          type: 'SHIPMENT_LOST',
-          title: `Parcel lost in transit — AWB ${shipment.awbNumber}`,
-          body: 'Delhivery reports this parcel lost. Refund the buyer, then claim it from Delhivery.',
-          linkHref: '/admin/orders',
-        })),
-      });
+      // The buyer chooses a replacement or a refund (Shipping Policy 9.2).
+      await flagShipmentLost(shipment.id, 'Delhivery reports this parcel lost');
     }
   }
 

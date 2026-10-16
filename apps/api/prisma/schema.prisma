@@ -1345,6 +1345,12 @@ model OrderItem {
   // 18%) never rewrites a past sale. Null as above.
   gstRatePercent Int?
 
+  // A free replacement for another line (a parcel lost in transit, or an
+  // exchange): what it replaces. Its order is paid with REPLACEMENT.
+  replacementOfId String?
+  replacementOf   OrderItem?  @relation("Replacement", fields: [replacementOfId], references: [id], onDelete: SetNull)
+  replacements    OrderItem[] @relation("Replacement")
+
   // Delivery partner details (filled when the seller ships via ShippingProvider).
   // Display copies of the line's shipment, kept so existing readers work.
   awbNumber   String?
@@ -1370,6 +1376,7 @@ model OrderItem {
   // Seller order management sorts by recency within a shop.
   @@index([sellerId, orderId])
   @@index([sellerId, payoutId])
+  @@index([replacementOfId])
   @@map("order_items")
 }
 
@@ -1424,6 +1431,16 @@ model Shipment {
   rtoInitiatedAt DateTime?
   rtoDeliveredAt DateTime?
   cancelledAt DateTime?
+  // The estimate from dispatch, by the destination's zone (Shipping Policy 3.2).
+  etaFrom     DateTime?
+  etaTo       DateTime?
+  // Failed delivery attempts so far (up to three are made, 6.5).
+  deliveryAttempts Int     @default(0)
+  // Lost in transit (9.2): flagged when 15 days past etaTo and not traceable,
+  // or when the courier says so; then the buyer's choice and when it was made.
+  lostFlaggedAt DateTime?
+  lostChoice    String?
+  lostChoiceAt  DateTime?
   /// A4 | THERMAL_4X6 — the seller's last print.
   labelSize   String?
   /// Freight in paise: the quote at booking, then the courier's final charge.

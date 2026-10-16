@@ -37,6 +37,7 @@ export * from './sellerInventory';
 export * from './sellerStore';
 export * from './kyc';
 export * from './taxIds';
+export * from './deliveryZone';
 export * from './codRefund';
 export * from './categoryIcons';
 export * from './sellerSupport';

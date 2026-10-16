@@ -1,3 +1,4 @@
+import { MAX_DELIVERY_ATTEMPTS } from '@clowe/shared';
 import { prisma } from '../../db';
 import { ApiError } from '../../utils/ApiError';
 import { creditExpiryFrom } from '../../routes/credits';
@@ -93,7 +94,13 @@ export async function startRto(shipment: ShipmentForRto, at: Date = new Date()):
 }
 
 /** Tell the seller and the buyer about a failed delivery attempt. */
-export async function notifyFailedAttempt(shipment: { orderId: string; sellerId: string; awbNumber: string | null }, reason: string): Promise<void> {
+export async function notifyFailedAttempt(
+  shipment: { orderId: string; sellerId: string; awbNumber: string | null },
+  reason: string,
+  attempt = 1,
+): Promise<void> {
+  const last = attempt >= MAX_DELIVERY_ATTEMPTS;
+  const ofMax = `attempt ${Math.min(attempt, MAX_DELIVERY_ATTEMPTS)} of ${MAX_DELIVERY_ATTEMPTS}`;
   const order = await prisma.order.findUniqueOrThrow({ where: { id: shipment.orderId }, select: { id: true, userId: true, orderNumber: true } });
   const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: shipment.sellerId }, select: { userId: true } });
   await prisma.notification.createMany({
@@ -101,15 +108,19 @@ export async function notifyFailedAttempt(shipment: { orderId: string; sellerId:
       {
         userId: seller.userId,
         type: 'SELLER_NDR',
-        title: `Delivery attempt failed — ${order.orderNumber}`,
-        body: `${reason}. Ask Delhivery to try again, or to deliver on another day, from the order page.`,
+        title: `Delivery attempt failed (${ofMax}) — ${order.orderNumber}`,
+        body: last
+          ? `${reason}. That was the last attempt: the parcel will come back to you.`
+          : `${reason}. Ask Delhivery to try again, or to deliver on another day, from the order page.`,
         linkHref: `/seller/orders/${order.id}`,
       },
       {
         userId: order.userId,
         type: 'ORDER_NDR',
-        title: `We missed you — ${order.orderNumber}`,
-        body: `Delhivery couldn't deliver today (${reason.toLowerCase()}). It will try again; reply to the courier's call or contact support to change the date.`,
+        title: `We missed you (${ofMax}) — ${order.orderNumber}`,
+        body: last
+          ? `Delhivery couldn't deliver (${reason.toLowerCase()}). That was the last of ${MAX_DELIVERY_ATTEMPTS} attempts, so the parcel goes back to the seller; anything you paid is refunded in full.`
+          : `Delhivery couldn't deliver today (${reason.toLowerCase()}). It will try again — up to ${MAX_DELIVERY_ATTEMPTS} attempts in all; reply to the courier's call or contact support to change the date.`,
         linkHref: `/account/orders/${order.id}`,
       },
     ],

@@ -43,7 +43,7 @@ deliveryRouter.get('/options', async (req, res, next) => {
       res.json({ success: true, data: { pincode, serviceable: false, message: refused, options: [], codAvailable: false } });
       return;
     }
-    const options = deliveryOptionsFor();
+    const options = deliveryOptionsFor(new Date(), pincode);
 
     res.json({
       success: true,

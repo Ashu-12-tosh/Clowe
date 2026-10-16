@@ -3,6 +3,7 @@ import { phoneSchema } from './auth';
 import { assetRefSchema } from './assets';
 import { codRefundAccountSchema } from './codRefund';
 import { gstNumberField } from './taxIds';
+import { isPoBoxAddress, PO_BOX_MESSAGE } from './deliveryZone';
 
 // ---------------------------------------------------------------------------
 // Cart
@@ -174,6 +175,9 @@ export const addressUpsertSchema = z.object({
   state: z.string().trim().min(2).max(60),
   pincode: z.string().trim().regex(/^\d{6}$/, 'Pincode must be 6 digits'),
   isDefault: z.boolean().optional(),
+}).superRefine((a, ctx) => {
+  // Shipping Policy 2.3: no delivery to a post office box.
+  if (isPoBoxAddress(a.line1, a.line2)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['line1'], message: PO_BOX_MESSAGE });
 });
 export type AddressUpsertInput = z.infer<typeof addressUpsertSchema>;
 
@@ -541,6 +545,17 @@ export interface OrderDetailItem {
   canReturn: boolean;
   /** The courier's scans for this line's parcel, newest first. */
   scans: import('./growth').TrackingScanView[];
+  /** The line's parcel once booked: the estimate from dispatch, attempts, lost in transit. */
+  parcel: {
+    shipmentId: string;
+    etaFrom: string | null;
+    etaTo: string | null;
+    deliveryAttempts: number;
+    lost: boolean;
+    lostChoice: import('./deliveryZone').LostParcelChoice | null;
+  } | null;
+  /** The free replacement sent for this line, if any. */
+  replacedBy: { orderId: string; orderNumber: string } | null;
   courierName: string | null;
   awbNumber: string | null;
   trackingUrl: string | null;

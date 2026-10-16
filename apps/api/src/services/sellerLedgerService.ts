@@ -130,9 +130,13 @@ export async function postDeliveryEntries(orderItemId: string, db: Db = prisma):
       quantity: true,
       status: true,
       product: { select: { categoryId: true } },
+      replacementOf: { select: { deliveredAt: true } },
     },
   });
   if (!item || item.status !== 'DELIVERED') return 0;
+  // A replacement for something already delivered (an exchange): the sale
+  // was the original's, paid once. A replacement for a lost parcel is the sale.
+  if (item.replacementOf?.deliveredAt) return 0;
 
   const settings = await getSettings();
   const taxRules = (await categoryRulesMap([item.product.categoryId])).get(item.product.categoryId);

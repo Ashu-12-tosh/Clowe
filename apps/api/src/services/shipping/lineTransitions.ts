@@ -1,3 +1,4 @@
+import { dispatchedEtaWindow } from '@clowe/shared';
 import { prisma } from '../../db';
 import { sendMessageSafe } from '../messaging';
 import { chargeLateDispatchIfDue } from '../lateDispatch';
@@ -28,6 +29,14 @@ export async function markLineShipped(itemId: string, at: Date = new Date()): Pr
     data: { status: 'SHIPPED', shippedAt: at },
   });
   if (moved.count === 0) return false;
+  // The estimate from dispatch, by the destination's zone (Shipping Policy 3.2).
+  if (item.shipmentId) {
+    const eta = dispatchedEtaWindow(item.order.shipPincode, at);
+    await prisma.shipment.updateMany({
+      where: { id: item.shipmentId, etaTo: null },
+      data: { etaFrom: eta.from, etaTo: eta.to },
+    });
+  }
   await prisma.notification.create({
     data: {
       userId: item.order.user.id,

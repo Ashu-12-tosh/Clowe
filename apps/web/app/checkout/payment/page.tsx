@@ -139,7 +139,7 @@ function PaymentPageInner() {
     }
     api<CartView>('/api/cart', { auth: true }).then(setCart).catch(() => {});
     api<CreditsInfo>('/api/credits', { auth: true }).then(setCredits).catch(() => {});
-    api<DeliveryOption[]>('/api/cart/delivery-options', { auth: true })
+    api<DeliveryOption[]>(`/api/cart/delivery-options?addressId=${encodeURIComponent(addressId)}`, { auth: true })
       .then(setOptions)
       .catch(() => {});
     api<SavedPaymentMethodInfo[]>('/api/me/payment-methods', { auth: true })

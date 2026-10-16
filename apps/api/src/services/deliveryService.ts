@@ -1,4 +1,4 @@
-import { type DeliveryMethod, type DeliveryOption } from '@clowe/shared';
+import { DELIVERY_ZONE_META, orderEtaWindow, type DeliveryMethod, type DeliveryOption } from '@clowe/shared';
 
 // ---------------------------------------------------------------------------
 // Delivery as the buyer sees it: always free. Buyers never pay a delivery
@@ -10,12 +10,18 @@ import { type DeliveryMethod, type DeliveryOption } from '@clowe/shared';
 /** The speeds a buyer can choose now. */
 export const OFFERED_DELIVERY_METHODS: readonly DeliveryMethod[] = ['STANDARD'];
 
-/** Business days each speed takes, as an inclusive [from, to] day offset. */
-const WINDOW_DAYS: Record<DeliveryMethod, [number, number]> = {
-  STANDARD: [4, 6],
+/**
+ * Days each retired speed took. Standard delivery is dated by the Shipping
+ * Policy's zones instead (orderEtaWindow): processing plus transit, in
+ * working days; without a PIN code it is quoted for "other cities".
+ */
+const WINDOW_DAYS: Record<Exclude<DeliveryMethod, 'STANDARD'>, [number, number]> = {
   EXPRESS: [2, 2],
   SAME_DAY: [0, 0],
 };
+
+/** Without a PIN code: "other cities and towns", the middle zone. */
+const NO_PINCODE = '000000';
 
 const LABELS: Record<DeliveryMethod, string> = {
   STANDARD: 'Standard Delivery',
@@ -44,18 +50,22 @@ export function deliveryPriceFor(): number {
   return 0;
 }
 
-export function etaWindowFor(method: DeliveryMethod, now = new Date()): { from: Date; to: Date } {
+export function etaWindowFor(method: DeliveryMethod, now = new Date(), pincode?: string | null): { from: Date; to: Date } {
+  if (method === 'STANDARD') {
+    const { from, to } = orderEtaWindow(pincode ?? NO_PINCODE, now);
+    return { from, to };
+  }
   const [minDays, maxDays] = WINDOW_DAYS[method];
   return { from: addDays(now, minDays), to: addDays(now, maxDays) };
 }
 
-/** The checkout's delivery step: the offered speeds, free and dated. */
-export function deliveryOptionsFor(now = new Date()): DeliveryOption[] {
+/** The checkout's delivery step: the offered speeds, free and dated for the PIN code. */
+export function deliveryOptionsFor(now = new Date(), pincode?: string | null): DeliveryOption[] {
   return OFFERED_DELIVERY_METHODS.map((method) => {
-    const { from, to } = etaWindowFor(method, now);
+    const { from, to } = etaWindowFor(method, now, pincode);
     return {
       method,
-      label: LABELS[method],
+      label: pincode ? `${LABELS[method]} · ${DELIVERY_ZONE_META[orderEtaWindow(pincode, now).zone].label}` : LABELS[method],
       etaLabel: etaLabel(from, to),
       pricePaise: 0,
       strikePaise: null,

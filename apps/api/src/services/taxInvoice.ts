@@ -33,6 +33,8 @@ export async function buildTaxInvoice(orderId: string, sellerId: string): Promis
   ]);
   if (!order || !seller) throw ApiError.notFound('Order not found');
   if (order.items.length === 0) return null;
+  // A free replacement is no new sale: the original's invoice stands.
+  if (order.paymentMethod === 'REPLACEMENT') return null;
   if (order.status === 'PLACED') throw ApiError.badRequest('This order is not paid yet', 'ORDER_NOT_PAID');
 
   // GST: the rate the line was sold at; worked out (the category's rule with

@@ -499,7 +499,11 @@ cartRouter.get('/cod-availability', async (req, res, next) => {
 // Delivery speeds priced for the current cart — the checkout's step 2.
 cartRouter.get('/delivery-options', async (req, res, next) => {
   try {
-    res.json({ success: true, data: deliveryOptionsFor() });
+    // Dated for the chosen address's zone when one is given.
+    const addressId = typeof req.query.addressId === 'string' ? req.query.addressId : '';
+    const address = addressId ? await prisma.address.findUnique({ where: { id: addressId } }) : null;
+    const pincode = address && address.userId === req.auth!.userId ? address.pincode : null;
+    res.json({ success: true, data: deliveryOptionsFor(new Date(), pincode) });
   } catch (err) {
     next(err);
   }

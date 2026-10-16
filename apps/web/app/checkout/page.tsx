@@ -112,9 +112,10 @@ export default function CheckoutPage() {
     window.dispatchEvent(new Event(BADGES_EVENT));
   }, []);
 
-  /** Delivery prices depend on the subtotal, so they reload with the cart. */
+  /** Delivery dates depend on the address's zone, so they reload with it. */
   const loadDeliveryOptions = useCallback(() => {
-    api<DeliveryOption[]>('/api/cart/delivery-options', { auth: true })
+    const query = selectedAddress ? `?addressId=${encodeURIComponent(selectedAddress)}` : '';
+    api<DeliveryOption[]>(`/api/cart/delivery-options${query}`, { auth: true })
       .then((options) => {
         setDeliveryOptions(options);
         setDeliveryMethod((current) =>
@@ -122,7 +123,7 @@ export default function CheckoutPage() {
         );
       })
       .catch(() => {});
-  }, []);
+  }, [selectedAddress]);
 
   useEffect(() => {
     if (!getStoredUser()) {
@@ -139,11 +140,9 @@ export default function CheckoutPage() {
         if (list.length === 0) setShowAddressForm(true);
       })
       .catch(() => setAddresses([]));
-    loadDeliveryOptions();
-  }, [router, loadDeliveryOptions]);
+  }, [router]);
 
-  // Adding an add-on or applying a coupon changes the subtotal, which can
-  // flip standard shipping between free and ₹49.
+  // Reloaded with the cart and with the chosen address (its delivery zone).
   useEffect(() => {
     if (cart) loadDeliveryOptions();
   }, [cart, loadDeliveryOptions]);

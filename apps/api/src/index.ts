@@ -8,6 +8,7 @@ import { logTryOnProviderStatus } from './services/tryon';
 import { logKycProviderStatus } from './services/kyc';
 import { logShippingProviderStatus } from './services/shipping';
 import { startTrackingPoll } from './services/shipping/tracking';
+import { startLostParcelSweep } from './services/shipping/lostParcels';
 import { logOtpProviderStatus } from './services/otp';
 import { startSearchLogCleanup } from './services/searchAnalytics';
 import { startQuerySuggestionRefresh } from './services/querySuggestions';
@@ -32,8 +33,10 @@ startPackingVideoCleanup();
 startLateDispatchJob();
 // Courier scans for every parcel still moving, every 30 minutes.
 startTrackingPoll();
+// Parcels 15 days past their estimate and untraceable are flagged lost - at boot and every 6 hours.
+startLostParcelSweep();
 
-// Shoppers' try-on photos expire after 30 days unless saved - same schedule.
+// Shoppers' try-on photos are deleted 24 hours after upload - every 10 minutes.
 startTryOnPhotoRetention();
 
 // Logged searches expire too - swept at boot and daily after that.

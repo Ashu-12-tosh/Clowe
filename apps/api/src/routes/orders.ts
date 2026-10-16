@@ -16,7 +16,12 @@ import {
   type OrderListRow,
   type TaxInvoice,
   codPlatformRefusal,
+  isPoBoxAddress,
+  LOST_PARCEL_CHOICES,
+  type LostParcelChoice,
+  PO_BOX_MESSAGE,
 } from '@clowe/shared';
+import { chooseLostOutcome } from '../services/shipping/lostParcels';
 import { scanViews } from './track';
 import { cancelShipmentsForLinesSafe } from '../services/shipping/cancellations';
 import { prisma } from '../db';
@@ -80,6 +85,8 @@ ordersRouter.post('/checkout', async (req, res, next) => {
 
     const address = await prisma.address.findUnique({ where: { id: addressId } });
     if (!address || address.userId !== userId) throw ApiError.badRequest('Address not found');
+    // An address saved before the rule: still no delivery to a post office box.
+    if (isPoBoxAddress(address.line1, address.line2)) throw ApiError.badRequest(PO_BOX_MESSAGE, 'PO_BOX_ADDRESS');
     // Delhivery has to deliver there (and, for COD, collect cash there).
     const pincodeCheck = await pincodeServiceability(address.pincode);
     const undeliverable = deliveryRefusal(address.pincode, pincodeCheck);
@@ -158,7 +165,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
     const subtotalPaise = cart.subtotalPaise;
     // Delivery is free on every order: the seller pays the courier.
     const shippingPaise = deliveryPriceFor();
-    const eta = etaWindowFor(deliveryMethod);
+    const eta = etaWindowFor(deliveryMethod, new Date(), address.pincode);
 
     // Coupon: re-validated here, so a code that expired between the cart page
     // and payment simply doesn't apply rather than silently under-charging.
@@ -621,7 +628,18 @@ ordersRouter.get('/:id', async (req, res, next) => {
             variant: { include: { product: { select: { status: true, categoryId: true, sellerId: true } } } },
             seller: { select: { shopName: true, returnWindowDays: true } },
             return: { include: { refund: true } },
-            shipment: { select: { events: { orderBy: { at: 'desc' as const }, take: 30, select: { at: true, status: true, location: true } } } },
+            shipment: {
+              select: {
+                id: true,
+                etaFrom: true,
+                etaTo: true,
+                deliveryAttempts: true,
+                lostFlaggedAt: true,
+                lostChoice: true,
+                events: { orderBy: { at: 'desc' as const }, take: 30, select: { at: true, status: true, location: true } },
+              },
+            },
+            replacements: { select: { orderId: true, order: { select: { orderNumber: true } } } },
           },
         },
       },
@@ -749,6 +767,17 @@ ordersRouter.get('/:id', async (req, res, next) => {
           !!i.deliveredAt &&
           Date.now() - i.deliveredAt.getTime() <= windowMsFor(i.id),
         scans: scanViews(i.shipment?.events),
+        parcel: i.shipment
+          ? {
+              shipmentId: i.shipment.id,
+              etaFrom: i.shipment.etaFrom?.toISOString() ?? null,
+              etaTo: i.shipment.etaTo?.toISOString() ?? null,
+              deliveryAttempts: i.shipment.deliveryAttempts,
+              lost: !!i.shipment.lostFlaggedAt,
+              lostChoice: (i.shipment.lostChoice as LostParcelChoice | null) ?? null,
+            }
+          : null,
+        replacedBy: i.replacements[0] ? { orderId: i.replacements[0].orderId, orderNumber: i.replacements[0].order.orderNumber } : null,
         courierName: i.courierName,
         awbNumber: i.awbNumber,
         trackingUrl: i.trackingUrl,
@@ -805,6 +834,22 @@ ordersRouter.get('/:id/invoices', async (req, res, next) => {
       (inv): inv is TaxInvoice => inv !== null,
     );
     res.json({ success: true, data: invoices });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// A parcel lost in transit: the buyer chooses a replacement or a refund (Shipping Policy 9.2).
+ordersRouter.post('/:id/lost-parcels/:shipmentId/choice', async (req, res, next) => {
+  try {
+    const { choice } = z.object({ choice: z.enum(LOST_PARCEL_CHOICES) }).parse(req.body);
+    const result = await chooseLostOutcome({
+      orderId: req.params.id!,
+      shipmentId: req.params.shipmentId!,
+      userId: req.auth!.userId,
+      choice,
+    });
+    res.json({ success: true, data: result });
   } catch (err) {
     next(err);
   }

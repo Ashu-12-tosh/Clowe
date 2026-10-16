@@ -1,4 +1,4 @@
-import { codPlatformRefusal, type ManualPaymentMethod } from '@clowe/shared';
+import { codPlatformRefusal, isPoBoxAddress, PO_BOX_MESSAGE, type ManualPaymentMethod } from '@clowe/shared';
 import { prisma } from '../db';
 import { getSettings } from './settingsService';
 import { saleReturnWindows } from './categoryRules';
@@ -45,6 +45,7 @@ export async function createManualOrder(input: {
   if (!address || address.userId !== user.id) {
     throw ApiError.badRequest('That address does not belong to the customer');
   }
+  if (isPoBoxAddress(address.line1, address.line2)) throw ApiError.badRequest(PO_BOX_MESSAGE, 'PO_BOX_ADDRESS');
   const pincodeCheck = await pincodeServiceability(address.pincode);
   const undeliverable = deliveryRefusal(address.pincode, pincodeCheck);
   if (undeliverable) throw ApiError.badRequest(undeliverable, 'PINCODE_NOT_SERVICEABLE');
@@ -91,7 +92,7 @@ export async function createManualOrder(input: {
   // Delivery is free on every order: the seller pays the courier.
   const shippingPaise = deliveryPriceFor();
   const totalPaise = subtotalPaise + shippingPaise;
-  const eta = etaWindowFor(input.deliveryMethod);
+  const eta = etaWindowFor(input.deliveryMethod, new Date(), address.pincode);
   const orderNumber = await generateOrderNumber();
 
   // The COD rules a shopper faces at checkout apply to a phone order too —

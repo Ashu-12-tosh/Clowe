@@ -17,6 +17,7 @@ import { SUPPORT_CHAT_EVENT } from '@/components/SupportChat';
 import { Scroller } from '@/components/home/HomeBits';
 import ProductCard from '@/components/ProductCard';
 import { ReturnModal, ReturnTimeline } from '@/components/orders/ReturnBits';
+import { ParcelStatus } from '@/components/orders/ParcelBits';
 import ReviewModal from '@/components/orders/ReviewModal';
 import NotReturnable from '@/components/NotReturnable';
 import { CheckIcon, HeadsetIcon, MapPinIcon, ReturnIcon } from '@/components/cart/CartIcons';
@@ -340,6 +341,7 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
                         {item.courierName} · AWB {item.awbNumber}
                       </p>
                     )}
+                    <ParcelStatus orderId={order.id} item={item} onChanged={load} />
                     <ScanTimeline scans={item.scans} />
                     {item.returnInfo && <ReturnTimeline info={item.returnInfo} />}
                   </div>

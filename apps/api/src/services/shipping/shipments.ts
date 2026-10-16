@@ -55,7 +55,12 @@ export function planParcel(
   lines: { id: string; quantity: number; product: { weightGrams: number | null; lengthMm: number | null; widthMm: number | null; heightMm: number | null } }[],
 ): ParcelPlan {
   const isCod = order.paymentMethod === 'COD';
-  const valuePaise = valueOfLines(order.totalPaise, order.items, lines.map((l) => l.id));
+  // A free replacement's order total is ₹0; the courier still needs the goods' value.
+  const ids = new Set(lines.map((l) => l.id));
+  const valuePaise =
+    order.paymentMethod === 'REPLACEMENT'
+      ? order.items.filter((i) => ids.has(i.id)).reduce((sum, i) => sum + i.pricePaise * i.quantity - i.promoDiscountPaise, 0)
+      : valueOfLines(order.totalPaise, order.items, ids);
   // One unit of one product: its own box size. Several go in a box the seller confirms later.
   const single = lines.length === 1 && lines[0]!.quantity === 1 ? lines[0]!.product : null;
   return {
