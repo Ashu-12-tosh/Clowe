@@ -19,6 +19,8 @@ interface EmailView {
   from: string;
   replyTo: string;
   dailyCap: number;
+  loginError: string | null;
+  heldUntil: string | null;
   sentToday: number;
   pending: number;
   failed: number;
@@ -71,6 +73,12 @@ export default function AdminEmailsPage() {
         </p>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
+      {view?.loginError && (
+        <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" data-email-login-error>
+          Hostinger refused the login for {view.from}: {view.loginError}. Emails are waiting, not lost
+          {view.heldUntil ? ` — next try ${new Date(view.heldUntil).toLocaleTimeString('en-IN')}` : ''}. Check the mailbox and its password (SMTP_PASSWORD), then send a test.
+        </p>
+      )}
       {view && (
         <>
           <section className="grid gap-3 sm:grid-cols-3">

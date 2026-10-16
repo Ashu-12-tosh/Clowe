@@ -34,7 +34,7 @@ interface Mail {
 
 /** The mock's sent mail, for tests; `mockControl.failFor` makes the next send to that address fail. */
 export const mockSent: Mail[] = [];
-export const mockControl: { failFor: string | null } = { failFor: null };
+export const mockControl: { failFor: string | null; loginFails: boolean } = { failFor: null, loginFails: false };
 
 let transport: ReturnType<typeof nodemailer.createTransport> | null = null;
 function smtp() {
@@ -51,6 +51,7 @@ function smtp() {
 
 async function deliver(m: Mail): Promise<void> {
   if (emailProviderName === 'mock') {
+    if (mockControl.loginFails) throw Object.assign(new Error('Invalid login: 535 5.7.8 Error: authentication failed'), { code: 'EAUTH' });
     if (mockControl.failFor === m.to) {
       mockControl.failFor = null;
       throw new Error('mock SMTP failure');
@@ -105,8 +106,26 @@ export async function sentToday(now = new Date()): Promise<number> {
   return prisma.emailOutbox.count({ where: { sentAt: { gte: istStartOfDay(now) } } });
 }
 
+/**
+ * Hostinger refusing the login (a wrong or changed password, a missing
+ * mailbox) is not the email's fault: it does not use up the email's retries.
+ * The whole queue waits LOGIN_HOLD_MS and tries again — one login attempt per
+ * pause, so the mailbox is never locked out by repeated failures.
+ */
+const LOGIN_HOLD_MS = 30 * 60_000;
+export const loginState: { heldUntil: Date | null; error: string | null } = { heldUntil: null, error: null };
+const isLoginError = (err: unknown) => {
+  const e = err as { code?: string; responseCode?: number; message?: string };
+  return e?.code === 'EAUTH' || e?.responseCode === 535 || /invalid login|authentication failed/i.test(String(e?.message ?? ''));
+};
+
 /** Send what is due, within today's cap. Returns how many went out. */
-export async function processEmailOutbox(now = new Date(), batch = 20): Promise<{ sent: number; failed: number; held: boolean }> {
+export async function processEmailOutbox(
+  now = new Date(),
+  batch = 20,
+  opts: { ignoreLoginHold?: boolean } = {},
+): Promise<{ sent: number; failed: number; held: boolean; loginFailed?: boolean }> {
+  if (!opts.ignoreLoginHold && loginState.heldUntil && loginState.heldUntil > now) return { sent: 0, failed: 0, held: true, loginFailed: true };
   // A send cut off mid-way (a restart) is tried again.
   await prisma.emailOutbox.updateMany({ where: { status: 'SENDING', nextAttemptAt: { lt: new Date(now.getTime() - 10 * 60_000) } }, data: { status: 'PENDING' } });
   const room = env.EMAIL_DAILY_CAP - (await sentToday(now));
@@ -124,8 +143,19 @@ export async function processEmailOutbox(now = new Date(), batch = 20): Promise<
     try {
       await deliver({ to: row.toEmail, subject: row.subject, html: row.html, text: row.text });
       await prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'SENT', sentAt: new Date(), attempts: row.attempts + 1, lastError: null } });
+      loginState.heldUntil = null;
+      loginState.error = null;
       sent += 1;
     } catch (err) {
+      const message = String((err as Error)?.message ?? err).slice(0, 500);
+      if (isLoginError(err)) {
+        const until = new Date(now.getTime() + LOGIN_HOLD_MS);
+        loginState.heldUntil = until;
+        loginState.error = message;
+        await prisma.emailOutbox.update({ where: { id: row.id }, data: { status: 'PENDING', lastError: message, nextAttemptAt: until } });
+        console.error(`[clowe-api] email: SMTP login refused - the queue waits until ${until.toISOString()}: ${message}`);
+        return { sent, failed: failed + 1, held: true, loginFailed: true };
+      }
       const attempts = row.attempts + 1;
       const giveUp = attempts >= MAX_ATTEMPTS;
       await prisma.emailOutbox.update({
@@ -133,7 +163,7 @@ export async function processEmailOutbox(now = new Date(), batch = 20): Promise<
         data: {
           status: giveUp ? 'FAILED' : 'PENDING',
           attempts,
-          lastError: String((err as Error)?.message ?? err).slice(0, 500),
+          lastError: message,
           nextAttemptAt: giveUp ? now : new Date(now.getTime() + RETRY_MINUTES[attempts - 1]! * 60_000),
         },
       });
@@ -262,6 +292,8 @@ export async function emailOutboxView() {
     from: env.MAIL_FROM,
     replyTo: env.MAIL_REPLY_TO,
     dailyCap: env.EMAIL_DAILY_CAP,
+    loginError: loginState.error,
+    heldUntil: loginState.heldUntil?.toISOString() ?? null,
     sentToday: today,
     pending,
     failed,

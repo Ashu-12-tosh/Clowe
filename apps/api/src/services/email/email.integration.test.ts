@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { env } from '../../env';
 import { sendMessageSafe } from '../messaging';
-import { bridgeNotifications, enqueueEmail, mockControl, mockSent, processEmailOutbox, sentToday } from '.';
+import { bridgeNotifications, enqueueEmail, loginState, mockControl, mockSent, processEmailOutbox, sentToday } from '.';
 
 /**
  * Email (mock transport here): notifications of the listed types become one
@@ -82,6 +82,24 @@ describe('notifications by email', () => {
     const capped = (await mine()).filter((m) => m.subject.startsWith('Capped'));
     expect(capped.map((m) => m.status).sort()).toEqual(['PENDING', 'SENT']);
     setCap(1_000_000);
+  });
+
+  it('a refused SMTP login holds the whole queue without using up retries', async () => {
+    await processEmailOutbox(new Date(), 1000); // nothing else waiting
+    await enqueueEmail({ to: 'mail-shopper@example.com', userId: withEmail, kind: 'TEST', title: 'Login held', body: 'x' });
+    mockControl.loginFails = true;
+    const now = new Date();
+    expect(await processEmailOutbox(now, 1000)).toMatchObject({ sent: 0, loginFailed: true, held: true });
+    const row = (await mine()).find((m) => m.subject === 'Login held')!;
+    expect(row).toMatchObject({ status: 'PENDING', attempts: 0 });
+    expect(row.nextAttemptAt.getTime()).toBe(now.getTime() + 30 * 60_000);
+    // Held: nothing is tried again until the pause is over…
+    mockControl.loginFails = false;
+    expect(await processEmailOutbox(new Date(now.getTime() + 60_000), 1000)).toMatchObject({ sent: 0, loginFailed: true });
+    // …then it goes, and the hold clears.
+    expect((await processEmailOutbox(new Date(now.getTime() + 31 * 60_000), 1000)).sent).toBeGreaterThanOrEqual(1);
+    expect((await mine()).find((m) => m.subject === 'Login held')).toMatchObject({ status: 'SENT', attempts: 1 });
+    expect(loginState).toMatchObject({ heldUntil: null, error: null });
   });
 
   it('the messaging layer’s email channel goes through the queue; bad addresses are refused', async () => {

@@ -913,7 +913,8 @@ If you can read this, email from no-reply@cloweshop.com works. Replies go to sup
       ctaLabel: 'Open Clowe',
     });
     if (!queued) throw ApiError.badRequest('That email address cannot be used', 'EMAIL_INVALID');
-    const r = await processEmailOutbox();
+    // An admin's test tries the login now, even while the queue is waiting after a refused login.
+    const r = await processEmailOutbox(new Date(), 20, { ignoreLoginHold: true });
     auditSafe({ actorId: req.auth!.userId, actorRole: 'ADMIN', module: 'SETTINGS', action: 'Test email sent', entityType: 'EmailOutbox', entityId: 'test', summary: `Test email to ${to}`, metadata: { to, ...r } });
     res.json({ success: true, data: { ...r, view: await emailOutboxView() } });
   } catch (err) {
