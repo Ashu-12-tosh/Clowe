@@ -38,7 +38,8 @@ export const IMAGE_SLOTS = {
   },
   PROMO_CARD: {
     label: 'Promo card (4-tile row)',
-    picture: { width: 800, height: 600 },
+    // Shown whole above the card's words; keep the products to the right half.
+    picture: { width: 800, height: 400 },
     full: { width: 800, height: 600 },
     mobile: { width: 1080, height: 810 },
   },

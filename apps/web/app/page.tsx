@@ -37,15 +37,19 @@ const AI_FEATURES = [
  * The icon for a promo tile without a photo: the icon of the department its
  * link opens (a sub-category counts as its root's), else a tag.
  */
-function promoIcon(href: string, categories: HomePayload['categories']): string {
+/** The top-level category a promo links into, if any. */
+function promoCategory(href: string, categories: HomePayload['categories']) {
   let slug: string | null = null;
   try {
     slug = new URL(href, 'https://x.invalid').searchParams.get('category');
   } catch {
     // An unparsable link just gets the default.
   }
-  const root = slug ? categories.find((c) => slug === c.slug || slug!.startsWith(`${c.slug}-`)) : undefined;
-  return root?.icon ?? '🏷️';
+  return slug ? categories.find((c) => slug === c.slug || slug!.startsWith(`${c.slug}-`)) : undefined;
+}
+
+function promoIcon(href: string, categories: HomePayload['categories']): string {
+  return promoCategory(href, categories)?.icon ?? '🏷️';
 }
 
 const BOTTOM_STRIP = [
@@ -186,7 +190,13 @@ export default function HomePage() {
       {home.promoCards.length > 0 && (
         <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {home.promoCards.map((card, i) => (
-            <PromoCard key={card.id} card={card} index={i} icon={promoIcon(card.href, home.categories)} />
+            <PromoCard
+              key={card.id}
+              card={card}
+              index={i}
+              icon={promoIcon(card.href, home.categories)}
+              label={promoCategory(card.href, home.categories)?.name}
+            />
           ))}
         </section>
       )}

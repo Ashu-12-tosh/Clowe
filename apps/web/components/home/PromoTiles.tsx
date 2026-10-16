@@ -6,8 +6,16 @@ import { TileMark } from '@/components/DesignedArt';
 // The home page's promo tiles, shared with the admin preview so what admins
 // see before saving is what shoppers get.
 
-/** One of the 4-tile row near the top of the home page. `index` alternates dark and light. */
-export function PromoCard({ card, index, icon }: { card: PromoTileView; index: number; icon: string }) {
+/**
+ * One of the 4-tile row near the top of the home page. With a picture: the
+ * picture whole on top (2:1), the words below it, nothing drawn over the
+ * products. Without one: a designed tile, `index` alternating dark and light.
+ * `label` is the linked category's name, shown above the title; without it
+ * the title's first word is.
+ */
+export function PromoCard({ card, index, icon, label }: { card: PromoTileView; index: number; icon: string; label?: string }) {
+  const eyebrow = label ?? card.title.split(' ')[0];
+  const title = label ? card.title : card.title.split(' ').slice(1).join(' ') || card.title;
   if (card.imageMode === 'FULL_IMAGE' && card.imageUrl) {
     return (
       <Link href={safeHref(card.href) ?? '/products'} className="block overflow-hidden rounded-2xl" data-promo-full>
@@ -21,28 +29,43 @@ export function PromoCard({ card, index, icon }: { card: PromoTileView; index: n
       </Link>
     );
   }
+  if (card.imageUrl) {
+    return (
+      <Link
+        href={safeHref(card.href) ?? '/products'}
+        className="group flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white text-ink-900 transition hover:shadow-md"
+      >
+        <span className="block overflow-hidden bg-cream-100">
+          <BannerPicture
+            src={card.imageUrl}
+            mobileSrc={card.mobileImageUrl}
+            alt=""
+            loading="lazy"
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+            className="block aspect-[2/1] w-full object-cover object-right transition duration-300 group-hover:scale-[1.03]"
+          />
+        </span>
+        <span className="flex flex-1 flex-col p-4">
+          <span className="text-xs font-bold uppercase tracking-widest text-brand-600">{eyebrow}</span>
+          <span className="mt-1 font-display text-lg font-bold leading-snug">{title}</span>
+          {card.subtitle && <span className="mt-1 text-sm text-gray-600">{card.subtitle}</span>}
+          <span className="mt-3 self-start rounded-lg border border-current px-3 py-1 text-xs font-bold uppercase tracking-wide">
+            Shop Now
+          </span>
+        </span>
+      </Link>
+    );
+  }
   const dark = index % 2 === 0;
   return (
     <Link
       href={safeHref(card.href) ?? '/products'}
       className={`group relative block overflow-hidden rounded-2xl ${dark ? 'bg-ink-950 text-white' : 'bg-cream-100 text-ink-900'}`}
     >
-      {card.imageUrl ? (
-        <BannerPicture
-          src={card.imageUrl}
-          mobileSrc={card.mobileImageUrl}
-          alt=""
-          loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover opacity-30 transition duration-300 group-hover:scale-105 group-hover:opacity-40"
-        />
-      ) : (
-        <TileMark icon={icon} tone={dark ? 'dark' : 'light'} />
-      )}
+      <TileMark icon={icon} tone={dark ? 'dark' : 'light'} />
       <div className="relative p-5">
-        <p className="text-xs font-bold uppercase tracking-widest opacity-70">{card.title.split(' ')[0]}</p>
-        <p className="mt-1 font-display text-lg font-bold leading-snug">
-          {card.title.split(' ').slice(1).join(' ') || card.title}
-        </p>
+        <p className="text-xs font-bold uppercase tracking-widest opacity-70">{eyebrow}</p>
+        <p className="mt-1 font-display text-lg font-bold leading-snug">{title}</p>
         {card.subtitle && (
           <p className={`mt-1 text-sm font-semibold ${dark ? 'text-brand-400' : 'text-brand-600'}`}>{card.subtitle}</p>
         )}
