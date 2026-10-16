@@ -98,19 +98,3 @@ export function fillLegalEntity(markdown: string, legal: LegalEntity | null | un
     .join('\n');
 }
 
-/**
- * An address typed in capitals, for running text: "A22, STREET NO. 21, MD
- * MARG, NAJAFGARH" → "A22, Street No. 21, MD Marg, Najafgarh". Words with a
- * digit and two-letter initials (MD) stay as typed; an address already in
- * mixed case is the admin's own styling and is kept.
- */
-export function legalAddressDisplay(address: string): string {
-  const a = address.replace(/\s*\n\s*/g, ', ').trim();
-  if (/[a-z]/.test(a)) return a;
-  return a.replace(/[A-Z][A-Z.]*/g, (word, offset: number) => {
-    const before = a[offset - 1];
-    if (before && /[0-9]/.test(before)) return word; // part of "A22", "2B"
-    if (/^[A-Z]{2}$/.test(word)) return word; // initials: MD
-    return word.charAt(0) + word.slice(1).toLowerCase();
-  });
-}
