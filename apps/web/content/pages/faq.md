@@ -112,7 +112,7 @@ These FAQs are provided for convenience and ease of understanding. They summaris
 
 44. How do I become a vendor? Register through the Vendor portal and furnish Your constitution documents, PAN, GSTIN, bank details, KYC and brand authorisations. Approval is at Our discretion.
 
-45. What does it cost? Commission and other charges are set out in Schedule II of the Vendor Terms and Seller Agreement and on the Vendor dashboard.
+45. What does it cost? Registering and listing are free. On each unit sold the vendor pays a referral fee of {{referralFee}}, a GT charge of {{gtFee}} and a payment collection fee of {{collectionFee}} of the selling price, and a handling fee ({{handlingFees}}), each plus GST at {{cloweGst}}, together with the courier’s actual charges. Optional plans, advertising, sponsorship and AI Try-On credits are charged as chosen. All charges are set out in Schedule II of the Vendor Terms and Seller Agreement, on the Seller Fees page and on the Vendor dashboard.
 
 46. Who sets the price? The vendor, in its sole discretion. We do not influence or mandate prices.
 

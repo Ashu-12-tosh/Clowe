@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_COMMERCIAL, handlingFeeFor, mergeCommercial, placementPriceProblems } from './commercial';
 import { computeListingEconomics, type SellerEconomicsRates } from './sellerEconomics';
+import { feeExampleMarkdown, handlingFeesText, publicCommercial } from './commercialPublic';
 
 // The owner's Batch 2 fees on a line, with the live statutory rates (TDS 0.1%, TCS 0.5%) and GST 18%.
 const f = DEFAULT_COMMERCIAL.fees;
@@ -74,5 +75,31 @@ describe('the commercial setting', () => {
 
   it('refuses nonsense', () => {
     expect(() => mergeCommercial(DEFAULT_COMMERCIAL, { fees: { gstPercent: -1 } })).toThrow();
+  });
+});
+
+describe('what the Seller Fees page and Schedule II publish', () => {
+  it('the worked example is the ledger’s own maths', () => {
+    const md = feeExampleMarkdown(publicCommercial(DEFAULT_COMMERCIAL), 0.1, 0.5);
+    expect(md).toContain('Referral fee 2%: ₹20');
+    expect(md).toContain('GT charge 1.5%: ₹15');
+    expect(md).toContain('Payment collection fee 2%: ₹20');
+    expect(md).toContain('Handling fee: ₹19');
+    expect(md).toContain("Clowe's fees: ₹74, plus GST 18% on them: ₹13.32");
+    expect(md).toContain('**You receive ₹907.59**');
+    expect(md).toContain('you keep ₹755.05');
+  });
+
+  it('states the handling slabs as set', () => {
+    expect(handlingFeesText(DEFAULT_COMMERCIAL.fees.handlingSlabs)).toBe(
+      '₹9 below ₹500; ₹14 from ₹500 to ₹999; ₹19 from ₹1,000 to ₹4,999; ₹25 from ₹5,000 to ₹19,999; ₹40 from ₹20,000',
+    );
+  });
+
+  it('never publishes Clowe’s own cost of a try-on credit', () => {
+    const pub = publicCommercial(DEFAULT_COMMERCIAL) as unknown as { tryon: Record<string, unknown> };
+    expect(pub.tryon).not.toHaveProperty('costPerCreditPaise');
+    expect(pub.tryon).not.toHaveProperty('tierCostsPaise');
+    expect(pub.tryon).not.toHaveProperty('phaseNote');
   });
 });

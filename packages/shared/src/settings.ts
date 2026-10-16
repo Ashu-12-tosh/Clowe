@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ProductListItem } from './catalog';
 import { httpUrlSchema } from './url';
 import type { LegalEntity } from './legal';
+import type { CommercialPublic } from './commercialPublic';
 
 // ---------------------------------------------------------------------------
 // Platform settings (admin-editable; defaults live in the API)
@@ -219,6 +220,8 @@ export interface PublicSettings {
   sellerFees: SellerFeeSchedule;
   /** Categories where nothing can be returned, by name ("Fashion › Innerwear"). */
   nonReturnableCategories: string[];
+  /** The owner's commercial rules as sellers see them (Batch 2). */
+  commercial: CommercialPublic;
 }
 
 /** The marketplace's charges to sellers, read from platform settings. */

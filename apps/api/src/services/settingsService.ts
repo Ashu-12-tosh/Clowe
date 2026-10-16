@@ -1,6 +1,7 @@
 import {
   DEFAULT_KYC_NAME_MATCH_MIN_SCORE,
   DEFAULT_LEGAL_ENTITY,
+  publicCommercial,
   type PlatformSettings,
   type PublicSettings,
 } from '@clowe/shared';
@@ -244,6 +245,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
       payoutMinPaise: s.payoutMinPaise,
     },
     nonReturnableCategories: await nonReturnableCategoryNames(),
+    commercial: publicCommercial(await (await import('./commercial')).getCommercial()),
   };
 }
 

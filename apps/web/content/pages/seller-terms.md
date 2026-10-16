@@ -4,7 +4,7 @@ CLOWE SHOP— www.cloweshop.com
 
 Operated by CLOWE PARTNERS LLP, registered office at {{legal.registeredAddress}}
 
-*Last updated: 12 October 2026*
+*Last updated: 16 October 2026*
 
 These Vendor Terms govern the registration of a Vendor on the Platform and the listing and sale of Products through it. They are to be read with the Terms and Conditions of Use and all policies incorporated therein. By registering as a Vendor, You enter into a binding agreement with the Company on a principal-to-principal basis.
 
@@ -74,7 +74,7 @@ These Vendor Terms govern the registration of a Vendor on the Platform and the l
 
 ## 6. Fees, Settlement and Recovery
 
-6.1 The Vendor shall pay the commission, marketplace fee, closing fee, payment collection fee, shipping fee, storage fee, advertising charges and penalties set out in Schedule II and published on the Vendor dashboard, together with applicable taxes.
+6.1 The Vendor shall pay the referral fee, GT charge, payment collection fee, handling fee, shipping fee, storage fee, plan fees, advertising, sponsorship and AI Try-On charges and penalties set out in Schedule II and published on the Vendor dashboard, together with applicable taxes.
 
 6.2 The Company may revise fees on not less than 30 days’ prior notice through the dashboard or by e-mail. Continued use after the effective date constitutes acceptance.
 
@@ -160,17 +160,23 @@ These Vendor Terms govern the registration of a Vendor on the Platform and the l
 
 **Sl. No. — Head of Charge — Basis — Rate**
 
-- 1 — Marketplace commission — 0 to 20% of item value — Depends on product
-- 2 — Closing / fixed fee — Per unit sold — 2%
-- 3 — Payment collection fee — 2 % of order value — Depends on product price
-- 4 — Shipping / logistics fee — Per shipment, by weight and zone — Depends on delivery area
-- 5 — Reverse pickup fee (exchange) — Per pickup — Depends on delivery area
-- 6 — Storage / fulfilment fee (if opted) — Per unit per month — 100 Per Unit
-- 7 — Advertising and promotion — As per campaign — 0 to 10000 INR
-- 8 — Penalty — late dispatch — Per order — 80 INR
-- 9 — Penalty — counterfeit or non-compliant listing — Per instance — 150 INR
-- 10 — Penalty — inaccurate product data supplied for AI Try-On — Per instance — 1000 INR
+- 1 — Referral fee — Per unit, % of the selling price (GST included) — {{referralFee}} (a category may carry its own rate, shown when listing)
+- 2 — GT (goods transfer) charge — Per unit, % of the selling price — {{gtFee}}
+- 3 — Payment collection fee — Per unit, % of the selling price — {{collectionFee}}
+- 4 — Handling fee — Per unit, by the unit's selling price — {{handlingFees}}; nil on the Premium plan
+- 5 — Shipping / logistics fee — Per shipment, by weight and zone — The courier's actual charge
+- 6 — Cash on Delivery fee — Per COD shipment — The courier's actual charge
+- 7 — Return-to-origin and reverse pickup freight — Per shipment — The courier's actual charge
+- 8 — Storage / fulfilment fee (if opted) — Per unit per month — 100 Per Unit
+- 9 — Seller plan — Per month, renewing on the same date — {{sellerPlans}}
+- 10 — Advertising and sponsorship — As per campaign — As per the rate card on the Advertising and Sponsorship pages of the Vendor dashboard
+- 11 — AI Try-On credits — Per pack, one credit per successful try-on image — {{tryonPacks}}; above the largest pack {{tryonExtraCredit}} per credit
+- 12 — Penalty — late dispatch — Per order — {{penaltyAmount}}
+- 13 — Penalty — counterfeit or non-compliant listing — Per instance — {{counterfeitPenalty}}
+- 14 — Penalty — inaccurate product data supplied for AI Try-On — Per instance — {{tryonDataPenalty}}
 
-All charges are exclusive of GST, payable additionally.
+All charges are exclusive of GST, payable additionally. GST on the Company's charges is levied at {{cloweGst}} and shown on the Company's monthly tax invoice to the Vendor.
+
+Worked example. {{feeExample}}
 
 AGREED AND ACCEPTED by clicking “I Agree” on registration as a Vendor.

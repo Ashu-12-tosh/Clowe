@@ -170,11 +170,12 @@ export default function AdsSection({ section }: { section: Section }) {
   const discount = sponsorship && plan?.plan === 'PREMIUM' && config ? config.sponsorship.premiumDiscountPercent : 0;
   const gst = plan?.gstPercent ?? 18;
 
-  async function submit(path: string, body: unknown, done: string) {
+  /** Create a campaign or booking: `create` is one of the literal POST calls below. */
+  async function submit(create: () => Promise<unknown>, done: string) {
     setBusy(true);
     setMsg(null);
     try {
-      await api(`/api/seller/advertising/${path}`, { method: 'POST', body, auth: true });
+      await create();
       setMsg({ ok: true, text: done });
       load();
     } catch (e) {
@@ -269,13 +270,13 @@ export default function AdsSection({ section }: { section: Section }) {
           {config.products.length === 0 ? (
             <p className="text-sm text-gray-500">You need a live product first.</p>
           ) : tab === 'cpc' ? (
-            <CpcForm config={config} sponsorship={sponsorship} discount={discount} busy={busy} onSubmit={(b) => submit('cpc', b, 'Campaign started.')} />
+            <CpcForm config={config} sponsorship={sponsorship} discount={discount} busy={busy} onSubmit={(b) => submit(() => api('/api/seller/advertising/cpc', { method: 'POST', body: b, auth: true }), 'Campaign started.')} />
           ) : tab === 'smart' ? (
-            <SmartForm config={config} busy={busy} onSubmit={(b) => submit('smart', b, 'Smart campaign started.')} />
+            <SmartForm config={config} busy={busy} onSubmit={(b) => submit(() => api('/api/seller/advertising/smart', { method: 'POST', body: b, auth: true }), 'Smart campaign started.')} />
           ) : tab === 'package' ? (
-            <PackageForm config={config} gst={gst} busy={busy} onSubmit={(b) => submit('packages', b, 'Package booked.')} />
+            <PackageForm config={config} gst={gst} busy={busy} onSubmit={(b) => submit(() => api('/api/seller/advertising/packages', { method: 'POST', body: b, auth: true }), 'Package booked.')} />
           ) : (
-            <PlacementForm config={config} sponsorship={sponsorship} discount={discount} gst={gst} busy={busy} onSubmit={(b) => submit('placements', b, 'Booked. A banner runs once it is approved; a rejected one is refunded.')} />
+            <PlacementForm config={config} sponsorship={sponsorship} discount={discount} gst={gst} busy={busy} onSubmit={(b) => submit(() => api('/api/seller/advertising/placements', { method: 'POST', body: b, auth: true }), 'Booked. A banner runs once it is approved; a rejected one is refunded.')} />
           )}
           {msg && <p className={`mt-3 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`} role="status">{msg.text}</p>}
         </section>

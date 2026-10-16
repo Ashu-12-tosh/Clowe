@@ -40,6 +40,7 @@ export * from './taxIds';
 export * from './deliveryZone';
 export * from './returnClaims';
 export * from './commercial';
+export * from './commercialPublic';
 export * from './sellerInvoice';
 export * from './advertising';
 export * from './codRefund';

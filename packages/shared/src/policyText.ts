@@ -1,3 +1,4 @@
+import { feeExampleMarkdown, handlingFeesText, type CommercialPublic } from './commercialPublic';
 import { fillReturnWindow } from './returnWindow';
 import { PACKING_VIDEO_RETENTION_DAYS } from './sellerOrders';
 import type { SellerFeeSchedule } from './settings';
@@ -26,6 +27,8 @@ export interface PolicyValues {
   sellerFees?: Partial<SellerFeeSchedule> | null;
   supportEmails?: { customer?: string; vendor?: string } | null;
   nonReturnableCategories?: string[] | null;
+  /** The owner's commercial rules as sellers see them (Batch 2). */
+  commercial?: CommercialPublic | null;
 }
 
 function hours(n: number): string {
@@ -53,6 +56,14 @@ function tokens(v: PolicyValues): Record<string, string> {
   const fee = <K extends keyof SellerFeeSchedule>(key: K, show: (n: number) => string, otherwise: string) =>
     fees[key] != null ? show(fees[key] as number) : otherwise;
   const onPayouts = 'the amount shown on your Payouts page';
+  const c = v.commercial ?? null;
+  const onFeesPage = 'the amount on the Seller Fees page';
+  const plan = (k: 'FREE' | 'GROWTH' | 'PRO' | 'PREMIUM', name: string) => {
+    const p = c?.plans[k];
+    if (!p) return name;
+    const limit = p.maxLiveProducts == null ? 'unlimited live products' : `up to ${p.maxLiveProducts} live products`;
+    return `${name} ${p.pricePaise ? `${rupees(p.pricePaise)} a month` : 'free'} (${limit}${p.monthlyAdCreditPaise ? `, ${rupees(p.monthlyAdCreditPaise)} advertising credit a month` : ''}${p.waivesHandlingFee ? ', no handling fee' : ''})`;
+  };
   return {
     [DISPATCH_SLA_TOKEN]: v.dispatchSlaHours != null ? hours(v.dispatchSlaHours) : 'the dispatch time shown on each order',
     [PENALTY_AFTER_TOKEN]:
@@ -70,6 +81,21 @@ function tokens(v: PolicyValues): Record<string, string> {
     '{{tcs}}': fee('tcsPercent', percent, 'the rate set by law'),
     '{{payoutHold}}': fee('payoutHoldDays', days, 'the clearing period shown on your Payouts page'),
     '{{payoutMin}}': fee('payoutMinPaise', rupees, onPayouts),
+    '{{referralFee}}': c ? percent(c.fees.referralPercent) : 'the referral rate of the product’s category',
+    '{{gtFee}}': c ? percent(c.fees.gtPercent) : onFeesPage,
+    '{{collectionFee}}': c ? percent(c.fees.collectionPercent) : onFeesPage,
+    '{{handlingFees}}': c ? handlingFeesText(c.fees.handlingSlabs) : 'the per-unit amount on the Seller Fees page',
+    '{{cloweGst}}': c ? percent(c.fees.gstPercent) : 'the applicable rate',
+    '{{counterfeitPenalty}}': c ? rupees(c.penalties.counterfeitListingPaise) : 'a fixed penalty',
+    '{{tryonDataPenalty}}': c ? rupees(c.penalties.inaccurateTryOnDataPaise) : 'a fixed penalty',
+    '{{sellerPlans}}': [plan('FREE', 'Free'), plan('GROWTH', 'Growth'), plan('PRO', 'Pro'), plan('PREMIUM', 'Premium')].join('; '),
+    '{{planGraceDays}}': c ? days(c.plans.graceDays) : 'a few days',
+    '{{welcomeAdCredit}}': c ? rupees(c.ads.welcomeCreditPaise) : 'a welcome advertising credit',
+    '{{tryonPacks}}': c ? c.tryon.packs.map((p) => `${p.credits} credits ${rupees(p.pricePaise)}`).join('; ') : 'the packs on your AI Try-On page',
+    '{{tryonExtraCredit}}': c ? rupees(c.tryon.extraCreditPaise) : 'a per-credit price',
+    '{{tryonFreeGrant}}': c ? `${c.tryon.freeGrantCredits} free credits for each of the first ${c.tryon.freeGrantSellers} approved sellers` : 'free credits for the first approved sellers',
+    '{{tryonExpiry}}': c ? (c.tryon.expiryDays ? `credits expire ${days(c.tryon.expiryDays)} after they are added` : 'credits do not expire') : 'credits expire as shown on your AI Try-On page',
+    '{{feeExample}}': c ? feeExampleMarkdown(c, fees.tdsPercent ?? 0.1, fees.tcsPercent ?? 0.5) : 'Your Payouts page and the pricing calculator show the exact amount for every order.',
     '{{tryonPhotoRetention}}': hours(TRYON_PHOTO_RETENTION_HOURS),
     '{{packingVideoDays}}': days(PACKING_VIDEO_RETENTION_DAYS),
     '{{customerSupportEmail}}': v.supportEmails?.customer || 'our customer support email',
