@@ -86,6 +86,7 @@ export async function cancelSellerPart(input: {
     actorUserId: input.actorUserId,
     reason: input.reason,
   });
-  const penaltyPaise = await chargeSellerCancelPenalty(order.id, input.sellerId, input.reason);
-  return { cancelledLines: done.cancelledLines, refund: done.refund, penaltyPaise };
+  // No cancellation penalty any more (owner's Batch 2): the late-dispatch
+  // penalty and the admin's penalties are what remain.
+  return { cancelledLines: done.cancelledLines, refund: done.refund, penaltyPaise: 0 };
 }

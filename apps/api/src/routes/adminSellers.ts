@@ -29,11 +29,15 @@ import {
   periodWindow,
   isNotASale,
   SELLER_DOCUMENT_LABELS,
+  ADMIN_PENALTY_LABELS,
+  adminPenaltySchema,
+  sellerVipSchema,
   sellerApplicationId,
   sellerInfoRequestSchema,
   VENDOR_TERMS_VERSION,
 } from '@clowe/shared';
 import { resolveFileUrls } from '../services/assets';
+import { getCommercial } from '../services/commercial';
 import { syncWarehouse, syncWarehouseSafe } from '../services/shipping/warehouses';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -807,6 +811,74 @@ async function applicationView(sellerId: string): Promise<AdminSellerDetail['app
   };
 }
 
+// Admin penalties (owner's Batch 2): ₹150 for a counterfeit or non-compliant
+// listing, ₹1,000 for inaccurate try-on data — amounts from the commercial
+// rules — with a reason the seller sees, audit-logged, deducted from payout.
+adminSellersRouter.post('/:id/penalties', async (req, res, next) => {
+  try {
+    const input = adminPenaltySchema.parse(req.body);
+    const seller = await prisma.sellerProfile.findUnique({ where: { id: req.params.id }, select: { id: true, userId: true, shopName: true } });
+    if (!seller) throw ApiError.notFound('Seller not found');
+    const c = await getCommercial();
+    const amountPaise = input.kind === 'COUNTERFEIT_LISTING' ? c.penalties.counterfeitListingPaise : c.penalties.inaccurateTryOnDataPaise;
+    const label = ADMIN_PENALTY_LABELS[input.kind];
+    const entry = await prisma.sellerLedgerEntry.create({
+      data: {
+        sellerId: seller.id,
+        type: 'ADMIN_PENALTY',
+        bucket: 'SETTLEMENT',
+        amountPaise: -amountPaise,
+        note: `${label}: ${input.reason}`,
+        createdById: req.auth!.userId,
+      },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: seller.userId,
+        type: 'SELLER_PENALTY',
+        title: `Penalty: ${label} (₹${(amountPaise / 100).toLocaleString('en-IN')})`,
+        body: `${input.reason} It is deducted from your next payout. If you disagree, raise it with seller support.`,
+        linkHref: '/seller/penalties',
+      },
+    });
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'PAYOUTS',
+      action: 'Penalty applied',
+      entityType: 'SellerLedgerEntry',
+      entityId: entry.id,
+      summary: `${label}: Rs ${(amountPaise / 100).toLocaleString('en-IN')} on ${seller.shopName} — ${input.reason}`,
+      metadata: { sellerId: seller.id, kind: input.kind, amountPaise, productId: input.productId ?? null },
+      ipAddress: ipFrom(req),
+    });
+    res.json({ success: true, data: { entryId: entry.id, amountPaise } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The admin's VIP flag: no handling fee on this seller's new orders.
+adminSellersRouter.patch('/:id/vip', async (req, res, next) => {
+  try {
+    const { vip } = sellerVipSchema.parse(req.body);
+    const seller = await prisma.sellerProfile.update({ where: { id: req.params.id }, data: { vip }, select: { id: true, shopName: true, vip: true } });
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'SELLERS',
+      action: vip ? 'VIP flag set' : 'VIP flag cleared',
+      entityType: 'SellerProfile',
+      entityId: seller.id,
+      summary: `${seller.shopName}: VIP ${vip ? 'on' : 'off'} (handling fee ${vip ? 'waived' : 'charged'} on new orders)`,
+      ipAddress: ipFrom(req),
+    });
+    res.json({ success: true, data: seller });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // "Needs more info": ask a pending applicant for a document or a detail before deciding.
 adminSellersRouter.post('/:id/request-info', async (req, res, next) => {
   try {
@@ -899,6 +971,8 @@ adminSellersRouter.get('/:id', async (req, res, next) => {
       bankIfsc: seller.bankIfsc,
       kycReviewedAt: seller.kycReviewedAt?.toISOString() ?? null,
       approvedAt: seller.approvedAt?.toISOString() ?? null,
+      vip: seller.vip,
+      plan: (await prisma.sellerSubscription.findUnique({ where: { sellerId: seller.id }, select: { plan: true } }))?.plan ?? 'FREE',
       panName: seller.panName,
       kyc,
       kycApprovalWarnings: kycApprovalWarnings(kyc),

@@ -39,6 +39,7 @@ export * from './kyc';
 export * from './taxIds';
 export * from './deliveryZone';
 export * from './returnClaims';
+export * from './commercial';
 export * from './codRefund';
 export * from './categoryIcons';
 export * from './sellerSupport';

@@ -118,6 +118,10 @@ export interface AdminSellerDetail extends AdminSellerListRow {
    * acknowledged past). Empty = nothing blocks it.
    */
   approvalBlockers: string[];
+  /** No handling fee on new orders, whatever the plan (owner's Batch 2). */
+  vip: boolean;
+  /** The seller's plan. */
+  plan: string;
   /** The application (Vendor Terms 2.1): documents (short-lived URLs), requests for more, terms accepted. */
   application: {
     applicationId: string;

@@ -33,6 +33,8 @@ export const categoryUpsertSchema = z.object({
   icon: z.string().trim().max(8).nullable().optional(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
+  /** Referral fee for products here, percent of the selling price (owner's Batch 2). */
+  referralPercent: z.number().min(0).max(50).optional(),
 }).merge(categoryRulesInputSchema);
 export type CategoryUpsertInput = z.infer<typeof categoryUpsertSchema>;
 
@@ -168,6 +170,8 @@ export interface AdminCategoryRow {
   isActive: boolean;
   sortOrder: number;
   productCount: number;
+  /** Referral fee, percent of the selling price, on new orders. */
+  referralPercent: number;
   /** 0 = root, 1 = child, 2 = grandchild. */
   depth: number;
   /** Rule fields set on this category itself (null = inherited). */

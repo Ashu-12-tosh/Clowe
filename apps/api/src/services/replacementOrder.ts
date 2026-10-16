@@ -117,6 +117,9 @@ export async function createReplacementOrder(input: {
             returnWindowDays: l.returnWindowDays,
             returnable: l.returnable,
             gstRatePercent: l.gstRatePercent,
+            // A replacement is sold under the original line's fees.
+            feeModel: l.feeModel,
+            feeRates: l.feeRates ?? undefined,
             replacementOfId: l.id,
           })),
         },

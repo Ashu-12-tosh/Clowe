@@ -489,18 +489,10 @@ export default function AdminSettingsPage() {
             />
             <FieldError message={fieldErrors['lateDispatchPenaltyPaise']} />
           </div>
-          <div>
-            <label className="text-xs text-gray-500">Seller cancels an order (₹, once per order)</label>
-            <input
-              type="number"
-              min={0}
-              value={dispatch.cancelRupees}
-              onChange={(e) => setDispatch((d) => ({ ...d, cancelRupees: e.target.value }))}
-              className={field}
-              name={'sellerCancelPenaltyPaise'}
-            />
-            <FieldError message={fieldErrors['sellerCancelPenaltyPaise']} />
-          </div>
+          <p className="text-xs text-gray-500 sm:col-span-2">
+            There is no penalty when a seller cancels (owner&apos;s rules). Admin penalties — counterfeit listing, inaccurate
+            try-on data — are in Commercial rules and on each seller&apos;s page.
+          </p>
           <label className="flex items-center gap-2 self-end pb-2 text-sm">
             <input
               type="checkbox"

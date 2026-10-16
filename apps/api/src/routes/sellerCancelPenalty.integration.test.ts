@@ -5,15 +5,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
 import { setSetting } from '../services/settingsService';
-import { latePenaltyKey, postEntry } from '../services/sellerLedgerService';
+import { cancelPenaltyKey, latePenaltyKey, postEntry } from '../services/sellerLedgerService';
 import { signAccessToken } from '../utils/jwt';
 
 /**
  * A seller who can't fulfil an order cancels their part of it: the buyer is
- * refunded for those lines (the whole order when nothing else is left), the
- * stock comes back, and the seller is charged the cancellation penalty once
- * per order. A buyer's or an admin's cancellation never charges it, and
- * neither does an order placed before the rule took effect.
+ * refunded for those lines (the whole order when nothing else is left) and
+ * the stock comes back. Since the owner's Batch 2 there is no cancellation
+ * penalty; one charged before that still shows, and can still be waived.
  */
 
 const prisma = new PrismaClient();
@@ -90,25 +89,22 @@ afterAll(async () => {
 });
 
 describe('a seller cancelling a whole order', () => {
-  it('cancels it, refunds what was paid, returns the stock, and charges ₹150 once', async () => {
+  it('cancels it, refunds what was paid, returns the stock, and charges no penalty', async () => {
     const { orderId } = await paidOrder(['A']);
     const paid = await prisma.payment.findUniqueOrThrow({ where: { orderId } });
     const stockBefore = (await prisma.productVariant.findUniqueOrThrow({ where: { id: shops.A.variantId } })).stock;
 
     const res = await call('POST', `/api/seller/orders/${orderId}/cancel`, shops.A.token, { reason: 'Out of stock in the warehouse' });
     expect(res.status, JSON.stringify(res.json)).toBe(200);
-    expect(res.json.data).toMatchObject({ cancelledLines: 1, penaltyPaise: 15_000, refund: { status: 'PROCESSED', amountPaise: paid.amountPaise } });
+    expect(res.json.data).toMatchObject({ cancelledLines: 1, penaltyPaise: 0, refund: { status: 'PROCESSED', amountPaise: paid.amountPaise } });
 
     expect((await prisma.order.findUniqueOrThrow({ where: { id: orderId } })).status).toBe('CANCELLED');
     expect((await prisma.productVariant.findUniqueOrThrow({ where: { id: shops.A.variantId } })).stock).toBe(stockBefore + 1);
-    const charged = await penalties(shops.A.sellerId, orderId);
-    expect(charged).toHaveLength(1);
-    expect(charged[0]).toMatchObject({ amountPaise: -15_000, bucket: 'SETTLEMENT', note: 'Cancelled by seller: Out of stock in the warehouse' });
+    expect(await penalties(shops.A.sellerId, orderId)).toHaveLength(0);
 
-    // A second try is refused, and charges nothing more.
+    // A second try is refused.
     const again = await call('POST', `/api/seller/orders/${orderId}/cancel`, shops.A.token, { reason: 'Out of stock in the warehouse' });
     expect(again.status).toBe(400);
-    expect(await penalties(shops.A.sellerId, orderId)).toHaveLength(1);
   });
 
   it('is refused once the items have shipped', async () => {
@@ -128,13 +124,13 @@ describe('a seller cancelling a whole order', () => {
 });
 
 describe('a seller cancelling their part of a shared order', () => {
-  it('refunds only their lines, leaves the rest going, and charges only them', async () => {
+  it('refunds only their lines, leaves the rest going, and charges no one', async () => {
     const { orderId } = await paidOrder(['A', 'B']);
     const lineA = await prisma.orderItem.findFirstOrThrow({ where: { orderId, sellerId: shops.A.sellerId } });
 
     const res = await call('POST', `/api/seller/orders/${orderId}/cancel`, shops.A.token, { reason: 'Damaged in storage' });
     expect(res.status, JSON.stringify(res.json)).toBe(200);
-    expect(res.json.data).toMatchObject({ cancelledLines: 1, penaltyPaise: 15_000, refund: { status: 'PROCESSED', amountPaise: lineA.pricePaise * lineA.quantity - lineA.promoDiscountPaise } });
+    expect(res.json.data).toMatchObject({ cancelledLines: 1, penaltyPaise: 0, refund: { status: 'PROCESSED', amountPaise: lineA.pricePaise * lineA.quantity - lineA.promoDiscountPaise } });
 
     const lines = await prisma.orderItem.findMany({ where: { orderId }, orderBy: { sellerId: 'asc' } });
     expect(Object.fromEntries(lines.map((l) => [l.sellerId, l.status]))).toEqual({
@@ -142,7 +138,7 @@ describe('a seller cancelling their part of a shared order', () => {
       [shops.B.sellerId]: 'CONFIRMED',
     });
     expect((await prisma.order.findUniqueOrThrow({ where: { id: orderId } })).status).not.toBe('CANCELLED');
-    expect(await penalties(shops.A.sellerId, orderId)).toHaveLength(1);
+    expect(await penalties(shops.A.sellerId, orderId)).toHaveLength(0);
     expect(await penalties(shops.B.sellerId, orderId)).toHaveLength(0);
   });
 });
@@ -191,9 +187,10 @@ describe('when the rule does not apply', () => {
 describe('the penalties view and waivers', () => {
   it('lists both kinds, and a waiver forgives only the kind it was for', async () => {
     const { orderId } = await paidOrder(['A']);
-    // The same order was also late (charged the way the sweep does), then cancelled.
+    // The same order was also late (charged the way the sweep does), and was
+    // cancelled with a penalty back when one was charged.
     await postEntry({ sellerId: shops.A.sellerId, type: 'LATE_DISPATCH_PENALTY', bucket: 'SETTLEMENT', amountPaise: -8_000, orderId, idempotencyKey: latePenaltyKey(orderId, shops.A.sellerId), note: 'Late' });
-    expect((await call('POST', `/api/seller/orders/${orderId}/cancel`, shops.A.token, { reason: 'Could not source it' })).status).toBe(200);
+    await postEntry({ sellerId: shops.A.sellerId, type: 'SELLER_CANCEL_PENALTY', bucket: 'SETTLEMENT', amountPaise: -15_000, orderId, idempotencyKey: cancelPenaltyKey(orderId, shops.A.sellerId), note: 'Cancelled by seller: Could not source it' });
 
     const cancelEntry = (await penalties(shops.A.sellerId, orderId))[0]!;
     const waive = await call('POST', `/api/admin/sellers/${shops.A.sellerId}/ledger/${cancelEntry.id}/waive`, adminToken, { reason: 'Supplier recall, not their fault' });
@@ -207,7 +204,8 @@ describe('the penalties view and waivers', () => {
       ['LATE_DISPATCH', 8_000, false],
       ['SELLER_CANCEL', 15_000, true],
     ]);
-    expect(view.json.data.cancelRule).toMatchObject({ enabled: true, penaltyPaise: 15_000 });
+    // No cancellation penalty is charged any more.
+    expect(view.json.data.cancelRule).toMatchObject({ enabled: false, penaltyPaise: 0 });
 
     // The admin ledger tells the two apart too.
     const ledger = await call('GET', `/api/admin/sellers/${shops.A.sellerId}/ledger?bucket=SETTLEMENT&pageSize=100`, adminToken);

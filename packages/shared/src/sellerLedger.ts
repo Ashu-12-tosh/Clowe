@@ -31,10 +31,18 @@ export const SELLER_LEDGER_TYPES = [
   'COD_FEE',
   'RTO_FREIGHT',
   'RETURN_FREIGHT',
+  'HANDLING_FEE',
+  'CLOWE_FEE_GST',
+  'ADMIN_PENALTY',
+  'SUBSCRIPTION_FEE',
+  'AD_SPEND',
+  'SPONSORSHIP_FEE',
+  'TRYON_CREDITS',
+  'AD_CREDIT_GRANT',
 ] as const;
 export type SellerLedgerTypeValue = (typeof SELLER_LEDGER_TYPES)[number];
 
-export const SELLER_LEDGER_BUCKETS = ['SETTLEMENT', 'PROMOTION'] as const;
+export const SELLER_LEDGER_BUCKETS = ['SETTLEMENT', 'PROMOTION', 'AD_CREDIT'] as const;
 export type SellerLedgerBucketValue = (typeof SELLER_LEDGER_BUCKETS)[number];
 
 export const SELLER_LEDGER_TYPE_LABELS: Record<SellerLedgerTypeValue, string> = {
@@ -60,7 +68,32 @@ export const SELLER_LEDGER_TYPE_LABELS: Record<SellerLedgerTypeValue, string> = 
   COD_FEE: 'COD fee (Delhivery)',
   RTO_FREIGHT: 'RTO freight (Delhivery)',
   RETURN_FREIGHT: 'Return pickup freight (Delhivery)',
+  HANDLING_FEE: 'Handling fee',
+  CLOWE_FEE_GST: 'GST on Clowe charges',
+  ADMIN_PENALTY: 'Penalty',
+  SUBSCRIPTION_FEE: 'Plan subscription',
+  AD_SPEND: 'Advertising',
+  SPONSORSHIP_FEE: 'Sponsorship',
+  TRYON_CREDITS: 'AI Try-On credits',
+  AD_CREDIT_GRANT: 'Advertising credit',
 };
+
+/**
+ * Clowe's own charges to a seller (each exclusive of GST, GST posted beside
+ * it as CLOWE_FEE_GST): what Clowe's monthly tax invoice to the seller lists.
+ */
+export const CLOWE_CHARGE_TYPES = [
+  'COMMISSION',
+  'PLATFORM_FEE',
+  'GATEWAY_FEE',
+  'CLOSING_FEE',
+  'GT_CHARGE',
+  'HANDLING_FEE',
+  'SUBSCRIPTION_FEE',
+  'AD_SPEND',
+  'SPONSORSHIP_FEE',
+  'TRYON_CREDITS',
+] as const satisfies readonly SellerLedgerTypeValue[];
 
 /**
  * Who pays for a return's pickup, as Store Settings → Returns says it. The
@@ -71,16 +104,18 @@ export const RETURN_PICKUP_NOTE =
   `is posted to your ledger as "${SELLER_LEDGER_TYPE_LABELS.RETURN_FREIGHT}". Decide on requests within 48 hours — see the Returns page.`;
 
 /** The two penalties a seller can be charged, once per order each. */
-export const PENALTY_KINDS = ['LATE_DISPATCH', 'SELLER_CANCEL'] as const;
+export const PENALTY_KINDS = ['LATE_DISPATCH', 'SELLER_CANCEL', 'ADMIN'] as const;
 export type PenaltyKind = (typeof PENALTY_KINDS)[number];
 export const PENALTY_KIND_LABELS: Record<PenaltyKind, string> = {
   LATE_DISPATCH: 'Late dispatch',
   SELLER_CANCEL: 'Cancelled by seller',
+  ADMIN: 'Applied by Clowe',
 };
 /** The ledger type that charges each kind. */
 export const PENALTY_LEDGER_TYPE: Record<PenaltyKind, SellerLedgerTypeValue> = {
   LATE_DISPATCH: 'LATE_DISPATCH_PENALTY',
   SELLER_CANCEL: 'SELLER_CANCEL_PENALTY',
+  ADMIN: 'ADMIN_PENALTY',
 };
 
 /** One row of a seller's ledger as the API serves it. */

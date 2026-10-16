@@ -20,7 +20,10 @@ import {
   updateSettingsSchema,
   voidReferralSchema,
   NOT_A_SALE_STATUSES,
+  commercialPatchSchema,
 } from '@clowe/shared';
+import { getCommercial, updateCommercial } from '../services/commercial';
+import { auditSafe } from '../services/auditService';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { bustHomeCache } from './home';
@@ -422,6 +425,7 @@ adminRouter.get('/categories', async (_req, res, next) => {
         parentId: c.parentId,
         icon: c.icon,
         imageUrl: c.imageUrl,
+        referralPercent: c.referralPercent,
         isActive: c.isActive,
         sortOrder: c.sortOrder,
         productCount: c._count.products,
@@ -502,6 +506,7 @@ adminRouter.patch('/categories/:id', async (req, res, next) => {
         icon: input.icon,
         isActive: input.isActive,
         sortOrder: input.sortOrder,
+        referralPercent: input.referralPercent,
         ...ruleDataFrom(input),
       },
     });
@@ -723,6 +728,39 @@ adminRouter.patch('/returns/:id/override', async (req, res, next) => {
 // ---------------------------------------------------------------------------
 // Platform settings (try-on threshold, social links, ad pricing)
 // ---------------------------------------------------------------------------
+
+// The owner's commercial rules (Batch 2): fees, plans, advertising,
+// sponsorship and try-on credits — one setting, changed by a partial patch
+// that is validated whole. Fee changes that need 30 days' notice go through
+// the scheduled-changes route instead (Vendor Terms 6.2).
+adminRouter.get('/commercial', async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await getCommercial() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminRouter.patch('/commercial', async (req, res, next) => {
+  try {
+    const patch = commercialPatchSchema.parse(req.body);
+    const before = await getCommercial();
+    const after = await updateCommercial(patch);
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'SETTINGS',
+      action: 'Commercial rules changed',
+      entityType: 'PlatformSetting',
+      entityId: 'commercial',
+      summary: `Commercial rules changed: ${Object.keys(patch).join(', ')}`,
+      metadata: { patch, before: Object.fromEntries(Object.keys(patch).map((k) => [k, (before as Record<string, unknown>)[k]])) },
+    });
+    res.json({ success: true, data: after });
+  } catch (err) {
+    next(err);
+  }
+});
 
 adminRouter.get('/settings', async (_req, res, next) => {
   try {

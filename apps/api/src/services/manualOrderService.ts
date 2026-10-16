@@ -7,6 +7,7 @@ import { saleGstRates } from './sellerPricing';
 import { ApiError } from '../utils/ApiError';
 import { codRefusal, deliveryRefusal, pincodeServiceability } from './shipping/serviceability';
 import { deliveryPriceFor, etaWindowFor } from './deliveryService';
+import { feeSnapshots } from './commercial';
 import { confirmCodOrder, generateOrderNumber, settlePaymentSuccess } from './orderService';
 import { allocateForDispatch } from './stockService';
 
@@ -125,6 +126,7 @@ export async function createManualOrder(input: {
   const windowByProduct = await saleReturnWindows(lines.map((l) => l.productId));
   const returnableByProduct = await saleReturnability(lines.map((l) => l.productId));
   const gstRates = await saleGstRates(lines.map((l) => ({ productId: l.productId, unitPaise: l.pricePaise })));
+  const feesByProduct = await feeSnapshots(lines.map((l) => ({ productId: l.productId, sellerId: l.sellerId })));
 
   const order = await prisma.$transaction(async (tx) => {
     for (const line of lines) {
@@ -189,6 +191,8 @@ export async function createManualOrder(input: {
             returnable: returnableByProduct.get(l.productId) ?? true,
             nonCancellable: l.nonCancellable,
             gstRatePercent: gstRates[i],
+            feeModel: 2,
+            feeRates: feesByProduct.get(l.productId) as object | undefined,
           })),
         },
       },

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { buyerPriceFor, type SellerEconomicsRates } from '@clowe/shared';
+import { buyerPriceFor, type PricingRatesView, type SellerEconomicsRates } from '@clowe/shared';
+import { prisma } from '../db';
+import { getCommercial, handlingWaivedFor } from '../services/commercial';
 import { requireAuth } from '../middleware/auth';
 import { getSettings } from '../services/settingsService';
 import { economicsRates } from '../services/payoutService';
@@ -13,9 +15,17 @@ sellerPricingRouter.use(requireAuth, requireSeller);
 
 // The rates the shared calculator needs, so the product form can show a
 // seller what a price will pay them with the same arithmetic the ledger uses.
-sellerPricingRouter.get('/', async (_req, res, next) => {
+sellerPricingRouter.get('/', async (req, res, next) => {
   try {
-    const rates: SellerEconomicsRates = economicsRates(await getSettings());
+    // New orders are charged the owner's Batch 2 fees: the calculator shows those.
+    const c = await getCommercial();
+    const waived = (await handlingWaivedFor([req.seller!.id])).get(req.seller!.id) ?? false;
+    const categories = await prisma.category.findMany({ select: { id: true, referralPercent: true } });
+    const rates: SellerEconomicsRates & PricingRatesView = {
+      ...economicsRates(await getSettings()),
+      v2: { ...c.fees, handlingWaived: waived },
+      categoryReferralPercent: Object.fromEntries(categories.map((cat) => [cat.id, cat.referralPercent])),
+    };
     res.json({ success: true, data: rates });
   } catch (err) {
     next(err);

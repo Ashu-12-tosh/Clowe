@@ -140,6 +140,7 @@ function RulesEditor({
     own.returnWindowDays === null ? '' : String(own.returnWindowDays),
   );
   const [returnable, setReturnable] = useState(own.returnable === null ? '' : String(own.returnable));
+  const [referral, setReferral] = useState(String(row.referralPercent));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const { errors: fieldErrors, show: showFieldErrors, fromError } = useFieldErrors();
@@ -170,7 +171,7 @@ function RulesEditor({
     try {
       await api(`/api/admin/categories/${row.id}`, {
         method: 'PATCH',
-        body: { ...body, imageUrl: tileImage.trim() || null },
+        body: { ...body, imageUrl: tileImage.trim() || null, referralPercent: Number(referral) },
         auth: true,
         success: `${row.name}: saved`,
       });
@@ -316,6 +317,20 @@ function RulesEditor({
           <p className="mt-1 text-[11px] text-gray-500">
             No: products here say &ldquo;Not returnable&rdquo; on their page and at checkout, and have no return button.
           </p>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-gray-700">Referral fee (% of the selling price)</label>
+          <input
+            type="number"
+            step="0.1"
+            min={0}
+            max={50}
+            name="referralPercent"
+            value={referral}
+            onChange={(e) => setReferral(e.target.value)}
+            className={`mt-1 w-full ${field}`}
+          />
+          <p className="mt-1 text-[11px] text-gray-500">On new orders only; a change needs 30 days&apos; notice to sellers (Vendor Terms 6.2).</p>
         </div>
       </div>
 

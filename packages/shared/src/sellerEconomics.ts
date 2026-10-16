@@ -49,6 +49,25 @@ export interface SellerEconomicsRates {
   closingFeePaise: number;
   /** Goods transfer (GT) charge, per unit. */
   gtChargePaise: number;
+  /**
+   * The owner's Batch 2 fees, when they apply (new order lines; the product
+   * form's preview): referral, GT and collection as percents of the selling
+   * price (GST included), the handling fee per unit by price slab, and GST on
+   * each of Clowe's charges. When set, commissionPercent, gatewayPercent and
+   * the fixed platform, closing and GT fees above are not used.
+   */
+  v2?: SellerFeesV2 | null;
+}
+
+export interface SellerFeesV2 {
+  referralPercent: number;
+  gtPercent: number;
+  collectionPercent: number;
+  handlingSlabs: { fromPaise: number; feePaise: number }[];
+  /** Premium plan or the admin's VIP flag. */
+  handlingWaived: boolean;
+  /** GST on Clowe's charges. */
+  gstPercent: number;
 }
 
 export interface SellerEconomicsInput {
@@ -99,6 +118,9 @@ export interface SellerEconomics {
   tcsPaise: number;
   /** The line's value net of GST: the base for TDS and TCS. */
   exGstPaise: number;
+  /** Batch 2: the handling fee, and the GST on all of Clowe's charges. */
+  handlingFeePaise: number;
+  cloweFeeGstPaise: number;
   /** What Clowe settles to the seller for this line: gross less every deduction. */
   sellerReceivesPaise: number;
   /** sellerReceives less the GST they remit — the seller's real take. */
@@ -141,6 +163,7 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
   // The seller's price before GST: the base for commission, TDS and TCS. The
   // gateway charges on what it collects, which is what the buyer pays.
   const exGstPaise = grossPaise - gstPaise;
+  if (rates.v2) return feesV2({ rates, v2: rates.v2, quantity, grossPaise, gstPaise, gstRatePercent, exGstPaise });
   const commissionPaise = percentOf(exGstPaise, rates.commissionPercent);
   const gatewayFeePaise = percentOf(grossPaise, rates.gatewayPercent);
   const tdsPaise = percentOf(exGstPaise, rates.tdsPercent);
@@ -202,6 +225,76 @@ export function computeListingEconomics(input: SellerEconomicsInput): SellerEcon
     tdsPaise,
     tcsPaise,
     exGstPaise,
+    handlingFeePaise: 0,
+    cloweFeeGstPaise: 0,
+    sellerReceivesPaise,
+    sellerKeepsAfterGstPaise: sellerReceivesPaise - gstPaise,
+    lines,
+  };
+}
+
+/**
+ * Batch 2 (the owner's commercial rules): on the selling price — what the
+ * buyer pays for the line, GST included — a referral fee, a GT charge and a
+ * payment collection fee as percents, a handling fee per unit by price slab
+ * (none on Premium or for a VIP seller), and GST on each of those charges.
+ * TDS and TCS are statutory and stay on the price before GST.
+ */
+function feesV2(input: {
+  rates: SellerEconomicsRates;
+  v2: SellerFeesV2;
+  quantity: number;
+  grossPaise: number;
+  gstPaise: number;
+  gstRatePercent: number;
+  exGstPaise: number;
+}): SellerEconomics {
+  const { rates, v2, quantity, grossPaise, gstPaise, gstRatePercent, exGstPaise } = input;
+  const sold = grossPaise > 0;
+  const unitPaise = quantity > 0 ? Math.round(grossPaise / quantity) : 0;
+  const referralPaise = percentOf(grossPaise, v2.referralPercent);
+  const gtPaise = percentOf(grossPaise, v2.gtPercent);
+  const collectionPaise = percentOf(grossPaise, v2.collectionPercent);
+  const sortedSlabs = [...v2.handlingSlabs].sort((a, b) => a.fromPaise - b.fromPaise);
+  let perUnit = sortedSlabs[0]?.feePaise ?? 0;
+  for (const s of sortedSlabs) if (unitPaise >= s.fromPaise) perUnit = s.feePaise;
+  const handlingFeePaise = sold && !v2.handlingWaived ? perUnit * quantity : 0;
+  const charges = referralPaise + gtPaise + collectionPaise + handlingFeePaise;
+  const cloweFeeGstPaise = Math.round((charges * v2.gstPercent) / 100);
+  const tdsPaise = percentOf(exGstPaise, rates.tdsPercent);
+  const tcsPaise = percentOf(exGstPaise, rates.tcsPercent);
+  const units = quantity > 1 ? ` × ${quantity}` : '';
+  const lines: SellerEconomicsLine[] = [
+    { key: 'sale', label: 'Sale', amountPaise: grossPaise, ledgerType: 'SALE_EARNING' },
+    { key: 'commission', label: `Referral fee (${v2.referralPercent}% of the selling price)`, amountPaise: -referralPaise, ledgerType: 'COMMISSION' },
+    { key: 'gt', label: `GT charge (${v2.gtPercent}% of the selling price)`, amountPaise: -gtPaise, ledgerType: 'GT_CHARGE' },
+    { key: 'gateway', label: `Payment collection fee (${v2.collectionPercent}% of the selling price)`, amountPaise: -collectionPaise, ledgerType: 'GATEWAY_FEE' },
+    {
+      key: 'handling',
+      label: v2.handlingWaived ? 'Handling fee (waived)' : `Handling fee (₹${perUnit / 100} per unit${units})`,
+      amountPaise: -handlingFeePaise,
+      ledgerType: 'HANDLING_FEE',
+    },
+    { key: 'feeGst', label: `GST on Clowe's fees (${v2.gstPercent}%)`, amountPaise: -cloweFeeGstPaise, ledgerType: 'CLOWE_FEE_GST' },
+    { key: 'tds', label: `TDS (${rates.tdsPercent}% of your price)`, amountPaise: -tdsPaise, ledgerType: 'TDS' },
+    { key: 'tcs', label: `TCS (${rates.tcsPercent}% of your price)`, amountPaise: -tcsPaise, ledgerType: 'GST_TCS' },
+  ];
+  const sellerReceivesPaise = lines.filter((l) => l.ledgerType !== null).reduce((sum, l) => sum + l.amountPaise, 0);
+  return {
+    buyerPaysPaise: grossPaise,
+    grossPaise,
+    gstPaise,
+    gstRatePercent,
+    commissionPaise: referralPaise,
+    gatewayFeePaise: collectionPaise,
+    platformFeePaise: 0,
+    closingFeePaise: 0,
+    gtChargePaise: gtPaise,
+    tdsPaise,
+    tcsPaise,
+    exGstPaise,
+    handlingFeePaise,
+    cloweFeeGstPaise,
     sellerReceivesPaise,
     sellerKeepsAfterGstPaise: sellerReceivesPaise - gstPaise,
     lines,

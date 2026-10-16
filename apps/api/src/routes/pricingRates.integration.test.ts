@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { PrismaClient, Role, SellerStatus } from '@prisma/client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { computeListingEconomics, type SellerEconomicsRates } from '@clowe/shared';
+import { computeListingEconomics, DEFAULT_COMMERCIAL, type SellerEconomicsRates } from '@clowe/shared';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
 import { DEFAULT_SETTINGS, getSettings, setSetting } from '../services/settingsService';
@@ -73,7 +73,14 @@ describe('GET /api/seller/pricing-rates', () => {
       platformFeePaise: DEFAULT_SETTINGS.platformFeePaise,
       closingFeePaise: DEFAULT_SETTINGS.closingFeePaise,
       gtChargePaise: DEFAULT_SETTINGS.gtChargePaise,
+      // New orders pay the owner's Batch 2 fees, so the calculator shows those,
+      // with each category's referral fee.
+      v2: { ...DEFAULT_COMMERCIAL.fees, handlingWaived: false },
+      categoryReferralPercent: expect.any(Object),
     });
+    const referral = Object.values((json.data as unknown as { categoryReferralPercent: Record<string, number> }).categoryReferralPercent);
+    expect(referral.length).toBeGreaterThan(0);
+    expect(referral.every((p) => p === 2)).toBe(true);
   });
 
   it('follows the settings, so the form and the ledger move together', async () => {
@@ -89,6 +96,7 @@ describe('GET /api/seller/pricing-rates', () => {
     expect(computeListingEconomics({ sellerPricePaise: 100_000, rates: json.data!, taxRules: slab }).gstRatePercent).toBe(5);
     const e = computeListingEconomics({ sellerPricePaise: 100_001, rates: json.data!, taxRules: slab });
     expect(e.gstRatePercent).toBe(18);
+    // The fixed closing fee belongs to orders before Batch 2; new ones have none.
     expect(e.closingFeePaise).toBe(0);
   });
 

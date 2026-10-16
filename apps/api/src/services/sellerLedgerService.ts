@@ -2,6 +2,7 @@ import { Prisma, type SellerLedgerBucket, type SellerLedgerType } from '@prisma/
 import {
   computeListingEconomics,
   type PenaltyKind,
+  type SellerFeesV2,
   type SellerLedgerEntryRow,
   type SellerLedgerPage,
   type SellerLedgerTypeValue,
@@ -41,6 +42,8 @@ export const DELIVERY_ENTRY_TYPES: readonly SellerLedgerTypeValue[] = [
   'GT_CHARGE',
   'TDS',
   'GST_TCS',
+  'HANDLING_FEE',
+  'CLOWE_FEE_GST',
 ];
 
 export interface PostEntryInput {
@@ -55,8 +58,10 @@ export interface PostEntryInput {
   purchaseId?: string | null;
   note?: string | null;
   createdById?: string | null;
-  /** GST_TCS only: the taxable value the TCS was taken on. */
+  /** GST_TCS: the taxable value the TCS was taken on; CLOWE_FEE_GST: the charge it is GST on. */
   taxablePaise?: number | null;
+  /** CLOWE_FEE_GST only: which charge (a ledger type, or ORDER_FEES for a line's fees). */
+  chargeType?: string | null;
   /** For uniqueness the column pairs cannot express (one penalty per order). */
   idempotencyKey?: string | null;
 }
@@ -88,6 +93,7 @@ function toRow(input: PostEntryInput): Prisma.SellerLedgerEntryCreateManyInput {
     note: input.note ?? null,
     createdById: input.createdById ?? null,
     taxablePaise: input.taxablePaise ?? null,
+    chargeType: input.chargeType ?? null,
     idempotencyKey: input.idempotencyKey ?? null,
   };
 }
@@ -129,6 +135,8 @@ export async function postDeliveryEntries(orderItemId: string, db: Db = prisma):
       gstRatePercent: true,
       quantity: true,
       status: true,
+      feeModel: true,
+      feeRates: true,
       product: { select: { categoryId: true } },
       replacementOf: { select: { deliveredAt: true } },
     },
@@ -140,11 +148,13 @@ export async function postDeliveryEntries(orderItemId: string, db: Db = prisma):
 
   const settings = await getSettings();
   const taxRules = (await categoryRulesMap([item.product.categoryId])).get(item.product.categoryId);
+  // Lines sold under the owner's Batch 2 fees carry them; older lines keep the earlier model.
+  const v2 = item.feeModel === 2 && item.feeRates ? (item.feeRates as unknown as SellerFeesV2) : null;
   const economics = computeListingEconomics({
     buyerPricePaise: item.pricePaise,
     gstRatePercent: item.gstRatePercent,
     quantity: item.quantity,
-    rates: economicsRates(settings),
+    rates: { ...economicsRates(settings), v2 },
     taxRules,
   });
 
@@ -159,8 +169,15 @@ export async function postDeliveryEntries(orderItemId: string, db: Db = prisma):
         orderId: item.orderId,
         orderItemId: item.id,
         note: l.label,
-        // GSTR-8 reports the value TCS was taken on, as it was calculated now.
-        taxablePaise: l.ledgerType === 'GST_TCS' ? economics.exGstPaise : null,
+        // GSTR-8 reports the value TCS was taken on, as it was calculated now;
+        // the GST on Clowe's fees records the fees it is on (Clowe's invoice).
+        taxablePaise:
+          l.ledgerType === 'GST_TCS'
+            ? economics.exGstPaise
+            : l.ledgerType === 'CLOWE_FEE_GST'
+              ? economics.commissionPaise + economics.gtChargePaise + economics.gatewayFeePaise + economics.handlingFeePaise
+              : null,
+        chargeType: l.ledgerType === 'CLOWE_FEE_GST' ? 'ORDER_FEES' : null,
       }),
     );
   if (rows.length === 0) return 0;
@@ -235,6 +252,7 @@ export const cancelPenaltyKey = (orderId: string, sellerId: string) => `seller-c
 const WAIVER_KEY_PREFIX: Record<PenaltyKind, string> = {
   LATE_DISPATCH: 'late-dispatch-waiver',
   SELLER_CANCEL: 'seller-cancel-waiver',
+  ADMIN: 'admin-penalty-waiver',
 };
 const waiverKey = (kind: PenaltyKind, orderId: string, sellerId: string) =>
   `${WAIVER_KEY_PREFIX[kind]}:${orderId}:${sellerId}`;
@@ -243,13 +261,15 @@ const waiverKey = (kind: PenaltyKind, orderId: string, sellerId: string) =>
 export function penaltyKindOf(type: SellerLedgerType, idempotencyKey: string | null): PenaltyKind | null {
   if (type === 'LATE_DISPATCH_PENALTY') return 'LATE_DISPATCH';
   if (type === 'SELLER_CANCEL_PENALTY') return 'SELLER_CANCEL';
+  if (type === 'ADMIN_PENALTY') return 'ADMIN';
   if (type !== 'PENALTY_WAIVER') return null;
   // A per-line waiver from before keys existed forgave a late dispatch.
   if (!idempotencyKey) return 'LATE_DISPATCH';
+  if (idempotencyKey.startsWith(`${WAIVER_KEY_PREFIX.ADMIN}:`)) return 'ADMIN';
   return idempotencyKey.startsWith(`${WAIVER_KEY_PREFIX.SELLER_CANCEL}:`) ? 'SELLER_CANCEL' : 'LATE_DISPATCH';
 }
 
-const PENALTY_TYPES: SellerLedgerType[] = ['LATE_DISPATCH_PENALTY', 'SELLER_CANCEL_PENALTY'];
+const PENALTY_TYPES: SellerLedgerType[] = ['LATE_DISPATCH_PENALTY', 'SELLER_CANCEL_PENALTY', 'ADMIN_PENALTY'];
 
 export type WaiveOutcome = 'WAIVED' | 'ALREADY_WAIVED' | 'NOT_A_PENALTY';
 
@@ -268,7 +288,7 @@ export async function waivePenalty(
 ): Promise<{ outcome: WaiveOutcome; amountPaise: number; orderItemId: string | null }> {
   const entry = await db.sellerLedgerEntry.findFirst({ where: { id: entryId, sellerId } });
   const kind = entry ? penaltyKindOf(entry.type, null) : null;
-  if (!entry || entry.type === 'PENALTY_WAIVER' || !kind || (!entry.orderItemId && !entry.orderId)) {
+  if (!entry || entry.type === 'PENALTY_WAIVER' || !kind || (kind !== 'ADMIN' && !entry.orderItemId && !entry.orderId)) {
     return { outcome: 'NOT_A_PENALTY', amountPaise: 0, orderItemId: null };
   }
   const posted = await postEntry(
@@ -279,7 +299,8 @@ export async function waivePenalty(
       amountPaise: -entry.amountPaise,
       orderId: entry.orderId,
       orderItemId: entry.orderItemId,
-      idempotencyKey: entry.orderItemId ? null : waiverKey(kind, entry.orderId!, sellerId),
+      // An admin penalty is per entry, not per order: its waiver is keyed by the entry.
+      idempotencyKey: kind === 'ADMIN' ? `${WAIVER_KEY_PREFIX.ADMIN}:${entry.id}` : entry.orderItemId ? null : waiverKey(kind, entry.orderId!, sellerId),
       note: `Waived: ${reason}`,
       createdById: adminId,
     },
@@ -316,8 +337,12 @@ export async function penaltiesView(
   ]);
   // A penalty is per order and kind now (one order can carry both kinds); one
   // charged before that is per line.
-  const keyOf = (kind: PenaltyKind, e: { orderId: string | null; orderItemId: string | null }) =>
-    e.orderItemId ? `item:${e.orderItemId}` : `${kind}:order:${e.orderId}`;
+  const keyOf = (kind: PenaltyKind, e: { id?: string; orderId: string | null; orderItemId: string | null; idempotencyKey?: string | null }) =>
+    kind === 'ADMIN'
+      ? `admin:${e.idempotencyKey ? e.idempotencyKey.split(':')[1] : e.id}`
+      : e.orderItemId
+        ? `item:${e.orderItemId}`
+        : `${kind}:order:${e.orderId}`;
   const waiverByKey = new Map(
     waivers.map((w) => [keyOf(penaltyKindOf('PENALTY_WAIVER', w.idempotencyKey)!, w), w]),
   );
@@ -350,9 +375,10 @@ export async function penaltiesView(
       slaHours: settings.dispatchSlaHours,
       effectiveFrom: settings.lateDispatchPenaltyEffectiveFrom,
     },
+    // The seller-cancellation penalty was removed (owner's Batch 2); past charges still show below.
     cancelRule: {
-      enabled: settings.penaltyEnabled && settings.sellerCancelPenaltyPaise > 0,
-      penaltyPaise: settings.sellerCancelPenaltyPaise,
+      enabled: false,
+      penaltyPaise: 0,
       effectiveFrom: settings.sellerCancelPenaltyEffectiveFrom,
     },
     rows: shown.map((p) => {

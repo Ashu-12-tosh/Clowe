@@ -30,6 +30,7 @@ import {
 } from '@clowe/shared';
 import { chooseLostOutcome } from '../services/shipping/lostParcels';
 import { cancelOrderLines } from '../services/lineCancellation';
+import { feeSnapshots } from '../services/commercial';
 import { exchangeAllowed, raiseClaim, rulesForDelivery } from '../services/returnClaims';
 import { raiseComplaint } from '../services/complaintService';
 import { scanViews } from './track';
@@ -234,6 +235,8 @@ ordersRouter.post('/checkout', async (req, res, next) => {
     const gstRates = await saleGstRates(
       orderLines.map((l) => ({ productId: l.productId, unitPaise: l.pricePaise - Math.floor(l.promoDiscountPaise / l.quantity) })),
     );
+    // Clowe's fees, fixed for these lines now (new orders only; older lines keep theirs).
+    const feesByProduct = await feeSnapshots(orderLines.map((l) => ({ productId: l.productId, sellerId: sellerByVariant.get(l.variantId)! })));
 
     // Create the order and reserve stock atomically. Conditional decrements
     // guard against a concurrent checkout taking the last unit.
@@ -339,6 +342,8 @@ ordersRouter.post('/checkout', async (req, res, next) => {
               returnable: returnableByProduct.get(line.productId) ?? true,
               nonCancellable: line.nonCancellable,
               gstRatePercent: gstRates[i],
+              feeModel: 2,
+              feeRates: feesByProduct.get(line.productId) as object | undefined,
             })),
           },
         },

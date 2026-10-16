@@ -7,6 +7,7 @@ import {
   type BreakdownRowKind,
   type CategoryRules,
   type SellerDeliveryEstimate,
+  type PricingRatesView,
   type SellerEconomicsRates,
 } from '@clowe/shared';
 import { api } from '@/lib/api';
@@ -79,10 +80,13 @@ export function PricingBreakdown({
   const pricePaise =
     typed !== null ? Math.max(0, Math.round(Number(typed || '0') * 100)) : (listingPricePaise ?? 0);
 
-  const economics = useMemo(
-    () => (rates ? computeListingEconomics({ sellerPricePaise: pricePaise, rates, taxRules }) : null),
-    [rates, pricePaise, taxRules],
-  );
+  const economics = useMemo(() => {
+    if (!rates) return null;
+    // The referral fee is the chosen category's (Admin → Categories).
+    const own = categoryId ? (rates as SellerEconomicsRates & Partial<PricingRatesView>).categoryReferralPercent?.[categoryId] : undefined;
+    const withCategory = rates.v2 && own !== undefined ? { ...rates, v2: { ...rates.v2, referralPercent: own } } : rates;
+    return computeListingEconomics({ sellerPricePaise: pricePaise, rates: withCategory, taxRules });
+  }, [rates, pricePaise, taxRules, categoryId]);
 
   // Delivery for this parcel, once the seller stops typing. Answers are cached
   // per weight slab and route on the server, so this rarely reaches Delhivery.

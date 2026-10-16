@@ -480,6 +480,9 @@ model SellerProfile {
   // sellers get 50 free (tryOnFreeGrant marks who received the launch offer).
   tryOnCredits   Int     @default(0)
   tryOnFreeGrant Boolean @default(false)
+  // Admin's VIP flag: no handling fee, whatever the plan.
+  vip            Boolean @default(false)
+  subscription   SellerSubscription?
   tryOnCreditLedger TryOnCreditLedger[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -828,6 +831,8 @@ model Category {
   icon      String?
   // Category landing page content.
   description String?
+  // Referral fee for products in this category, percent of the selling price (Batch 2).
+  referralPercent Float @default(2)
   // Subcategory tile shape on the landing rail: "square" | "circle".
   tileShape   String  @default("square")
   // Hero side-card bullets: [{ icon, title, subtitle }].
@@ -965,6 +970,9 @@ model Product {
   searchColors    String        @default("")
   // Seller's own switch — hides an approved listing without archiving it.
   isVisible       Boolean       @default(true)
+  // Over the plan's live-product limit (owner's Batch 2): hidden from shoppers,
+  // never deleted; live again when the seller picks it or upgrades.
+  planHidden      Boolean       @default(false)
   // Seller opt-in for AI Try-On; only honoured in try-on eligible categories.
   tryOnEnabled    Boolean       @default(false)
   // Seller's "Not returnable" (pierced jewellery, customised or final-sale
@@ -1371,6 +1379,11 @@ model OrderItem {
   // the ledger, payouts and GSTR-8 read it, so a later GST change (the flat
   // 18%) never rewrites a past sale. Null as above.
   gstRatePercent Int?
+  // Clowe's fees for this line, fixed at checkout (owner's Batch 2): 1 = the
+  // earlier commission/platform/closing/GT model, 2 = referral, GT %,
+  // collection and handling fee, each plus GST. feeRates holds the numbers.
+  feeModel Int  @default(1)
+  feeRates Json?
 
   // A free replacement for another line (a parcel lost in transit, or an
   // exchange): what it replaces. Its order is paid with REPLACEMENT.
@@ -1729,6 +1742,40 @@ model TryOnHistory {
   @@index([status, createdAt])
   @@index([flagged, createdAt])
   @@map("tryon_history")
+}
+
+enum SellerPlanKind {
+  FREE
+  GROWTH
+  PRO
+  PREMIUM
+}
+
+/// A seller's plan (owner's Batch 2): monthly, auto-renewing on the same
+/// date, paid from the Seller Wallet first and then from the next payout.
+/// Upgrades take effect at once (prorated); downgrades at the next renewal.
+/// A renewal that cannot be paid gets graceDays, then the plan drops to FREE.
+model SellerSubscription {
+  id               String         @id @default(cuid())
+  sellerId         String         @unique
+  seller           SellerProfile  @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  plan             SellerPlanKind @default(FREE)
+  autoRenew        Boolean        @default(true)
+  /// The current paid month (null on FREE).
+  periodStart      DateTime?
+  periodEnd        DateTime?
+  /// A downgrade waiting for the renewal date.
+  pendingPlan      SellerPlanKind?
+  /// A renewal not yet paid: the plan holds until then, then drops to FREE.
+  graceUntil       DateTime?
+  /// Sellers from before the plans keep every product live until this date.
+  limitGraceUntil  DateTime?
+  limitNoticeSentAt DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([periodEnd])
+  @@map("seller_subscriptions")
 }
 
 /// Each acceptance of the Vendor Terms and Seller Agreement: which version,
@@ -2288,6 +2335,15 @@ enum SellerLedgerType {
   COD_FEE // - Delhivery's COD collection charge on a delivered COD parcel (GST included)
   RTO_FREIGHT // - Delhivery's charge for bringing an undelivered parcel back (GST included)
   RETURN_FREIGHT // - Delhivery's charge for collecting a customer return (reverse pickup, GST included)
+  // Batch 2 — Clowe's charges (each exclusive of GST; the GST is its own entry):
+  HANDLING_FEE // - per-unit handling fee, by selling price slab
+  CLOWE_FEE_GST // - GST on a Clowe charge (chargeType says which)
+  ADMIN_PENALTY // - an admin's penalty (counterfeit listing, inaccurate try-on data), with a reason
+  SUBSCRIPTION_FEE // - the seller's plan, monthly
+  AD_SPEND // - advertising: clicks, packages, placements
+  SPONSORSHIP_FEE // - sponsorship placements
+  TRYON_CREDITS // - AI Try-On credit packs
+  AD_CREDIT_GRANT // + advertising credit given (welcome, plan) — usable only on ads
 }
 
 /// Settlement money can be paid out; promotion credits never can. Keeping them
@@ -2295,7 +2351,10 @@ enum SellerLedgerType {
 /// a penalty cannot eat ad credits, without any code having to remember that.
 enum SellerLedgerBucket {
   SETTLEMENT
+  // The Seller Wallet: topped up through the payment gateway; Clowe's charges come from it first.
   PROMOTION
+  // Advertising credit (welcome credit, plan credit): spent only on advertising.
+  AD_CREDIT
 }
 
 /// The seller's money, one signed row per event. Balances are sums over this
@@ -2325,6 +2384,8 @@ model SellerLedgerEntry {
   // GST_TCS only: the net taxable value (ex-GST) the TCS was taken on, as
   // calculated when it was posted. GSTR-8 reports it.
   taxablePaise Int?
+  /// CLOWE_FEE_GST entries: the charge the GST is on (a SellerLedgerType value).
+  chargeType String?
   // Uniqueness for posters the pairs below cannot express, e.g. one
   // late-dispatch penalty per order and seller: "late-dispatch:<order>:<seller>".
   idempotencyKey String? @unique

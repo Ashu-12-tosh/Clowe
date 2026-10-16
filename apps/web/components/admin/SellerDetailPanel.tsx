@@ -111,6 +111,36 @@ export default function SellerDetailPanel({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  /** The admin's VIP flag: no handling fee on new orders. */
+  async function toggleVip() {
+    if (!detail || busy) return;
+    setBusy('vip');
+    try {
+      await api(`/api/admin/sellers/${sellerId}/vip`, { method: 'PATCH', auth: true, body: { vip: !detail.vip }, success: detail.vip ? 'VIP removed' : 'VIP set' });
+      await load();
+    } catch (err) {
+      setActionError(err instanceof ApiRequestError ? err.message : 'Could not change the VIP flag');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** An admin penalty (owner's Batch 2), with the reason the seller sees; deducted from payout. */
+  async function penalise(kind: 'COUNTERFEIT_LISTING' | 'INACCURATE_TRYON_DATA') {
+    const what = kind === 'COUNTERFEIT_LISTING' ? 'a counterfeit or non-compliant listing' : 'inaccurate try-on data';
+    const reason = prompt(`Penalty for ${what} on ${detail?.shopName}. Reason (shown to the seller):`);
+    if (!reason || reason.trim().length < 5 || busy) return;
+    setBusy(`penalty:${kind}`);
+    try {
+      await api(`/api/admin/sellers/${sellerId}/penalties`, { auth: true, body: { kind, reason: reason.trim() }, success: 'Penalty applied — deducted from the next payout' });
+      await load();
+    } catch (err) {
+      setActionError(err instanceof ApiRequestError ? err.message : 'Could not apply the penalty');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   /** "Needs more info": the applicant is told what to send (app, SMS, e-mail). */
   async function requestInfo() {
     const message = prompt(`What does ${detail?.shopName} need to send? (shown to the seller)`);
@@ -658,6 +688,19 @@ export default function SellerDetailPanel({
                     </ul>
                   </div>
                 )}
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]" data-commercial-actions>
+                <span className="rounded bg-cream-100 px-2 py-1 font-semibold text-ink-900">Plan: {detail.plan}</span>
+                <label className="flex items-center gap-1.5 font-semibold text-gray-700">
+                  <input type="checkbox" name="vip" checked={detail.vip} onChange={() => void toggleVip()} disabled={!!busy} />
+                  VIP (no handling fee)
+                </label>
+                <button onClick={() => void penalise('COUNTERFEIT_LISTING')} disabled={!!busy} data-action="penalty-counterfeit" className="rounded border border-red-300 px-2 py-1 font-semibold text-red-700 disabled:opacity-50">
+                  Penalty: counterfeit listing
+                </button>
+                <button onClick={() => void penalise('INACCURATE_TRYON_DATA')} disabled={!!busy} data-action="penalty-tryon" className="rounded border border-red-300 px-2 py-1 font-semibold text-red-700 disabled:opacity-50">
+                  Penalty: inaccurate try-on data
+                </button>
+              </div>
               <div className="mt-3 rounded-lg border border-gray-200 p-3 text-[11px]" data-application>
                 <p className="font-semibold text-ink-900">
                   Application {detail.application.applicationId}
