@@ -1,4 +1,12 @@
 /**
+ * The version of the Terms and Conditions of Use and the Privacy Policy a
+ * person accepts when they sign in ("By continuing you confirm you are 18+
+ * and agree to…"). Stored on the account; change it when either document
+ * changes in a way that needs accepting again.
+ */
+export const TERMS_VERSION = '2026-10-16';
+
+/**
  * The legal entity behind the site — what payment gateways (Cashfree) check
  * the website for. Admin-editable platform settings, never hard-coded on a
  * page: the footer, Contact Us, About and every policy page read them.

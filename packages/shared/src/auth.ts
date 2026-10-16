@@ -36,6 +36,8 @@ export const verifyOtpSchema = z.object({
    * says a new PIN must be set (pinResetRequired).
    */
   purpose: z.enum(['LOGIN', 'PIN_RESET']).default('LOGIN'),
+  /** The Terms/Privacy version shown beside the button ("By continuing you…"). */
+  termsVersion: z.string().trim().max(20).optional(),
 });
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
 
@@ -105,7 +107,12 @@ export const pinSchema = z.string().regex(/^\d{4}$/, 'PIN must be 4 digits');
 export const checkPhoneSchema = z.object({ phone: phoneSchema });
 
 /** POST /api/auth/pin-login */
-export const pinLoginSchema = z.object({ phone: phoneSchema, pin: pinSchema });
+export const pinLoginSchema = z.object({
+  phone: phoneSchema,
+  pin: pinSchema,
+  /** The Terms/Privacy version shown beside the button ("By continuing you…"). */
+  termsVersion: z.string().trim().max(20).optional(),
+});
 
 /** POST /api/auth/me/set-pin. confirmPin, when sent, must match. */
 export const setPinSchema = z

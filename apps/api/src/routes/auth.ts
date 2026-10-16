@@ -14,6 +14,7 @@ import {
   refreshTokenSchema,
   updatePreferencesSchema,
   updateProfileSchema,
+  TERMS_VERSION,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { consumeOtp } from '../services/authService';
@@ -61,11 +62,26 @@ authRouter.post('/check-phone', async (req, res, next) => {
 });
 
 // Quick login with the 4-digit PIN (no OTP/SMS cost).
+/**
+ * Signing in with the consent line shown ("By continuing you confirm you are
+ * 18+ and agree to the Terms and Privacy Policy") accepts that version: stored
+ * on the account the first time it changes. A version other than the current
+ * one (a stale page) is not recorded.
+ */
+async function recordTermsAcceptance(userId: string, termsVersion: string | undefined): Promise<void> {
+  if (termsVersion !== TERMS_VERSION) return;
+  await prisma.user.updateMany({
+    where: { id: userId, OR: [{ termsVersion: null }, { NOT: { termsVersion: TERMS_VERSION } }] },
+    data: { termsVersion: TERMS_VERSION, termsAcceptedAt: new Date() },
+  });
+}
+
 authRouter.post('/pin-login', otpVerifyLimiter, async (req, res, next) => {
   const { phone } = req.body ?? {};
   try {
     const input = pinLoginSchema.parse(req.body);
     const data = await authService.pinLogin(input.phone, input.pin);
+    await recordTermsAcceptance(data.user.id, input.termsVersion);
     setRefreshCookie(res, data.refreshToken);
     auditLogin(req, 'SUCCESS', {
       userId: data.user.id,
@@ -114,6 +130,7 @@ authRouter.post('/verify-otp', otpVerifyLimiter, async (req, res, next) => {
   try {
     const input = verifyOtpSchema.parse(req.body);
     const data = await authService.verifyOtp(input);
+    await recordTermsAcceptance(data.user.id, input.termsVersion);
     setRefreshCookie(res, data.refreshToken);
     auditLogin(req, 'SUCCESS', {
       userId: data.user.id,

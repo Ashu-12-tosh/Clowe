@@ -9,7 +9,7 @@ import ResendOtp from '@/components/auth/ResendOtp';
 import LoginMethodChoice from '@/components/auth/LoginMethodChoice';
 import { lastLoginMethod, rememberLoginMethod as rememberMethod, type LoginMethod } from '@/lib/loginMethod';
 import { closeLogin } from '@/lib/returnTo';
-import { phoneSubmitAction, preselectedLoginMethod, type AuthTokensResponse, type AuthUser, type OtpRequestResult, type UserRole } from '@clowe/shared';
+import { TERMS_VERSION, phoneSubmitAction, preselectedLoginMethod, type AuthTokensResponse, type AuthUser, type OtpRequestResult, type UserRole } from '@clowe/shared';
 import {
   api,
   ApiRequestError,
@@ -261,7 +261,7 @@ export default function LoginPage() {
     try {
       setPinFailed(false);
       const data = await api<AuthTokensResponse>('/api/auth/pin-login', {
-        body: { phone, pin: pinValue },
+        body: { phone, pin: pinValue, termsVersion: TERMS_VERSION },
       });
       finishAuth(data, 'pin');
     } catch (err) {
@@ -283,6 +283,7 @@ export default function LoginPage() {
           code: codeValue ?? code,
           referralCode: referralCode.trim() || undefined,
           ...(pinReset ? { purpose: 'PIN_RESET' } : {}),
+          termsVersion: TERMS_VERSION,
         },
       });
       finishAuth(data, 'otp');
@@ -524,6 +525,17 @@ export default function LoginPage() {
                     onOtp={() => void chooseOtp()}
                   />
                 )}
+                <p className="text-center text-[11px] leading-relaxed text-gray-500" data-login-consent>
+                  By continuing you confirm you are 18+ and agree to the{' '}
+                  <Link href="/pages/terms-conditions" className="font-semibold text-brand-600 hover:underline">
+                    Terms
+                  </Link>{' '}
+                  and{' '}
+                  <Link href="/pages/privacy-policy" className="font-semibold text-brand-600 hover:underline">
+                    Privacy Policy
+                  </Link>
+                  .
+                </p>
               </form>
             )}
 

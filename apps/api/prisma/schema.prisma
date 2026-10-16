@@ -274,6 +274,9 @@ model User {
   // Saved photo for AI try-on — uploaded once, reused on every "Try On Me"
   // (deleted with every try-on photo 24 hours after upload).
   tryOnPhotoUrl String?
+  // The Terms and Privacy Policy version accepted at sign-in, and when.
+  termsVersion    String?
+  termsAcceptedAt DateTime?
   // Consent to use AI Try-On (18+, the photo is of them or of a consenting
   // adult): when, and which wording. Null = not given, or withdrawn.
   tryOnConsentAt      DateTime?
