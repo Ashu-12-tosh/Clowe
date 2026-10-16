@@ -66,6 +66,15 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
       MESSAGING_PROVIDER: ${MESSAGING_PROVIDER:-mock}
+      # Email: Hostinger SMTP as no-reply@cloweshop.com (sends once SMTP_PASSWORD is set).
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-auto}
+      SMTP_HOST: ${SMTP_HOST:-smtp.hostinger.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-no-reply@cloweshop.com}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-Clowe <no-reply@cloweshop.com>}
+      MAIL_REPLY_TO: ${MAIL_REPLY_TO:-support@cloweshop.com}
+      EMAIL_DAILY_CAP: ${EMAIL_DAILY_CAP:-90}
       SHIPPING_PROVIDER: ${SHIPPING_PROVIDER:-mock}
       DELHIVERY_ENV: ${DELHIVERY_ENV:-staging}
       DELHIVERY_API_TOKEN: ${DELHIVERY_API_TOKEN:-}

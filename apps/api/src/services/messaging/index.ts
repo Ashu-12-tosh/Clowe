@@ -1,6 +1,7 @@
 import { env } from '../../env';
 import type { MessagingProvider, OutboundMessage } from './MessagingProvider';
 import { MockMessagingProvider } from './MockMessagingProvider';
+import { enqueueEmailSafe } from '../email';
 
 function createMessagingProvider(): MessagingProvider {
   switch (env.MESSAGING_PROVIDER) {
@@ -14,8 +15,15 @@ function createMessagingProvider(): MessagingProvider {
 
 export const messagingProvider = createMessagingProvider();
 
-/** Fire-and-forget send — never lets a messaging failure break the main flow. */
+/**
+ * Fire-and-forget send — never lets a messaging failure break the main flow.
+ * Email goes into the email queue (Hostinger SMTP); WhatsApp/SMS to the provider.
+ */
 export function sendMessageSafe(message: OutboundMessage): void {
+  if (message.channel === 'email') {
+    enqueueEmailSafe({ to: message.to, kind: 'message', title: message.subject ?? 'A message from Clowe', subject: message.subject, body: message.body });
+    return;
+  }
   messagingProvider.send(message).catch((err) => {
     console.error('[clowe-api] messaging send failed:', err);
   });

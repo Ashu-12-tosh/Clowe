@@ -30,6 +30,7 @@ const NAV: DashNavItem[] = [
   { href: '/admin/inventory', label: 'Inventory & Warehouse', icon: '🏭' },
   { href: '/admin/ads', label: 'Ads & sponsorship', icon: '📣' },
   { href: '/admin/ai', label: 'AI usage', icon: '✨' },
+  { href: '/admin/emails', label: 'Emails', icon: '✉️' },
   { href: '/admin/seller-referrals', label: 'Referrals', icon: '🤝' },
   { href: '/admin/audit', label: 'Audit Logs', icon: '📋' },
   { href: '/admin/csp-reports', label: 'CSP Reports', icon: '🛡' },

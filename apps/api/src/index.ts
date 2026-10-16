@@ -18,6 +18,7 @@ import { startFeeChangeJob } from './services/feeChanges';
 import { logOtpProviderStatus } from './services/otp';
 import { startSearchLogCleanup } from './services/searchAnalytics';
 import { startQuerySuggestionRefresh } from './services/querySuggestions';
+import { logEmailProviderStatus, startEmailJobs } from './services/email';
 
 const app = createApp();
 
@@ -29,6 +30,7 @@ app.listen(env.PORT, () => {
   logOtpProviderStatus();
   logKycProviderStatus();
   logShippingProviderStatus();
+  logEmailProviderStatus();
   void logStorageStatus();
 });
 
@@ -60,3 +62,6 @@ startSearchLogCleanup();
 // Query suggestions are built from the catalog and the search log in the
 // background - at boot, then every 15 minutes - and never per keystroke.
 startQuerySuggestionRefresh();
+
+// Email: notifications into the queue, and the queue out within the daily cap - every 30 seconds.
+startEmailJobs();

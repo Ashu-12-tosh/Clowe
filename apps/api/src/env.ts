@@ -98,6 +98,19 @@ const envSchema = z.object({
   REFERRAL_REWARD_PAISE: z.coerce.number().int().min(0).default(10000),
   // 'mock' logs WhatsApp/SMS/email to the console. MSG91/Gupshup/SES later.
   MESSAGING_PROVIDER: z.enum(['mock']).default('mock'),
+  // --- Email (Hostinger SMTP, from no-reply@cloweshop.com) ---
+  // 'auto': SMTP when SMTP_PASSWORD is set (never under tests), else the mock,
+  // which only logs. Emails queue in email_outbox and send in the background.
+  EMAIL_PROVIDER: z.enum(['auto', 'mock', 'smtp']).default('auto'),
+  SMTP_HOST: z.string().default('smtp.hostinger.com'),
+  SMTP_PORT: z.coerce.number().int().default(465),
+  SMTP_USER: z.string().default('no-reply@cloweshop.com'),
+  SMTP_PASSWORD: optionalSecret,
+  MAIL_FROM: z.string().default('Clowe <no-reply@cloweshop.com>'),
+  MAIL_REPLY_TO: z.string().default('support@cloweshop.com'),
+  // Emails a day (IST), held below Hostinger's per-mailbox limit; the rest
+  // wait in the queue for the next day.
+  EMAIL_DAILY_CAP: z.coerce.number().int().min(0).default(90),
   // --- Shipping: Delhivery is the only courier ---
   // 'mock' imitates Delhivery (no network, no money); 'delhivery' calls its
   // API with DELHIVERY_API_TOKEN.

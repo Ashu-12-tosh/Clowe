@@ -148,6 +148,23 @@ function financialYear(month: string): string {
   return `${start}-${String((start + 1) % 100).padStart(2, '0')}`;
 }
 
+/** Tells the seller (in the app, and by email through the notification bridge) that the invoice is ready. */
+async function notifyInvoiceReady(sellerId: string, month: string, number: string, totalPaise: number): Promise<void> {
+  const seller = await prisma.sellerProfile.findUnique({ where: { id: sellerId }, select: { userId: true } });
+  if (!seller) return;
+  const [y, m] = month.split('-').map(Number);
+  const label = new Date(Date.UTC(y!, m! - 1, 1)).toLocaleString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  await prisma.notification.create({
+    data: {
+      userId: seller.userId,
+      type: 'SELLER_INVOICE',
+      title: `Your ${label} invoice is ready`,
+      body: `Clowe's tax invoice ${number} for ${label} is ready: ₹${(totalPaise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} in fees and charges, including GST. You can view and download it in Billing.`,
+      linkHref: `/seller/billing/invoices/${month}`,
+    },
+  });
+}
+
 /** Issue a month's invoice (once): fix its number and figures. Null when there is nothing to invoice. */
 export async function issueMonthlyInvoice(sellerId: string, month: string): Promise<SellerMonthlyInvoice | null> {
   const existing = await prisma.sellerTaxInvoice.findUnique({ where: { sellerId_month: { sellerId, month } } });
@@ -164,6 +181,7 @@ export async function issueMonthlyInvoice(sellerId: string, month: string): Prom
     const document = { ...doc, number, issuedAt: issuedAt.toISOString() };
     try {
       await prisma.sellerTaxInvoice.create({ data: { sellerId, month, number, issuedAt, document: document as unknown as object } });
+      await notifyInvoiceReady(sellerId, month, number, doc.totals.totalPaise);
       return document;
     } catch (err) {
       const again = await prisma.sellerTaxInvoice.findUnique({ where: { sellerId_month: { sellerId, month } } });

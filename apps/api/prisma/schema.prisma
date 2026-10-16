@@ -2853,3 +2853,29 @@ model AiUsage {
   @@index([userKey, createdAt])
   @@map("ai_usage")
 }
+
+/// Outgoing email (Hostinger SMTP, from no-reply@cloweshop.com): queued, sent
+/// in the background with retries, and held under a daily cap.
+model EmailOutbox {
+  id            String    @id @default(cuid())
+  /// One email per source (e.g. n:<notificationId>), so nothing is sent twice.
+  dedupeKey     String?   @unique
+  kind          String
+  toEmail       String
+  userId        String?
+  subject       String
+  html          String
+  text          String
+  /// PENDING, SENDING, SENT or FAILED (gave up after the last retry).
+  status        String    @default("PENDING")
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  lastError     String?
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([status, nextAttemptAt])
+  @@index([sentAt])
+  @@index([createdAt])
+  @@map("email_outbox")
+}

@@ -52,6 +52,7 @@ import { sendToUserSafe } from '../services/messaging';
 import { getSettings, setSetting } from '../services/settingsService';
 import { refundAdCredits } from '../services/sellerLedgerService';
 import { expireDueAds } from './ads';
+import { emailOutboxView, enqueueEmail, processEmailOutbox } from '../services/email';
 import {
   SELLER_REFERRAL_TARGET_PAISE,
   deliveredSalesPaise,
@@ -883,6 +884,38 @@ adminRouter.patch('/ai', async (req, res, next) => {
       metadata: { patch },
     });
     res.json({ success: true, data: next_ });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Email (no-reply@cloweshop.com): today's count against the cap, the queue, the latest.
+adminRouter.get('/emails', async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await emailOutboxView() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// One test email, queued and sent straight away (it counts against the cap).
+adminRouter.post('/emails/test', async (req, res, next) => {
+  try {
+    const { to } = z.object({ to: z.string().trim().email().max(200) }).parse(req.body);
+    const queued = await enqueueEmail({
+      to,
+      kind: 'TEST',
+      title: 'Test email from Clowe',
+      body: `This is a test of Clowe's email, sent by an admin at ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} India time.
+
+If you can read this, email from no-reply@cloweshop.com works. Replies go to support@cloweshop.com.`,
+      ctaHref: '/',
+      ctaLabel: 'Open Clowe',
+    });
+    if (!queued) throw ApiError.badRequest('That email address cannot be used', 'EMAIL_INVALID');
+    const r = await processEmailOutbox();
+    auditSafe({ actorId: req.auth!.userId, actorRole: 'ADMIN', module: 'SETTINGS', action: 'Test email sent', entityType: 'EmailOutbox', entityId: 'test', summary: `Test email to ${to}`, metadata: { to, ...r } });
+    res.json({ success: true, data: { ...r, view: await emailOutboxView() } });
   } catch (err) {
     next(err);
   }
