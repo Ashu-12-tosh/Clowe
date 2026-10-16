@@ -2,7 +2,7 @@
 
 CLOWE SHOP— www.cloweshop.com
 
-Operated by CLOWE PARTNERS LLP, CIN: DLC30330G, registered office at A22, STREET NO. 21, MD MARG, GOPAL NAGAR, NAJAFGARH, NEW DELHI 110073
+Operated by CLOWE PARTNERS LLP, CIN: DLC30330G, registered office at {{legal.registeredAddress}}
 
 GSTIN: 07AAWFC9519L1ZL , PAN: AAWFC9519L
 
@@ -170,9 +170,9 @@ By accessing, browsing, registering on or transacting through the Platform, You 
 
 16.1 Complaints are received and disposed of in accordance with the Customer Support and Grievance Policy, under Rule 3(2) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021, Rule 4 of the Consumer Protection (E-Commerce) Rules, 2020 and Section 13 of the Digital Personal Data Protection Act, 2023.
 
-16.2 Grievance Officer: Name: Amit Designation: Grievance officer Address: A22, STREET NO. 21, MD MARG, GOPAL NAGAR, NAJAFGARH, NEW DELHI 110073 E-mail:  support@cloweshop.com Hours: 9AM to 5PM, Monday to Friday (excluding public holidays)
+16.2 Grievance Officer: Name: Amit Designation: Grievance officer Address: {{legal.registeredAddress}} E-mail:  support@cloweshop.com Hours: 9AM to 5PM, Monday to Friday (excluding public holidays)
 
-Nodal Officer: Nitin Designation: Nodal officer Address: A22, STREET NO. 21, MD MARG, GOPAL NAGAR, NAJAFGARH, NEW DELHI 110073 E-mail:  support@cloweshop.com.
+Nodal Officer: Nitin Designation: Nodal officer Address: {{legal.registeredAddress}} E-mail:  support@cloweshop.com.
 
 16.3 Complaints are acknowledged within twenty-four (24) hours and disposed of within fifteen (15) days; consumer complaints are acknowledged within forty-eight (48) hours and redressed within one (1) month. Complaints concerning content exposing a person’s private area, nudity, a sexual act, or impersonation including artificially morphed images are acted upon within twenty-four (24) hours.
 

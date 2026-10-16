@@ -2,7 +2,7 @@
 
 CLOWE SHOP— www.cloweshop.com
 
-Operated by CLOWE PARTNERS LLP, registered office at A22, STREET NO. 21, MD MARG, GOPAL NAGAR, NAJAFGARH, NEW DELHI 110073
+Operated by CLOWE PARTNERS LLP, registered office at {{legal.registeredAddress}}
 
 *Last updated: 12 October 2026*
 

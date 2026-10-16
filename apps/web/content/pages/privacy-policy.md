@@ -2,7 +2,7 @@
 
 CLOWE SHOP — www.cloweshop.com
 
-Operated by CLOWE PARTNERS LLP, CIN: DLC30330G, registered office at A22, STREET NO. 21, MD MARG, GOPAL NAGAR, NAJAFGARH, NEW DELHI 110073
+Operated by CLOWE PARTNERS LLP, CIN: DLC30330G, registered office at {{legal.registeredAddress}}
 
 *Last updated: 16 October 2026*
 
@@ -171,7 +171,7 @@ In relation to the personal data described here, the Company acts as a Data Fidu
 
 Grievance Officer (under Rule 3(2) of the Information Technology (Intermediary Guidelines and Digital Media Ethics Code) Rules, 2021 and Section 13 of the Digital Personal Data Protection Act, 2023)
 
-Name: Amit Designation: Grievance officer Address: A22, STREET NO. 21, MD MARG, GOPAL NAGAR, NAJAFGARH, NEW DELHI 110073 E-mail:  support@cloweshop.com Hours: 9AM to 5PM, Monday to Friday (excluding public holidays)
+Name: Amit Designation: Grievance officer Address: {{legal.registeredAddress}} E-mail:  support@cloweshop.com Hours: 9AM to 5PM, Monday to Friday (excluding public holidays)
 
 12.1 Complaints are acknowledged within twenty-four (24) hours and disposed of within fifteen (15) days. Consumer complaints are acknowledged within forty-eight (48) hours and redressed within one (1) month.
 

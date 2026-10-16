@@ -2,7 +2,7 @@
 
 CLOWE SHOP— www.cloweshop.com
 
-Operated by CLOWE PARTNERS LLP, registered office at A22, STREET NO. 21, MD MARG, GOPAL NAGAR, NAJAFGARH, NEW DELHI 110073
+Operated by CLOWE PARTNERS LLP, registered office at {{legal.registeredAddress}}
 
 *Last updated: 16 October 2026*
 
@@ -45,13 +45,13 @@ Level 1 — Customer Support: support@cloweshop.com/8929316316. Response within 
 
 Level 2 — Nodal Officer
 
-Name: Nitin Designation: Nodal officer Address: A22, STREET NO. 21, MD MARG, GOPAL NAGAR, NAJAFGARH, NEW DELHI 110073 E-mail:  support@cloweshop.com
+Name: Nitin Designation: Nodal officer Address: {{legal.registeredAddress}} E-mail:  support@cloweshop.com
 
 Appointed under Rule 4(3) of the Consumer Protection (E-Commerce) Rules, 2020 for coordination with law-enforcement agencies and to ensure compliance with the Information Technology Act, 2000 and the rules thereunder. Response within 72 hours.
 
 Level 3 — Grievance Officer
 
-Name: Amit Designation: Grievance officer Address: A22, STREET NO. 21, MD MARG, GOPAL NAGAR, NAJAFGARH, NEW DELHI 110073 E-mail:  support@cloweshop.com Hours: 9AM to 5PM, Monday to Friday (excluding public holidays)
+Name: Amit Designation: Grievance officer Address: {{legal.registeredAddress}} E-mail:  support@cloweshop.com Hours: 9AM to 5PM, Monday to Friday (excluding public holidays)
 
 3.2 A complaint to the Grievance Officer must state the complainant’s name and contact particulars, the order, ticket or listing reference, a clear statement of the grievance, the relief sought, and supporting documents.
 
