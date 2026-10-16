@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import type { AdLabel, ProductListItem } from '@clowe/shared';
 import AdBadge from '@/components/AdBadge';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
+import { STORE_CLOSED_MESSAGE } from '@clowe/shared';
+import { useOrdersOpen } from '@/lib/ordersOpen';
 import { discountPercent, formatPaise } from '@/lib/format';
 import { BADGES_EVENT } from '@/components/Header';
 import WishlistButton from '@/components/WishlistButton';
@@ -48,8 +50,13 @@ export default function CategoryProductCard({
   const off = discountPercent(product.pricePaise, product.mrpPaise);
   const [state, setState] = useState<'idle' | 'busy' | 'added'>('idle');
   const [error, setError] = useState('');
+  const ordersOpen = useOrdersOpen();
 
   async function add(mode: 'cart' | 'buy') {
+    if (mode === 'buy' && ordersOpen === false) {
+      setError(STORE_CLOSED_MESSAGE);
+      return;
+    }
     if (!getStoredUser()) {
       router.push('/login');
       return;
@@ -166,7 +173,7 @@ export default function CategoryProductCard({
           <button
             onClick={() => void add('buy')}
             disabled={state === 'busy' || !product.inStock}
-            title="Buy now"
+            title={ordersOpen === false ? STORE_CLOSED_MESSAGE : 'Buy now'}
             aria-label={`Buy ${product.title} now`}
             className="flex w-9 shrink-0 items-center justify-center rounded-lg border border-brand-600 text-brand-600 transition hover:bg-brand-50 disabled:opacity-40"
           >

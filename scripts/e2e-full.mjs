@@ -757,6 +757,7 @@ async function flow4Products() {
     check(p.images[0]?.url?.includes('-w'), `image not stored resized: ${p.images[0]?.url}`);
     S.simpleId = p.id;
     S.simpleSlug = p.slug;
+    S.simpleCategoryId = p.categoryId;
     S.simpleVariantId = p.variants[0].id;
   }, { page, needs: ['approved'], key: 'simple' });
 
@@ -896,6 +897,17 @@ async function flow5Edits() {
 // ---------------------------------------------------------------------------
 async function flow6TryOn() {
   const F = '6 Try-on';
+  await step(F, 'the seller has try-on credits (free grant at approval, else added by admin)', async () => {
+    const p = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
+    if (p.tryOnCredits < 5) {
+      await apiOk('POST', `/api/admin/sellers/${S.sellerId}/tryon-credits`, S.adminToken, { credits: 20, charge: false, note: `E2E ${RUN}` });
+    }
+    const after = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
+    check(after.tryOnCredits >= 5, `credits ${after.tryOnCredits}`);
+    const lots = await prisma.tryOnCreditLot.findMany({ where: { sellerId: S.sellerId } });
+    check(lots.some((l) => l.source === 'FREE_GRANT' || l.source === 'ADMIN'), `lots: ${lots.map((l) => l.source).join(', ')}`);
+  }, { needs: ['approved'], key: 'tryonCredits' });
+
   await step(F, 'shopper try-on: result shown, seller credits down, shopper counted', async () => {
     S.tryShopper = await seedUser('CUSTOMER', `E2E TryOn ${RUN}`);
     const page = await newPage('tryon');
@@ -924,116 +936,241 @@ async function flow6TryOn() {
     const quota = await apiOk('GET', '/api/tryon/quota', token);
     check(JSON.stringify(quota).match(/"used(Today)?":\s*1|"todayUsed":\s*1|"remaining/), `quota after one run: ${JSON.stringify(quota)}`);
     S.tryToken = token;
-  }, { page: () => S.tryPage, needs: ['live', 'cloth'], key: 'tryon' });
+  }, { page: () => S.tryPage, needs: ['live', 'cloth', 'tryonCredits'], key: 'tryon' });
 
-  await step(F, 'refused when the seller has no credits left', async () => {
-    await prisma.sellerProfile.update({ where: { id: S.sellerId }, data: { tryOnCredits: 0 } });
+  await step(F, 'the same photo on the same product again within 24 hours is free', async () => {
+    const last = await prisma.tryOnHistory.findFirst({ where: { userId: S.tryShopper.id, productId: S.clothId, status: 'SUCCESS' }, orderBy: { createdAt: 'desc' } });
+    const before = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
+    const r = await apiOk('POST', '/api/tryon', S.tryToken, { productId: S.clothId, photoRef: last.inputImageUrl });
+    check(r.status === 'SUCCESS', `repeat run: ${JSON.stringify(r).slice(0, 120)}`);
+    const after = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
+    check(after.tryOnCredits === before.tryOnCredits, `credits ${before.tryOnCredits} → ${after.tryOnCredits} on a repeat`);
+  }, { needs: ['tryon'] });
+
+  await step(F, 'at zero credits the button goes, a new photo is refused, and the seller is told', async () => {
+    await prisma.tryOnCreditLot.updateMany({ where: { sellerId: S.sellerId }, data: { remaining: 0 } });
+    await prisma.sellerProfile.update({ where: { id: S.sellerId }, data: { tryOnCredits: 1, tryOnZeroNotifiedAt: null } });
     const page = S.tryPage;
-    const runsBefore = await prisma.tryOnHistory.count({ where: { productId: S.clothId, status: 'SUCCESS' } }).catch(() => null);
     try {
-      await goto(page, `/products/${S.clothSlug}/tryon`);
-      const gen = page.getByRole('button', { name: /Generate (another|my) try-on/ });
-      if (await gen.isVisible().catch(() => false) && (await gen.isEnabled())) await gen.click();
-      const said = page.getByText(/credit|unavailable|isn.t available|not available|paused/i).first();
-      await said.waitFor({ timeout: 30_000 });
-      const runsAfter = await prisma.tryOnHistory.count({ where: { productId: S.clothId, status: 'SUCCESS' } }).catch(() => null);
-      check(runsBefore === null || runsAfter <= runsBefore, 'a try-on ran at zero credits');
+      // A new shopper uses the last credit; the seller hears about it.
+      const other = await seedUser('CUSTOMER', `E2E TryOn2 ${RUN}`);
+      await prisma.user.update({ where: { id: other.id }, data: { tryOnConsentAt: new Date(), tryOnConsentVersion: (await prisma.user.findUnique({ where: { id: S.tryShopper.id } })).tryOnConsentVersion } });
+      const otherPage = await newPage('tryon-other');
+      await pinLogin(otherPage, other.phone, other.pin);
+      const otherToken = await tokenOf(otherPage);
+      await otherPage.close();
+      const photo = await makeImage('other-photo.jpg', 800, 1200, '#3a4f6b');
+      const up = await upload(otherToken, '/api/uploads/private', 'images', photo, 'TRYON_PHOTO');
+      const ref = up.json?.data?.items?.[0]?.ref;
+      const used = await apiOk('POST', '/api/tryon', otherToken, { productId: S.clothId, photoRef: ref });
+      check(used.status === 'SUCCESS', 'the last credit did not run');
+      const pdp = await apiOk('GET', `/api/products/${S.clothSlug}`, otherToken);
+      check(pdp.tryOnEligible === false, 'the product still offers try-on at zero credits');
+      await goto(page, `/products/${S.clothSlug}`);
+      await page.locator('h1').first().waitFor({ timeout: 120_000 });
+      check(!(await page.getByText('✨ AI Try-On').count()), 'the Try-On box is still on the product page');
+      const photo2 = await makeImage('other-photo-2.jpg', 800, 1200, '#5b3a6b');
+      const up2 = await upload(otherToken, '/api/uploads/private', 'images', photo2, 'TRYON_PHOTO');
+      const refused = await api('POST', '/api/tryon', otherToken, { productId: S.clothId, photoRef: up2.json?.data?.items?.[0]?.ref });
+      check(refused.json?.error?.code === 'TRYON_NOT_ELIGIBLE', `a new photo at zero: ${JSON.stringify(refused.json).slice(0, 120)}`);
+      const told = await prisma.notification.findFirst({ where: { userId: S.sellerUserId, type: 'SELLER_TRYON' } });
+      check(told, 'the seller was not told the credits ran out');
     } finally {
-      await prisma.sellerProfile.update({ where: { id: S.sellerId }, data: { tryOnCredits: 20 } });
+      await apiOk('POST', `/api/admin/sellers/${S.sellerId}/tryon-credits`, S.adminToken, { credits: 20, charge: false, note: `E2E ${RUN} refill` });
     }
   }, { needs: ['tryon'] });
 }
 
 // ---------------------------------------------------------------------------
-// 7 Ads and promotions
+// 7 Seller Wallet, plans, advertising, sponsorship, try-on credits (Batch 2)
 // ---------------------------------------------------------------------------
-async function promoBalance(sellerId) {
-  const r = await apiOk('GET', '/api/seller/promotion-credits', S.sellerToken);
-  return r.balancePaise;
+async function wallet() {
+  return apiOk('GET', '/api/seller/billing/wallet', S.sellerToken);
+}
+const istToday = () => new Date(Date.now() + 5.5 * 3_600_000).toISOString().slice(0, 10);
+const istDayPlus = (n) => new Date(Date.now() + 5.5 * 3_600_000 + n * 86_400_000).toISOString().slice(0, 10);
+
+/** Earlier E2E runs' bookings for today would hold the slots this run books. */
+async function freeTodaysE2eSlots() {
+  const day = new Date(`${istToday()}T00:00:00Z`);
+  await prisma.adSlotBooking.deleteMany({ where: { day, campaign: { seller: { shopName: { startsWith: 'E2E' } } } } });
 }
 
 async function flow7Ads() {
-  const F = '7 Ads';
+  const F = '7 Wallet/Plans/Ads';
   const page = S.sellerPage;
-  await step(F, 'promotion credits bought with the mock payment', async () => {
+  await step(F, 'Seller Wallet topped up with the mock payment', async () => {
     await goto(page, '/seller');
     await page.getByRole('button', { name: '₹5,000' }).click({ timeout: 120_000 });
-    S.promoBefore = await promoBalance(S.sellerId);
+    S.walletBefore = (await wallet()).walletPaise;
     await page.getByRole('button', { name: 'Add credits' }).click();
     await page.locator('[data-action=pay-credits]').click({ timeout: 30_000 });
     await toast(page, /Paid — ₹5,000/);
-    const after = await promoBalance(S.sellerId);
-    check(after - S.promoBefore === 500000, `balance ${S.promoBefore} → ${after}`);
+    const after = (await wallet()).walletPaise;
+    check(after - S.walletBefore === 500000, `wallet ${S.walletBefore} → ${after}`);
   }, { page, needs: ['approved'], key: 'credits' });
 
-  const settings = await apiOk('GET', '/api/admin/settings', S.adminToken).catch(() => null);
-  const price = (pl, d) => settings?.adPricing?.[pl]?.[String(d)];
-  for (const [placement, label, days, expected] of [
-    ['HOME_BANNER', /Home page banner/, 7, 49900],
-    ['CATEGORY_SPONSORED', /Sponsored slot/, 7, 29900],
-  ]) {
-    await step(F, `${placement} request shows the settings price (${expected / 100}) and is submitted`, async () => {
-      check(price(placement, days) === expected, `settings price for ${placement} ${days}d is ${price(placement, days)}`);
-      await goto(page, '/seller/ads/new');
-      await page.getByRole('button', { name: new RegExp(S.editedTitle ?? S.simpleTitle) }).first().click({ timeout: 120_000 });
-      await page.getByRole('button', { name: label }).click();
-      const dayBtn = page.getByRole('button', { name: new RegExp(`^${days} days`) });
-      const text = await dayBtn.innerText();
-      check(text.replace(/[,\s]/g, '').includes(`₹${expected / 100}`), `button says "${text}"`);
-      await dayBtn.click();
-      await page.locator('[data-action=submit-ad]').click();
-      await toast(page, /Ad submitted/);
-    }, { page, needs: ['credits', 'live'], key: `ad-${placement}` });
-  }
+  await step(F, 'the old ad booking page leads to Advertising', async () => {
+    await goto(page, '/seller/ads');
+    await page.waitForURL(/\/seller\/advertising/, { timeout: 60_000 });
+    const r = await api('POST', '/api/seller/ads', S.sellerToken, { productId: S.simpleId, placement: 'CATEGORY_SPONSORED', durationDays: 7 });
+    check(r.status === 410, `old booking API answered ${r.status}`);
+  }, { page, needs: ['approved'] });
 
-  await step(F, 'admin approves both; the balance goes down by the settings prices; they appear', async () => {
-    const admin = S.adminPage;
-    const before = await promoBalance(S.sellerId);
-    await goto(admin, '/admin/ads');
-    await admin.getByRole('button', { name: 'Pending', exact: true }).click({ timeout: 60_000 });
-    const ads = await prisma.ad.findMany({ where: { sellerId: S.sellerId, status: 'PENDING' } });
-    check(ads.length >= 2, `${ads.length} pending ads`);
-    await admin.locator('[data-action=approve-ad]').first().waitFor({ timeout: 30_000 }).catch(async () => {
-      const shown = await admin.locator('main').innerText();
-      throw new Error(`${ads.length} ads are PENDING in the database but the admin Pending tab shows: "${shown.slice(0, 120)}"`);
-    });
+  await step(F, 'plan: upgrade to Growth, paid from the wallet with GST', async () => {
+    const before = (await wallet()).walletPaise;
+    await goto(page, '/seller/plans');
+    await page.locator('[data-action=plan-GROWTH]').click({ timeout: 120_000 });
+    await toast(page, /You are on GROWTH/);
+    const after = (await wallet()).walletPaise;
+    check(before - after === 59900 + 10782, `wallet ${before} → ${after} (want −₹706.82)`);
+    await page.locator('[data-current-plan=GROWTH]').waitFor({ timeout: 30_000 });
+  }, { page, needs: ['credits'], key: 'growth' });
+
+  await step(F, 'Advertising: ₹500 welcome credit, a pay-per-click campaign from the form', async () => {
+    await goto(page, '/seller/advertising');
+    const credit = page.locator('[data-ad-credit]');
+    await credit.waitFor({ timeout: 120_000 });
+    await page.waitForFunction(() => /₹/.test(document.querySelector('[data-ad-credit]')?.textContent ?? ''), null, { timeout: 30_000 });
+    check(/₹500/.test(await credit.innerText()), `ad credit shows "${await credit.innerText()}"`);
+    await page.locator('select[name=productId]').selectOption(S.simpleId);
+    await page.locator('input[name=name]').fill(`E2E CPC ${RUN}`);
+    await page.locator('input[name=bid]').fill('5');
+    await page.locator('input[name=daily]').fill('100');
+    await page.getByRole('button', { name: 'Start campaign' }).click();
+    await page.getByText('Campaign started.').waitFor({ timeout: 30_000 });
+    const c = await prisma.adCampaign.findFirst({ where: { sellerId: S.sellerId, name: `E2E CPC ${RUN}` } });
+    check(c && c.bidPaise === 500 && c.status === 'ACTIVE', `campaign ${JSON.stringify(c && { bid: c.bidPaise, status: c.status })}`);
+    S.cpcId = c.id;
+  }, { page, needs: ['credits', 'live'], key: 'cpc' });
+
+  await step(F, 'shoppers see it labelled "Sponsored" in search; a click is charged once, from the credit', async () => {
+    const shopper = S.tryPage;
+    const title = (await prisma.product.findUnique({ where: { id: S.simpleId } })).title;
+    const word = title.split(/\s+/).find((w) => w.length >= 4 && /^[a-z]+$/i.test(w)) ?? title.split(/\s+/)[0];
+    const credit0 = (await wallet()).adCreditPaise;
     for (let i = 0; i < 2; i++) {
-      await admin.locator('[data-action=approve-ad]').first().click({ timeout: 120_000 });
-      await toast(admin, /Ad approved/);
-      await admin.waitForTimeout(500);
+      await goto(shopper, `/products?q=${encodeURIComponent(word)}`);
+      const card = shopper.locator(`a[href="/products/${S.simpleSlug}"]`).filter({ hasText: 'Sponsored' }).first();
+      await card.waitFor({ timeout: 120_000 });
+      await card.click();
+      await shopper.waitForURL(new RegExp(`/products/${S.simpleSlug}`), { timeout: 60_000 });
+      await shopper.waitForTimeout(1500);
     }
-    const after = await promoBalance(S.sellerId);
-    const live = await prisma.ad.findMany({ where: { sellerId: S.sellerId, status: 'ACTIVE' } });
-    check(live.length >= 2, `${live.length} live ads`);
-    // Charged at request or at approval: either way the total spent is the two prices.
-    const spent = S.promoBefore + 500000 - after;
-    check(spent === 49900 + 29900, `spent ${spent} (balance before approval ${before}, after ${after})`);
-    const home = await apiOk('GET', '/api/ads/active?placement=HOME_BANNER', null);
-    check(JSON.stringify(home).includes(S.simpleId) || JSON.stringify(home).includes(S.editedTitle ?? S.simpleTitle), `home banner ad not served by /api/ads/active: ${JSON.stringify(home).slice(0, 200)}`);
-  }, { page: S.adminPage, needs: ['ad-HOME_BANNER', 'ad-CATEGORY_SPONSORED'], key: 'adsLive' });
+    // This browser is headless Chrome, which says so in its user agent: its clicks are bots and cost nothing.
+    const clicks = await prisma.adClick.findMany({ where: { campaignId: S.cpcId } });
+    check(clicks.length === 2 && clicks.every((c) => !c.valid && c.reason === 'bot'), `browser clicks: ${clicks.map((c) => `${c.valid}/${c.reason}`).join(', ')}`);
+    check(clicks.every((c) => c.userId === S.tryShopper.id), 'the click was not tied to the signed-in shopper');
+    check((await wallet()).adCreditPaise === credit0, 'a bot click was charged');
+    // A shopper's own browser: the first click is charged, the same one again within 24 hours is not.
+    const human = (deviceId) =>
+      fetch(`${API}/api/ad-serve/click`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${S.tryToken}`, 'content-type': 'application/json', 'user-agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/128 Mobile Safari/537.36' },
+        body: JSON.stringify({ campaignId: S.cpcId, productId: S.simpleId, deviceId, slotType: 'SPONSORED_PRODUCT' }),
+      }).then((r) => r.json());
+    check((await human('e2e-phone-0001')).data?.counted === true, 'the first real click was not counted');
+    check((await human('e2e-phone-0002')).data?.counted === false, 'a repeat click within 24 hours was counted');
+    const credit1 = (await wallet()).adCreditPaise;
+    check(credit0 - credit1 === 500, `ad credit ${credit0} → ${credit1}`);
+  }, { page: () => S.tryPage, needs: ['cpc', 'tryon'] });
 
-  await step(F, 'an ad stops when its campaign ends', async () => {
-    const ad = await prisma.ad.findFirst({ where: { sellerId: S.sellerId, status: 'ACTIVE', placement: 'CATEGORY_SPONSORED' } });
-    await prisma.ad.update({ where: { id: ad.id }, data: { endAt: new Date(Date.now() - 60_000) } });
-    await api('GET', '/api/ads/active?placement=CATEGORY_SPONSORED', null);
-    const now = await prisma.ad.findUnique({ where: { id: ad.id } });
-    check(now.status !== 'ACTIVE', `still ${now.status} after its end`);
-  }, { needs: ['adsLive'] });
-
-  await step(F, 'a rejected request is refunded', async () => {
-    const before = await promoBalance(S.sellerId);
-    await apiOk('POST', '/api/seller/ads', S.sellerToken, { productId: S.simpleId, placement: 'CATEGORY_SPONSORED', durationDays: 15 });
-    const mid = await promoBalance(S.sellerId);
+  await step(F, 'homepage banner booked with an image, approved by admin, shown with its "Ad" label', async () => {
+    await freeTodaysE2eSlots();
+    await goto(page, '/seller/advertising');
+    await page.getByRole('button', { name: 'Premium placements' }).click({ timeout: 120_000 });
+    await page.locator('select[name=placement]').selectOption('HOMEPAGE_BANNER');
+    const banner = await makeImage('e2e-banner.jpg', 1500, 500, '#1f6b4f');
+    await page.locator('input[name=creative]').setInputFiles(banner);
+    await page.locator('form img').first().waitFor({ timeout: 60_000 });
+    await page.locator('input[name=headline]').fill(`E2E banner ${RUN}`);
+    const before = (await wallet()).walletPaise;
+    await page.getByRole('button', { name: /^Book for/ }).click();
+    await page.getByText(/^Booked\./).waitFor({ timeout: 30_000 });
+    const c = await prisma.adCampaign.findFirst({ where: { sellerId: S.sellerId, placement: 'HOMEPAGE_BANNER' }, orderBy: { createdAt: 'desc' } });
+    check(c?.status === 'PENDING_APPROVAL', `banner status ${c?.status}`);
+    const w = await wallet();
+    check(before - w.walletPaise === 100000 + 18000 || w.adCreditPaise < 50000, `wallet ${before} → ${w.walletPaise}`);
     const admin = S.adminPage;
     await goto(admin, '/admin/ads');
-    await admin.getByRole('button', { name: 'Pending', exact: true }).click({ timeout: 60_000 });
-    await admin.getByRole('button', { name: /✕ Reject/ }).first().click({ timeout: 120_000 });
-    await admin.getByPlaceholder('Reason shown to the seller').fill('E2E: rejected to test the refund');
-    await admin.locator('[data-action=reject-ad]').click();
-    await toast(admin, /Ad rejected/);
-    const after = await promoBalance(S.sellerId);
-    check(after === before, `balance ${before} → ${mid} on request → ${after} after rejection`);
-  }, { page: S.adminPage, needs: ['credits'] });
+    await admin.locator(`[data-review-row="${c.id}"] button`, { hasText: 'Approve' }).click({ timeout: 120_000 });
+    await admin.locator(`[data-review-row="${c.id}"]`).waitFor({ state: 'detached', timeout: 30_000 });
+    const shopper = S.tryPage;
+    await goto(shopper, '/');
+    const shown = shopper.locator(`a:has(img[alt="E2E banner ${RUN}"])`);
+    await shown.waitFor({ timeout: 120_000 });
+    check(/\bad\b/i.test(await shown.innerText()), 'the banner has no "Ad" label');
+    S.bannerId = c.id;
+  }, { page, needs: ['credits', 'live'] });
+
+  await step(F, 'a rejected creative is refunded and its day freed', async () => {
+    const before = (await wallet());
+    const booked = await apiOk('POST', '/api/seller/advertising/placements', S.sellerToken, { placement: 'CATEGORY_BANNER', categoryId: S.simpleCategoryId, startDate: istDayPlus(20), units: 1, creativeUrl: '/uploads/e2e-reject.jpg' });
+    const admin = S.adminPage;
+    await goto(admin, '/admin/ads');
+    const row = admin.locator(`[data-review-row="${booked.id}"]`);
+    await row.getByRole('button', { name: 'Reject…' }).click({ timeout: 120_000 });
+    await row.locator('input[name=reason]').fill('E2E: text unreadable');
+    await row.getByRole('button', { name: 'Reject and refund' }).click();
+    await row.waitFor({ state: 'detached', timeout: 30_000 });
+    const after = await wallet();
+    check(after.walletPaise === before.walletPaise && after.adCreditPaise === before.adCreditPaise, `wallet ${before.walletPaise}/${before.adCreditPaise} → ${after.walletPaise}/${after.adCreditPaise}`);
+    check((await prisma.adSlotBooking.count({ where: { campaignId: booked.id } })) === 0, 'the day was not freed');
+  }, { page: S.adminPage, needs: ['credits', 'live'] });
+
+  await step(F, 'Sponsorship: the rate card, a homepage featured product, labelled "Sponsored" for shoppers', async () => {
+    await goto(page, '/seller/sponsorship');
+    const card = page.locator('[data-rate-card]');
+    await card.waitFor({ timeout: 120_000 });
+    const text = await card.innerText();
+    check(/Homepage Featured Product/.test(text) && /₹199/.test(text) && /Brand Spotlight/.test(text), `rate card: ${text.slice(0, 200)}`);
+    await page.locator('select[name=placement]').selectOption('SP_HOMEPAGE_FEATURED');
+    await page.locator('select[name=productId]').selectOption(S.simpleId);
+    await page.getByRole('button', { name: /^Book for/ }).click();
+    await page.getByText(/^Booked\./).waitFor({ timeout: 30_000 });
+    const shopper = S.tryPage;
+    await goto(shopper, '/');
+    const sp = shopper.locator('section[aria-label=Sponsored]').locator(`a[href="/products/${S.simpleSlug}"]`).first();
+    await sp.waitFor({ timeout: 120_000 });
+    check(/sponsored/i.test(await sp.innerText()), 'the featured product has no "Sponsored" label');
+  }, { page, needs: ['credits', 'live'] });
+
+  await step(F, 'AI Try-On: a 100-credit pack bought from the wallet (₹1,500 + GST)', async () => {
+    const before = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
+    const w0 = (await wallet()).walletPaise;
+    await goto(page, '/seller/tryon');
+    await page.locator('[data-pack="100"] button').click({ timeout: 120_000 });
+    await toast(page, /Paid from your Seller Wallet/);
+    const after = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
+    check(after.tryOnCredits - before.tryOnCredits === 100, `credits ${before.tryOnCredits} → ${after.tryOnCredits}`);
+    const w1 = (await wallet()).walletPaise;
+    check(w0 - w1 === 177000, `wallet ${w0} → ${w1}`);
+  }, { page, needs: ['credits'] });
+
+  await step(F, "Billing: this month's invoice from Clowe lists the charges", async () => {
+    await goto(page, '/seller/billing');
+    const list = page.locator('[data-seller-invoices]');
+    await list.getByText(/View/).first().click({ timeout: 120_000 });
+    const inv = page.locator('[data-seller-invoice]');
+    await inv.waitFor({ timeout: 60_000 });
+    const text = await inv.innerText();
+    check(/CLOWE PARTNERS LLP/i.test(text), 'supplier is not Clowe Partners LLP');
+    check(/plan|subscription/i.test(text) && /try-on/i.test(text) && /advertis|sponsor/i.test(text), `invoice lines: ${text.slice(0, 300)}`);
+  }, { page, needs: ['growth'] });
+
+  await step(F, 'a fee change announced 30 days ahead reaches the seller, and can be cancelled', async () => {
+    const short = await api('POST', '/api/admin/fee-changes', S.adminToken, { patch: { fees: { gtPercent: 1.6 } }, effectiveAt: new Date(Date.now() + 10 * 86_400_000).toISOString() });
+    check(short.json?.error?.code === 'NOTICE_TOO_SHORT', `10 days' notice: ${short.status}`);
+    const fc = await apiOk('POST', '/api/admin/fee-changes', S.adminToken, { patch: { fees: { gtPercent: 1.6 } }, effectiveAt: new Date(Date.now() + 32 * 86_400_000).toISOString() });
+    try {
+      await goto(page, '/seller/billing');
+      const banner = page.locator('[data-fee-change]').first();
+      await banner.waitFor({ timeout: 120_000 });
+      check(/1\.5 → 1\.6/.test(await banner.innerText()), `banner: ${await banner.innerText()}`);
+    } finally {
+      await apiOk('POST', `/api/admin/fee-changes/${fc.id}/cancel`, S.adminToken);
+    }
+  }, { page, needs: ['approved'] });
 }
 
 // ---------------------------------------------------------------------------
@@ -1085,6 +1222,24 @@ async function flow8Shopper() {
     S.shopperToken = await tokenOf(page);
     S.addressId = u.addresses[0].id;
   }, { page, key: 'shopper' });
+
+  await step(F, 'store closed for orders: the shopper is told "launching soon" and refused; a test account is not', async () => {
+    await apiOk('PUT', '/api/admin/settings', S.adminToken, { storeOpenForOrders: false });
+    try {
+      const token = await tokenOf(page);
+      const refused = await api('POST', '/api/orders/checkout', token, { addressId: 'none', paymentMethod: 'COD' });
+      check(refused.json?.error?.code === 'STORE_NOT_OPEN', `checkout while closed: ${refused.status} ${refused.json?.error?.code}`);
+      await goto(page, '/checkout');
+      await page.locator('[data-store-closed]').first().waitFor({ timeout: 120_000 });
+      check(/launching soon/i.test(await page.locator('[data-store-closed]').first().innerText()), 'no launching-soon notice');
+      const me = await prisma.user.findFirst({ where: { phone: S.shopperPhone } });
+      await apiOk('PATCH', `/api/admin/users/${me.id}/test-account`, S.adminToken, { isTestAccount: true });
+      const open = await apiOk('GET', '/api/orders/availability', token);
+      check(open.open === true, 'a test account cannot order while closed');
+    } finally {
+      await apiOk('PUT', '/api/admin/settings', S.adminToken, { storeOpenForOrders: true });
+    }
+  }, { page, needs: ['admin'] });
 
   await step(F, 'forgot PIN: OTP, a new PIN, signed in', async () => {
     await page.evaluate(() => localStorage.clear());
@@ -1343,12 +1498,15 @@ async function flow9Fulfilment() {
     const rows = await ledger(S.sellerId, S.prepaidOrderId);
     const types = new Set(rows.map((r) => r.type));
     // GST is inside the sale (the buyer price includes it; the invoice splits it); TCS is GST_TCS.
-    const want = ['SALE_EARNING', 'COMMISSION', 'PLATFORM_FEE', 'GATEWAY_FEE', 'TDS', 'GST_TCS', 'FORWARD_FREIGHT'];
+    // Batch 2 fees: referral (COMMISSION), GT, collection (GATEWAY_FEE), handling, and GST on them.
+    const want = ['SALE_EARNING', 'COMMISSION', 'GT_CHARGE', 'GATEWAY_FEE', 'HANDLING_FEE', 'CLOWE_FEE_GST', 'TDS', 'GST_TCS', 'FORWARD_FREIGHT'];
     const missing = want.filter((t) => !types.has(t));
     check(!missing.length, `missing ${missing.join(', ')} (have ${[...types].join(', ')})`);
     const sale = rows.find((r) => r.type === 'SALE_EARNING');
     const item = await prisma.orderItem.findUnique({ where: { id: S.prepaidItemId } });
     check(item.gstRatePercent === 18, `GST rate recorded on the line: ${item.gstRatePercent}`);
+    check(item.feeModel === 2, `fee model on the line: ${item.feeModel}`);
+    check(!types.has('PLATFORM_FEE') && !types.has('CLOSING_FEE'), 'old fixed fees were charged');
     check(sale.amountPaise > 0, `sale earning ${sale.amountPaise}`);
   }, { needs: ['delivered'] });
 
@@ -1373,19 +1531,17 @@ async function flow9Fulfilment() {
     await page.getByText(/late|dispatch/i).first().waitFor({ timeout: 120_000 });
   }, { page, needs: ['shopper', 'live'] });
 
-  await step(F, 'seller cancels an order: ₹150 penalty, shown under Penalties', async () => {
+  await step(F, 'seller cancels an order: no cancellation penalty (Batch 2)', async () => {
     await apiOk('POST', '/api/cart/items', S.shopperToken, { variantId: S.simpleVariantId, quantity: 1 });
     const co = await apiOk('POST', '/api/orders/checkout', S.shopperToken, { addressId: S.addressId, paymentMethod: 'COD' });
     await goto(page, `/seller/orders/${co.orderId}`);
     await page.getByRole('button', { name: /Cancel (this order|my items|order)/i }).first().click({ timeout: 120_000 });
     await page.locator('select[name=cancelReason]').selectOption('Out of stock or discontinued');
     await page.getByRole('button', { name: /Cancel my items/ }).click();
-    await toast(page, /cancelled.*₹150|₹150.*penalty/i, 30_000);
+    const said = await toast(page, /item\(s\) cancelled/i, 30_000);
+    check(!/penalty/i.test(String(said ?? '')), `the toast mentions a penalty: ${said}`);
     const rows = await ledger(S.sellerId, co.orderId);
-    const pen = rows.find((r) => r.type === 'SELLER_CANCEL_PENALTY');
-    check(pen && Math.abs(pen.amountPaise) === 15000, `penalty rows: ${rows.map((r) => `${r.type}:${r.amountPaise}`).join(', ')}`);
-    await goto(page, '/seller/penalties');
-    await page.getByText(/cancel/i).first().waitFor({ timeout: 120_000 });
+    check(!rows.some((r) => r.type === 'SELLER_CANCEL_PENALTY'), `penalty rows: ${rows.map((r) => `${r.type}:${r.amountPaise}`).join(', ')}`);
   }, { page, needs: ['shopper', 'live'] });
 }
 
@@ -1751,7 +1907,7 @@ async function flow13Admin() {
     const rows = await prisma.auditLog.findMany({ where: { actorId: S.admin.id }, select: { action: true, module: true } });
     check(rows.length > auditBefore, 'no audit entries for this run\'s admin');
     const text = rows.map((r) => `${r.module}:${r.action}`).join(' | ');
-    const expect = [/SELLERS:/, /PRODUCTS:/, /SETTINGS:/, /ADS:/, /USERS:/, /BANNERS:/, /CATEGORIES:/, /CATEGORYFACETS:/];
+    const expect = [/SELLERS:/, /PRODUCTS:/, /SETTINGS:/, /ADVERTISING:/, /USERS:/, /BANNERS:/, /CATEGORIES:/, /CATEGORYFACETS:/];
     const missing = expect.filter((re) => !re.test(text));
     check(!missing.length, `no audit entry matching ${missing.join(', ')} — have: ${text.slice(0, 300)}`);
   }, { page, needs: ['admin'] });
@@ -1821,9 +1977,10 @@ async function prodChecks() {
     check(await page.locator('section[aria-roledescription=carousel]').count(), 'no hero carousel');
     const home = await (await fetch(`${PROD}/api/home`)).json();
     check((home.data?.banners ?? []).length > 0, 'no home banners in /api/home');
-    const ads = await fetch(`${PROD}/api/ads/active?placement=HOME_BANNER`).then((r) => r.json()).catch(() => null);
-    const sponsored = await page.getByText(/Sponsored/i).count();
-    check(sponsored > 0 || (ads?.data ?? []).length === 0, `ads exist (${(ads?.data ?? []).length}) but no Sponsored slot is shown`);
+    const ads = await fetch(`${PROD}/api/ad-serve?surface=HOME`).then((r) => r.json()).catch(() => null);
+    const served = (ads?.data?.items ?? []).length + (ads?.data?.banners ?? []).length;
+    const labelled = await page.locator('section[aria-label=Sponsored]').count();
+    check(served === 0 || labelled > 0, `ads are served (${served}) but no labelled slot is shown`);
   }, { page });
   await pb.close();
 }

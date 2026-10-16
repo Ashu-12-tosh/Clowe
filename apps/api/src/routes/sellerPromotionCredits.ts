@@ -9,6 +9,7 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
+import { assertMockPaymentAllowed } from '../services/storeOpen';
 import { paymentProvider } from '../services/payments';
 import { balance, settlePromotionPurchase } from '../services/sellerLedgerService';
 import { blockSuspendedWrites, requireSeller } from './seller';
@@ -67,6 +68,7 @@ sellerPromotionCreditsRouter.post('/purchase/:id/mock-pay', async (req, res, nex
       throw ApiError.badRequest('Mock payments are disabled', 'MOCK_DISABLED');
     }
     const { outcome } = mockPaySchema.parse(req.body);
+    if (outcome === 'success') await assertMockPaymentAllowed(req.auth!.userId);
     const purchase = await ownPurchase(req.seller!.id, req.params.id);
     const result = await settlePromotionPurchase(
       purchase.id,

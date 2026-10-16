@@ -166,14 +166,14 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
                 {/* A soft cream fade behind the words, over the picture's plain left side. */}
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-y-0 left-0 hidden w-4/5 bg-gradient-to-r from-cream-100/90 via-cream-100/60 to-transparent md:block lg:w-3/5 lg:from-cream-100/80 lg:via-cream-100/40"
+                  className="pointer-events-none absolute inset-y-0 left-0 hidden w-[75%] bg-gradient-to-r from-cream-100 via-cream-100/90 via-60% to-transparent md:block lg:w-3/5 lg:from-cream-100/80 lg:via-cream-100/40"
                 />
-                <div className="relative p-5 sm:p-8 md:flex md:h-full md:max-w-[62%] md:flex-col md:justify-center md:py-6 md:pl-14 md:pr-0 lg:max-w-[50%] xl:max-w-[46%]" data-hero-copy>
+                <div className="relative p-5 pb-10 sm:p-8 sm:pb-12 md:flex md:h-full md:max-w-[58%] md:flex-col md:justify-center md:py-6 md:pl-14 md:pr-0 lg:max-w-[50%] xl:max-w-[46%]" data-hero-copy>
                   <HeroCopy banner={banner} />
                 </div>
               </>
             ) : (
-              <div className="grid items-center gap-6 p-5 sm:p-8 md:h-full md:py-6 md:pl-14 lg:grid-cols-2 lg:gap-10" data-hero-copy>
+              <div className="grid items-center gap-6 p-5 pb-10 sm:p-8 sm:pb-12 md:h-full md:py-6 md:pl-14 lg:grid-cols-2 lg:gap-10" data-hero-copy>
                 <div>
                   <HeroCopy banner={banner} />
                 </div>

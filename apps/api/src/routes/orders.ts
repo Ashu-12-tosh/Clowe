@@ -31,6 +31,7 @@ import {
 import { chooseLostOutcome } from '../services/shipping/lostParcels';
 import { cancelOrderLines } from '../services/lineCancellation';
 import { feeSnapshots } from '../services/commercial';
+import { assertCanPlaceOrders, canPlaceOrders } from '../services/storeOpen';
 import { exchangeAllowed, raiseClaim, rulesForDelivery } from '../services/returnClaims';
 import { raiseComplaint } from '../services/complaintService';
 import { scanViews } from './track';
@@ -61,8 +62,19 @@ ordersRouter.use(requireAuth);
 // Checkout: cart → order (stock reserved) + gateway order
 // ---------------------------------------------------------------------------
 
+// Can this account place an order now? (The store may not be open yet.)
+ordersRouter.get('/availability', async (req, res, next) => {
+  try {
+    res.json({ success: true, data: { open: await canPlaceOrders(req.auth!.userId) } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 ordersRouter.post('/checkout', async (req, res, next) => {
   try {
+    // Before launch: no orders, COD included, except from admins and test accounts.
+    await assertCanPlaceOrders(req.auth!.userId);
     // Sellers/admins can browse the store from their dashboards, but buying
     // is customer-only.
     if (req.auth!.role !== 'CUSTOMER') {

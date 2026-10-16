@@ -21,6 +21,7 @@ import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import NotReturnable from '@/components/NotReturnable';
 import NonCancellable from '@/components/NonCancellable';
 import { formatPaise } from '@/lib/format';
+import { LaunchingSoon, useOrdersOpen } from '@/lib/ordersOpen';
 import { BADGES_EVENT } from '@/components/Header';
 import CheckoutStepper, { type CheckoutStep } from '@/components/checkout/CheckoutStepper';
 import CouponBox from '@/components/checkout/CouponBox';
@@ -92,6 +93,7 @@ function Step({
 export default function CheckoutPage() {
   const couponsEnabled = useCouponsEnabled();
   const router = useRouter();
+  const ordersOpen = useOrdersOpen();
   const [cart, setCart] = useState<CartView | null>(null);
   const [addresses, setAddresses] = useState<AddressInfo[] | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<string>('');
@@ -180,6 +182,7 @@ export default function CheckoutPage() {
 
   /** Carry the choices made here into the payment step. */
   function continueToPayment() {
+    if (ordersOpen === false) return;
     if (!selectedAddress) {
       setError('Pick a delivery address to continue');
       return;
@@ -253,6 +256,7 @@ export default function CheckoutPage() {
 
   return (
     <main className="mx-auto max-w-7xl px-4 pb-24 pt-4 lg:pb-8">
+      {ordersOpen === false && <LaunchingSoon className="mb-3" />}
       <nav className="flex items-center gap-2 text-xs text-gray-500">
         <Link href="/" className="hover:text-brand-600">
           Home
@@ -720,7 +724,7 @@ export default function CheckoutPage() {
           <div className="hidden lg:block">
             <button
               onClick={continueToPayment}
-              disabled={!selectedAddress}
+              disabled={!selectedAddress || ordersOpen === false}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 py-3.5 text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-50"
             >
               <LockIcon className="h-4 w-4" />
@@ -762,7 +766,7 @@ export default function CheckoutPage() {
         </div>
         <button
           onClick={continueToPayment}
-          disabled={!selectedAddress}
+          disabled={!selectedAddress || ordersOpen === false}
           className="rounded-lg bg-brand-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-50"
         >
           Continue to Payment

@@ -62,6 +62,8 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   // — here or from admin settings — brings the whole feature back with no
   // other change.
   couponsEnabled: false,
+  // Production opens for orders only when the admin says so.
+  storeOpenForOrders: env.NODE_ENV !== 'production',
   // Off until there is an FSSAI licence: Grocery and Supplements are hidden,
   // not deleted. See services/shopperVisibility.ts.
   foodCategoriesEnabled: false,
@@ -178,6 +180,8 @@ export async function getSettings(): Promise<PlatformSettings> {
       DEFAULT_SETTINGS.kycNameMatchMinScore,
     couponsEnabled:
       (byKey.get('couponsEnabled') as boolean | undefined) ?? DEFAULT_SETTINGS.couponsEnabled,
+    storeOpenForOrders:
+      (byKey.get('storeOpenForOrders') as boolean | undefined) ?? DEFAULT_SETTINGS.storeOpenForOrders,
     foodCategoriesEnabled:
       (byKey.get('foodCategoriesEnabled') as boolean | undefined) ??
       DEFAULT_SETTINGS.foodCategoriesEnabled,
@@ -230,6 +234,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     codMinOrderPaise: s.codMinOrderPaise,
     pdpOffers: s.pdpOffers,
     couponsEnabled: s.couponsEnabled,
+    storeOpenForOrders: s.storeOpenForOrders,
     legalEntity: s.legalEntity,
     returnWindowDays: s.returnWindowDays,
     gstUniformPercent: s.gstUniformPercent,

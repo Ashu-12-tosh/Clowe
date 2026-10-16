@@ -242,6 +242,9 @@ model User {
   email        String?   @unique
   role         Role      @default(CUSTOMER)
   isActive     Boolean   @default(true)
+  /// Marked by an admin: may order while the store is closed, and pay through
+  /// the mock gateway on production (owner's pre-launch switch).
+  isTestAccount Boolean  @default(false)
   // Profile
   dateOfBirth  DateTime?
   gender       String? // MALE | FEMALE | OTHER | PREFER_NOT_TO_SAY

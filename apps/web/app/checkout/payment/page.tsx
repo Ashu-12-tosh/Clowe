@@ -24,6 +24,7 @@ import {
 } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
+import { LaunchingSoon, useOrdersOpen } from '@/lib/ordersOpen';
 import { getPublicSettings } from '@/lib/settings';
 import CheckoutStepper from '@/components/checkout/CheckoutStepper';
 import {
@@ -79,6 +80,7 @@ function fmtShort(iso: string): string {
 
 function PaymentPageInner() {
   const router = useRouter();
+  const ordersOpen = useOrdersOpen();
   const searchParams = useSearchParams();
 
   const addressId = searchParams.get('addressId') ?? '';
@@ -187,6 +189,7 @@ function PaymentPageInner() {
 
   async function pay() {
     setError('');
+    if (ordersOpen === false) return;
     if (method === 'UPI' && upiId.trim() && upiState !== 'ok') {
       setError('Check your UPI ID before continuing');
       return;
@@ -338,6 +341,7 @@ function PaymentPageInner() {
 
   return (
     <main className="mx-auto max-w-7xl px-4 pb-24 pt-4 lg:pb-8">
+      {ordersOpen === false && <LaunchingSoon className="mb-3" />}
       <nav className="flex items-center gap-2 text-xs text-gray-500">
         <Link href="/cart" className="hover:text-brand-600">
           Cart
@@ -839,7 +843,7 @@ function PaymentPageInner() {
 
             <button
               onClick={() => void pay()}
-              disabled={placing}
+              disabled={placing || ordersOpen === false}
               className="t-btn mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 py-3.5 text-white transition hover:bg-brand-700 disabled:opacity-50"
             >
               <LockIcon className="h-4 w-4" />

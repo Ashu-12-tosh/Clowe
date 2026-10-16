@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { UserRole } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
+import { LaunchingSoon, useOrdersOpen } from '@/lib/ordersOpen';
 
 interface Props {
   variantId: string | null; // null until a size is picked
@@ -20,6 +21,7 @@ export default function AddToCartButton({ variantId, stock, mode = 'cart' }: Pro
   // Sellers/admins browse the store view-only (in useEffect — avoids hydration mismatch).
   const [role, setRole] = useState<UserRole | null>(null);
   useEffect(() => setRole(getStoredUser()?.role ?? null), []);
+  const ordersOpen = useOrdersOpen();
 
   if (role === 'SELLER' || role === 'ADMIN') {
     if (mode === 'buy') return null; // one notice is enough — shown on the cart-mode slot
@@ -28,6 +30,15 @@ export default function AddToCartButton({ variantId, stock, mode = 'cart' }: Pro
         <div className="w-full rounded-lg border border-gray-200 bg-cream-100 py-3 text-center text-sm font-semibold text-gray-500">
           👁 View only — {role === 'SELLER' ? 'seller' : 'admin'} accounts can&apos;t purchase
         </div>
+      </div>
+    );
+  }
+
+  // Before launch "Buy now" says so; the cart still works.
+  if (mode === 'buy' && ordersOpen === false) {
+    return (
+      <div className="flex-1">
+        <LaunchingSoon />
       </div>
     );
   }

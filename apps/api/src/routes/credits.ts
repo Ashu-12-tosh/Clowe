@@ -12,6 +12,7 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
+import { assertMockPaymentAllowed } from '../services/storeOpen';
 import { paymentProvider } from '../services/payments';
 
 export const creditsRouter = Router();
@@ -192,6 +193,7 @@ creditsRouter.post('/purchase/:id/mock-pay', async (req, res, next) => {
     }
     const userId = req.auth!.userId;
     const { outcome } = settleSchema.parse(req.body);
+    if (outcome === 'success') await assertMockPaymentAllowed(userId);
     const purchase = await prisma.creditPurchase.findFirst({
       where: { id: req.params.id, userId },
     });

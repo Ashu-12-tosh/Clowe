@@ -162,6 +162,14 @@ export interface PlatformSettings {
    */
   couponsEnabled: boolean;
   /**
+   * Whether shoppers can place orders (owner's pre-launch switch). Off until
+   * payments and shipping are live: browsing, search, wishlist and cart work,
+   * "Buy now", "Place order" and checkout say "We're launching soon", and the
+   * API refuses every order, COD too — except from admins and accounts an
+   * admin marked as test accounts. Off by default on production.
+   */
+  storeOpenForOrders: boolean;
+  /**
    * Whether the food categories — Grocery and Supplements, with everything
    * under them — are open. Off until there is an FSSAI licence.
    *
@@ -206,6 +214,8 @@ export interface PublicSettings {
   codMinOrderPaise: number;
   pdpOffers: PdpOffer[];
   couponsEnabled: boolean;
+  /** False until the admin opens the store for orders. */
+  storeOpenForOrders: boolean;
   /** Public by nature: every page that names the business reads it. */
   legalEntity: LegalEntity;
   /**
@@ -267,6 +277,7 @@ export const updateSettingsSchema = z.object({
   penaltyEnabled: z.boolean().optional(),
   kycNameMatchMinScore: z.number().int().min(0).max(100).optional(),
   couponsEnabled: z.boolean().optional(),
+  storeOpenForOrders: z.boolean().optional(),
   foodCategoriesEnabled: z.boolean().optional(),
   demoCatalogEnabled: z.boolean().optional(),
   // Each field optional: the admin form sends all six, but a partial update
@@ -432,3 +443,6 @@ export interface AdminSellerReferralRow {
 export const voidReferralSchema = z.object({
   reason: z.string().trim().min(5, 'Reason required (min 5 chars)').max(300),
 });
+
+/** What shoppers are told while the store is not yet open for orders. */
+export const STORE_CLOSED_MESSAGE = "We're launching soon — orders open shortly";

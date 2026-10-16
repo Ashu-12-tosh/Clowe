@@ -29,6 +29,22 @@ export default function AdminUsersPage() {
     return () => clearTimeout(t);
   }, [load]);
 
+  /** A test account may order while the store is closed (pre-launch switch). */
+  async function toggleTest(user: AdminUserRow) {
+    setError('');
+    try {
+      await api(`/api/admin/users/${user.id}/test-account`, {
+        method: 'PATCH',
+        body: { isTestAccount: !user.isTestAccount },
+        auth: true,
+        success: user.isTestAccount ? 'No longer a test account' : 'Marked as a test account',
+      });
+      load();
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
+    }
+  }
+
   async function toggleActive(user: AdminUserRow) {
     setError('');
     if (
@@ -99,6 +115,12 @@ export default function AdminUsersPage() {
                     {u.name ?? '—'}
                   </p>
                   <p className="text-xs text-gray-500">+91 {u.phone}</p>
+                  {u.role !== 'ADMIN' && (
+                    <label className="mt-1 flex items-center gap-1.5 text-[11px] text-gray-600" title="May order while the store is closed">
+                      <input type="checkbox" name="isTestAccount" checked={u.isTestAccount} onChange={() => void toggleTest(u)} data-test-account={u.id} />
+                      Test account
+                    </label>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">

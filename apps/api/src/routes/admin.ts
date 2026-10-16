@@ -556,10 +556,33 @@ adminRouter.get('/users', async (req, res, next) => {
       name: u.name,
       role: u.role,
       isActive: u.isActive,
+      isTestAccount: u.isTestAccount,
       orderCount: u._count.orders,
       createdAt: u.createdAt.toISOString(),
     }));
     res.json({ success: true, data: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// A test account may order while the store is closed and pay through the mock gateway.
+adminRouter.patch('/users/:id/test-account', async (req, res, next) => {
+  try {
+    const { isTestAccount } = z.object({ isTestAccount: z.boolean() }).parse(req.body);
+    const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, phone: true } });
+    if (!user) throw ApiError.notFound('User not found');
+    await prisma.user.update({ where: { id: user.id }, data: { isTestAccount } });
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'USERS',
+      action: isTestAccount ? 'Marked as test account' : 'Test account mark removed',
+      entityType: 'User',
+      entityId: user.id,
+      summary: `${isTestAccount ? 'Marked' : 'Unmarked'} ${user.phone.slice(0, 2)}******${user.phone.slice(-2)} as a test account`,
+    });
+    res.json({ success: true, data: { id: user.id, isTestAccount } });
   } catch (err) {
     next(err);
   }

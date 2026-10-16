@@ -44,6 +44,7 @@ export default function AdminSettingsPage() {
     holdDays: '',
   });
   const [couponsEnabled, setCouponsEnabled] = useState(false);
+  const [storeOpen, setStoreOpen] = useState(false);
   const [foodCategoriesEnabled, setFoodCategoriesEnabled] = useState(false);
   const [demoCatalogEnabled, setDemoCatalogEnabled] = useState(false);
   const [dispatch, setDispatch] = useState({ slaHours: '', afterHours: '', penaltyRupees: '', cancelRupees: '', enabled: true });
@@ -71,6 +72,7 @@ export default function AdminSettingsPage() {
         setTryonMin(toRupees(s.tryonMinPricePaise));
         setKycMinScore(String(s.kycNameMatchMinScore));
         setCouponsEnabled(s.couponsEnabled);
+        setStoreOpen(s.storeOpenForOrders);
         setFoodCategoriesEnabled(s.foodCategoriesEnabled);
         setDemoCatalogEnabled(s.demoCatalogEnabled);
         setSocial(s.socialLinks);
@@ -145,6 +147,7 @@ export default function AdminSettingsPage() {
           payoutHoldDays: Math.max(0, Math.round(Number(payout.holdDays) || 0)),
           kycNameMatchMinScore: Math.min(100, Math.max(0, Math.round(Number(kycMinScore) || 0))),
           couponsEnabled,
+          storeOpenForOrders: storeOpen,
           foodCategoriesEnabled,
           demoCatalogEnabled,
           dispatchSlaHours: Math.max(1, Math.round(Number(dispatch.slaHours) || 0)),
@@ -237,6 +240,23 @@ export default function AdminSettingsPage() {
           PAN and bank-account names scoring below this are flagged before approval. Bands: 100 direct
           match, 85–99 good partial, 60–84 moderate partial, 34–59 poor partial, 0–33 no match. Changing
           it re-grades every seller at once — nothing is re-verified or re-billed.
+        </p>
+      </div>
+
+      {/* Store open for orders (pre-launch switch) */}
+      <div className="mt-3 rounded-2xl border border-amber-200 bg-white p-4" data-store-open>
+        <h2 className="text-sm font-bold">&#128722; Store open for orders</h2>
+        <label className="mt-2 flex items-start gap-2 text-sm">
+          <input type="checkbox" name="storeOpenForOrders" checked={storeOpen} onChange={(e) => setStoreOpen(e.target.checked)} className="mt-0.5" />
+          <span>Shoppers can place orders</span>
+        </label>
+        <p className="mt-1 text-xs text-gray-400">
+          Leave off until payments and shipping are live. While off, browsing, search, wishlist and
+          cart work; &ldquo;Buy now&rdquo;, checkout and &ldquo;Place order&rdquo; say &ldquo;We&apos;re
+          launching soon &mdash; orders open shortly&rdquo;, and every order is refused, Cash on
+          Delivery too &mdash; except from admins and accounts marked as test accounts (Admin &rarr;
+          Users). On production, the mock payment gateway also refuses to mark anything paid for
+          anyone else.
         </p>
       </div>
 

@@ -35,6 +35,8 @@ export function trackAd(ad: { campaignId: string; slotType: string; productId?: 
   if (!ad.campaignId) return; // Premium featured cards are not campaigns
   api('/api/ad-serve/click', {
     method: 'POST',
+    // Signed in: the click is the shopper's, so a later order is attributed to the ad.
+    auth: true,
     body: { campaignId: ad.campaignId, slotType: ad.slotType, deviceId: deviceId(), ...(ad.productId ? { productId: ad.productId } : {}) },
   }).catch(() => {});
 }

@@ -196,6 +196,8 @@ export interface AdminUserRow {
   name: string | null;
   role: UserRole;
   isActive: boolean;
+  /** May order while the store is closed (owner's pre-launch switch). */
+  isTestAccount: boolean;
   orderCount: number;
   createdAt: string;
 }

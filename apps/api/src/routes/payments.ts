@@ -6,6 +6,7 @@ import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { paymentProvider, RazorpayProvider } from '../services/payments';
 import { settlePaymentFailure, settlePaymentSuccess } from '../services/orderService';
+import { assertMockPaymentAllowed } from '../services/storeOpen';
 
 export const paymentsRouter = Router();
 
@@ -29,6 +30,7 @@ paymentsRouter.post('/mock-pay', requireAuth, async (req, res, next) => {
       throw ApiError.badRequest('Mock payments are disabled', 'MOCK_DISABLED');
     }
     const { orderId, outcome } = mockPaySchema.parse(req.body);
+    if (outcome === 'success') await assertMockPaymentAllowed(req.auth!.userId);
     const order = await ownOrder(req.auth!.userId, orderId);
     if (!order.payment || order.payment.status !== 'CREATED') {
       throw ApiError.badRequest('This order is not awaiting payment');
