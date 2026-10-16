@@ -35,6 +35,7 @@ export const MOCK_ENV = {
   AI_PROVIDER: 'mock',
   MESSAGING_PROVIDER: 'mock',
   SHIPPING_PROVIDER: 'mock',
+  EMAIL_PROVIDER: 'mock',
   STORAGE_PROVIDER: 'local',
   DELHIVERY_ENV: 'staging',
   DELHIVERY_PRODUCTION_WRITES: 'false',
@@ -44,6 +45,7 @@ export const MOCK_ENV = {
   GEMINI_API_KEY: '',
   ANTHROPIC_API_KEY: '',
   SMS_PANEL_API_KEY: '',
+  SMTP_PASSWORD: '',
   CASHFREE_VERIFICATION_CLIENT_ID: '',
   CASHFREE_VERIFICATION_CLIENT_SECRET: '',
   RAZORPAY_KEY_ID: '',
@@ -64,8 +66,9 @@ export function assertMockOnly(env) {
     TRYON_PROVIDER: 'mock',
     AI_PROVIDER: 'mock',
     SHIPPING_PROVIDER: 'mock',
+    EMAIL_PROVIDER: 'mock',
   }).filter(([k, v]) => env[k] !== v);
-  if (wrong.length || env.DELHIVERY_API_TOKEN || env.FASHN_API_KEY) {
+  if (wrong.length || env.DELHIVERY_API_TOKEN || env.FASHN_API_KEY || env.GEMINI_API_KEY || env.SMTP_PASSWORD) {
     throw new Error(`refusing to run: not mock-only (${wrong.map(([k]) => k).join(', ') || 'a provider key is set'})`);
   }
 }
