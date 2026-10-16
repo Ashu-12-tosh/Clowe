@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { SellerProductDetail } from '@clowe/shared';
 import { api } from '@/lib/api';
 import ProductForm from '@/components/seller/ProductForm';
+import { SpinImagesPanel } from '@/components/seller/SpinImagesPanel';
 
 export default function EditProductPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const params = use(paramsPromise);
@@ -60,6 +61,7 @@ export default function EditProductPage({ params: paramsPromise }: { params: Pro
       <div className="mt-5">
         <ProductForm initial={product} />
       </div>
+      <SpinImagesPanel productId={product.id} initial={product.spinImages} />
     </div>
   );
 }

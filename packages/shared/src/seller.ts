@@ -285,6 +285,8 @@ export interface SellerProductDetail {
   tryOnEnabled: boolean;
   nonReturnable: boolean;
   nonCancellable: boolean;
+  /** The 360° view's images, in order (Pro and Premium). */
+  spinImages: string[];
   lowStockAlert: number;
   allowBackorders: boolean;
   variants: {

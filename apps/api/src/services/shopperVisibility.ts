@@ -78,7 +78,8 @@ export async function isHiddenSeller(sellerId: string): Promise<boolean> {
  * a later spread of one would silently drop it.
  */
 export async function visibleProductWhere(): Promise<Prisma.ProductWhereInput> {
-  return whereFrom(await shopperHidden());
+  // Over the seller's plan limit (owner's Batch 2): hidden, never deleted.
+  return { ...whereFrom(await shopperHidden()), planHidden: false };
 }
 
 export function whereFrom(hidden: ShopperHidden): Prisma.ProductWhereInput {
@@ -88,10 +89,10 @@ export function whereFrom(hidden: ShopperHidden): Prisma.ProductWhereInput {
   return or.length ? { NOT: { OR: or } } : {};
 }
 
-type ProductKey = { categoryId: string; sellerId: string };
+type ProductKey = { categoryId: string; sellerId: string; planHidden?: boolean };
 
 export function productTestFrom(hidden: ShopperHidden): (p: ProductKey) => boolean {
-  return (p) => hidden.categoryIds.has(p.categoryId) || hidden.sellerIds.has(p.sellerId);
+  return (p) => p.planHidden === true || hidden.categoryIds.has(p.categoryId) || hidden.sellerIds.has(p.sellerId);
 }
 
 /** For filtering rows already loaded: true when shoppers must not see the product. */

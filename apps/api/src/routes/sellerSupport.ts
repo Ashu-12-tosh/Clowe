@@ -18,6 +18,7 @@ import {
   type TicketStatusValue,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { planOf } from '../services/planService';
 import { getSettings } from '../services/settingsService';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -303,13 +304,16 @@ sellerSupportRouter.post('/tickets', async (req, res, next) => {
       );
     }
 
+    // Priority seller support (Pro) and dedicated support (Premium) go to the front of the queue.
+    const plan = await planOf(sellerId);
+    const priority = plan === 'PREMIUM' ? 'URGENT' : plan === 'PRO' && (input.priority === 'LOW' || input.priority === 'MEDIUM') ? 'HIGH' : input.priority;
     const ticket = await prisma.supportTicket.create({
       data: {
         reference: await nextReference(),
         sellerId,
         category: input.category,
-        subject: input.subject,
-        priority: input.priority,
+        subject: plan === 'PREMIUM' ? `[Dedicated] ${input.subject}` : input.subject,
+        priority,
         orderNumber: input.orderNumber || null,
         productId: input.productId || null,
         lastMessageAt: new Date(),

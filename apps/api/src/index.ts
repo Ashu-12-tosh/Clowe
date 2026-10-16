@@ -11,6 +11,7 @@ import { startTrackingPoll } from './services/shipping/tracking';
 import { startLostParcelSweep } from './services/shipping/lostParcels';
 import { startComplaintBreachSweep } from './services/complaintService';
 import { startSellerInvoiceJob } from './services/sellerInvoice';
+import { startPlanJobs } from './services/planService';
 import { logOtpProviderStatus } from './services/otp';
 import { startSearchLogCleanup } from './services/searchAnalytics';
 import { startQuerySuggestionRefresh } from './services/querySuggestions';
@@ -41,6 +42,8 @@ startLostParcelSweep();
 startComplaintBreachSweep();
 // Clowe's monthly tax invoices to sellers, issued once a month ends - checked every 6 hours.
 startSellerInvoiceJob();
+// Plan renewals, grace and the product-limit notices - hourly.
+startPlanJobs();
 
 // Shoppers' try-on photos are deleted 24 hours after upload - every 10 minutes.
 startTryOnPhotoRetention();

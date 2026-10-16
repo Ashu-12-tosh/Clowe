@@ -14,6 +14,7 @@ import {
   periodToDateIST,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { requirePlanFeature } from '../services/planService';
 import { requireAuth } from '../middleware/auth';
 import { getSettings } from '../services/settingsService';
 import { availableBalance, sumFees, taxRulesFor } from '../services/payoutService';
@@ -206,6 +207,9 @@ sellerDashboardRouter.get('/', async (req, res, next) => {
     const seller = req.seller!;
     const sellerId = seller.id;
     const { range, granularity } = dashQuery.parse(req.query);
+    // Basic analytics on every plan; longer views with Growth (quarter) and Pro (year).
+    if (range === 'QUARTER') await requirePlanFeature(sellerId, 'BETTER_ANALYTICS');
+    if (range === 'YEAR') await requirePlanFeature(sellerId, 'ADVANCED_ANALYTICS');
     const { from, to, previousFrom, previousTo } = rangeBounds(range);
     const settings = await getSettings();
 

@@ -9,6 +9,8 @@ import {
   type ReviewSummaryView,
   type SearchIntent,
   type SellerAssistantReply,
+  aiMarketingSchema,
+  type PlanFeature,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -16,6 +18,7 @@ import { ApiError } from '../utils/ApiError';
 import { aiProvider } from '../services/ai';
 import { getSettings } from '../services/settingsService';
 import { aiLimiter } from '../middleware/rateLimits';
+import { requirePlanFeature } from '../services/planService';
 
 export const aiRouter = Router();
 aiRouter.use(aiLimiter);
@@ -35,9 +38,18 @@ function extractJson(text: string): Record<string, unknown> | null {
 // 1. Product description generator (sellers)
 // ---------------------------------------------------------------------------
 
+/** A seller using an AI tool: their plan must include it (admins are not limited). */
+async function requireSellerPlan(userId: string, role: string | undefined, feature: PlanFeature): Promise<void> {
+  if (role === 'ADMIN') return;
+  const seller = await prisma.sellerProfile.findUnique({ where: { userId }, select: { id: true } });
+  if (seller) await requirePlanFeature(seller.id, feature);
+}
+
 aiRouter.post('/product-description', requireAuth, async (req, res, next) => {
   try {
     const input = aiDescriptionSchema.parse(req.body);
+    // AI listing generation: Growth, Pro and Premium (owner's Batch 2).
+    await requireSellerPlan(req.auth!.userId, req.auth!.role, 'AI_LISTING');
     const description = await aiProvider.complete({
       task: 'product-description',
       system:
@@ -48,6 +60,34 @@ aiRouter.post('/product-description', requireAuth, async (req, res, next) => {
       maxTokens: 1024,
     });
     res.json({ success: true, data: { description, provider: aiProvider.name } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 1b. AI marketing assistance (Premium plan): campaign copy for a product
+// ---------------------------------------------------------------------------
+
+aiRouter.post('/marketing', requireAuth, async (req, res, next) => {
+  try {
+    const input = aiMarketingSchema.parse(req.body);
+    await requireSellerPlan(req.auth!.userId, req.auth!.role, 'AI_MARKETING');
+    const seller = await prisma.sellerProfile.findUnique({ where: { userId: req.auth!.userId }, select: { id: true } });
+    const product = await prisma.product.findFirst({
+      where: { id: input.productId, ...(req.auth!.role === 'ADMIN' ? {} : { sellerId: seller?.id ?? '-' }) },
+      select: { title: true, description: true, brand: true, category: { select: { name: true } } },
+    });
+    if (!product) throw ApiError.notFound('Product not found');
+    const copy = await aiProvider.complete({
+      task: 'marketing',
+      system:
+        'You are a marketing assistant for a seller on Clowe, an Indian online marketplace. Write honest marketing copy for the product: ' +
+        'a 2-line social media post, 3 hashtags, a 1-line offer idea and a short WhatsApp message. Never invent specifications, discounts or claims not given. Plain text, labelled sections.',
+      user: JSON.stringify({ product: { title: product.title, brand: product.brand, category: product.category.name, description: product.description.slice(0, 800) }, goal: input.goal }),
+      maxTokens: 700,
+    });
+    res.json({ success: true, data: { copy, provider: aiProvider.name } });
   } catch (err) {
     next(err);
   }

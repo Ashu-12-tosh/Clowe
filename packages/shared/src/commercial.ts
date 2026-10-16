@@ -331,6 +331,32 @@ export const DEFAULT_COMMERCIAL: CommercialSettings = {
   },
 };
 
+/** A seller's plan, as the Plans page shows it. */
+export interface SellerPlanView {
+  plan: SellerPlan;
+  autoRenew: boolean;
+  periodStart: string | null;
+  periodEnd: string | null;
+  pendingPlan: SellerPlan | null;
+  graceUntil: string | null;
+  /** Sellers from before the plans: every product stays live until then. */
+  limitGraceUntil: string | null;
+  liveProducts: number;
+  hiddenByPlan: number;
+  walletPaise: number;
+  gstPercent: number;
+  plans: Record<SellerPlan, PlanRules>;
+}
+export const sellerPlanChangeSchema = z.object({ plan: z.enum(SELLER_PLANS) });
+export const aiMarketingSchema = z.object({
+  productId: z.string().min(1),
+  goal: z.string().trim().max(200).optional(),
+});
+/** The 360° view: images around the product, in order (Pro and Premium). */
+export const spinImagesSchema = z.object({ imageUrls: z.array(z.string().trim().min(1).max(500)).max(72) });
+export const sellerAutoRenewSchema = z.object({ autoRenew: z.boolean() });
+export const sellerLiveProductsSchema = z.object({ productIds: z.array(z.string().min(1)).max(1000) });
+
 /** Admin penalties (owner's Batch 2), each with a reason, deducted from payout. */
 export const ADMIN_PENALTY_KINDS = ['COUNTERFEIT_LISTING', 'INACCURATE_TRYON_DATA'] as const;
 export type AdminPenaltyKind = (typeof ADMIN_PENALTY_KINDS)[number];

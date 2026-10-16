@@ -21,7 +21,22 @@ export class MockAIProvider implements AIProvider {
         return this.supportChat(payload);
       case 'seller-assistant':
         return this.sellerAssistant(payload);
+      case 'marketing':
+        return this.marketing(payload);
     }
+  }
+
+  /** Marketing copy built only from what the product says (no claims of its own). */
+  private marketing(p: Record<string, unknown>): string {
+    const product = (p.product ?? {}) as { title?: string; brand?: string | null; category?: string };
+    const title = String(product.title ?? 'this product');
+    const tag = (s: string) => `#${s.replace(/[^A-Za-z0-9]/g, '')}`;
+    return [
+      `Social post: Meet ${title}${product.brand ? ` by ${product.brand}` : ''}. Now on Clowe — see the details and order today.`,
+      `Hashtags: ${tag('Clowe')} ${tag(product.category ?? 'ShopOnline')} ${tag(product.brand ?? 'NewArrival')}`,
+      `Offer idea: ${p.goal ? String(p.goal) : 'Feature it in a weekend promotion from your Promotions page.'}`,
+      `WhatsApp: Hi! ${title} is now available on Clowe. Have a look on our store page.`,
+    ].join('\n');
   }
 
   /**

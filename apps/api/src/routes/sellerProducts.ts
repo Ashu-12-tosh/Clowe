@@ -13,6 +13,8 @@ import {
   type SellerProductSort,
   NOT_A_SALE_STATUSES,
 } from '@clowe/shared';
+import { admitToPlan, requirePlanFeature } from '../services/planService';
+import { spinImagesSchema } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
@@ -363,6 +365,24 @@ sellerProductsRouter.get('/export', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
+// PUT /:id/spin-images — the 360° view (Pro and Premium plans)
+// ---------------------------------------------------------------------------
+
+sellerProductsRouter.put('/:id/spin-images', async (req, res, next) => {
+  try {
+    const { imageUrls } = spinImagesSchema.parse(req.body);
+    if (imageUrls.length > 0) await requirePlanFeature(req.seller!.id, 'SPIN_360');
+    if (imageUrls.length === 1) throw ApiError.badRequest('A 360° view needs at least 2 images, taken around the product in order', 'SPIN_TOO_FEW');
+    const product = await prisma.product.findFirst({ where: { id: req.params.id, sellerId: req.seller!.id }, select: { id: true } });
+    if (!product) throw ApiError.notFound('Product not found');
+    await prisma.product.update({ where: { id: product.id }, data: { spinImages: imageUrls } });
+    res.json({ success: true, data: { spinImages: imageUrls } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // PATCH /:id/visibility — the Active/Inactive switch on a row
 // ---------------------------------------------------------------------------
 
@@ -375,11 +395,10 @@ sellerProductsRouter.patch('/:id/visibility', async (req, res, next) => {
     });
     if (!product) throw ApiError.notFound('Product not found');
 
-    const updated = await prisma.product.update({
-      where: { id: product.id },
-      data: { isVisible },
-      include: PRODUCT_INCLUDE,
-    });
+    await prisma.product.update({ where: { id: product.id }, data: { isVisible } });
+    // Switched on: it counts against the plan's live-product limit.
+    if (isVisible && product.status === 'APPROVED') await admitToPlan(product.id);
+    const updated = await prisma.product.findUniqueOrThrow({ where: { id: product.id }, include: PRODUCT_INCLUDE });
     const sales = await salesByProduct(req.seller!.id);
     res.json({ success: true, data: toRow(updated, sales.get(updated.id)) });
   } catch (err) {

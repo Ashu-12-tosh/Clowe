@@ -405,6 +405,8 @@ export interface ProductDetail {
   returnable: boolean;
   /** True: cannot be cancelled once the order is confirmed (Cancellation Policy 2.1). */
   nonCancellable: boolean;
+  /** The 360° view's images, in order; empty when there is none. */
+  spinImages: string[];
   sellerShopName: string;
   /** Who fulfils the order — shown in the "Sold by" card. */
   seller: {

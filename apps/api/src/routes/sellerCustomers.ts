@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requirePlanFeature } from '../services/planService';
 import { z } from 'zod';
 import {
   CUSTOMER_SEGMENTS,
@@ -27,6 +28,10 @@ import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerCustomersRouter = Router();
 sellerCustomersRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
+// Customer insights are advanced analytics: Pro and Premium (owner's Batch 2).
+sellerCustomersRouter.use((req, _res, next) => {
+  requirePlanFeature(req.seller!.id, 'ADVANCED_ANALYTICS').then(() => next(), next);
+});
 
 /** A shopper with no order in this many days is drifting away. */
 const AT_RISK_DAYS = 90;

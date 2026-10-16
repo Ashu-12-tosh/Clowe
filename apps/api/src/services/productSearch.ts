@@ -23,6 +23,7 @@ import { hiddenCategoryIds, visibleProductWhere } from './shopperVisibility';
 export const LIVE_PRODUCT_WHERE = {
   status: 'APPROVED' as const,
   isVisible: true,
+  planHidden: false,
   seller: { vacationMode: false },
 } satisfies Prisma.ProductWhereInput;
 

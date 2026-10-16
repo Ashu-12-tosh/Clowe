@@ -75,7 +75,8 @@ async function makeSeller() {
     },
   });
   const seller = await prisma.sellerProfile.create({
-    data: { userId: user.id, shopName: `Coupon Shop ${seq}`, status: SellerStatus.APPROVED },
+    // Promotion tools come with the Growth plan and above (owner's Batch 2).
+    data: { userId: user.id, shopName: `Coupon Shop ${seq}`, status: SellerStatus.APPROVED, subscription: { create: { plan: 'GROWTH' } } },
   });
   return { sellerId: seller.id, token: signAccessToken({ sub: user.id, role: 'SELLER' }) };
 }

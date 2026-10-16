@@ -493,6 +493,7 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
       tryOnEnabled: p.tryOnEnabled,
       nonReturnable: p.nonReturnable,
       nonCancellable: p.nonCancellable,
+      spinImages: p.spinImages,
       lowStockAlert: p.lowStockAlert,
       allowBackorders: p.allowBackorders,
       variants: [

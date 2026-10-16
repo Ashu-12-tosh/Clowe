@@ -17,6 +17,7 @@ import {
   periodWindow,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { requirePlanFeature } from '../services/planService';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { getSettings } from '../services/settingsService';
@@ -325,6 +326,8 @@ async function assertPromoCodesAllowed() {
 sellerPromotionsRouter.post('/', async (req, res, next) => {
   try {
     const sellerId = req.seller!.id;
+    // Promotion tools: Growth, Pro and Premium (owner's Batch 2).
+    await requirePlanFeature(sellerId, 'PROMOTION_TOOLS');
     const { couponsEnabled } = await getSettings();
     const input = promotionUpsertSchema.parse(req.body);
     await assertOwnTargets(sellerId, input);

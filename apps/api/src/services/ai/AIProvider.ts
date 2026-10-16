@@ -3,7 +3,8 @@ export type AiTask =
   | 'review-summary'
   | 'search-intent'
   | 'support-chat'
-  | 'seller-assistant';
+  | 'seller-assistant'
+  | 'marketing';
 
 export interface AiCompleteInput {
   /** Which feature is calling — lets the mock provider answer sensibly. */

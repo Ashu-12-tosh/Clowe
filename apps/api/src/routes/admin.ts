@@ -23,6 +23,7 @@ import {
   commercialPatchSchema,
 } from '@clowe/shared';
 import { getCommercial, updateCommercial } from '../services/commercial';
+import { admitToPlan } from '../services/planService';
 import { auditSafe } from '../services/auditService';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
@@ -371,6 +372,8 @@ adminRouter.patch('/products/:id', async (req, res, next) => {
         approvedAt: action === 'approve' ? new Date() : product.approvedAt,
       },
     });
+    // Over the seller's plan limit, an approved product waits hidden.
+    const live = action === 'approve' ? await admitToPlan(product.id) : false;
     await prisma.notification.create({
       data: {
         userId: product.seller.userId,
@@ -378,7 +381,9 @@ adminRouter.patch('/products/:id', async (req, res, next) => {
         title: action === 'approve' ? 'Product approved ✅' : 'Product rejected',
         body:
           action === 'approve'
-            ? `"${product.title}" is now live on Clowe.`
+            ? live
+              ? `"${product.title}" is now live on Clowe.`
+              : `"${product.title}" is approved; it is hidden until you make room within your plan's product limit (Plans).`
             : `"${product.title}" was rejected.${reason ? ` Reason: ${reason}` : ''}`,
       },
     });

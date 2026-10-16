@@ -51,6 +51,7 @@ export const productsRouter = Router();
 const LIVE: Prisma.ProductWhereInput = {
   status: 'APPROVED',
   isVisible: true,
+  planHidden: false,
   seller: { vacationMode: false },
 };
 
@@ -337,6 +338,7 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
       !product ||
       product.status !== 'APPROVED' ||
       !product.isVisible ||
+      product.planHidden ||
       product.seller.vacationMode ||
       (await isHiddenProduct(product))
     ) {
@@ -402,6 +404,7 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
       returnWindowDays: await returnWindowDaysFor(product.categoryId, product.seller.returnWindowDays),
       returnable: await returnableFor(product.categoryId, product.nonReturnable),
       nonCancellable: product.nonCancellable,
+      spinImages: product.spinImages,
       sellerShopName: product.seller.shopName,
       seller: {
         shopName: product.seller.shopName,

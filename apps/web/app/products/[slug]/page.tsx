@@ -26,6 +26,7 @@ import {
 } from '@/components/cart/CartIcons';
 import PolicyText from '@/components/PolicyText';
 import NonCancellable from '@/components/NonCancellable';
+import SpinViewer from '@/components/SpinViewer';
 import { responsiveImage, imageAt } from '@clowe/shared';
 
 /** "12K+ Sold" / "845 Sold". */
@@ -169,6 +170,8 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
   // would otherwise land on nothing. Only fires when the gallery actually
   // changes identity, so picking a size within one colour keeps your place.
   useEffect(() => setImageIndex(0), [gallery]);
+  // The 360° view, when the seller added one.
+  const [spin, setSpin] = useState(false);
 
   /** Distinct values of one axis, in the API's (sorted) order. */
   const valuesFor = (key: string): string[] =>
@@ -315,8 +318,19 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
           )}
 
           <div className="relative min-w-0 flex-1">
-            {gallery[imageIndex] && (
-              <ZoomImage src={gallery[imageIndex].url} alt={product.title} />
+            {spin && product.spinImages.length >= 2 ? (
+              <SpinViewer images={product.spinImages} alt={product.title} />
+            ) : (
+              gallery[imageIndex] && <ZoomImage src={gallery[imageIndex].url} alt={product.title} />
+            )}
+            {product.spinImages.length >= 2 && (
+              <button
+                onClick={() => setSpin((s) => !s)}
+                className="absolute bottom-3 right-3 z-10 rounded-full bg-white/90 px-3 py-1.5 text-xs font-bold text-ink-900 shadow"
+                data-action="toggle-360"
+              >
+                {spin ? 'Photos' : '360° view'}
+              </button>
             )}
             {product.isBestSeller && (
               <span className="absolute left-3 top-3 rounded-md bg-brand-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-brand-700">
