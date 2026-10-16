@@ -37,7 +37,7 @@ export default async function ContactPage() {
         <span className="text-gray-600">Contact Us</span>
       </nav>
 
-      <article className="mt-4 rounded-3xl border border-gray-100 bg-white p-6 sm:p-10">
+      <article className="mt-4 rounded-3xl border border-gray-100 bg-white p-5 sm:p-10">
         <h1 className="font-display text-3xl font-bold tracking-tight text-ink-900">Contact Us</h1>
         <p className="mt-3 leading-relaxed text-gray-700">
           cloweshop.com is operated by <strong>{legal.name}</strong>. We&apos;re here to help with orders,
@@ -50,14 +50,15 @@ export default async function ContactPage() {
               <a
                 key={row.label}
                 href={row.kind === 'email' ? `mailto:${row.value}` : `tel:${row.value.replace(/[^\d+]/g, '')}`}
-                className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-cream-100 p-5 transition hover:border-brand-600"
+                className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-cream-100 p-4 transition hover:border-brand-600 sm:p-5"
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-xl">
+                <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-xl sm:flex">
                   {row.icon}
                 </span>
                 <span className="min-w-0">
                   <span className="block text-xs font-bold uppercase tracking-wide text-gray-500">{row.label}</span>
-                  <span className="block break-words font-semibold text-ink-900">{row.value}</span>
+                  {/* One line on a phone too: an email never breaks at its hyphen. */}
+                  <span className="block whitespace-nowrap text-sm font-semibold text-ink-900 sm:text-base">{row.value}</span>
                 </span>
               </a>
             ))}

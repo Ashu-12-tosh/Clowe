@@ -300,15 +300,59 @@ export const adminOrderStatusSchema = z.object({
 });
 export type AdminOrderStatusInput = z.infer<typeof adminOrderStatusSchema>;
 
-export const adminOrderCancelSchema = z.object({
-  reason: z.string().trim().min(3, 'Say why this order is being cancelled').max(300),
-});
+/**
+ * Why an admin cancels: a fixed list, each with the words the customer sees.
+ * "Other" carries a short text the admin writes and confirms.
+ */
+export const ADMIN_CANCEL_REASONS = ['OUT_OF_STOCK', 'SELLER_UNABLE', 'ADDRESS_NOT_SERVICEABLE', 'SUSPECTED_FRAUD', 'CUSTOMER_REQUEST', 'OTHER'] as const;
+export type AdminCancelReason = (typeof ADMIN_CANCEL_REASONS)[number];
+
+export const ADMIN_CANCEL_REASON_LABELS: Record<AdminCancelReason, string> = {
+  OUT_OF_STOCK: 'Out of stock',
+  SELLER_UNABLE: 'Seller unable to fulfil',
+  ADDRESS_NOT_SERVICEABLE: 'Address not serviceable',
+  SUSPECTED_FRAUD: 'Suspected fraud',
+  CUSTOMER_REQUEST: 'Customer request',
+  OTHER: 'Other',
+};
+
+/** What the customer is told, in their notification and on the order. */
+export const ADMIN_CANCEL_CUSTOMER_TEXT: Record<Exclude<AdminCancelReason, 'OTHER'>, string> = {
+  OUT_OF_STOCK: 'The item is out of stock, so we have cancelled it.',
+  SELLER_UNABLE: 'The seller is unable to fulfil this order, so we have cancelled it.',
+  ADDRESS_NOT_SERVICEABLE: 'Our courier does not deliver to this address yet, so we have cancelled the order.',
+  SUSPECTED_FRAUD: 'We could not verify this order, so we have cancelled it.',
+  CUSTOMER_REQUEST: 'Cancelled at your request.',
+};
+
+const cancelReasonFields = {
+  reasonCode: z.enum(ADMIN_CANCEL_REASONS).optional(),
+  /** For "Other": the words the customer sees. */
+  otherText: z.string().trim().max(200).optional(),
+  /** Free text, from before the list (still accepted from scripts and tests). */
+  reason: z.string().trim().min(3).max(300).optional(),
+};
+type CancelReasonInput = { reasonCode?: AdminCancelReason; otherText?: string; reason?: string };
+const reasonGiven = (v: CancelReasonInput, ctx: z.RefinementCtx) => {
+  if (v.reasonCode === 'OTHER' && (v.otherText ?? '').length < 5) {
+    ctx.addIssue({ code: 'custom', path: ['otherText'], message: 'Write what the customer should be told (at least 5 characters)' });
+  }
+  if (!v.reasonCode && !v.reason) ctx.addIssue({ code: 'custom', path: ['reasonCode'], message: 'Pick why this is being cancelled' });
+};
+
+/** The words the customer sees for a cancellation. */
+export function adminCancelReasonText(v: CancelReasonInput): string {
+  if (v.reasonCode === 'OTHER') return (v.otherText ?? '').trim();
+  if (v.reasonCode) return ADMIN_CANCEL_CUSTOMER_TEXT[v.reasonCode];
+  return (v.reason ?? '').trim();
+}
+
+export const adminOrderCancelSchema = z.object(cancelReasonFields).superRefine(reasonGiven);
 
 /** Cancel some lines of an order, with the reason the buyer is told. */
-export const adminOrderLinesCancelSchema = z.object({
-  reason: z.string().trim().min(3, 'Say why these items are being cancelled').max(300),
-  itemIds: z.array(z.string().min(1)).min(1).max(100),
-});
+export const adminOrderLinesCancelSchema = z
+  .object({ ...cancelReasonFields, itemIds: z.array(z.string().min(1)).min(1).max(100) })
+  .superRefine(reasonGiven);
 export type AdminOrderCancelInput = z.infer<typeof adminOrderCancelSchema>;
 
 export const adminOrderNoteSchema = z.object({

@@ -152,3 +152,17 @@ describe('an admin cancelling a paid order', () => {
     expect((await prisma.payment.findUniqueOrThrow({ where: { orderId } })).status).toBe('REFUNDED');
   });
 });
+
+describe('an admin cancelling with a reason from the list', () => {
+  it('tells the customer the fixed words, never "fraud"; "Other" needs its own words', async () => {
+    const { orderId } = await orderAs('UPI');
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect((await call('POST', `/api/admin/orders/${orderId}/cancel`, adminToken, { reasonCode: 'OTHER', otherText: 'no' })).status).toBe(400);
+    expect((await call('POST', `/api/admin/orders/${orderId}/cancel`, adminToken, {})).status).toBe(400);
+    const res = await call('POST', `/api/admin/orders/${orderId}/cancel`, adminToken, { reasonCode: 'SUSPECTED_FRAUD' });
+    expect(res.status).toBe(200);
+    const told = await prisma.notification.findFirstOrThrow({ where: { userId: order.userId, type: 'ORDER_CANCELLED' }, orderBy: { createdAt: 'desc' } });
+    expect(told.body).toBe('We could not verify this order, so we have cancelled it.');
+    expect(told.body).not.toMatch(/fraud/i);
+  });
+});

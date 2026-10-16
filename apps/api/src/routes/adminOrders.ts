@@ -11,6 +11,7 @@ import {
   ORDER_CHANNELS,
   ORDER_TABS,
   ORDER_TAB_STATUSES,
+  adminCancelReasonText,
   adminOrderCancelSchema,
   adminOrderLinesCancelSchema,
   adminOrderNoteSchema,
@@ -757,7 +758,7 @@ adminOrdersRouter.post('/:id/items/cancel', async (req, res, next) => {
       statuses: ['PLACED', 'CONFIRMED', 'PACKED', 'SHIPPED'],
       by: 'ADMIN',
       actorUserId: req.auth!.userId,
-      reason: input.reason,
+      reason: adminCancelReasonText(input),
     });
     res.json({ success: true, data: result });
   } catch (err) {
@@ -768,6 +769,7 @@ adminOrdersRouter.post('/:id/items/cancel', async (req, res, next) => {
 adminOrdersRouter.post('/:id/cancel', async (req, res, next) => {
   try {
     const input = adminOrderCancelSchema.parse(req.body);
+    const said = adminCancelReasonText(input);
     const order = await prisma.order.findUnique({
       where: { id: req.params.id },
       include: { items: true, payment: true },
@@ -793,7 +795,7 @@ adminOrdersRouter.post('/:id/cancel', async (req, res, next) => {
       }),
       prisma.order.update({
         where: { id: order.id },
-        data: { adminNote: `Cancelled by admin: ${input.reason}` },
+        data: { adminNote: `Cancelled by admin: ${said}` },
       }),
       // Reserved units go back on the variant; the ledger entry follows below.
       ...live.map((item) =>
@@ -826,7 +828,7 @@ adminOrdersRouter.post('/:id/cancel', async (req, res, next) => {
         await returnStock(tx, {
           variantId: item.variantId,
           quantity: item.quantity,
-          reason: `Cancelled by admin: ${input.reason}`,
+          reason: `Cancelled by admin: ${said}`,
           reference: order.orderNumber,
           actorId: req.auth!.userId,
         });
@@ -842,14 +844,14 @@ adminOrdersRouter.post('/:id/cancel', async (req, res, next) => {
         userId: order.userId,
         type: 'ORDER_CANCELLED',
         title: `Order ${order.orderNumber} cancelled`,
-        body: input.reason,
+        body: said,
         linkHref: `/account/orders/${order.id}`,
       },
     });
 
     // What was paid for the cancelled lines goes back through the gateway, the
     // same path returns use; the refund is recorded whether it succeeds or fails.
-    const refund = await refundCancelledOrder(order.id, `Cancelled by admin: ${input.reason}`, req.auth!.userId);
+    const refund = await refundCancelledOrder(order.id, `Cancelled by admin: ${said}`, req.auth!.userId);
     await settleEarnedCredits(order.id);
     res.json({ success: true, data: { cancelled: live.length, refund } });
   } catch (err) {

@@ -28,12 +28,12 @@ import {
   type ManualPaymentMethod,
   type OrderChannel,
   type OrderTab,
-  ORDER_CANCEL_REASONS,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
+import CancelReasonDialog, { type CancelReasonChoice } from '@/components/admin/CancelReasonDialog';
 import { BarList, DonutChart, LineChart } from '@/components/charts/Charts';
 
 // ---------------------------------------------------------------------------
@@ -929,57 +929,35 @@ function OrderDrawer({
     }
   }
 
-  async function cancel() {
-    const reason = window.prompt('Why is this order being cancelled?');
-    if (reason === null) return;
-    if (reason.trim().length < 3) {
-      flash('Give a reason of at least 3 characters.');
-      return;
-    }
-    if (busy) return;
+  // Cancelling: the whole order, or one item; a reason from the list (CancelReasonDialog).
+  const [cancelTarget, setCancelTarget] = useState<{ itemId?: string; title: string } | null>(null);
+
+  async function confirmCancel(choice: CancelReasonChoice) {
+    if (!cancelTarget || busy) return;
+    const line = cancelTarget.itemId;
     setBusy(true);
     try {
-      await api(`/api/admin/orders/${orderId}/cancel`, {
-        method: 'POST',
-        auth: true,
-        body: { reason: reason.trim() },
-        success: 'Order cancelled — stock returned and the customer notified',
-      });
-      flash('Order cancelled — stock returned and the customer notified.');
+      if (line) {
+        await api(`/api/admin/orders/${orderId}/items/cancel`, {
+          method: 'POST',
+          auth: true,
+          body: { ...choice, itemIds: [line] },
+          success: 'Item cancelled — the customer is told why and refunded for it',
+        });
+      } else {
+        await api(`/api/admin/orders/${orderId}/cancel`, {
+          method: 'POST',
+          auth: true,
+          body: choice,
+          success: 'Order cancelled — stock returned and the customer notified',
+        });
+        flash('Order cancelled — stock returned and the customer notified.');
+      }
+      setCancelTarget(null);
       await load();
       await onChanged();
     } catch (err) {
-      flash(err instanceof ApiRequestError ? err.message : 'Could not cancel that order.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  /** One line only (Cancellation Policy 3.1): the buyer is told why and refunded for it. */
-  async function cancelLine(itemId: string, title: string) {
-    const reason = window.prompt(
-      `Why is "${title}" being cancelled? The buyer sees this.
-
-For example: ${ORDER_CANCEL_REASONS.slice(0, 3).join('; ')}.`,
-    );
-    if (reason === null) return;
-    if (reason.trim().length < 3) {
-      flash('Give a reason of at least 3 characters.');
-      return;
-    }
-    if (busy) return;
-    setBusy(true);
-    try {
-      await api(`/api/admin/orders/${orderId}/items/cancel`, {
-        method: 'POST',
-        auth: true,
-        body: { reason: reason.trim(), itemIds: [itemId] },
-        success: 'Item cancelled — the customer is told why and refunded for it',
-      });
-      await load();
-      await onChanged();
-    } catch (err) {
-      flash(err instanceof ApiRequestError ? err.message : 'Could not cancel that item.');
+      flash(err instanceof ApiRequestError ? err.message : line ? 'Could not cancel that item.' : 'Could not cancel that order.');
     } finally {
       setBusy(false);
     }
@@ -998,6 +976,9 @@ For example: ${ORDER_CANCEL_REASONS.slice(0, 3).join('; ')}.`,
 
   return (
     <aside className="space-y-4">
+      {cancelTarget && (
+        <CancelReasonDialog title={cancelTarget.title} busy={busy} onCancel={() => setCancelTarget(null)} onConfirm={(c) => void confirmCancel(c)} />
+      )}
       <section className="rounded-2xl border border-gray-100 bg-white p-4">
         <div className="flex items-start justify-between gap-2">
           <h2 className="text-sm font-bold text-ink-900">Order details</h2>
@@ -1111,7 +1092,7 @@ For example: ${ORDER_CANCEL_REASONS.slice(0, 3).join('; ')}.`,
                 <p className="text-[11px] text-gray-400">× {i.quantity}</p>
                 {['PLACED', 'CONFIRMED', 'PACKED', 'SHIPPED'].includes(i.status) && detail.items.length > 1 && (
                   <button
-                    onClick={() => void cancelLine(i.id, i.title)}
+                    onClick={() => setCancelTarget({ itemId: i.id, title: `Cancel “${i.title}”` })}
                     disabled={busy}
                     className="mt-1 text-[11px] font-semibold text-red-600 hover:underline disabled:opacity-50"
                   >
@@ -1298,7 +1279,7 @@ For example: ${ORDER_CANCEL_REASONS.slice(0, 3).join('; ')}.`,
           {!closed && (
             <button
               disabled={busy}
-              onClick={() => void cancel()}
+              onClick={() => setCancelTarget({ title: 'Cancel this order' })}
               className="col-span-2 rounded-lg border border-red-200 py-2 text-red-600 hover:bg-red-50 disabled:opacity-50 min-w-0"
             >
               Cancel order
