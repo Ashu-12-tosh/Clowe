@@ -40,7 +40,7 @@ const DEFAULT_FEATURES: CategoryCallout[] = [
   { icon: '✅', title: 'Approved Sellers', subtitle: 'Every shop is reviewed before it sells.' },
   { icon: '🏷', title: 'Clear Pricing', subtitle: 'GST included in every price.' },
   { icon: '🛡', title: 'Secure Payments', subtitle: 'Safe & secure checkout.' },
-  { icon: '↩', title: 'Exchange or Refund', subtitle: 'For defective, damaged or wrong items.' },
+  { icon: '↩', title: 'Damage & Wrong-Item Protection', subtitle: '48-hour claims, exchange or refund.' },
 ];
 
 /** Collapsible sidebar group. */

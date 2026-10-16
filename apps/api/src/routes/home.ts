@@ -142,6 +142,12 @@ async function buildHomePayload(): Promise<HomePayload> {
     const slug = linkedCategorySlug(href);
     return slug !== null && !stocked.has(slug);
   };
+  // A hero slide stays up while its category fills (the owner's call): it
+  // goes only when it leads into a category shoppers cannot see at all.
+  const opensClosed = (href: string | null | undefined) => {
+    const slug = linkedCategorySlug(href);
+    return slug !== null && hidden.categorySlugs.has(slug);
+  };
 
   const [banners, promoTiles, deal, rootCategories, brands, trending] = await Promise.all([
     prisma.homeBanner.findMany({ where: { isActive: true }, orderBy: { sortOrder: 'asc' } }),
@@ -170,7 +176,7 @@ async function buildHomePayload(): Promise<HomePayload> {
 
   return {
     banners: banners
-      .filter((b) => !opensHidden(b.primaryHref) && !opensHidden(b.secondaryHref))
+      .filter((b) => !opensClosed(b.primaryHref) && !opensClosed(b.secondaryHref))
       .map((b) => ({
       id: b.id,
       headline: b.headline,

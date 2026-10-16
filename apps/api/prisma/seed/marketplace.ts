@@ -205,7 +205,7 @@ async function seedProducts(
           title,
           slug,
           description:
-            `${title}. Quality you can rely on, backed by Clowe's easy returns ` +
+            `${title}. Quality you can rely on, backed by Clowe's damage and wrong-item protection ` +
             `and secure payments. Seeded demo product — imagery is neutral placeholder stock.`,
           basePricePaise: price * 100,
           mrpPaise: mrp * 100,

@@ -23,7 +23,7 @@ import PolicyText from '@/components/PolicyText';
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
-  { Icon: ReturnIcon, title: 'Exchange or Refund', text: 'If an item arrives defective, damaged or wrong' },
+  { Icon: ReturnIcon, title: 'Damage & Wrong-Item Protection', text: '48-hour claims, exchange or refund' },
   { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
   { Icon: TruckIcon, title: 'Free Delivery', text: 'On all orders' },
   { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },

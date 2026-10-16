@@ -20,7 +20,8 @@ import PolicyText from '@/components/PolicyText';
 
 const TRUST_ITEMS = [
   { icon: '🚚', title: 'Free Shipping', text: 'On all orders' },
-  { icon: '↩️', title: 'Exchange or Refund', text: 'For defective, damaged or wrong items' },
+  // Return Policy 2 and 3.1: defects, damage and wrong items, claimed within 48 hours.
+  { icon: '↩️', title: 'Damage & Wrong-Item Protection', text: '48-hour claims, exchange or refund' },
   { icon: '🔒', title: 'Secure Payments', text: 'Safe & secure checkout' },
   { icon: '🤖', title: 'AI Shopping Assistant', text: 'Get smart help' },
   { icon: '🎧', title: 'Help & Support', text: 'Help centre and support chat' },

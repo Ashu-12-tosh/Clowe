@@ -24,6 +24,13 @@ export type ProductDecisionInput = z.infer<typeof productDecisionSchema>;
 // Category management
 // ---------------------------------------------------------------------------
 
+/** One bullet on a category landing page: icon, title, a line under it. */
+export const categoryCalloutSchema = z.object({
+  icon: z.string().trim().max(8),
+  title: z.string().trim().min(2).max(60),
+  subtitle: z.string().trim().max(120),
+});
+
 export const categoryUpsertSchema = z.object({
   name: z.string().trim().min(2).max(40),
   parentId: z.string().nullable().optional(),
@@ -35,6 +42,9 @@ export const categoryUpsertSchema = z.object({
   sortOrder: z.number().int().min(0).optional(),
   /** Referral fee for products here, percent of the selling price (owner's Batch 2). */
   referralPercent: z.number().min(0).max(50).optional(),
+  /** The landing page's hero side-card bullets and bottom feature strip. */
+  highlights: z.array(categoryCalloutSchema).max(8).optional(),
+  features: z.array(categoryCalloutSchema).max(8).optional(),
 }).merge(categoryRulesInputSchema);
 export type CategoryUpsertInput = z.infer<typeof categoryUpsertSchema>;
 

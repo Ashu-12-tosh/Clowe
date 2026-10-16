@@ -25,16 +25,22 @@ const AI_PILLS = [
 const ROTATE_MS = 5500;
 
 /**
- * The hero picture, by width. Phones: the slide's own 4:5 phone image, or
- * without one the right-hand part of the computer image (where the products
- * and people are) as a square, above the words. Tablets: the whole 16:9
- * picture above the words. From 1024px: the picture fills the card behind the
- * words, anchored right, the card keeping the picture's 16:9 so nothing is
- * cut; the words sit on the plain cream the picture leaves on its left.
+ * Every slide is one fixed height per width, so the carousel never changes
+ * size as it turns (the owner's call): 340px from 768px, 380px from 1024px,
+ * 440px from 1280px. Below 768px the picture sits above the words.
+ */
+export const HERO_SLIDE_HEIGHT = 'md:h-[340px] lg:h-[380px] xl:h-[440px]';
+
+/**
+ * The hero picture, by width. Phones: a 220px-high band of the slide's 4:5
+ * phone image (its lower part, where the products are), or of the computer
+ * image anchored right, above the words. From 768px: the picture fills the
+ * slide behind the words, cropped to the slide's height and anchored right;
+ * the words sit on the plain cream the picture leaves on its left.
  */
 export function heroPictureClass(mobileImageUrl: string | null | undefined): string {
-  const phone = mobileImageUrl ? 'aspect-[4/5]' : 'aspect-square object-right';
-  return `mx-auto block w-full max-w-sm rounded-2xl object-cover shadow-lg ${phone} sm:max-w-lg sm:aspect-video sm:object-center lg:h-full lg:max-w-none lg:aspect-auto lg:rounded-none lg:object-right lg:shadow-none`;
+  const phone = mobileImageUrl ? 'object-[50%_75%]' : 'object-right';
+  return `block h-[220px] w-full rounded-2xl object-cover shadow-lg ${phone} md:h-full md:rounded-none md:object-[100%_60%] md:shadow-none`;
 }
 
 /** Headline with the admin-chosen word rendered in gold. */
@@ -56,33 +62,33 @@ function Headline({ text, highlight }: { text: string; highlight: string | null 
 function HeroCopy({ banner }: { banner: HomeBannerView }) {
   return (
     <>
-      <h1 className="line-clamp-2 font-display text-3xl font-bold leading-tight text-ink-900 sm:text-4xl xl:text-5xl">
+      <h1 className="line-clamp-2 font-display text-2xl font-bold leading-tight text-ink-900 sm:text-3xl lg:text-4xl xl:text-5xl">
         <Headline text={banner.headline} highlight={banner.highlight} />
       </h1>
-      {banner.subtext && <p className="mt-4 line-clamp-2 max-w-md text-sm leading-relaxed text-gray-600">{banner.subtext}</p>}
-      <div className="mt-6 flex flex-wrap gap-3">
+      {banner.subtext && <p className="mt-3 line-clamp-2 max-w-md text-sm leading-relaxed text-gray-600 xl:mt-4">{banner.subtext}</p>}
+      <div className="mt-4 flex flex-wrap gap-3 xl:mt-6">
         <Link
           href={safeHref(banner.primaryHref) ?? '/products'}
-          className="rounded-lg bg-ink-900 px-6 py-3 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800"
+          className="rounded-lg bg-ink-900 px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800 xl:px-6 xl:py-3"
         >
           {banner.primaryLabel}
         </Link>
         {banner.secondaryLabel && safeHref(banner.secondaryHref) && (
           <Link
             href={safeHref(banner.secondaryHref) ?? '/products'}
-            className="rounded-lg border border-brand-600 bg-white/60 px-6 py-3 text-sm font-bold uppercase tracking-wide text-brand-600 hover:bg-brand-50"
+            className="rounded-lg border border-brand-600 bg-white/60 px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-brand-600 hover:bg-brand-50 xl:px-6 xl:py-3"
           >
             {banner.secondaryLabel}
           </Link>
         )}
       </div>
-      <div className="mt-6 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2 xl:mt-6" data-hero-chips>
         {AI_PILLS.map((pill) => (
           <Link
             key={pill.label}
             // eslint-disable-next-line no-restricted-syntax -- route from a table defined in code, not data
             href={pill.href}
-            className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/70 px-3 py-1.5 text-xs font-medium text-gray-700 backdrop-blur transition hover:border-brand-600 hover:text-brand-600"
+            className="flex items-center gap-1.5 rounded-full border border-gray-200 bg-white/70 px-3 py-1 text-xs font-medium text-gray-700 backdrop-blur transition hover:border-brand-600 hover:text-brand-600 xl:py-1.5"
           >
             <span className="text-brand-600">{pill.icon}</span>
             {pill.label}
@@ -131,23 +137,24 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
             <Link
               key={banner.id}
               href={safeHref(banner.primaryHref) ?? '/products'}
-              className="block w-full shrink-0"
+              className={`block w-full shrink-0 ${HERO_SLIDE_HEIGHT}`}
               data-banner-full
+              data-hero-slide
             >
               <BannerPicture
                 src={banner.imageUrl}
                 mobileSrc={banner.mobileImageUrl}
                 alt={banner.altText ?? banner.headline}
                 loading={i === 0 ? 'eager' : 'lazy'}
-                // A phone image is 4:5; without one the computer image shows whole.
-                className={`block w-full object-cover ${banner.mobileImageUrl ? 'aspect-[4/5] sm:aspect-[8/3]' : 'aspect-[8/3]'}`}
+                // Phones: the 4:5 phone image, or the computer image whole. From 768px the slide's height, anchored right.
+                className={`block w-full object-cover object-right ${banner.mobileImageUrl ? 'aspect-[4/5] sm:aspect-[8/3]' : 'aspect-[8/3]'} md:aspect-auto md:h-full`}
               />
             </Link>
           ) : (
-          <div key={banner.id} className={`relative w-full shrink-0 ${banner.imageUrl ? 'lg:aspect-video' : ''}`}>
+          <div key={banner.id} className={`relative w-full shrink-0 ${HERO_SLIDE_HEIGHT}`} data-hero-slide>
             {banner.imageUrl ? (
               <>
-                <div className="px-7 pt-7 sm:px-10 sm:pt-10 lg:absolute lg:inset-0 lg:p-0">
+                <div className="px-5 pt-5 sm:px-8 sm:pt-8 md:absolute md:inset-0 md:p-0">
                   <BannerPicture
                     src={banner.imageUrl}
                     mobileSrc={banner.mobileImageUrl}
@@ -159,14 +166,14 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
                 {/* A soft cream fade behind the words, over the picture's plain left side. */}
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-y-0 left-0 hidden w-3/5 bg-gradient-to-r from-cream-100/80 via-cream-100/40 to-transparent lg:block"
+                  className="pointer-events-none absolute inset-y-0 left-0 hidden w-4/5 bg-gradient-to-r from-cream-100/90 via-cream-100/60 to-transparent md:block lg:w-3/5 lg:from-cream-100/80 lg:via-cream-100/40"
                 />
-                <div className="relative p-7 sm:p-10 lg:flex lg:h-full lg:max-w-[46%] lg:flex-col lg:justify-center lg:py-12 lg:pl-14 lg:pr-0">
+                <div className="relative p-5 sm:p-8 md:flex md:h-full md:max-w-[62%] md:flex-col md:justify-center md:py-6 md:pl-14 md:pr-0 lg:max-w-[50%] xl:max-w-[46%]" data-hero-copy>
                   <HeroCopy banner={banner} />
                 </div>
               </>
             ) : (
-              <div className="grid items-center gap-6 p-7 sm:p-10 lg:grid-cols-2 lg:gap-10">
+              <div className="grid items-center gap-6 p-5 sm:p-8 md:h-full md:py-6 md:pl-14 lg:grid-cols-2 lg:gap-10" data-hero-copy>
                 <div>
                   <HeroCopy banner={banner} />
                 </div>
@@ -175,7 +182,7 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
                   <ArtPanel
                     icon={heroIcon(banner.primaryHref, i)}
                     caption={banner.highlight?.replace(/[.!]+$/, '')}
-                    className="h-72 w-full max-w-lg shadow-lg"
+                    className="h-64 w-full max-w-lg shadow-lg xl:h-72"
                   />
                 </div>
               </div>
@@ -190,14 +197,14 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
           <button
             onClick={prev}
             aria-label="Previous slide"
-            className="absolute left-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink-900 shadow transition hover:bg-white sm:flex"
+            className="absolute left-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink-900 shadow transition hover:bg-white md:flex"
           >
             ‹
           </button>
           <button
             onClick={next}
             aria-label="Next slide"
-            className="absolute right-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink-900 shadow transition hover:bg-white sm:flex"
+            className="absolute right-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-ink-900 shadow transition hover:bg-white md:flex"
           >
             ›
           </button>

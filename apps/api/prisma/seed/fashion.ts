@@ -326,13 +326,13 @@ export async function seedFashion(prisma: PrismaClient) {
     highlights: [
       { icon: '✅', title: 'Approved Sellers', subtitle: 'Every Shop Reviewed' },
       { icon: '✨', title: 'Latest Trends', subtitle: 'Stay Ahead in Style' },
-      { icon: '↩', title: 'Easy Returns', subtitle: 'Hassle-free returns' },
+      { icon: '↩', title: 'Damage & Wrong-Item Protection', subtitle: '48-hour claims, exchange or refund' },
     ],
     features: [
       { icon: '✨', title: 'Latest Trends', subtitle: 'New styles from our sellers' },
       { icon: '✅', title: 'Approved Sellers', subtitle: 'Every shop is reviewed before it sells' },
       { icon: '💎', title: 'Listings Reviewed', subtitle: 'Checked before they go live' },
-      { icon: '↩', title: 'Easy Returns', subtitle: 'Hassle-free return policy' },
+      { icon: '↩', title: 'Damage & Wrong-Item Protection', subtitle: '48-hour claims, exchange or refund' },
       { icon: '🛡', title: 'Secure Payments', subtitle: 'Safe & secure transactions' },
       { icon: '💡', title: 'Fashion Advice', subtitle: 'Style tips & inspiration' },
     ],
@@ -476,7 +476,7 @@ export async function seedFashion(prisma: PrismaClient) {
           title,
           slug,
           description:
-            `${title}. Easy returns, secure payments and free delivery on every order. ` +
+            `${title}. Damage and wrong-item protection, secure payments and free delivery on every order. ` +
             `Seeded demo product — imagery is neutral stock photography.`,
           highlights: plan.highlights ?? [],
           attributes: demoAttributesFor(

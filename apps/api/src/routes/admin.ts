@@ -514,6 +514,8 @@ adminRouter.patch('/categories/:id', async (req, res, next) => {
         isActive: input.isActive,
         sortOrder: input.sortOrder,
         referralPercent: input.referralPercent,
+        highlights: input.highlights,
+        features: input.features,
         ...ruleDataFrom(input),
       },
     });

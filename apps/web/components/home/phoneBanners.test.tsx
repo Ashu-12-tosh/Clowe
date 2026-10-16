@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { heroPictureClass } from './HeroCarousel';
+import { HERO_SLIDE_HEIGHT, heroPictureClass } from './HeroCarousel';
 import { categoryPictureClass } from '../category/CategoryHero';
 
 // On a phone no banner product may be cut off and no headline may sit on one.
@@ -7,21 +7,20 @@ import { categoryPictureClass } from '../category/CategoryHero';
 describe('home hero picture', () => {
   const cls = (mobile: string | null) => heroPictureClass(mobile).split(' ');
 
-  it('on a phone: the slide’s 4:5 phone image when there is one', () => {
-    expect(cls('https://cloweshop.com/uploads/p-w800.webp')).toContain('aspect-[4/5]');
+  it('on a phone: above the words, capped at 220px, the lower (product) part of the 4:5 phone image', () => {
+    expect(cls('https://cloweshop.com/uploads/p-w800.webp')).toEqual(expect.arrayContaining(['h-[220px]', 'w-full', 'object-cover', 'object-[50%_75%]']));
   });
 
-  it('on a phone without one: the right-hand (product) side of the picture, square', () => {
-    expect(cls(null)).toEqual(expect.arrayContaining(['aspect-square', 'object-right']));
-    expect(cls(null)).not.toContain('aspect-[4/5]');
+  it('on a phone without one: the right-hand (product) side of the computer picture', () => {
+    expect(cls(null)).toEqual(expect.arrayContaining(['h-[220px]', 'object-right']));
   });
 
-  it('on a tablet: the whole 16:9 picture', () => {
-    expect(cls(null)).toEqual(expect.arrayContaining(['sm:aspect-video', 'sm:object-center']));
+  it('from 768px: fills the slide behind the words, anchored right', () => {
+    expect(cls(null)).toEqual(expect.arrayContaining(['md:h-full', 'md:object-[100%_60%]', 'object-cover']));
   });
 
-  it('from 1024px: fills the card behind the words, anchored right', () => {
-    expect(cls(null)).toEqual(expect.arrayContaining(['lg:h-full', 'lg:aspect-auto', 'lg:object-right', 'object-cover']));
+  it('every slide has one fixed height per width: 340, 380 and 440px', () => {
+    expect(HERO_SLIDE_HEIGHT.split(' ')).toEqual(['md:h-[340px]', 'lg:h-[380px]', 'xl:h-[440px]']);
   });
 });
 

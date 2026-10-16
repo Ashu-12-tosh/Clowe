@@ -440,7 +440,7 @@ export async function seedElectronics(prisma: PrismaClient) {
       { icon: '⚡', title: 'Latest Technology', subtitle: 'Upgrade to the newest innovations.' },
       { icon: '🏷', title: 'Clear Pricing', subtitle: 'GST included in every price.' },
       { icon: '🛡', title: 'Secure Payments', subtitle: 'Safe & secure checkout.' },
-      { icon: '↩', title: 'Easy Returns', subtitle: 'Hassle-free return policy.' },
+      { icon: '↩', title: 'Damage & Wrong-Item Protection', subtitle: '48-hour claims, exchange or refund.' },
     ],
   };
   const root = await prisma.category.upsert({
@@ -559,7 +559,7 @@ export async function seedElectronics(prisma: PrismaClient) {
           title,
           slug,
           description:
-            `${title}. Backed by Clowe's easy returns, secure payments and a ` +
+            `${title}. Backed by Clowe's damage and wrong-item protection, secure payments and a ` +
             `1-year brand warranty. Seeded demo product — imagery is neutral stock photography.`,
           highlights: plan.highlights ?? [],
           attributes: demoAttributesFor(
