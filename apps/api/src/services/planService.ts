@@ -55,7 +55,7 @@ async function notify(sellerId: string, title: string, body: string, sms = false
 }
 
 /** Can the wallet plus what is owed on the next payout cover this, GST included? */
-async function canPay(sellerId: string, basePaise: number): Promise<boolean> {
+export async function canPay(sellerId: string, basePaise: number): Promise<boolean> {
   const { fees } = await getCommercial();
   const [wallet, settlement] = await Promise.all([balance(sellerId, 'PROMOTION'), balance(sellerId, 'SETTLEMENT')]);
   return wallet + Math.max(0, settlement) >= basePaise + cloweGst(basePaise, fees.gstPercent);

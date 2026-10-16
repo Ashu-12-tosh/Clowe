@@ -2,16 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import {
-  TRYON_PACKS,
-  type SellerTryOnMetric,
-  type SellerTryOnOverview,
-  type TryOnPackKey,
-} from '@clowe/shared';
+import { type SellerTryOnMetric, type SellerTryOnOverview } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
+import { ContactVendorSupport } from '@/components/seller/AdsSection';
 
 const RANGES = [
   { days: 7, label: 'Last 7 days' },
@@ -26,9 +22,11 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 const LEDGER_LABELS: Record<string, string> = {
-  FREE_GRANT: '🎁 Free launch credits',
+  FREE_GRANT: '🎁 Free credits',
   PURCHASE: '🛒 Pack purchased',
+  ADMIN: '➕ Added by Clowe',
   RUN: '✨ Shopper try-on',
+  EXPIRED: '⌛ Expired',
 };
 
 function fmtDateTime(iso: string): string {
@@ -57,7 +55,8 @@ export default function SellerTryOnPage() {
   const [data, setData] = useState<SellerTryOnOverview | null>(null);
   const [limitDrafts, setLimitDrafts] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState('');
-  const [buying, setBuying] = useState<TryOnPackKey | ''>('');
+  const [buying, setBuying] = useState<number | 0>(0);
+  const [monthly, setMonthly] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
@@ -108,23 +107,34 @@ export default function SellerTryOnPage() {
     }
   }
 
-  async function buy(pack: TryOnPackKey) {
+  async function buy(credits: number) {
     if (buying) return;
-    setBuying(pack);
+    setBuying(credits);
     setError('');
     try {
       const result = await api<{ balance: number; credits: number }>('/api/seller/tryon/buy', {
         method: 'POST',
-        body: { pack },
+        body: { credits, autoRenew: monthly },
         auth: true,
       });
       flash(`${result.credits} try-ons added — balance ${result.balance}`);
-      toast.success(`Paid — ${result.credits} try-ons added, balance ${result.balance}`);
+      toast.success(`Paid from your Seller Wallet — ${result.credits} try-ons added, balance ${result.balance}`);
       load();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Purchase failed');
     } finally {
-      setBuying('');
+      setBuying(0);
+    }
+  }
+
+  async function stopMonthly() {
+    setError('');
+    try {
+      await api('/api/seller/tryon/auto-renew', { method: 'POST', body: { credits: null }, auth: true });
+      flash('Monthly pack stopped — your credits stay');
+      load();
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Could not stop it');
     }
   }
 
@@ -420,42 +430,65 @@ export default function SellerTryOnPage() {
             </p>
             <p className="mt-2 font-display text-3xl font-bold">{balance}</p>
             <p className="mt-1 text-xs text-gray-400">
-              {data.credits.freeGrant
-                ? 'Includes your 50 free early-seller try-ons.'
-                : 'Each shopper try-on uses one credit.'}
+              Each successful shopper try-on uses one credit; a failed one, or the same shopper
+              trying the same photo on the same product again within 24 hours, is free. At 0,
+              shoppers stop seeing “Try On Me”.
+              {data.credits.freeGrant ? ' Includes your free credits.' : ''}
             </p>
           </div>
 
           <div className="rounded-2xl border border-gray-100 bg-white p-4">
             <p className="text-sm font-bold text-ink-900">Buy more try-ons</p>
             <p className="text-[11px] text-gray-400">
-              Credits never expire and work across all your products.
+              Paid from your Seller Wallet (then your next payout), plus {data.credits.gstPercent}% GST.{' '}
+              {data.credits.expiryDays
+                ? `Credits expire ${data.credits.expiryDays} days after they are added.`
+                : 'Credits do not expire.'}{' '}
+              They work across all your products.
             </p>
+            {data.credits.monthlyPackCredits && data.credits.renewsAt && (
+              <p className="mt-2 rounded-lg bg-cream-50 px-3 py-2 text-xs text-ink-900" data-monthly-pack>
+                Monthly pack: {data.credits.monthlyPackCredits} credits, renews {new Date(data.credits.renewsAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}.{' '}
+                <button type="button" onClick={() => void stopMonthly()} className="font-semibold text-brand-600 hover:underline">
+                  Stop
+                </button>
+              </p>
+            )}
+            <label className="mt-3 flex items-center gap-2 text-xs text-ink-900">
+              <input type="checkbox" checked={monthly} onChange={(e) => setMonthly(e.target.checked)} name="monthly" />
+              Buy it again every month on this date
+            </label>
             <ul className="mt-3 space-y-2">
-              {TRYON_PACKS.map((pack) => (
+              {data.credits.packs.map((pack) => (
                 <li
-                  key={pack.key}
+                  key={pack.credits}
                   className="flex items-center justify-between gap-2 rounded-xl border border-gray-100 p-3"
+                  data-pack={pack.credits}
                 >
                   <div>
-                    <p className="text-sm font-bold text-ink-900">
-                      {pack.label} · {pack.credits} try-ons
-                    </p>
+                    <p className="text-sm font-bold text-ink-900">{pack.credits} try-ons</p>
                     <p className="text-[11px] text-gray-400">
-                      {formatPaise(pack.pricePaise)} ·{' '}
-                      {formatPaise(Math.round(pack.pricePaise / pack.credits))} each
+                      {formatPaise(pack.pricePaise)} + GST · {formatPaise(Math.round(pack.pricePaise / pack.credits))} each
                     </p>
                   </div>
                   <button
-                    onClick={() => void buy(pack.key)}
-                    disabled={buying !== ''}
+                    onClick={() => void buy(pack.credits)}
+                    disabled={buying !== 0}
                     className="rounded-lg bg-brand-600 px-3.5 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-700 disabled:opacity-50"
                   >
-                    {buying === pack.key ? <><Spinner className="mr-1" />Buying…</> : 'Buy'}
+                    {buying === pack.credits ? <><Spinner className="mr-1" />Buying…</> : monthly ? 'Buy monthly' : 'Buy'}
                   </button>
                 </li>
               ))}
             </ul>
+            <div className="mt-3 border-t border-gray-100 pt-3">
+              <p className="text-xs text-gray-600">
+                More than {Math.max(...data.credits.packs.map((p) => p.credits))}? {formatPaise(data.credits.extraCreditPaise)} per credit + GST — ask vendor support and we add them.
+              </p>
+              <div className="mt-2">
+                <ContactVendorSupport topic="more AI Try-On credits" />
+              </div>
+            </div>
           </div>
 
           <div className="rounded-2xl border border-gray-100 bg-white p-4">

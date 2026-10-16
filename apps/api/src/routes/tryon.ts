@@ -29,6 +29,7 @@ import { assertTryOnConsent } from '../services/tryonConsent';
 import { deleteTryOnPhotosOf } from '../services/tryonPhotoRetention';
 import { assertOwnAssets, resolveFileUrl, resolveFileUrls, storePrivateFile } from '../services/assets';
 import { categoryRulesFor } from '../services/categoryRules';
+import { consumeCredit, noticeIfOut } from '../services/tryonCredits';
 
 export const tryonRouter = Router();
 tryonRouter.use(requireAuth);
@@ -258,15 +259,23 @@ tryonRouter.post('/', async (req, res, next) => {
       );
     }
 
-    // Seller-side quota: every run costs the shop one credit, and the seller
-    // may cap individual products. Either running out turns try-on off here.
-    if (product.seller.tryOnCredits <= 0) {
+    // A repeat — same shopper, photo and product within 24 hours of a
+    // successful image — is free to the seller and outside the product's cap.
+    const repeat = await prisma.tryOnHistory.findFirst({
+      where: { userId, productId: product.id, inputImageUrl: input.photoRef, status: 'SUCCESS', createdAt: { gt: new Date(Date.now() - 24 * 3_600_000) } },
+      select: { id: true },
+    });
+
+    // Seller-side quota: every successful run costs the shop one credit, and
+    // the seller may cap individual products. Either running out turns
+    // try-on off here.
+    if (!repeat && product.seller.tryOnCredits <= 0) {
       throw ApiError.badRequest(
         'AI Try-On is not available on this product right now',
         'TRYON_NOT_ELIGIBLE',
       );
     }
-    if (product.tryOnLimit != null && product.tryOnUsed >= product.tryOnLimit) {
+    if (!repeat && product.tryOnLimit != null && product.tryOnUsed >= product.tryOnLimit) {
       throw ApiError.badRequest(
         'AI Try-On is not available on this product right now',
         'TRYON_NOT_ELIGIBLE',
@@ -307,10 +316,10 @@ tryonRouter.post('/', async (req, res, next) => {
         contentType: image.contentType,
       });
       // Cost + latency are logged per run — the admin accounting/monitor trail.
-      // A successful run also consumes one of the seller's try-on credits and
-      // counts against the product's own cap.
-      const [updated] = await prisma.$transaction([
-        prisma.tryOnHistory.update({
+      // A successful run that is not a free repeat also consumes one of the
+      // seller's try-on credits and counts against the product's own cap.
+      const updated = await prisma.$transaction(async (tx) => {
+        const row = await tx.tryOnHistory.update({
           where: { id: record.id },
           data: {
             status: 'SUCCESS',
@@ -318,24 +327,14 @@ tryonRouter.post('/', async (req, res, next) => {
             costPaise: tryOnProvider.costPaise,
             durationMs: Date.now() - startedAt,
           },
-        }),
-        prisma.sellerProfile.update({
-          where: { id: product.seller.id },
-          data: { tryOnCredits: { decrement: 1 } },
-        }),
-        prisma.product.update({
-          where: { id: product.id },
-          data: { tryOnUsed: { increment: 1 } },
-        }),
-        prisma.tryOnCreditLedger.create({
-          data: {
-            sellerId: product.seller.id,
-            delta: -1,
-            reason: 'RUN',
-            note: product.title.slice(0, 80),
-          },
-        }),
-      ]);
+        });
+        if (!repeat) {
+          await consumeCredit(product.seller.id, product.title, tx);
+          await tx.product.update({ where: { id: product.id }, data: { tryOnUsed: { increment: 1 } } });
+        }
+        return row;
+      });
+      if (!repeat) void noticeIfOut(product.seller.id).catch((err) => console.error('[clowe-api] try-on credit notice failed:', err));
       const body: TryOnResult = {
         id: updated.id,
         status: 'SUCCESS',

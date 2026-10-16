@@ -476,10 +476,17 @@ model SellerProfile {
   // Why the shop was suspended or banned (shown to the seller).
   suspensionReason String?
   suspendedAt      DateTime?
-  // AI Try-On credits: each shopper run on this shop deducts one. First 100
-  // sellers get 50 free (tryOnFreeGrant marks who received the launch offer).
+  // AI Try-On credits: each successful shopper run on this shop deducts one
+  // (the sum of the unexpired lots). The first approved sellers get free
+  // credits (tryOnFreeGrant marks who received them; owner's Batch 2).
   tryOnCredits   Int     @default(0)
   tryOnFreeGrant Boolean @default(false)
+  /// A pack bought every month (its credits), and when it renews next.
+  tryOnPackRenewCredits Int?
+  tryOnPackRenewAt      DateTime?
+  /// When the seller was told the credits ran out (cleared by a top-up).
+  tryOnZeroNotifiedAt   DateTime?
+  tryOnCreditLots       TryOnCreditLot[]
   // Admin's VIP flag: no handling fee, whatever the plan.
   vip            Boolean @default(false)
   subscription   SellerSubscription?
@@ -2446,6 +2453,24 @@ model StockTransferItem {
 
   @@unique([transferId, variantId])
   @@map("stock_transfer_items")
+}
+
+/// A batch of try-on credits (free grant, pack, admin top-up): spent oldest-
+/// expiring first, and what is left at expiresAt lapses (null = never).
+model TryOnCreditLot {
+  id        String        @id @default(cuid())
+  sellerId  String
+  seller    SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  /// FREE_GRANT | PURCHASE | ADMIN | LEGACY
+  source    String
+  credits   Int
+  remaining Int
+  expiresAt DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([sellerId, remaining])
+  @@index([expiresAt])
+  @@map("tryon_credit_lots")
 }
 
 // Every credit movement on a seller's AI Try-On balance: the launch grant,

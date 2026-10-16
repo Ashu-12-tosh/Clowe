@@ -73,21 +73,46 @@ export interface SellerTryOnOverview {
 
 import { z } from 'zod';
 
-/** How many of the earliest sellers get the free launch credits. */
-export const TRYON_FREE_GRANT_SELLERS = 100;
-export const TRYON_FREE_GRANT_CREDITS = 50;
+// Packs, prices, the free grant and expiry are admin settings (commercial.tryon).
 
-export const TRYON_PACKS = [
-  { key: 'S', credits: 50, pricePaise: 29900, label: 'Starter' },
-  { key: 'M', credits: 200, pricePaise: 99900, label: 'Growth' },
-  { key: 'L', credits: 500, pricePaise: 199900, label: 'Pro' },
-] as const;
-export type TryOnPackKey = (typeof TRYON_PACKS)[number]['key'];
-
+/** Buy a pack (by its credits): once, or every month on this date. */
 export const sellerTryOnBuySchema = z.object({
-  pack: z.enum(['S', 'M', 'L']),
+  credits: z.number().int().min(1),
+  autoRenew: z.boolean().default(false),
 });
 export type SellerTryOnBuyInput = z.infer<typeof sellerTryOnBuySchema>;
+
+/** Change the monthly pack (its credits), or stop it (null). */
+export const sellerTryOnAutoRenewSchema = z.object({ credits: z.number().int().min(1).nullable() });
+
+/** Admin: credits above the biggest pack, charged at the per-credit rate unless waived. */
+export const adminTryOnCreditsSchema = z.object({
+  credits: z.number().int().min(1).max(100_000),
+  charge: z.boolean(),
+  note: z.string().trim().max(200).default(''),
+});
+
+/** Admin only: a month of try-on economics. */
+export interface TryOnProfitReport {
+  month: string;
+  creditsSold: number;
+  creditsGranted: number;
+  /** Credits spent (one per successful run that was not a free repeat). */
+  creditsUsed: number;
+  successfulRuns: number;
+  freeRepeats: number;
+  failedRuns: number;
+  /** What sellers paid for credits, before GST. */
+  revenuePaise: number;
+  /** As logged by the provider adapter for each run. */
+  providerCostPaise: number;
+  /** Successful runs × the admin's cost per credit. */
+  estimatedCostPaise: number;
+  profitPaise: number;
+  costPerCreditPaise: number;
+  tierCostsPaise: number[];
+  phaseNote: string;
+}
 
 export const sellerTryOnLimitSchema = z.object({
   /** null clears the cap — the product uses the pool until it runs dry. */
@@ -105,9 +130,19 @@ export interface SellerTryOnLedgerRow {
 export interface SellerTryOnCredits {
   /** Try-ons left in the pool across all products. */
   balance: number;
-  /** True when this shop received the first-100-sellers launch offer. */
+  /** True when this shop received the free credits for the first approved sellers. */
   freeGrant: boolean;
   ledger: SellerTryOnLedgerRow[];
+  /** The packs on sale (before GST). */
+  packs: { credits: number; pricePaise: number }[];
+  /** The monthly pack, if any, and when it renews. */
+  monthlyPackCredits: number | null;
+  renewsAt: string | null;
+  /** Credits lapse this many days after they are added; null = never. */
+  expiryDays: number | null;
+  /** Above the biggest pack, per credit, through vendor support. */
+  extraCreditPaise: number;
+  gstPercent: number;
 }
 
 /** One try-on-eligible product with its cap and usage. */

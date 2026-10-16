@@ -13,6 +13,7 @@ import { startComplaintBreachSweep } from './services/complaintService';
 import { startSellerInvoiceJob } from './services/sellerInvoice';
 import { startPlanJobs } from './services/planService';
 import { startAdJobs } from './services/advertising';
+import { startTryOnCreditJobs } from './services/tryonCredits';
 import { logOtpProviderStatus } from './services/otp';
 import { startSearchLogCleanup } from './services/searchAnalytics';
 import { startQuerySuggestionRefresh } from './services/querySuggestions';
@@ -46,6 +47,7 @@ startSellerInvoiceJob();
 // Plan renewals, grace and the product-limit notices - hourly.
 startPlanJobs();
 startAdJobs();
+startTryOnCreditJobs();
 
 // Shoppers' try-on photos are deleted 24 hours after upload - every 10 minutes.
 startTryOnPhotoRetention();

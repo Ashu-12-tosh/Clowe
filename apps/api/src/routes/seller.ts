@@ -262,24 +262,6 @@ sellerRouter.post('/register', async (req, res, next) => {
         `[clowe-api] SELLER REFERRAL USED: referrer=${referrer.id} referred=${profile.id} code=${referralCode}`,
       );
     }
-    // Launch offer: the first 100 shops on Clowe get 50 free AI try-ons.
-    const granted = await prisma.sellerProfile.count({ where: { tryOnFreeGrant: true } });
-    if (granted < 100) {
-      await prisma.$transaction([
-        prisma.sellerProfile.update({
-          where: { id: profile.id },
-          data: { tryOnFreeGrant: true, tryOnCredits: { increment: 50 } },
-        }),
-        prisma.tryOnCreditLedger.create({
-          data: {
-            sellerId: profile.id,
-            delta: 50,
-            reason: 'FREE_GRANT',
-            note: 'Early-seller launch offer',
-          },
-        }),
-      ]);
-    }
     // A customer becomes a SELLER (they can still shop). An admin stays ADMIN:
     // seller pages go by the shop, not the role, and demoting the only admin
     // would lock everyone out of the admin panel.

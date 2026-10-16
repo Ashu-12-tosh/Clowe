@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  TRYON_PACKS,
+  sellerTryOnAutoRenewSchema,
   sellerTryOnBuySchema,
   sellerTryOnLimitSchema,
   variantLabelOf,
@@ -17,6 +17,8 @@ import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { blockSuspendedWrites, requireSeller } from './seller';
 import { categoryRulesMap } from '../services/categoryRules';
+import { getCommercial } from '../services/commercial';
+import { buyPack, grantFreeCredits, setPackAutoRenew } from '../services/tryonCredits';
 
 export const sellerTryonRouter = Router();
 sellerTryonRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
@@ -48,6 +50,9 @@ function requestRef(id: string, createdAt: Date): string {
 sellerTryonRouter.get('/', async (req, res, next) => {
   try {
     const sellerId = req.seller!.id;
+    // Sellers approved before the free grant moved to approval get theirs here.
+    await grantFreeCredits(sellerId);
+    const c = await getCommercial();
     const days = Math.min(Math.max(Number(req.query.days) || 30, 7), 180);
     const to = new Date();
     const from = startOfDay(new Date(Date.now() - (days - 1) * 86400000));
@@ -98,7 +103,7 @@ sellerTryonRouter.get('/', async (req, res, next) => {
       }),
       prisma.sellerProfile.findUnique({
         where: { id: sellerId },
-        select: { tryOnCredits: true, tryOnFreeGrant: true },
+        select: { tryOnCredits: true, tryOnFreeGrant: true, tryOnPackRenewCredits: true, tryOnPackRenewAt: true },
       }),
       prisma.tryOnCreditLedger.findMany({
         where: { sellerId },
@@ -207,6 +212,12 @@ sellerTryonRouter.get('/', async (req, res, next) => {
           note: l.note,
           createdAt: l.createdAt.toISOString(),
         })),
+        packs: c.tryon.packs,
+        monthlyPackCredits: profile?.tryOnPackRenewCredits ?? null,
+        renewsAt: profile?.tryOnPackRenewAt?.toISOString() ?? null,
+        expiryDays: c.tryon.expiryDays,
+        extraCreditPaise: c.tryon.extraCreditPaise,
+        gstPercent: c.fees.gstPercent,
       },
       allocations,
     };
@@ -231,28 +242,24 @@ sellerTryonRouter.patch('/products/:productId', async (req, res, next) => {
   }
 });
 
-// Buy a credit pack. The dev payment provider settles instantly; with Razorpay
-// this goes through the normal checkout flow before credits are added.
+// Buy a credit pack (owner's Batch 2): paid from the Seller Wallet with GST,
+// then the payable balance; once, or renewing monthly on this date.
 sellerTryonRouter.post('/buy', async (req, res, next) => {
   try {
-    const { pack } = sellerTryOnBuySchema.parse(req.body);
-    const chosen = TRYON_PACKS.find((p) => p.key === pack)!;
-    const [profile] = await prisma.$transaction([
-      prisma.sellerProfile.update({
-        where: { id: req.seller!.id },
-        data: { tryOnCredits: { increment: chosen.credits } },
-        select: { tryOnCredits: true },
-      }),
-      prisma.tryOnCreditLedger.create({
-        data: {
-          sellerId: req.seller!.id,
-          delta: chosen.credits,
-          reason: 'PURCHASE',
-          note: `${chosen.label} pack (${chosen.credits} try-ons, ₹${chosen.pricePaise / 100})`,
-        },
-      }),
-    ]);
-    res.json({ success: true, data: { balance: profile.tryOnCredits, credits: chosen.credits } });
+    const { credits, autoRenew } = sellerTryOnBuySchema.parse(req.body);
+    const p = await buyPack(req.seller!.id, credits, autoRenew);
+    res.json({ success: true, data: { balance: p.tryOnCredits, credits, monthlyPackCredits: p.tryOnPackRenewCredits, renewsAt: p.tryOnPackRenewAt?.toISOString() ?? null } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Change the monthly pack, or stop it (credits: null).
+sellerTryonRouter.post('/auto-renew', async (req, res, next) => {
+  try {
+    const { credits } = sellerTryOnAutoRenewSchema.parse(req.body);
+    const p = await setPackAutoRenew(req.seller!.id, credits);
+    res.json({ success: true, data: { balance: p.tryOnCredits, monthlyPackCredits: p.tryOnPackRenewCredits, renewsAt: p.tryOnPackRenewAt?.toISOString() ?? null } });
   } catch (err) {
     next(err);
   }

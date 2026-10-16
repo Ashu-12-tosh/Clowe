@@ -18,6 +18,7 @@ import { api, ApiRequestError, downloadFile } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { BarList, DonutChart, LineChart, colorAt } from '@/components/charts/Charts';
 import RequestDrawer from '@/components/admin/tryon/RequestDrawer';
+import TryOnProfitCard from '@/components/admin/tryon/ProfitCard';
 import SettingsModal, { type SettingsMode } from '@/components/admin/tryon/SettingsModal';
 
 const REFRESH_MS = 30000;
@@ -306,6 +307,8 @@ export default function AdminTryOnMonitorPage() {
           {error}
         </p>
       )}
+
+      <TryOnProfitCard />
 
       {/* --- KPI cards -------------------------------------------------- */}
       <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">

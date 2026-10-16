@@ -31,6 +31,7 @@ import {
   SELLER_DOCUMENT_LABELS,
   ADMIN_PENALTY_LABELS,
   adminPenaltySchema,
+  adminTryOnCreditsSchema,
   sellerVipSchema,
   sellerApplicationId,
   sellerInfoRequestSchema,
@@ -38,6 +39,7 @@ import {
 } from '@clowe/shared';
 import { resolveFileUrls } from '../services/assets';
 import { grantWelcomeCredit } from '../services/advertising';
+import { adminAddCredits, grantFreeCredits } from '../services/tryonCredits';
 import { getCommercial } from '../services/commercial';
 import { syncWarehouse, syncWarehouseSafe } from '../services/shipping/warehouses';
 import { prisma } from '../db';
@@ -547,8 +549,11 @@ adminSellersRouter.patch('/:id/status', async (req, res, next) => {
     // Approved: register their pickup address with Delhivery now, so the first
     // order can be booked. A failure is recorded on the seller, never raised.
     if (step.status === 'APPROVED') await syncWarehouseSafe(seller.id);
-    // And the welcome advertising credit, once.
-    if (step.status === 'APPROVED') await grantWelcomeCredit(seller.id);
+    // And the welcome advertising credit and free try-on credits, once each.
+    if (step.status === 'APPROVED') {
+      await grantWelcomeCredit(seller.id);
+      await grantFreeCredits(seller.id);
+    }
 
     if (blocking || input.action === 'reinstate') {
       sendToUserSafe(
@@ -1021,6 +1026,30 @@ adminSellersRouter.get('/:id', async (req, res, next) => {
     };
     body.kycAlerts.fraudAccount = kyc.fraudAccount;
     res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// AI Try-On credits above the biggest pack (owner's Batch 2): asked for
+// through vendor support, added here, charged at the per-credit rate
+// unless waived. Audit-logged.
+adminSellersRouter.post('/:id/tryon-credits', async (req, res, next) => {
+  try {
+    const input = adminTryOnCreditsSchema.parse(req.body);
+    const r = await adminAddCredits(req.params.id, input.credits, input.charge, input.note);
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'SELLERS',
+      action: 'Try-on credits added',
+      entityType: 'SellerProfile',
+      entityId: req.params.id,
+      summary: `${input.credits} try-on credits added${r.pricePaise ? `, charged Rs ${(r.pricePaise / 100).toLocaleString('en-IN')} + GST` : ' free of charge'}${input.note ? ` — ${input.note}` : ''}`,
+      metadata: { credits: input.credits, pricePaise: r.pricePaise },
+      ipAddress: ipFrom(req),
+    });
+    res.json({ success: true, data: r });
   } catch (err) {
     next(err);
   }

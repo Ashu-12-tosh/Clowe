@@ -28,6 +28,7 @@ import { tryOnProvider } from '../services/tryon';
 import { removeStoredFile } from './uploads';
 import { resolveFileUrls } from '../services/assets';
 import { privateStorage } from '../services/storage';
+import { tryOnProfitReport } from '../services/tryonCredits';
 
 export const adminTryonRouter = Router();
 adminTryonRouter.use(requireAuth, requireRole('ADMIN'));
@@ -913,6 +914,19 @@ adminTryonRouter.get('/filters', async (_req, res, next) => {
         categories: categories.map((c) => ({ id: c.id, name: c.name, parentId: c.parentId })),
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Admin only (owner's Batch 2): a month of try-on economics — credits sold
+// and given, used, revenue before GST, the provider's cost, profit.
+adminTryonRouter.get('/profit', async (req, res, next) => {
+  try {
+    const month = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)
+      ? req.query.month
+      : new Date(Date.now() + 5.5 * 3_600_000).toISOString().slice(0, 7);
+    res.json({ success: true, data: await tryOnProfitReport(month) });
   } catch (err) {
     next(err);
   }

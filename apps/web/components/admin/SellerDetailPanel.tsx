@@ -141,6 +141,23 @@ export default function SellerDetailPanel({
     }
   }
 
+  /** Try-on credits above the biggest pack, asked for through vendor support. */
+  async function addTryOnCredits() {
+    const n = Number(prompt(`How many AI Try-On credits for ${detail?.shopName}?`));
+    if (!Number.isInteger(n) || n < 1 || busy) return;
+    const charge = confirm(`Charge ${n} credits at the per-credit rate (+ GST) to ${detail?.shopName}'s wallet? Cancel adds them free.`);
+    const note = prompt('Note (optional, shown to the seller):') ?? '';
+    setBusy('tryon-credits');
+    try {
+      await api(`/api/admin/sellers/${sellerId}/tryon-credits`, { auth: true, body: { credits: n, charge, note: note.trim() }, success: `${n} try-on credits added` });
+      await load();
+    } catch (err) {
+      setActionError(err instanceof ApiRequestError ? err.message : 'Could not add the credits');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   /** "Needs more info": the applicant is told what to send (app, SMS, e-mail). */
   async function requestInfo() {
     const message = prompt(`What does ${detail?.shopName} need to send? (shown to the seller)`);
@@ -699,6 +716,9 @@ export default function SellerDetailPanel({
                 </button>
                 <button onClick={() => void penalise('INACCURATE_TRYON_DATA')} disabled={!!busy} data-action="penalty-tryon" className="rounded border border-red-300 px-2 py-1 font-semibold text-red-700 disabled:opacity-50">
                   Penalty: inaccurate try-on data
+                </button>
+                <button onClick={() => void addTryOnCredits()} disabled={!!busy} data-action="tryon-credits" className="rounded border border-gray-300 px-2 py-1 font-semibold text-ink-900 disabled:opacity-50">
+                  Add try-on credits
                 </button>
               </div>
               <div className="mt-3 rounded-lg border border-gray-200 p-3 text-[11px]" data-application>
