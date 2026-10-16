@@ -2455,6 +2455,32 @@ model StockTransferItem {
   @@map("stock_transfer_items")
 }
 
+enum FeeChangeStatus {
+  SCHEDULED
+  APPLIED
+  CANCELLED
+}
+
+/// A change to the commercial rules announced ahead (owner's Batch 2): at
+/// least 30 days' notice to sellers by email, SMS and the dashboard, applied
+/// automatically on its date.
+model ScheduledFeeChange {
+  id          String          @id @default(cuid())
+  /// The partial commercial rules it applies (merged over what is in force then).
+  patch       Json
+  /// What changes, in words, as sellers were told.
+  summary     String
+  effectiveAt DateTime
+  status      FeeChangeStatus @default(SCHEDULED)
+  createdById String
+  createdAt   DateTime        @default(now())
+  appliedAt   DateTime?
+  cancelledAt DateTime?
+
+  @@index([status, effectiveAt])
+  @@map("scheduled_fee_changes")
+}
+
 /// A batch of try-on credits (free grant, pack, admin top-up): spent oldest-
 /// expiring first, and what is left at expiresAt lapses (null = never).
 model TryOnCreditLot {

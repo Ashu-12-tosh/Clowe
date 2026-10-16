@@ -21,8 +21,10 @@ import {
   voidReferralSchema,
   NOT_A_SALE_STATUSES,
   commercialPatchSchema,
+  feeChangeScheduleSchema,
 } from '@clowe/shared';
 import { getCommercial, updateCommercial } from '../services/commercial';
+import { cancelFeeChange, listFeeChanges, scheduleFeeChange } from '../services/feeChanges';
 import { admitToPlan } from '../services/planService';
 import { auditSafe } from '../services/auditService';
 import { Prisma } from '@prisma/client';
@@ -762,6 +764,32 @@ adminRouter.patch('/commercial', async (req, res, next) => {
       metadata: { patch, before: Object.fromEntries(Object.keys(patch).map((k) => [k, (before as Record<string, unknown>)[k]])) },
     });
     res.json({ success: true, data: after });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Fee changes announced ahead: at least 30 days out, sellers told, applied on the date.
+adminRouter.get('/fee-changes', async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await listFeeChanges() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminRouter.post('/fee-changes', async (req, res, next) => {
+  try {
+    const input = feeChangeScheduleSchema.parse(req.body);
+    res.status(201).json({ success: true, data: await scheduleFeeChange(req.auth!.userId, input.patch, new Date(input.effectiveAt)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminRouter.post('/fee-changes/:id/cancel', async (req, res, next) => {
+  try {
+    res.json({ success: true, data: await cancelFeeChange(req.auth!.userId, req.params.id) });
   } catch (err) {
     next(err);
   }

@@ -3,6 +3,7 @@ import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { invoiceFor, invoiceList } from '../services/sellerInvoice';
 import { walletView } from '../services/wallet';
+import { listFeeChanges } from '../services/feeChanges';
 import { blockSuspendedWrites, requireSeller } from './seller';
 import { getCommercial } from '../services/commercial';
 import { changePlan, ensureSubscription, pickLiveProducts, setAutoRenew } from '../services/planService';
@@ -21,6 +22,15 @@ import {
 
 export const sellerBillingRouter = Router();
 sellerBillingRouter.use(requireAuth, requireSeller);
+
+// Fee changes announced and not yet in effect.
+sellerBillingRouter.get('/fee-changes', async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await listFeeChanges(true) });
+  } catch (err) {
+    next(err);
+  }
+});
 
 sellerBillingRouter.get('/wallet', async (req, res, next) => {
   try {

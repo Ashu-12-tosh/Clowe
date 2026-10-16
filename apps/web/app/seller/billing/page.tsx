@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { invoiceMonthLabel, type SellerInvoiceListRow } from '@clowe/shared';
+import { invoiceMonthLabel, type FeeChangeView, type SellerInvoiceListRow } from '@clowe/shared';
 import { api } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import PromotionCreditsCard from '@/components/seller/PromotionCreditsCard';
@@ -20,10 +20,12 @@ interface WalletView {
 export default function SellerBillingPage() {
   const [wallet, setWallet] = useState<WalletView | null>(null);
   const [invoices, setInvoices] = useState<SellerInvoiceListRow[] | null>(null);
+  const [changes, setChanges] = useState<FeeChangeView[]>([]);
 
   useEffect(() => {
     api<WalletView>('/api/seller/billing/wallet', { auth: true }).then(setWallet).catch(() => {});
     api<SellerInvoiceListRow[]>('/api/seller/billing/invoices', { auth: true }).then(setInvoices).catch(() => setInvoices([]));
+    api<FeeChangeView[]>('/api/seller/billing/fee-changes', { auth: true }).then(setChanges).catch(() => {});
   }, []);
 
   return (
@@ -34,6 +36,13 @@ export default function SellerBillingPage() {
           Clowe&apos;s charges are exclusive of GST; GST is added and shown on your monthly tax invoice from Clowe.
         </p>
       </div>
+      {changes.map((c) => (
+        <section key={c.id} className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" data-fee-change>
+          <p className="font-bold">Fee change from {new Date(c.effectiveAt).toLocaleDateString('en-IN', { dateStyle: 'long' })}</p>
+          <pre className="mt-1 whitespace-pre-wrap font-sans text-xs">{c.summary}</pre>
+          <p className="mt-1 text-xs">Orders placed before then keep the old fees. <Link href="/seller-fees" className="font-semibold underline">Seller fees</Link></p>
+        </section>
+      ))}
       <PromotionCreditsCard />
       <section className="rounded-2xl border border-gray-100 bg-white p-4" data-ad-credit>
         <h2 className="text-sm font-bold text-ink-900">Advertising credit</h2>

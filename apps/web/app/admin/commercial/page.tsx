@@ -9,6 +9,7 @@ import {
   PLAN_FEATURE_LABELS,
   PLAN_FEATURES,
   type CommercialSettings,
+  type FeeChangeView,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { toast } from '@/lib/toast';
@@ -203,6 +204,22 @@ export default function AdminCommercialPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [effectiveOn, setEffectiveOn] = useState('');
+  const [changes, setChanges] = useState<FeeChangeView[]>([]);
+
+  const loadChanges = useCallback(() => {
+    api<FeeChangeView[]>('/api/admin/fee-changes', { auth: true }).then(setChanges).catch(() => setChanges([]));
+  }, []);
+  useEffect(loadChanges, [loadChanges]);
+
+  async function cancelChange(id: string) {
+    if (!confirm('Cancel this fee change? Sellers are told it will not happen.')) return;
+    try {
+      await api(`/api/admin/fee-changes/${id}/cancel`, { method: 'POST', auth: true, success: 'Cancelled — sellers told' });
+      loadChanges();
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Not cancelled');
+    }
+  }
 
   const load = useCallback(() => {
     api<CommercialSettings>('/api/admin/commercial', { auth: true })
@@ -250,6 +267,7 @@ export default function AdminCommercialPage() {
         quiet: true,
       });
       setDraft(rules);
+      loadChanges();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Not scheduled');
     } finally {
@@ -273,6 +291,29 @@ export default function AdminCommercialPage() {
         Fee changes for sellers need 30 days&apos; notice. To schedule one, edit a section, pick the date and press &ldquo;Schedule&rdquo;:
         <input type="date" name="effectiveOn" min={minDate} value={effectiveOn} onChange={(e) => setEffectiveOn(e.target.value)} className="rounded border border-amber-300 px-2 py-1" />
       </div>
+      {changes.length > 0 && (
+        <section className="rounded-2xl border border-gray-100 bg-white p-4" data-fee-changes>
+          <h2 className="text-sm font-bold text-ink-900">Announced fee changes</h2>
+          <ul className="mt-2 divide-y divide-gray-100 text-xs">
+            {changes.map((c) => (
+              <li key={c.id} className="flex flex-wrap items-start justify-between gap-2 py-2">
+                <div>
+                  <p className="font-semibold text-ink-900">
+                    From {new Date(c.effectiveAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })} ·{' '}
+                    <span className={c.status === 'SCHEDULED' ? 'text-amber-700' : c.status === 'APPLIED' ? 'text-green-700' : 'text-gray-500'}>{c.status.toLowerCase()}</span>
+                  </p>
+                  <pre className="mt-1 whitespace-pre-wrap font-sans text-gray-600">{c.summary}</pre>
+                </div>
+                {c.status === 'SCHEDULED' && (
+                  <button type="button" onClick={() => void cancelChange(c.id)} className="rounded border border-gray-300 px-2 py-1 font-semibold">
+                    Cancel
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {SECTIONS.map((s) => (
         <section key={s.key} className="rounded-2xl border border-gray-100 bg-white p-4" data-commercial-section={s.key}>
           <div className="flex flex-wrap items-start justify-between gap-2">

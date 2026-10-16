@@ -416,3 +416,22 @@ export function cloweGst(basePaise: number, gstPercent: number): number {
 export function planAllows(c: CommercialSettings, plan: SellerPlan, feature: PlanFeature): boolean {
   return c.plans[plan].features.includes(feature);
 }
+
+// --- Fee changes announced ahead (owner's Batch 2) ------------------------------------
+
+export const feeChangeScheduleSchema = z.object({
+  /** The part of the commercial rules that changes. */
+  patch: z.record(z.string(), z.unknown()),
+  effectiveAt: z.string().datetime({ offset: true }),
+});
+
+export interface FeeChangeView {
+  id: string;
+  /** One line per value that changes, "fees.gtPercent: 1.5 → 2". */
+  summary: string;
+  effectiveAt: string;
+  status: 'SCHEDULED' | 'APPLIED' | 'CANCELLED';
+  createdAt: string;
+  appliedAt: string | null;
+  cancelledAt: string | null;
+}
