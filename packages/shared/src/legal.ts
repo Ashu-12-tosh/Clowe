@@ -33,6 +33,8 @@ export interface LegalEntity {
   gstin: string;
   supportEmail: string;
   supportPhone: string;
+  /** A second public number (shown beside the first). */
+  supportPhoneAlt: string;
 }
 
 export const DEFAULT_LEGAL_ENTITY: LegalEntity = {
@@ -42,6 +44,7 @@ export const DEFAULT_LEGAL_ENTITY: LegalEntity = {
   gstin: '',
   supportEmail: '',
   supportPhone: '',
+  supportPhoneAlt: '',
 };
 
 /** Words that stay in capitals when a registered name is shown in title case. */
@@ -63,7 +66,7 @@ export function legalDisplayName(name: string): string {
     .join('');
 }
 
-const TOKEN = /\{\{legal\.(name|displayName|registeredAddress|llpin|gstin|supportEmail|supportPhone)\}\}/g;
+const TOKEN = /\{\{legal\.(name|displayName|registeredAddress|llpin|gstin|supportEmail|supportPhoneAlt|supportPhone)\}\}/g;
 
 /**
  * Fill {{legal.*}} tokens in a policy page's markdown. A line naming a field

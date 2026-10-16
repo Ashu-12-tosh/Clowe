@@ -363,7 +363,8 @@ export default function AdminSettingsPage() {
             ['llpin', 'LLPIN', 'AAB-1234'],
             ['gstin', 'GSTIN', '27ABCDE1234F1Z0'],
             ['supportEmail', 'Support email', 'support@cloweshop.com'],
-            ['supportPhone', 'Support phone', '+91 98765 43210'],
+            ['supportPhone', 'Support phone (and WhatsApp)', '+91 98765 43210'],
+            ['supportPhoneAlt', 'Second support phone', '+91 98765 43211'],
           ] as const
         ).map(([key, label, placeholder]) => (
           <div key={key} className="mt-3">
@@ -379,7 +380,7 @@ export default function AdminSettingsPage() {
               />
             ) : (
               <input
-                type={key === 'supportEmail' ? 'email' : key === 'supportPhone' ? 'tel' : 'text'}
+                type={key === 'supportEmail' ? 'email' : key === 'supportPhone' || key === 'supportPhoneAlt' ? 'tel' : 'text'}
                 value={legal[key]}
                 placeholder={placeholder}
                 onChange={(e) => setLegal((l) => ({ ...l, [key]: e.target.value }))}

@@ -27,7 +27,8 @@ export default async function ContactPage() {
   // The link scheme is fixed here, never taken from the stored value.
   const reach = [
     legal.supportEmail.trim() && { kind: 'email' as const, icon: '✉️', label: 'Email', value: legal.supportEmail },
-    legal.supportPhone.trim() && { kind: 'phone' as const, icon: '📞', label: 'Phone', value: legal.supportPhone },
+    legal.supportPhone.trim() && { kind: 'phone' as const, icon: '📞', label: 'Phone & WhatsApp', value: legal.supportPhone },
+    legal.supportPhoneAlt.trim() && { kind: 'phone' as const, icon: '📞', label: 'Phone', value: legal.supportPhoneAlt },
   ].filter((row): row is { kind: 'email' | 'phone'; icon: string; label: string; value: string } => Boolean(row));
 
   return (

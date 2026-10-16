@@ -292,6 +292,10 @@ export const updateSettingsSchema = z.object({
         .string()
         .trim()
         .regex(/^(\+?\d[\d -]{7,18}\d)?$/, 'Enter a phone number, digits only (spaces, dashes and a leading + are fine)'),
+      supportPhoneAlt: z
+        .string()
+        .trim()
+        .regex(/^(\+?\d[\d -]{7,18}\d)?$/, 'Enter a phone number, digits only (spaces, dashes and a leading + are fine)'),
     })
     .partial()
     .optional(),

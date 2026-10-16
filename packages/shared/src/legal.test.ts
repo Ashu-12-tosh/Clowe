@@ -43,6 +43,15 @@ describe('fillLegalEntity', () => {
     expect(out).not.toContain('Email');
   });
 
+  it('fills the second phone separately from the first', () => {
+    const out = fillLegalEntity('Call {{legal.supportPhone}} or {{legal.supportPhoneAlt}}.', {
+      ...DEFAULT_LEGAL_ENTITY,
+      supportPhone: '+91 8929316316',
+      supportPhoneAlt: '+91 8929314314',
+    });
+    expect(out).toBe('Call +91 8929316316 or +91 8929314314.');
+  });
+
   it('falls back to the registered name when settings are unavailable', () => {
     expect(fillLegalEntity('By {{legal.name}}.', null)).toBe('By CLOWE PARTNERS LLP.');
   });
