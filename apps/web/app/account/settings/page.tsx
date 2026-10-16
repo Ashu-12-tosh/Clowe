@@ -568,7 +568,7 @@ export default function AccountSettingsPage() {
                 )}
                 <button
                   onClick={() => {
-                    void api('/api/auth/logout-all', { auth: true }).then(async () => {
+                    void api('/api/auth/logout-all', { method: 'POST', auth: true }).then(async () => {
                       await logoutSession();
                       window.location.href = '/login';
                     });

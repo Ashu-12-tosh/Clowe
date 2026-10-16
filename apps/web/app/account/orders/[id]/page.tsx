@@ -127,7 +127,7 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
     setBusy('cancel');
     setError('');
     try {
-      await api(`/api/orders/${order.id}/cancel`, { auth: true });
+      await api(`/api/orders/${order.id}/cancel`, { method: 'POST', auth: true });
       load();
       flash('Order cancelled.');
     } catch (err) {
