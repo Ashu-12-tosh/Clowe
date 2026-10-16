@@ -24,6 +24,11 @@ const AI_PILLS = [
 
 const ROTATE_MS = 5500;
 
+/** The hero picture's shape below 1024px: the phone image's 4:5, else the whole 16:9 picture. */
+export function heroPictureShape(mobileImageUrl: string | null | undefined): string {
+  return mobileImageUrl ? 'aspect-[4/5] max-w-sm sm:aspect-video' : 'aspect-video';
+}
+
 /** Headline with the admin-chosen word rendered in gold. */
 function Headline({ text, highlight }: { text: string; highlight: string | null }) {
   if (!highlight || !text.includes(highlight)) {
@@ -133,15 +138,15 @@ export default function HeroCarousel({ banners }: { banners: HomeBannerView[] })
               </div>
               {banner.imageUrl ? (
                 // Above the text on phones and tablets, beside it from 1024px. A phone
-                // gets its own 4:5 image, or the computer one cropped to 4:5 around
-                // its centre.
+                // gets its own 4:5 image when there is one; otherwise the computer
+                // image shows whole (16:9), so no product is cut off at the sides.
                 <div className="order-first flex justify-center lg:order-none lg:justify-end">
                   <BannerPicture
                     src={banner.imageUrl}
                     mobileSrc={banner.mobileImageUrl}
                     alt=""
                     loading={i === 0 ? 'eager' : 'lazy'}
-                    className="aspect-[4/5] w-full max-w-sm rounded-2xl object-cover object-center shadow-lg sm:aspect-video sm:max-w-lg lg:aspect-auto lg:h-72"
+                    className={`${heroPictureShape(banner.mobileImageUrl)} w-full rounded-2xl object-cover object-center shadow-lg sm:max-w-lg lg:aspect-auto lg:h-72`}
                   />
                 </div>
               ) : (

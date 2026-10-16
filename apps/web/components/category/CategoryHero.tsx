@@ -18,6 +18,16 @@ interface Props {
 }
 
 /**
+ * A designed slide's picture. On a phone it sits above the words, whole (the
+ * phone image's square, else the 16:9 picture), so no headline covers a
+ * product and nothing is cut off; from 640px it fills the right three
+ * quarters behind the words' fade.
+ */
+export function categoryPictureClass(mobileImageUrl: string | null | undefined): string {
+  return `block w-full object-cover ${mobileImageUrl ? 'aspect-square' : 'aspect-video'} sm:absolute sm:inset-y-0 sm:right-0 sm:aspect-auto sm:h-full sm:w-3/4`;
+}
+
+/**
  * Category hero: an auto-advancing banner carousel with arrows and dots, plus
  * the optional highlights card docked on the right.
  */
@@ -66,7 +76,7 @@ export default function CategoryHero({ icon, slides, highlights, intervalMs = 60
           src={slide.imageUrl}
           mobileSrc={slide.mobileImageUrl}
           alt=""
-          className="absolute inset-y-0 right-0 h-full w-3/4 object-cover"
+          className={categoryPictureClass(slide.mobileImageUrl)}
         />
       ) : (
         // Until a banner image is uploaded in admin: designed, not blank.
@@ -74,7 +84,9 @@ export default function CategoryHero({ icon, slides, highlights, intervalMs = 60
       )}
 
       {!full && (
-      <div className="relative flex min-h-[15rem] items-center gap-4 p-6 sm:min-h-[16rem] sm:p-8">
+      <div
+        className={`relative flex items-center gap-4 p-6 sm:min-h-[16rem] sm:p-8 ${slide.imageUrl ? 'pb-9' : 'min-h-[15rem]'}`}
+      >
         {/* Copy — sits on a fade so it stays readable over the photo. */}
         <div className="max-w-sm bg-gradient-to-r from-cream-100 via-cream-100/90 to-transparent pr-8">
           {slide.eyebrow && (
