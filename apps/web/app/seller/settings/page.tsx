@@ -19,6 +19,7 @@ import {
   type StoreHighlight,
   type StoreTab,
   IMAGE_SLOTS,
+  GSTIN_EXAMPLE,
   RETURN_PICKUP_NOTE,
   sizeHint
 } from '@clowe/shared';
@@ -633,7 +634,7 @@ export default function SellerStoreSettingsPage() {
                     ))}
                   </select>
                 </Field>
-                <Field label="GSTIN" hint="Format 29ABCDE1234F1Z5">
+                <Field label="GSTIN" hint={`Format ${GSTIN_EXAMPLE}`}>
                   <input
                     value={form.gstNumber ?? ''}
                     onChange={(e) => patch({ gstNumber: e.target.value.toUpperCase() })}

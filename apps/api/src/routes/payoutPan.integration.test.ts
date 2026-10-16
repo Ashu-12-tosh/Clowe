@@ -83,7 +83,7 @@ async function payableSeller(profile: Profile = {}) {
       panNumber: profile.panNumber ?? null,
       panName: profile.panName ?? null,
       // A GSTIN is required for approval and payouts; these tests are about the PAN.
-      gstNumber: '27ABCDE1234F1Z5',
+      gstNumber: '27ABCDE1234F1Z0',
       ...(profile.kycStatus ? { kycStatus: profile.kycStatus } : {}),
     },
   });
@@ -227,7 +227,7 @@ describe('a payout without a verified PAN', () => {
     const saved = await call('PUT', '/api/seller/store/business', s.token, {
       panNumber: 'ABCDE1234F',
       panName: 'Pan Holder',
-      gstNumber: '27ABCDE1234F1Z5',
+      gstNumber: '27ABCDE1234F1Z0',
     });
     expect(saved.status).toBe(200);
     expect((await call('POST', '/api/seller/kyc/verify', s.token)).status).toBe(200);

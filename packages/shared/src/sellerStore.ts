@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { gstNumberField, gstinMatchesPan, panNumberField } from './taxIds';
 import { imageUrlSchema } from './imageUrl';
 import { httpUrlSchema } from './url';
 
@@ -202,20 +203,8 @@ export type StoreProfileInput = z.infer<typeof storeProfileSchema>;
 
 export const storeBusinessSchema = z.object({
   businessType: z.string().trim().max(40).optional().or(z.literal('')),
-  gstNumber: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9A-Z]Z[0-9A-Z]$/, 'GSTIN looks like 29ABCDE1234F1Z5')
-    .optional()
-    .or(z.literal('')),
-  panNumber: z
-    .string()
-    .trim()
-    .toUpperCase()
-    .regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, 'PAN looks like ABCDE1234F')
-    .optional()
-    .or(z.literal('')),
+  gstNumber: gstNumberField.optional(),
+  panNumber: panNumberField.optional(),
   /**
    * The name exactly as printed on the PAN — the owner for a proprietorship,
    * the company for a company. The PAN check scores against this.
@@ -237,7 +226,7 @@ export const storeBusinessSchema = z.object({
     .regex(/^\d{6}$/, 'PIN code is 6 digits')
     .optional()
     .or(z.literal('')),
-});
+}).superRefine(gstinMatchesPan);
 export type StoreBusinessInput = z.infer<typeof storeBusinessSchema>;
 
 export const storeShippingSchema = z.object({

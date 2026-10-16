@@ -17,7 +17,7 @@ let server: Server;
 let base: string;
 let token: string;
 let sellerId: string;
-const GSTIN = '27ABCDE1234F1Z5';
+const GSTIN = '27ABCDE1234F1Z0';
 
 const save = async (body: Record<string, unknown>) =>
   (

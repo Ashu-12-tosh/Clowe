@@ -355,7 +355,7 @@ export default function AdminSettingsPage() {
             ['name', 'Legal name (as registered)', 'CLOWE PARTNERS LLP'],
             ['registeredAddress', 'Registered address', 'Unit, street, city, state, PIN'],
             ['llpin', 'LLPIN', 'AAB-1234'],
-            ['gstin', 'GSTIN', '27ABCDE1234F1Z5'],
+            ['gstin', 'GSTIN', '27ABCDE1234F1Z0'],
             ['supportEmail', 'Support email', 'support@cloweshop.com'],
             ['supportPhone', 'Support phone', '+91 98765 43210'],
           ] as const

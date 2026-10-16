@@ -258,7 +258,7 @@ export const updateSettingsSchema = z.object({
         .string()
         .trim()
         .toUpperCase()
-        .regex(/^(\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z])?$/, 'GSTIN is 15 characters, like 27ABCDE1234F1Z5'),
+        .regex(/^(\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z])?$/, 'GSTIN is 15 characters, like 27ABCDE1234F1Z0'),
       supportEmail: z
         .string()
         .trim()

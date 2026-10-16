@@ -38,7 +38,7 @@ const FIELDS: Array<[string, keyof SellerProfile, unknown]> = [
   ['profile', 'storePhone', '9876543210'],
   ['profile', 'primaryCategoryId', '<category>'],
   ['business', 'businessType', 'PROPRIETORSHIP'],
-  ['business', 'gstNumber', '27ABCDE1234F1Z5'],
+  ['business', 'gstNumber', '27ABCDE1234F1Z0'],
   ['business', 'panNumber', 'ABCDE1234F'],
   ['business', 'panName', 'FIELD KEEPER'],
   ['business', 'addressLine1', '1 Seller Lane'],

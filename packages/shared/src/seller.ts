@@ -2,6 +2,7 @@ import { imageUrlSchema } from './imageUrl';
 import { httpUrlSchema } from './url';
 import { SHIPPING_LIMITS } from './shipping';
 import { z } from 'zod';
+import { gstNumberField, gstinMatchesPan, panNumberField } from './taxIds';
 import type { PackingVideoView } from './sellerOrders';
 import { optionValuesSchema } from './variants';
 import { productAttributeInputSchema, type ProductAttribute } from './productAttributes';
@@ -21,8 +22,8 @@ export const sellerRegisterSchema = z.object({
     .optional()
     .or(z.literal('').transform(() => undefined)),
   description: z.string().trim().max(500).optional(),
-  gstNumber: z.string().trim().max(20).optional(),
-  panNumber: z.string().trim().max(12).optional(),
+  gstNumber: gstNumberField.optional(),
+  panNumber: panNumberField.optional(),
   bankName: z.string().trim().max(80).optional(),
   bankAccountName: z.string().trim().max(80).optional(),
   bankAccountNo: z.string().trim().max(24).optional(),
@@ -41,7 +42,9 @@ export const sellerRegisterSchema = z.object({
   .refine((s) => !(s.bankAccountNo || s.bankIfsc || s.bankAccountName) || Boolean(s.bankName), {
     message: 'Bank name is required with bank details',
     path: ['bankName'],
-  });
+  })
+  // The GSTIN is issued against the PAN given with it.
+  .superRefine(gstinMatchesPan);
 export type SellerRegisterInput = z.infer<typeof sellerRegisterSchema>;
 
 export type SellerStatusValue = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SUSPENDED' | 'BANNED';
