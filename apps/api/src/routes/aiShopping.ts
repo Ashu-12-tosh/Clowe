@@ -46,6 +46,9 @@ async function listing(port: number, params: Record<string, string | number | un
 /** The port this request came in on: the listing is asked on the same server. */
 const portOf = (req: import('express').Request) => req.socket.localPort ?? env.PORT;
 
+/** "₹1,179" — whole rupees, Indian grouping, as the shopper sees prices. */
+const rupeesText = (paise: number) => `₹${Math.round(paise / 100).toLocaleString('en-IN')}`;
+
 const numberIn = (text: string) => new Set((text.match(/\d[\d,]*/g) ?? []).map((n) => n.replace(/,/g, '')));
 
 // --- AI Search -------------------------------------------------------------------------
@@ -209,15 +212,15 @@ aiShoppingRouter.post('/compare-summary', aiLimiter, optionalAuth, async (req, r
         maxTokens: 400,
         system:
           'You help a shopper on Clowe, an Indian online marketplace, choose between products. Use ONLY the data given for each product ' +
-          '(title, price in rupees including GST, attributes, seller, returns, rating). If something the shopper needs is not in the data, say it is not listed. ' +
+          '(title, price including GST, attributes, seller, returns, rating). Write prices exactly as given (e.g. "₹1,179"). If something the shopper needs is not in the data, say it is not listed. ' +
           'Never invent specs, prices, offers or reviews. Write 3-5 short sentences in plain text, then one line starting "For you:" with a suggestion based on the shopper\'s needs, if given.',
         user: JSON.stringify({
           needs: input.needs ?? null,
           products: view.products.map((p) => ({
             title: p.title,
             brand: p.brand,
-            priceRupees: p.pricePaise / 100,
-            mrpRupees: p.mrpPaise ? p.mrpPaise / 100 : null,
+            price: rupeesText(p.pricePaise),
+            mrp: p.mrpPaise ? rupeesText(p.mrpPaise) : null,
             rating: p.ratingCount ? `${p.ratingAvg?.toFixed(1)} from ${p.ratingCount} ratings` : 'no ratings yet',
             seller: p.sellerName,
             returns: p.returns,
