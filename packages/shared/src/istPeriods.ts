@@ -91,6 +91,27 @@ export function istDayKey(at: Date): string {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+/** The Indian calendar date `days` days before the one holding `at` ("2026-10-04"). */
+export function istDayKeyDaysAgo(at: Date, days: number): string {
+  const { year, month, day } = istDate(at);
+  return istDayKey(istDayStart(year, month, day - days));
+}
+
+/**
+ * The span of a date-picker range read as Indian calendar days: from the
+ * start of `from` to the last millisecond of `to`, both IST. Either may be
+ * left out; a value that is not a YYYY-MM-DD date reads as absent.
+ */
+export function istDayRange(from?: string, to?: string): { gte: Date | null; lte: Date | null } {
+  const start = (key?: string) => {
+    const m = key ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(key) : null;
+    return m ? istDayStart(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+  };
+  const fromStart = start(from);
+  const toStart = start(to);
+  return { gte: fromStart, lte: toStart ? new Date(toStart.getTime() + 86_400_000 - 1) : null };
+}
+
 export interface MonthPeriod {
   from: Date;
   /** Exclusive: now for the month still running, else the next month's start. */

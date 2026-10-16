@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { istDayKeyDaysAgo, istDayRange } from './istPeriods';
 import {
   istDate,
   istDayKey,
@@ -110,5 +111,30 @@ describe('monthToDateIST', () => {
   it('crosses the year in January', () => {
     const p = monthToDateIST(new Date('2027-01-10T00:00:00Z'));
     expect(p.previousFrom.toISOString()).toBe('2026-11-30T18:30:00.000Z'); // 1 Dec 2026 IST
+  });
+});
+
+describe('audit log date range (Indian calendar days)', () => {
+  // 01:30 IST on 16 October is still 15 October in UTC.
+  const lateNight = new Date('2026-10-15T20:00:00Z');
+
+  it('"today" is the IST date, not the UTC one', () => {
+    expect(lateNight.toISOString().slice(0, 10)).toBe('2026-10-15');
+    expect(istDayKey(lateNight)).toBe('2026-10-16');
+    expect(istDayKeyDaysAgo(lateNight, 29)).toBe('2026-09-17');
+    expect(istDayKeyDaysAgo(new Date('2026-03-01T10:00:00Z'), 1)).toBe('2026-02-28');
+  });
+
+  it('a picked day runs from IST midnight to IST midnight', () => {
+    const { gte, lte } = istDayRange('2026-10-16', '2026-10-16');
+    expect(gte!.toISOString()).toBe('2026-10-15T18:30:00.000Z');
+    expect(lte!.toISOString()).toBe('2026-10-16T18:29:59.999Z');
+    // So the late-night entry falls on the 16th.
+    expect(lateNight >= gte! && lateNight <= lte!).toBe(true);
+  });
+
+  it('leaves out a bound that is missing or not a date', () => {
+    expect(istDayRange(undefined, '2026-10-16').gte).toBeNull();
+    expect(istDayRange('16/10/2026', undefined)).toEqual({ gte: null, lte: null });
   });
 });

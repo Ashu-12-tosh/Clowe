@@ -15,6 +15,7 @@ import {
   type AuditTab,
   type CspReportRow,
   istDayKey,
+  istDayRange,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -91,15 +92,10 @@ function buildWhere(query: Query): Prisma.AuditLogWhereInput {
   if (query.ip) and.push({ ipAddress: { contains: query.ip } });
   if (query.actorId) and.push({ actorId: query.actorId });
 
-  const gte = query.from ? new Date(`${query.from}T00:00:00`) : null;
-  const lte = query.to ? new Date(`${query.to}T23:59:59.999`) : null;
-  if ((gte && !Number.isNaN(gte.getTime())) || (lte && !Number.isNaN(lte.getTime()))) {
-    and.push({
-      createdAt: {
-        ...(gte && !Number.isNaN(gte.getTime()) ? { gte } : {}),
-        ...(lte && !Number.isNaN(lte.getTime()) ? { lte } : {}),
-      },
-    });
+  // The picker's dates are Indian calendar days, whatever timezone the server runs in.
+  const { gte, lte } = istDayRange(query.from, query.to);
+  if (gte || lte) {
+    and.push({ createdAt: { ...(gte ? { gte } : {}), ...(lte ? { lte } : {}) } });
   }
 
   if (query.q) {
@@ -205,8 +201,9 @@ adminAuditRouter.get('/summary', async (req, res, next) => {
     const settings = await getSettings();
 
     const now = new Date();
-    const rangeStart = query.from ? new Date(`${query.from}T00:00:00`) : null;
-    const rangeEnd = query.to ? new Date(`${query.to}T23:59:59.999`) : now;
+    const range = istDayRange(query.from, query.to);
+    const rangeStart = range.gte;
+    const rangeEnd = range.lte ?? now;
     const start = rangeStart ?? new Date(now.getTime() - 29 * 86400000);
     const days = Math.max(
       1,

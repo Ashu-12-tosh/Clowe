@@ -13,6 +13,8 @@ import {
   type AuditSeverityValue,
   type AuditSummary,
   type AuditTab,
+  istDayKey,
+  istDayKeyDaysAgo,
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
 import { toast } from '@/lib/toast';
@@ -42,14 +44,13 @@ const DEVICE_ICONS: Record<string, string> = {
   OTHER: '•',
 };
 
-function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+/** Dates are Indian calendar days, wherever the browser is: "today" is today in IST. */
+function todayIST(): string {
+  return istDayKey(new Date());
 }
 
 function daysAgo(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return isoDate(d);
+  return istDayKeyDaysAgo(new Date(), n);
 }
 
 function num(n: number): string {
@@ -126,7 +127,7 @@ export default function AdminAuditPage() {
   const [status, setStatus] = useState('ALL');
   const [ip, setIp] = useState('');
   const [from, setFrom] = useState(daysAgo(29));
-  const [to, setTo] = useState(isoDate(new Date()));
+  const [to, setTo] = useState(todayIST());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -373,7 +374,7 @@ export default function AdminAuditPage() {
           type="date"
           value={to}
           min={from}
-          max={isoDate(new Date())}
+          max={todayIST()}
           onChange={(e) => setTo(e.target.value)}
           className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs outline-none focus:border-brand-600"
         />
@@ -459,7 +460,7 @@ export default function AdminAuditPage() {
             setStatus('ALL');
             setIp('');
             setFrom(daysAgo(29));
-            setTo(isoDate(new Date()));
+            setTo(todayIST());
           }}
           className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-semibold hover:bg-gray-50"
         >
