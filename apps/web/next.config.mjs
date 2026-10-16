@@ -1,3 +1,4 @@
+import { PERMISSIONS_POLICY } from './lib/securityHeaders.mjs';
 /** @type {import('next').NextConfig} */
 
 // In development, proxy /api and /uploads through the Next server so a single
@@ -78,8 +79,8 @@ export default function config(phase) {
         { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
         // Belt and braces with frame-ancestors 'none', for browsers that only know this one.
         { key: 'X-Frame-Options', value: 'DENY' },
-        // Voice search needs the microphone; nothing here uses the camera or location.
-        { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=(), browsing-topics=()' },
+        // Camera (packing video) and microphone (voice search) from our own pages only.
+        { key: 'Permissions-Policy', value: PERMISSIONS_POLICY },
       ];
       if (!isDev) {
         // The API already sends this for the same host; pages say it too.
