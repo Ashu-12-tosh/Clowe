@@ -1,4 +1,4 @@
-import type { AIProvider, AiCompleteInput } from './AIProvider';
+import type { AIProvider, AiCompleteInput, AiResult } from './AIProvider';
 
 /**
  * Free dev provider: deterministic templates + keyword heuristics so every AI
@@ -7,8 +7,15 @@ import type { AIProvider, AiCompleteInput } from './AIProvider';
  */
 export class MockAIProvider implements AIProvider {
   readonly name = 'mock';
+  readonly model = 'mock';
 
-  async complete(input: AiCompleteInput): Promise<string> {
+  async complete(input: AiCompleteInput): Promise<AiResult> {
+    // Rough token counts (4 characters a token) so the usage view has numbers in development.
+    const text = this.answer(input);
+    return { text, inputTokens: Math.ceil((input.system.length + input.user.length) / 4), outputTokens: Math.ceil(text.length / 4) };
+  }
+
+  private answer(input: AiCompleteInput): string {
     const payload = safeParse(input.user);
     switch (input.task) {
       case 'product-description':
@@ -23,7 +30,38 @@ export class MockAIProvider implements AIProvider {
         return this.sellerAssistant(payload);
       case 'marketing':
         return this.marketing(payload);
+      case 'ai-search':
+        return this.aiSearch(payload);
+      case 'compare-summary':
+        return this.compareSummary(payload);
+      case 'recommendations':
+        return JSON.stringify({ ids: ((payload.candidates as { id: string }[] | undefined) ?? []).slice(0, 8).map((c) => c.id) });
     }
+  }
+
+  /** Filters from the words of the question, against the categories given. */
+  private aiSearch(p: Record<string, unknown>): string {
+    const query = String(p.query ?? '');
+    const lower = query.toLowerCase();
+    const categories = (p.categories as { slug: string; name: string }[] | undefined) ?? [];
+    const category = categories.find((c) => lower.includes(c.name.toLowerCase()))?.slug ?? null;
+    const under = lower.match(/(?:under|below|less than|upto|up to)\s*(?:rs\.?|₹)?\s*(\d[\d,]*)/);
+    const maxPrice = under ? Number(under[1]!.replace(/,/g, '')) : null;
+    const colors = ['black', 'white', 'red', 'blue', 'green', 'pink', 'yellow', 'grey'].filter((c) => lower.includes(c));
+    const q = lower
+      .replace(/(?:under|below|less than|upto|up to)\s*(?:rs\.?|₹)?\s*\d[\d,]*/g, '')
+      .replace(/\b(show me|i want|looking for|find|a|an|the|for|me|some)\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return JSON.stringify({ q: q || query, category, minPrice: null, maxPrice, colors, answer: `Showing ${q || query}${maxPrice ? ` under ₹${maxPrice}` : ''}.` });
+  }
+
+  /** A comparison written only from the rows given. */
+  private compareSummary(p: Record<string, unknown>): string {
+    const products = (p.products as { title: string; pricePaise: number }[] | undefined) ?? [];
+    if (products.length < 2) return 'Pick at least two products to compare.';
+    const cheapest = [...products].sort((a, b) => a.pricePaise - b.pricePaise)[0]!;
+    return `${cheapest.title} is the lowest price of the ${products.length}. Compare the attributes above to see which fits your needs.`;
   }
 
   /** Marketing copy built only from what the product says (no claims of its own). */

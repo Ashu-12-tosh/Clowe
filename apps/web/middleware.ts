@@ -47,13 +47,32 @@ function isMissingContentPage(pathname: string): boolean {
   }
 }
 
+/**
+ * /store/<slug> for a store that does not exist, or is suspended or closed:
+ * the API answers 404 for it, and so does the page — decided here for the
+ * same reason as content pages. If the API cannot be asked in time, the page
+ * renders and says "not found" in the browser as before.
+ */
+async function isMissingStore(pathname: string): Promise<boolean> {
+  const match = /^\/store\/([^/]+)\/?$/.exec(pathname);
+  if (!match) return false;
+  try {
+    const res = await fetch(`${apiOrigin}/api/stores/${encodeURIComponent(decodeURIComponent(match[1]!))}`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    return res.status === 404;
+  } catch {
+    return false;
+  }
+}
+
 function freshNonce(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   return btoa(String.fromCharCode(...bytes));
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const nonce = freshNonce();
   // Behind nginx the request arrives over plain http; the public origin is the configured one.
   const origin = (dev ? null : siteOrigin) ?? request.nextUrl.origin;
@@ -66,7 +85,8 @@ export function middleware(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(HEADER, policy);
-  const response = isMissingContentPage(request.nextUrl.pathname)
+  const missing = isMissingContentPage(request.nextUrl.pathname) || (await isMissingStore(request.nextUrl.pathname));
+  const response = missing
     ? NextResponse.rewrite(new URL(NOT_FOUND_PATH, request.url), { request: { headers: requestHeaders } })
     : NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set(HEADER, policy);

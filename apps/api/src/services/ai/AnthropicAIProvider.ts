@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { AIProvider, AiCompleteInput } from './AIProvider';
+import type { AIProvider, AiCompleteInput, AiResult } from './AIProvider';
 
 /**
  * Real AI via the Claude API (official SDK). Activated automatically when
@@ -11,12 +11,12 @@ export class AnthropicAIProvider implements AIProvider {
 
   constructor(
     apiKey: string,
-    private readonly model: string,
+    readonly model: string,
   ) {
     this.client = new Anthropic({ apiKey });
   }
 
-  async complete(input: AiCompleteInput): Promise<string> {
+  async complete(input: AiCompleteInput): Promise<AiResult> {
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: input.maxTokens,
@@ -30,6 +30,6 @@ export class AnthropicAIProvider implements AIProvider {
       .join('')
       .trim();
     if (!text) throw new Error(`AI returned no text (stop_reason: ${response.stop_reason})`);
-    return text;
+    return { text, inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens };
   }
 }
