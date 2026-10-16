@@ -82,10 +82,13 @@ describe('a new ticket (2.2, 2.3, 4.2)', () => {
     const month = new Date(c.createdAt);
     month.setMonth(month.getMonth() + 1);
     expect(c.resolveDueAt?.toISOString()).toBe(month.toISOString());
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 300));
     const channels = sent.mock.calls.map(([m]) => m.channel);
-    expect(channels).toEqual(expect.arrayContaining(['sms', 'email']));
+    expect(channels).toEqual(expect.arrayContaining(['sms']));
     expect(sent.mock.calls.every(([m]) => m.body.includes(c.complaintId))).toBe(true);
+    // The e-mail goes through the email queue (no-reply@cloweshop.com).
+    const mail = await prisma.emailOutbox.findFirst({ where: { subject: { contains: c.complaintId } } });
+    expect(mail?.text).toContain(c.complaintId);
     sent.mockRestore();
   });
 
