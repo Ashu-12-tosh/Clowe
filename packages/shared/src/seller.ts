@@ -153,6 +153,8 @@ export const sellerProductUpsertSchema = z
     tags: z.array(z.string().trim().min(2).max(30)).max(15).optional(),
     isVisible: z.boolean().optional(),
     tryOnEnabled: z.boolean().optional(),
+    /** "Not returnable": pierced jewellery, customised or final-sale items. */
+    nonReturnable: z.boolean().optional(),
     lowStockAlert: z.number().int().min(0).max(1000).optional(),
     allowBackorders: z.boolean().optional(),
     /** DRAFT keeps it private; SUBMIT sends it for admin approval. */
@@ -219,6 +221,7 @@ export interface SellerProductDetail {
   tags: string[];
   isVisible: boolean;
   tryOnEnabled: boolean;
+  nonReturnable: boolean;
   lowStockAlert: number;
   allowBackorders: boolean;
   variants: {

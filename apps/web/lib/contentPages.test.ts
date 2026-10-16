@@ -12,8 +12,8 @@ const LEGAL_TOKEN = /^\{\{legal\.(name|displayName|registeredAddress|llpin|gstin
 
 /** The pages that state rules a buyer or seller is held to. */
 const POLICY_PAGES = [
-  'terms-conditions', 'privacy-policy', 'shipping-policy', 'shipping-info', 'return-policy', 'returns-refunds',
-  'cancellation', 'payment-policy', 'cookie-policy', 'faq', 'help', 'purchase-protection',
+  'terms-conditions', 'customer-terms-of-sale', 'privacy-policy', 'shipping-policy', 'return-policy',
+  'cancellation', 'payment-policy', 'cookie-policy', 'faq', 'help',
   'seller-terms', 'seller-fees', 'grievance-redressal',
 ];
 
@@ -36,19 +36,20 @@ describe('content pages', () => {
     }
   });
 
-  it('state no fee, limit or rate as a number of their own', () => {
-    // Fees, limits and rates come from settings tokens, so a change in admin shows everywhere.
-    for (const slug of ['seller-terms', 'seller-fees', 'payment-policy', 'terms-conditions']) {
+  it('the seller fee page states no fee as a number of its own', () => {
+    // Its fees come from settings tokens, so a change in admin shows there at once. (The
+    // lawyer's documents are published word for word, numbers included.)
+    for (const slug of ['seller-fees']) {
       expect(read(slug), slug).not.toMatch(/₹\s?\d|\d+(\.\d+)?\s?%/);
     }
   });
 
   it('leave nothing to fill in', () => {
-    for (const page of CONTENT_PAGES) expect(read(page.slug), page.slug).not.toMatch(/TO FILL|TODO|\[placeholder/i);
+    for (const page of CONTENT_PAGES) expect(read(page.slug), page.slug).not.toMatch(/TO FILL|TODO|\[placeholder|\[INSERT/i);
   });
 
   it('describe no feature Clowe does not have: those pages are gone (and 404)', () => {
-    for (const slug of ['affiliate', 'recalls', 'accelerator']) {
+    for (const slug of ['affiliate', 'recalls', 'accelerator', 'purchase-protection', 'shipping-info', 'returns-refunds']) {
       expect(CONTENT_PAGES.some((p) => p.slug === slug), slug).toBe(false);
       expect(fs.existsSync(path.join(PAGES, `${slug}.md`)), slug).toBe(false);
     }

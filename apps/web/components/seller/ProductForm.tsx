@@ -259,6 +259,7 @@ export default function ProductForm({ initial }: Props) {
   const [tagsText, setTagsText] = useState((initial?.tags ?? []).join(', '));
   const [isVisible, setIsVisible] = useState(initial?.isVisible ?? true);
   const [tryOnEnabled, setTryOnEnabled] = useState(initial?.tryOnEnabled ?? true);
+  const [nonReturnable, setNonReturnable] = useState(initial?.nonReturnable ?? false);
 
   const [aiBusy, setAiBusy] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -557,6 +558,7 @@ export default function ProductForm({ initial }: Props) {
       isVisible,
       // Only meaningful in try-on categories; the API enforces the same gate.
       tryOnEnabled: rules.tryOnEligible ? tryOnEnabled : false,
+      nonReturnable,
       lowStockAlert: Math.max(0, Math.round(Number(lowStockAlert) || 0)),
       allowBackorders,
       mode,
@@ -1793,6 +1795,26 @@ export default function ProductForm({ initial }: Props) {
                     <span className="block text-xs text-gray-400">
                       Unticking hides an approved listing from browsing and search without
                       archiving it.
+                    </span>
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="nonReturnable"
+                    // A non-returnable category decides for every product in it.
+                    checked={!rules.returnable || nonReturnable}
+                    disabled={!rules.returnable}
+                    onChange={(e) => setNonReturnable(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-[#B8860B] disabled:opacity-60"
+                  />
+                  <span>
+                    Not returnable
+                    <span className="block text-xs text-gray-400">
+                      {rules.returnable
+                        ? 'For pierced jewellery, customised or made-to-measure items, and final-sale stock. Buyers see "Not returnable" before they buy, and get no return button.'
+                        : 'Products in this category cannot be returned, so this is always on.'}
                     </span>
                   </span>
                 </label>

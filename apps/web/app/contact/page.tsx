@@ -107,10 +107,10 @@ export default async function ContactPage() {
         <section className="mt-8">
           <h2 className="font-display text-xl font-bold text-ink-900">Grievance Officer</h2>
           <p className="mt-3 leading-relaxed text-gray-700">
-            Complaint not resolved? Our Grievance Officer acknowledges every complaint within 24 hours and
-            resolves it within 15 days. Their details are on{' '}
+            Complaint not resolved? Escalate it to our Nodal Officer and Grievance Officer — their details, and how
+            quickly we respond, are in our{' '}
             <Link href="/pages/grievance-redressal" className="font-semibold text-brand-600 hover:underline">
-              Grievance Redressal
+              Customer Support and Grievance Policy
             </Link>
             .
           </p>
@@ -119,7 +119,8 @@ export default async function ContactPage() {
         <p className="mt-8 text-sm text-gray-500">
           Policies: <Link href="/pages/terms-conditions" className="hover:underline">Terms</Link> ·{' '}
           <Link href="/pages/privacy-policy" className="hover:underline">Privacy</Link> ·{' '}
-          <Link href="/pages/returns-refunds" className="hover:underline">Refunds &amp; Cancellation</Link> ·{' '}
+          <Link href="/pages/return-policy" className="hover:underline">Returns &amp; Refunds</Link> ·{' '}
+          <Link href="/pages/cancellation" className="hover:underline">Cancellation</Link> ·{' '}
           <Link href="/pages/shipping-policy" className="hover:underline">Shipping</Link>
         </p>
       </article>

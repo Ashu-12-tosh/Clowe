@@ -901,7 +901,7 @@ ordersRouter.post('/items/:itemId/return', async (req, res, next) => {
       include: {
         order: { select: { userId: true, orderNumber: true, paymentMethod: true } },
         seller: { select: { userId: true, returnWindowDays: true } },
-        product: { select: { categoryId: true } },
+        product: { select: { categoryId: true, nonReturnable: true } },
         return: true,
       },
     });

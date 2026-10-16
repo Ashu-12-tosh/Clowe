@@ -253,8 +253,11 @@ export const CHILD_RULE_OVERRIDES: Record<string, Partial<RootRules>> = {
   // Try-on would render a customer in underwear from a photo they uploaded
   // to shop with. Off at the department level, and isSensitiveForTryOn()
   // catches the same garments listed under any other category.
-  // Not returnable either: worn-close garments are not resold.
+  // Not returnable either: worn-close garments are not resold (Return Policy 5.1).
   'fashion-innerwear': { tryOnEligible: false, returnable: false },
+  // Cosmetics, fragrances and personal care: not returnable (Return Policy 5.1).
+  // A root, listed here because the override sets only the field it names.
+  beauty: { returnable: false },
   'fashion-accessories': { tryOnEligible: false },
   // Electronics: the option axes each department actually varies on. The
   // root declares only colour, so a category not listed here offers colour

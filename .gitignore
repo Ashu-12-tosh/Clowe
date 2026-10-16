@@ -29,3 +29,5 @@ backups/
 *.tsbuildinfo
 e2e-results/
 Clowe-banners/
+# The lawyer's policy documents (source for apps/web/content/pages), kept out of git.
+Clowe-legal/

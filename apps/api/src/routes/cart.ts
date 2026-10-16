@@ -179,7 +179,7 @@ export async function buildCartView(userId: string): Promise<CartView> {
       tryOnEligible:
         (rulesByCategory.get(i.variant.product.categoryId)?.tryOnEligible ?? false) &&
         i.variant.product.tryOnEnabled,
-      returnable: rulesByCategory.get(i.variant.product.categoryId)?.returnable ?? true,
+      returnable: (rulesByCategory.get(i.variant.product.categoryId)?.returnable ?? true) && !i.variant.product.nonReturnable,
       promotion: promotions.get(i.variantId)
         ? {
             id: promotions.get(i.variantId)!.promotionId,

@@ -10,9 +10,20 @@ import { env } from '../env';
  */
 const VERSION = 'v1';
 
+const derive = (secret: string) => Buffer.from(hkdfSync('sha256', secret, 'clowe', 'cod-refund-account-v1', 32));
+
+/** The key new records are written with. */
 function key(): Buffer {
-  const secret = env.COD_REFUND_KEY ?? env.JWT_ACCESS_SECRET;
-  return Buffer.from(hkdfSync('sha256', secret, 'clowe', 'cod-refund-account-v1', 32));
+  return derive(env.COD_REFUND_KEY ?? env.JWT_ACCESS_SECRET);
+}
+
+/**
+ * Keys a stored record may have been written with: the current one, then —
+ * once COD_REFUND_KEY is set — the JWT-derived key used before it, so
+ * records written earlier stay readable.
+ */
+function readKeys(): Buffer[] {
+  return env.COD_REFUND_KEY ? [derive(env.COD_REFUND_KEY), derive(env.JWT_ACCESS_SECRET)] : [key()];
 }
 
 export function encryptCodRefundAccount(account: Pick<CodRefundAccountInput, 'accountName' | 'accountNumber' | 'ifsc'>): string {
@@ -26,8 +37,16 @@ export function encryptCodRefundAccount(account: Pick<CodRefundAccountInput, 'ac
 export function decryptCodRefundAccount(stored: string): CodRefundAccountView {
   const [version, iv, tag, data] = stored.split(':');
   if (version !== VERSION || !iv || !tag || !data) throw new Error('Unreadable refund account record');
-  const decipher = createDecipheriv('aes-256-gcm', key(), Buffer.from(iv, 'base64'));
-  decipher.setAuthTag(Buffer.from(tag, 'base64'));
-  const plain = Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString('utf8');
-  return JSON.parse(plain) as CodRefundAccountView;
+  let lastError: unknown;
+  for (const k of readKeys()) {
+    try {
+      const decipher = createDecipheriv('aes-256-gcm', k, Buffer.from(iv, 'base64'));
+      decipher.setAuthTag(Buffer.from(tag, 'base64'));
+      const plain = Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString('utf8');
+      return JSON.parse(plain) as CodRefundAccountView;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError;
 }

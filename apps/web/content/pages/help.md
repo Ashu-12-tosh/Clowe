@@ -2,34 +2,30 @@
 
 *Last updated: 16 October 2026*
 
-Quick answers to common questions. For anything else, the **Support chat** (gold bubble, bottom-right) is on every page, or write to {{customerSupportEmail}}.
+For anything about an order, open it in **My Orders**, or use the **Support chat** (bottom-right). You can also write to support@cloweshop.com.
 
-## Orders and delivery
+## Shopping on Clowe
 
-- **Where is my order?** — My Orders → open the order → live status and courier tracking
-- **Cancel an order** — possible until any item ships, from the order page; it cancels the whole order
-- **Delivery charge** — none: delivery is free on every order
-- **Delivery time** — usually 4–6 business days; checkout shows the date for your pincode
-- **Cash on Delivery** — available for orders up to {{codMax}}
+- [Frequently Asked Questions](/pages/faq)
+- [Customer Terms of Sale](/pages/customer-terms-of-sale)
+- [Shipping and Delivery Policy](/pages/shipping-policy)
+- [Cancellation Policy](/pages/cancellation)
+- [Return, Exchange and Refund Policy](/pages/return-policy)
+- [Payment Policy](/pages/payment-policy)
 
-## Returns and refunds
+## Your account and data
 
-- **Return window** — {{returnWindow}} from delivery for most items (shorter for some categories, such as grocery); start it from the order page
-- **Return pickup** — free for you
-- **Refund timeline** — cancelled orders straight away; returns once the item reaches the seller and is checked; banks usually take 5–7 business days
+- [Privacy Policy](/pages/privacy-policy)
+- [Cookie Policy](/pages/cookie-policy)
+- [Terms and Conditions of Use](/pages/terms-conditions)
 
-## Account
+## Selling on Clowe
 
-- **Login** — phone + OTP, or your 4-digit Clowe PIN
-- **Change phone number** — Profile → Personal information → Change (OTP-verified)
-- **Try-on photo** — Profile → Try-on photo (upload, replace or delete any time)
+- [Sell on Clowe](/sell)
+- [Vendor Terms and Seller Agreement](/pages/seller-terms)
+- [Seller Fees](/pages/seller-fees)
 
-## Sellers
+## Complaints
 
-- **Become a seller** — [Sell on Clowe](/sell)
-- **Rules and fees** — [Seller Terms](/pages/seller-terms) and [Seller Fees](/pages/seller-fees)
-- **Seller support** — from your seller dashboard, or {{vendorSupportEmail}}
-
-## Still need help?
-
-See [Grievance Redressal](/pages/grievance-redressal).
+- [Customer Support and Grievance Policy](/pages/grievance-redressal)
+- [Contact Us](/contact)

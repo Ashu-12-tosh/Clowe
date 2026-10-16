@@ -939,6 +939,10 @@ model Product {
   isVisible       Boolean       @default(true)
   // Seller opt-in for AI Try-On; only honoured in try-on eligible categories.
   tryOnEnabled    Boolean       @default(false)
+  // Seller's "Not returnable" (pierced jewellery, customised or final-sale
+  // items). Can only make a product non-returnable: a non-returnable
+  // category wins whatever this says.
+  nonReturnable   Boolean       @default(false)
   // Optional per-product cap on shopper try-ons; null = until credits run out.
   tryOnLimit      Int?
   tryOnUsed       Int           @default(0)

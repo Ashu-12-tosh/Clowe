@@ -1,31 +1,62 @@
-# Cancellation
+# Cancellation Policy
 
-*Last updated: 16 October 2026*
+CLOWE SHOP— www.cloweshop.com
 
-How cancelling works on cloweshop.com, run by **{{legal.name}}**.
+Operated by CLOWE PARTNERS LLP
 
-## Cancelling your order
+*Last updated: 12 October 2026*
 
-- You can cancel your order from **My Orders** at no charge **until any item in it has shipped** — while it is placed, confirmed or packed.
-- Cancelling cancels the whole order. Once any item has shipped, the order can no longer be cancelled; you can return items after delivery instead. See the [Return Policy](/pages/return-policy).
+This Cancellation Policy forms part of the Terms and Conditions of Use and the Customer Terms of Sale. It is displayed before an order is placed, in compliance with Rule 5(3)(d) of the Consumer Protection (E-Commerce) Rules, 2020.
 
-## Your refund
+## 1. Cancellation by the Customer
 
-- **Paid online:** the full amount is refunded to your original payment method as soon as you cancel. Banks usually show it within **5–7 business days**.
-- **Cash on Delivery:** nothing was paid, so there is nothing to refund.
-- **Clowe Credits** used on the order come back to your account.
+1.1 Before dispatch. An order may be cancelled free of charge at any time before the Product is dispatched, through “My Orders” on the Platform or by contacting Customer Support. The contract of sale is not concluded until dispatch, and cancellation before that stage is a withdrawal of the Customer’s offer.
 
-## If the seller cancels
+1.2 After dispatch and before delivery. Once a Product has been dispatched, cancellation is not permitted as a matter of right. A request may be made to Customer Support, which shall be forwarded to the Vendor and the logistics partner, and may be accommodated where the consignment can still be intercepted. Where the consignment cannot be intercepted, the Customer may refuse delivery, in which case Clause 1.3 applies.
 
-If a seller cannot fulfil your order and cancels it, you get the same full refund to your original payment method.
+1.3 Refusal of delivery. Where a Customer refuses to accept delivery of a prepaid order without any defect or deficiency in the Product, the consignment is returned to origin. Refund of the Product value shall be made in accordance with Clause 4, less the forward and return shipping charges actually incurred, which are disclosed at checkout.
 
-## Who we are
+1.4 After delivery. An order cannot be cancelled after delivery. Remedies after delivery, where available, are governed solely by the Return, Exchange and Refund Policy.
 
-cloweshop.com is owned and operated by **{{legal.name}}**.
+1.5 No cancellation charge is levied on a Customer for cancellation after confirmation of an order, save as stated in Clause 1.3, and no charge is levied unless a similar charge is borne by the Company or the Vendor on cancellation by them, in accordance with Rule 4(10) of the Consumer Protection (E-Commerce) Rules, 2020.
 
-- Registered address: {{legal.registeredAddress}}
-- LLPIN: {{legal.llpin}}
-- GSTIN: {{legal.gstin}}
-- Email: {{customerSupportEmail}}
-- Phone: {{legal.supportPhone}}
-- Every way to reach us: [Contact Us](/contact)
+## 2. Orders Not Capable of Cancellation
+
+2.1 The following cannot be cancelled once the order is confirmed, owing to their nature:
+
+- customised, made-to-measure, monogrammed, embroidered or personalised Products;
+- Products altered to the Customer’s specified measurements;
+- Products expressly marked “non-cancellable” on the product page before the order is placed;
+- Products purchased under a clearance, final-sale or liquidation event expressly marked as such.
+## 3. Cancellation by the Company or the Vendor
+
+3.1 An order may be cancelled, in whole or in part, before or after confirmation, where:
+
+- the Product is out of stock or discontinued;
+- the price, description, specification or image was displayed in error;
+- the delivery address is outside the serviceable area or is incomplete, incorrect or unreachable;
+- the transaction is suspected to be fraudulent, or the payment instrument is declined, charged back or flagged;
+- the order appears to be placed for resale, export or other commercial exploitation, or exceeds applicable quantity limits;
+- the Customer has a history of refusing delivery, misusing exchange facilities or abusing promotional benefits;
+- cancellation is required by an order or direction of any court or statutory authority; or
+- performance is prevented by a force majeure event.
+
+3.2 The Customer shall be informed of such cancellation by e-mail, SMS or in-app notification with the reason, and the full amount paid shall be refunded in accordance with Clause 4.
+
+3.3 Neither the Company nor the Vendor shall be liable for any loss arising from a cancellation under Clause 3.1 beyond refund of the amount actually paid.
+
+## 4. Refund on Cancellation
+
+4.1 Prepaid orders. The amount paid shall be refunded to the original mode of payment. Refund shall be initiated within 72 hours of the cancellation being effected, and shall be credited within 7 working days, subject to the processing timelines of the issuing bank, card network or payment service provider, over which the Company has no control.
+
+4.2 Cash-on-delivery orders. As no payment is made at the time of ordering, no refund arises on cancellation before delivery. Where a cash-on-delivery order has been paid for on delivery, Clause 1.4 applies and the matter falls under the Return, Exchange and Refund Policy.
+
+4.3 Where a discount, coupon, promotional code, loyalty credit or bank offer was applied, refund shall be of the net amount actually paid. A single-use coupon consumed on a cancelled order may be reinstated at the Company’s discretion, and may not be reinstated where it has expired.
+
+4.4 Where only part of an order is cancelled, any shipping or handling charge attributable to the remaining items shall continue to apply.
+
+## 5. Grievances
+
+5.1 Any grievance in relation to a cancellation may be raised under the Customer Support and Grievance Policy. Complaints are acknowledged within forty-eight (48) hours and redressed within one (1) month in accordance with Rule 4(5) of the Consumer Protection (E-Commerce) Rules, 2020.
+
+5.2 Nothing in this Policy restricts the rights of a consumer under the Consumer Protection Act, 2019.

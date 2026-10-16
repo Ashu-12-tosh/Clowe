@@ -364,6 +364,7 @@ sellerRouter.get('/products/:id', requireSeller, async (req, res, next) => {
       tags: p.tags,
       isVisible: p.isVisible,
       tryOnEnabled: p.tryOnEnabled,
+      nonReturnable: p.nonReturnable,
       lowStockAlert: p.lowStockAlert,
       allowBackorders: p.allowBackorders,
       variants: [
@@ -454,6 +455,7 @@ function productDataFrom(input: SellerProductUpsertInput, rules: CategoryRules) 
       rules.tryOnEligible &&
       !isSensitiveForTryOn(input.title) &&
       !isListingBelowTryOnAge(input.variants.map((v) => v.optionValues?.size ?? '')),
+    nonReturnable: input.nonReturnable ?? false,
     lowStockAlert: input.lowStockAlert ?? 5,
     allowBackorders: input.allowBackorders ?? false,
   };
@@ -694,6 +696,7 @@ async function saveLiveEdit(
         metaDescription: proposed.metaDescription,
         tags: proposed.tags,
         isVisible: proposed.isVisible,
+        nonReturnable: proposed.nonReturnable,
         lowStockAlert: proposed.lowStockAlert,
         allowBackorders: proposed.allowBackorders,
         // Judged against the live title and category, which are what buyers see.

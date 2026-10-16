@@ -8,7 +8,8 @@ import { hiddenCategoryIds } from './shopperVisibility';
  * and the default is yes. Sellers cannot make a non-returnable item
  * returnable. Checkout fixes the answer on each order line, like the window.
  */
-export async function returnableFor(categoryId: string): Promise<boolean> {
+export async function returnableFor(categoryId: string, productNonReturnable = false): Promise<boolean> {
+  if (productNonReturnable) return false;
   return (await categoryRulesFor(categoryId)).returnable;
 }
 
@@ -16,16 +17,19 @@ export async function returnableFor(categoryId: string): Promise<boolean> {
 export async function saleReturnability(productIds: string[]): Promise<Map<string, boolean>> {
   const products = await prisma.product.findMany({
     where: { id: { in: [...new Set(productIds)] } },
-    select: { id: true, categoryId: true },
+    select: { id: true, categoryId: true, nonReturnable: true },
   });
   const out = new Map<string, boolean>();
-  for (const p of products) out.set(p.id, await returnableFor(p.categoryId));
+  for (const p of products) out.set(p.id, await returnableFor(p.categoryId, p.nonReturnable));
   return out;
 }
 
 /** An order line's returnability: what it was sold with, else (lines written without checkout) today's rule. */
-export async function orderLineReturnable(line: { returnable: boolean | null; product: { categoryId: string } }): Promise<boolean> {
-  return line.returnable ?? returnableFor(line.product.categoryId);
+export async function orderLineReturnable(line: {
+  returnable: boolean | null;
+  product: { categoryId: string; nonReturnable?: boolean };
+}): Promise<boolean> {
+  return line.returnable ?? returnableFor(line.product.categoryId, line.product.nonReturnable ?? false);
 }
 
 /**

@@ -139,3 +139,26 @@ describe('after buying', () => {
     expect((order.json.data?.items as { canReturn: boolean }[])[0]!.canReturn).toBe(true);
   });
 });
+
+describe("a seller's own Not returnable flag", () => {
+  afterEach(async () => {
+    await prisma.product.update({ where: { slug: FIXTURE.phoneWordedPlainly }, data: { nonReturnable: false } });
+  });
+
+  it('makes one product non-returnable in a returnable category', async () => {
+    await prisma.product.update({ where: { slug: FIXTURE.phoneWordedPlainly }, data: { nonReturnable: true } });
+    expect((await product()).json.data?.returnable).toBe(false);
+    const s = await shopper();
+    const variant = await prisma.productVariant.findFirstOrThrow({ where: { product: { slug: FIXTURE.phoneWordedPlainly } } });
+    await prisma.cart.create({ data: { userId: s.userId, items: { create: [{ variantId: variant.id, quantity: 1 }] } } });
+    const lines = (await call('GET', '/api/cart', s.token)).json.data?.lines as { returnable: boolean }[];
+    expect(lines[0]!.returnable).toBe(false);
+    await call('POST', '/api/orders/checkout', s.token, { addressId: s.addressId, paymentMethod: 'UPI' });
+    expect((await prisma.orderItem.findFirstOrThrow({ where: { order: { userId: s.userId } } })).returnable).toBe(false);
+  });
+
+  it('cannot make a product in a non-returnable category returnable', async () => {
+    await setReturnable('mobiles-smartphones', false);
+    expect((await product()).json.data?.returnable).toBe(false);
+  });
+});

@@ -68,7 +68,13 @@ export default function config(phase) {
     // Contact Us lives at /contact; /pages/contact is where people (and payment
     // gateways) guess it. A real 308, before anything renders.
     async redirects() {
-      return [{ source: '/pages/contact', destination: '/contact', permanent: true }];
+      return [
+        { source: '/pages/contact', destination: '/contact', permanent: true },
+        // Replaced by the lawyer's policy documents (October 2026).
+        { source: '/pages/returns-refunds', destination: '/pages/return-policy', permanent: true },
+        { source: '/pages/purchase-protection', destination: '/pages/return-policy', permanent: true },
+        { source: '/pages/shipping-info', destination: '/pages/shipping-policy', permanent: true },
+      ];
     },
     // Security headers that do not change per request. The
     // Content-Security-Policy carries a per-request nonce, so it is set in

@@ -400,7 +400,7 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
         (product.tryOnLimit == null || product.tryOnUsed < product.tryOnLimit),
       sizeGuide: resolved.rules.sizeGuide && variantAxes.some((a) => a.key === 'size'),
       returnWindowDays: await returnWindowDaysFor(product.categoryId, product.seller.returnWindowDays),
-      returnable: await returnableFor(product.categoryId),
+      returnable: await returnableFor(product.categoryId, product.nonReturnable),
       sellerShopName: product.seller.shopName,
       seller: {
         shopName: product.seller.shopName,
