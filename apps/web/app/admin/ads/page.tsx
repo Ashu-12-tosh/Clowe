@@ -1,182 +1,191 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AD_PLACEMENT_LABELS, type AdminAdRow } from '@clowe/shared';
+import { PLACEMENT_LABELS, type PlacementKind } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
-import { usePending } from '@/lib/usePending';
-import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 
-const FILTERS = ['PENDING', 'ACTIVE', 'REJECTED', 'EXPIRED', 'ALL'] as const;
+// ---------------------------------------------------------------------------
+// Advertising and sponsorship review (owner's Batch 2): creatives wait here
+// before they run; a rejection frees the booked days and refunds the seller.
+// Below, the calendar of every booked slot — advertising and sponsorship share
+// it, so no space is ever sold twice.
+// ---------------------------------------------------------------------------
 
-const adStatusStyles: Record<string, string> = {
-  PENDING: 'bg-orange-100 text-orange-700',
-  ACTIVE: 'bg-green-100 text-green-700',
-  REJECTED: 'bg-red-100 text-red-700',
-  EXPIRED: 'bg-gray-100 text-gray-600',
-};
+const FILTERS = [
+  ['PENDING_APPROVAL', 'Waiting'],
+  ['ACTIVE', 'Running'],
+  ['REJECTED', 'Rejected'],
+  ['ENDED', 'Ended'],
+] as const;
 
-export default function AdminAdsPage() {
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>('PENDING');
-  const [rows, setRows] = useState<AdminAdRow[] | null>(null);
-  const [error, setError] = useState('');
+interface ReviewRow {
+  id: string;
+  name: string;
+  sponsorship: boolean;
+  placement: PlacementKind | null;
+  status: string;
+  shopName: string;
+  product: { title: string; slug: string } | null;
+  creativeUrl: string | null;
+  headline: string | null;
+  pricePaise: number;
+  rejectionReason: string | null;
+  days: string[];
+  createdAt: string;
+}
+interface CalendarRow {
+  day: string;
+  space: string;
+  scopeKey: string;
+  slot: number;
+  campaignId: string;
+  name: string;
+  status: string;
+  sponsorship: boolean;
+  placement: PlacementKind | null;
+  shopName: string;
+}
+
+const todayIst = () => new Date(Date.now() + 5.5 * 3_600_000).toISOString().slice(0, 10);
+
+export default function AdminAdReviewPage() {
+  const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('PENDING_APPROVAL');
+  const [rows, setRows] = useState<ReviewRow[] | null>(null);
+  const [calendar, setCalendar] = useState<CalendarRow[] | null>(null);
+  const [from, setFrom] = useState(todayIst());
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [reason, setReason] = useState('');
-  const { run, isPending } = usePending();
+  const [error, setError] = useState('');
 
   const load = useCallback(() => {
-    const qs = filter === 'ALL' ? '' : `?status=${filter}`;
-    api<AdminAdRow[]>(`/api/admin/ads${qs}`, { auth: true })
-      .then(setRows)
-      .catch(() => setRows([]));
+    api<ReviewRow[]>(`/api/admin/ad-review?status=${filter}`, { auth: true }).then(setRows).catch(() => setRows([]));
   }, [filter]);
+  const loadCalendar = useCallback(() => {
+    api<CalendarRow[]>(`/api/admin/ad-review/calendar?from=${from}&days=31`, { auth: true }).then(setCalendar).catch(() => setCalendar([]));
+  }, [from]);
   useEffect(load, [load]);
+  useEffect(loadCalendar, [loadCalendar]);
 
-  async function decide(id: string, body: Record<string, string>) {
+  async function decide(id: string, action: 'approve' | 'reject') {
     setError('');
-    await run(id, async () => {
-      try {
-        await api(`/api/admin/ads/${id}`, {
-          method: 'PATCH',
-          body,
-          auth: true,
-          success: body.action === 'approve' ? 'Ad approved — it is live' : 'Ad rejected',
-        });
-        setRejecting(null);
-        setReason('');
-        load();
-      } catch (err) {
-        setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
-      }
-    });
+    try {
+      await api(`/api/admin/ad-review/${id}`, { method: 'POST', body: action === 'reject' ? { action, reason } : { action }, auth: true });
+      setRejecting(null);
+      setReason('');
+      load();
+      loadCalendar();
+    } catch (e) {
+      setError(e instanceof ApiRequestError ? e.message : 'Could not save — try again.');
+    }
   }
 
+  const spaces = [...new Set((calendar ?? []).map((c) => `${c.space}${c.scopeKey ? ` · ${c.scopeKey.slice(-6)}` : ''}`))];
+  const days = [...new Set((calendar ?? []).map((c) => c.day))];
+
   return (
-    <div>
-      <h1 className="text-2xl font-bold">Ads</h1>
-      <p className="mt-1 text-sm text-gray-500">
-        Review seller ad requests. Approved ads run for their duration in clearly-labeled Sponsored
-        slots; the amount is collected manually / adjusted from payouts.
-      </p>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">Ads &amp; sponsorship review</h1>
+        <p className="mt-1 text-sm text-gray-500">Approve creatives before they run. Rejecting frees the days and refunds the seller (with GST); the seller sees your reason.</p>
+      </div>
 
-      {error && (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
-      )}
-
-      <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
-              filter === f
-                ? 'border-ink-900 bg-ink-900 text-white'
-                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
-            }`}
-          >
-            {f === 'ALL' ? 'All' : f.charAt(0) + f.slice(1).toLowerCase()}
+      <div className="flex flex-wrap gap-2">
+        {FILTERS.map(([k, label]) => (
+          <button key={k} type="button" onClick={() => setFilter(k)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${filter === k ? 'bg-ink-900 text-white' : 'bg-gray-100 text-gray-700'}`}>
+            {label}
           </button>
         ))}
       </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
-      {rows === null && <p className="mt-6 text-sm text-gray-500">Loading…</p>}
-      {rows && rows.length === 0 && <p className="mt-6 text-sm text-gray-600">No ads in this view.</p>}
-
-      {rows && rows.length > 0 && (
-        <div className="mt-4 space-y-3">
-          {rows.map((ad) => (
-            <div key={ad.id} className="rounded-2xl border border-gray-100 bg-white p-4">
-              <div className="flex gap-4">
-                {ad.imageUrl ? (
+      {rows === null ? (
+        <p className="text-sm text-gray-500">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="text-sm text-gray-500">Nothing here.</p>
+      ) : (
+        <ul className="space-y-3" data-ad-review>
+          {rows.map((r) => (
+            <li key={r.id} className="rounded-2xl border border-gray-100 bg-white p-4" data-review-row={r.id}>
+              <div className="flex flex-wrap gap-4">
+                {r.creativeUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={ad.imageUrl} alt="" className="h-20 w-16 shrink-0 rounded-lg object-cover" />
-                ) : (
-                  <div className="h-20 w-16 shrink-0 rounded-lg bg-gray-100" />
+                  <img src={r.creativeUrl} alt="Creative" className="h-24 w-72 max-w-full rounded-lg border object-cover" />
                 )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="break-words text-sm font-semibold">
-                      {ad.productTitle}
-                      <span className="ml-2 rounded bg-cream-100 px-1.5 py-0.5 text-xs font-medium text-gray-600">
-                        🏪 {ad.shopName}
-                      </span>
-                    </p>
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${adStatusStyles[ad.status] ?? ''}`}>
-                      {ad.status}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-gray-500">
-                    {AD_PLACEMENT_LABELS[ad.placement]} · {ad.durationDays} days ·{' '}
-                    <span className="font-semibold text-ink-900">{formatPaise(ad.pricePaise)}</span> ·
-                    requested{' '}
-                    {new Date(ad.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                <div className="min-w-0 flex-1 text-sm">
+                  <p className="font-semibold text-ink-900">
+                    {r.placement ? PLACEMENT_LABELS[r.placement] : r.name}{' '}
+                    <span className="text-xs font-normal text-gray-500">({r.sponsorship ? 'Sponsorship' : 'Advertising'})</span>
                   </p>
-                  {ad.status === 'ACTIVE' && ad.endAt && (
-                    <p className="mt-0.5 text-xs text-green-700">
-                      Live until {new Date(ad.endAt).toLocaleDateString('en-IN')} · 👁 {ad.views} · 🖱 {ad.clicks}
-                    </p>
-                  )}
-                  {ad.status === 'REJECTED' && ad.rejectionReason && (
-                    <p className="mt-0.5 text-xs text-red-600">Declined: {ad.rejectionReason}</p>
-                  )}
-
-                  {ad.status === 'PENDING' && rejecting !== ad.id && (
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={() => void decide(ad.id, { action: 'approve' })}
-                        disabled={isPending(ad.id)}
-                        aria-busy={isPending(ad.id)}
-                        data-action="approve-ad"
-                        className="rounded-lg bg-ink-900 px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
-                      >
-                        {isPending(ad.id) ? <><Spinner className="mr-1" />Approving…</> : '✓ Approve — go live'}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setRejecting(ad.id);
-                          setReason('');
-                        }}
-                        className="rounded-lg border border-red-300 px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-red-600 hover:bg-red-50"
-                      >
-                        ✕ Reject
-                      </button>
-                    </div>
-                  )}
-                  {rejecting === ad.id && (
-                    <div className="mt-3 rounded-xl border border-red-200 bg-red-50/50 p-3">
-                      <input
-                        value={reason}
-                        onChange={(e) => setReason(e.target.value)}
-                        maxLength={300}
-                        placeholder="Reason shown to the seller"
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600"
-                        autoFocus
-                      />
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          onClick={() => void decide(ad.id, { action: 'reject', reason: reason.trim() })}
-                          disabled={reason.trim().length < 5 || isPending(ad.id)}
-                          aria-busy={isPending(ad.id)}
-                          data-action="reject-ad"
-                          className="rounded-lg bg-red-600 px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-red-700 disabled:opacity-50"
-                        >
-                          {isPending(ad.id) ? <><Spinner className="mr-1" />Rejecting…</> : 'Confirm rejection'}
-                        </button>
-                        <button
-                          onClick={() => setRejecting(null)}
-                          className="rounded-lg border border-gray-300 px-4 py-1.5 text-xs font-semibold text-gray-600 hover:bg-white"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <p className="text-xs text-gray-500">
+                    {r.shopName} · {formatPaise(r.pricePaise)} + GST · {r.days[0]}
+                    {r.days.length > 1 ? ` → ${r.days[r.days.length - 1]} (${r.days.length} days)` : ''}
+                  </p>
+                  {r.headline && <p className="mt-1">“{r.headline}”</p>}
+                  {r.product && <p className="text-xs text-gray-500">Product: {r.product.title}</p>}
+                  {r.rejectionReason && <p className="text-xs text-red-600">Rejected: {r.rejectionReason}</p>}
                 </div>
+                {r.status === 'PENDING_APPROVAL' && (
+                  <div className="flex flex-col gap-2">
+                    <button type="button" onClick={() => decide(r.id, 'approve')} className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white">Approve</button>
+                    <button type="button" onClick={() => setRejecting(rejecting === r.id ? null : r.id)} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-700">Reject…</button>
+                  </div>
+                )}
               </div>
-            </div>
+              {rejecting === r.id && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why — the seller sees this" className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm" name="reason" />
+                  <button type="button" disabled={reason.trim().length < 3} onClick={() => decide(r.id, 'reject')} className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">Reject and refund</button>
+                </div>
+              )}
+            </li>
           ))}
-        </div>
+        </ul>
       )}
+
+      <section className="rounded-2xl border border-gray-100 bg-white p-4" data-ad-calendar>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-bold">Booking calendar</h2>
+          <label className="text-xs text-gray-500">
+            From <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="ml-1 rounded border border-gray-200 px-2 py-1" />
+          </label>
+        </div>
+        {calendar === null ? (
+          <p className="text-sm text-gray-500">Loading…</p>
+        ) : calendar.length === 0 ? (
+          <p className="text-sm text-gray-500">Nothing booked in these 31 days.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+              <thead>
+                <tr>
+                  <th className="sticky left-0 bg-white py-1 pr-2 text-left">Day</th>
+                  {spaces.map((s) => <th key={s} className="px-2 py-1 text-left font-semibold">{s}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {days.map((d) => (
+                  <tr key={d} className="border-t border-gray-100 align-top">
+                    <td className="sticky left-0 bg-white py-1 pr-2 font-medium">{d}</td>
+                    {spaces.map((s) => (
+                      <td key={s} className="px-2 py-1">
+                        {(calendar ?? [])
+                          .filter((c) => c.day === d && `${c.space}${c.scopeKey ? ` · ${c.scopeKey.slice(-6)}` : ''}` === s)
+                          .map((c) => (
+                            <span key={`${c.campaignId}-${c.slot}`} className={`mb-0.5 block rounded px-1 ${c.status === 'PENDING_APPROVAL' ? 'bg-orange-100' : c.sponsorship ? 'bg-purple-100' : 'bg-blue-100'}`} title={c.name}>
+                              {c.shopName}
+                            </span>
+                          ))}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-2 text-[11px] text-gray-500">Blue: advertising · purple: sponsorship · orange: waiting for approval.</p>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

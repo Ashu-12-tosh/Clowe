@@ -37,6 +37,7 @@ import {
   VENDOR_TERMS_VERSION,
 } from '@clowe/shared';
 import { resolveFileUrls } from '../services/assets';
+import { grantWelcomeCredit } from '../services/advertising';
 import { getCommercial } from '../services/commercial';
 import { syncWarehouse, syncWarehouseSafe } from '../services/shipping/warehouses';
 import { prisma } from '../db';
@@ -546,6 +547,8 @@ adminSellersRouter.patch('/:id/status', async (req, res, next) => {
     // Approved: register their pickup address with Delhivery now, so the first
     // order can be booked. A failure is recorded on the seller, never raised.
     if (step.status === 'APPROVED') await syncWarehouseSafe(seller.id);
+    // And the welcome advertising credit, once.
+    if (step.status === 'APPROVED') await grantWelcomeCredit(seller.id);
 
     if (blocking || input.action === 'reinstate') {
       sendToUserSafe(

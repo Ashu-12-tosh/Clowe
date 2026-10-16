@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import type { ProductListItem } from '@clowe/shared';
+import type { AdLabel, ProductListItem } from '@clowe/shared';
+import AdBadge from '@/components/AdBadge';
 import { discountPercent, formatPaise } from '@/lib/format';
 import WishlistButton from './WishlistButton';
 import { responsiveImage } from '@clowe/shared';
@@ -10,8 +11,8 @@ interface Props {
   product: ProductListItem;
   inWishlist: boolean;
   onRemovedFromWishlist?: () => void;
-  /** Promoted placement: renders a small "Sponsored" label (Amazon-style). */
-  sponsored?: boolean;
+  /** Paid placement: shows its "Sponsored" or "Ad" label (true = "Sponsored"). */
+  sponsored?: boolean | AdLabel;
   /** Fired on navigation — used for ad click tracking. */
   onNavigate?: () => void;
 }
@@ -50,9 +51,7 @@ export default function ProductCard({
         />
       </div>
       <div className="p-3">
-        {sponsored && (
-          <p className="mb-0.5 text-[10px] font-medium text-gray-400">Sponsored</p>
-        )}
+        {sponsored && <AdBadge label={sponsored === true ? 'Sponsored' : sponsored} className="mb-1" />}
         <p className="t-card-title truncate text-ink-900">{product.title}</p>
         <p className="t-card-brand mt-0.5 uppercase tracking-wide text-gray-400">
           {product.brand ?? product.categoryName}

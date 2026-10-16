@@ -105,3 +105,33 @@ export async function canCover(sellerId: string, basePaise: number, useAdCredit 
   const base = Math.max(0, basePaise - (useAdCredit ? adCreditPaise : 0));
   return walletPaise >= base + cloweGst(base, fees.gstPercent);
 }
+
+/**
+ * Give back a charge (a rejected booking or creative): every entry posted for
+ * it, reversed into the bucket it came from — credit back as credit, wallet
+ * money to the wallet, a payout deduction undone. Once.
+ */
+export async function refundCharge(idempotencyKey: string, note: string): Promise<number> {
+  const entries = await prisma.sellerLedgerEntry.findMany({ where: { idempotencyKey: { startsWith: `${idempotencyKey}:` } } });
+  let refunded = 0;
+  await prisma.$transaction(async (tx) => {
+    for (const e of entries) {
+      if (e.idempotencyKey?.endsWith(':refund')) continue;
+      const done = await postEntry(
+        {
+          sellerId: e.sellerId,
+          type: e.type,
+          bucket: e.bucket,
+          amountPaise: -e.amountPaise,
+          note: `Refund — ${note}`,
+          chargeType: e.chargeType,
+          taxablePaise: e.taxablePaise === null ? null : -e.taxablePaise,
+          idempotencyKey: `${e.idempotencyKey}:refund`,
+        },
+        tx,
+      );
+      if (done) refunded += -e.amountPaise;
+    }
+  });
+  return refunded;
+}

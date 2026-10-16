@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { ProductListItem } from '@clowe/shared';
+import type { AdLabel, ProductListItem } from '@clowe/shared';
+import AdBadge from '@/components/AdBadge';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import { discountPercent, formatPaise } from '@/lib/format';
 import { BADGES_EVENT } from '@/components/Header';
@@ -14,8 +15,8 @@ import { responsiveImage } from '@clowe/shared';
 interface Props {
   product: ProductListItem;
   inWishlist: boolean;
-  /** Promoted placement — renders a small "Sponsored" label. */
-  sponsored?: boolean;
+  /** Paid placement: shows its "Sponsored" or "Ad" label (true = "Sponsored"). */
+  sponsored?: boolean | AdLabel;
   onNavigate?: () => void;
 }
 
@@ -118,7 +119,7 @@ export default function CategoryProductCard({
       <WishlistButton productId={product.id} initialInWishlist={inWishlist} />
 
       <div className="flex flex-1 flex-col p-3">
-        {sponsored && <p className="mb-0.5 text-[10px] font-medium text-gray-400">Sponsored</p>}
+        {sponsored && <AdBadge label={sponsored === true ? 'Sponsored' : sponsored} className="mb-1" />}
         <Link
           href={`/products/${product.slug}`}
           onClick={onNavigate}

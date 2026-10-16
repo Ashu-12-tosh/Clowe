@@ -6,13 +6,13 @@ import type { ProductListItem, ProductListResponse } from '@clowe/shared';
 import { api } from '@/lib/api';
 import { fetchWishlistIds } from '@/lib/wishlist';
 import ProductCard from './ProductCard';
-import { trackAdClick, useSponsoredAds } from './SponsoredAds';
+import { adProductIds, trackAd, useAds } from './AdSlots';
 
-/** "Top Picks For You" — latest live products, with sponsored cards inline. */
+/** "Top Picks For You" — latest live products, after the labelled paid cards. */
 export default function TopPicks() {
   const [items, setItems] = useState<ProductListItem[]>([]);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
-  const ads = useSponsoredAds('HOME_BANNER');
+  const ads = useAds('HOME').items;
 
   useEffect(() => {
     api<ProductListResponse>('/api/products?limit=5')
@@ -22,8 +22,8 @@ export default function TopPicks() {
   }, []);
 
   // Sponsored products lead the grid; skip organic duplicates of the same product.
-  const adProductIds = new Set(ads.map((ad) => ad.product.id));
-  const organic = items.filter((p) => !adProductIds.has(p.id));
+  const paid = adProductIds(ads);
+  const organic = items.filter((p) => !paid.has(p.id));
 
   if (organic.length === 0 && ads.length === 0) return null;
 
@@ -38,11 +38,11 @@ export default function TopPicks() {
       <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         {ads.map((ad) => (
           <ProductCard
-            key={`ad-${ad.id}`}
+            key={`ad-${ad.campaignId}-${ad.product.id}`}
             product={ad.product}
             inWishlist={wishlistIds.has(ad.product.id)}
-            sponsored
-            onNavigate={() => trackAdClick(ad.id)}
+            sponsored={ad.label}
+            onNavigate={() => trackAd({ ...ad, productId: ad.product.id })}
           />
         ))}
         {organic.map((product) => (

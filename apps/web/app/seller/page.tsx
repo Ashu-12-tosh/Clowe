@@ -640,7 +640,7 @@ export default function SellerDashboardPage() {
                 </div>
                 <div className="flex gap-2">
                   <Link
-                    href="/seller/ads/new"
+                    href="/seller/advertising"
                     className="rounded-lg border border-brand-600 px-4 py-2 text-xs font-bold text-brand-600 hover:bg-white"
                   >
                     Create campaign

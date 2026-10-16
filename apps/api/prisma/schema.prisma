@@ -484,6 +484,7 @@ model SellerProfile {
   vip            Boolean @default(false)
   subscription   SellerSubscription?
   taxInvoices    SellerTaxInvoice[]
+  adCampaigns    AdCampaign[]
   tryOnCreditLedger TryOnCreditLedger[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -977,6 +978,7 @@ model Product {
   // 360° view (Pro and Premium plans): images taken around the product, in
   // order; the product page spins through them as the shopper drags.
   spinImages      String[]      @default([])
+  adCampaigns     AdCampaign[]
   // Seller opt-in for AI Try-On; only honoured in try-on eligible categories.
   tryOnEnabled    Boolean       @default(false)
   // Seller's "Not returnable" (pierced jewellery, customised or final-sale
@@ -1799,6 +1801,136 @@ model SellerTaxInvoice {
 
   @@unique([sellerId, month])
   @@map("seller_tax_invoices")
+}
+
+enum AdCampaignKind {
+  CPC
+  PACKAGE
+  PLACEMENT
+  SMART
+}
+
+enum AdCampaignStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  PAUSED
+  ENDED
+  REJECTED
+}
+
+/// Advertising and sponsorship (owner's Batch 2). CPC: the seller bids per
+/// valid click inside the type's range. PACKAGE: a fixed-price bundle for
+/// campaignDays. PLACEMENT: a booked slot (banner, featured seller…) on a
+/// calendar. SMART: a budget and a goal, spread across the CPC types.
+/// Sponsorship uses the same machinery with sponsorship = true and its own
+/// rate card. Creatives are approved before going live.
+model AdCampaign {
+  id              String            @id @default(cuid())
+  sellerId        String
+  seller          SellerProfile     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  kind            AdCampaignKind
+  sponsorship     Boolean           @default(false)
+  name            String
+  /// CPC / SMART / PACKAGE: the ad types it runs (CpcAdType values).
+  adTypes         String[]          @default([])
+  packageKey      String?
+  /// PLACEMENT: which (PlacementKind) and, for category spaces, the category.
+  placement       String?
+  categoryId      String?
+  productId       String?
+  product         Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  /// CPC: the seller's bid per valid click.
+  bidPaise        Int?
+  dailyBudgetPaise   Int?
+  monthlyBudgetPaise Int?
+  /// SMART: CLICKS or ORDERS, and the whole budget.
+  goal            String?
+  totalBudgetPaise Int?
+  /// PACKAGE / PLACEMENT: what was charged up front.
+  pricePaise      Int               @default(0)
+  status          AdCampaignStatus  @default(ACTIVE)
+  rejectionReason String?
+  creativeUrl     String?
+  headline        String?
+  startAt         DateTime
+  endAt           DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  bookings     AdSlotBooking[]
+  clicks       AdClick[]
+  stats        AdDailyStat[]
+  attributions AdAttribution[]
+
+  @@index([status, kind])
+  @@index([sellerId, createdAt])
+  @@map("ad_campaigns")
+}
+
+/// One slot of a space on one day. The unique key is what stops two
+/// campaigns (advertising or sponsorship) holding the same slot.
+model AdSlotBooking {
+  id         String     @id @default(cuid())
+  campaignId String
+  campaign   AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  space      String
+  /// The category for category spaces; empty otherwise.
+  scopeKey   String     @default("")
+  day        DateTime   @db.Date
+  slot       Int
+
+  @@unique([space, scopeKey, day, slot])
+  @@index([campaignId])
+  @@map("ad_slot_bookings")
+}
+
+/// A click on an ad. Valid (and charged, for CPC) once per shopper or device,
+/// product and campaign in 24 hours; never the seller's own, never a bot.
+model AdClick {
+  id          String     @id @default(cuid())
+  campaignId  String
+  campaign    AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  productId   String?
+  viewerKey   String
+  userId      String?
+  valid       Boolean
+  reason      String?
+  chargedPaise Int       @default(0)
+  createdAt   DateTime   @default(now())
+
+  @@index([campaignId, viewerKey, productId, createdAt])
+  @@index([userId, productId, createdAt])
+  @@map("ad_clicks")
+}
+
+model AdDailyStat {
+  campaignId   String
+  campaign     AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  day          DateTime   @db.Date
+  /// The slot it ran in (an ad type or a placement): per-type performance.
+  slotType     String     @default("")
+  impressions  Int        @default(0)
+  clicks       Int        @default(0)
+  spendPaise   Int        @default(0)
+  orders       Int        @default(0)
+  revenuePaise Int        @default(0)
+
+  @@id([campaignId, day, slotType])
+  @@map("ad_daily_stats")
+}
+
+/// An order line bought within attributionDays of a valid click on its product's ad.
+model AdAttribution {
+  id           String     @id @default(cuid())
+  campaignId   String
+  campaign     AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  clickId      String
+  orderItemId  String     @unique
+  revenuePaise Int
+  createdAt    DateTime   @default(now())
+
+  @@index([campaignId])
+  @@map("ad_attributions")
 }
 
 /// Each acceptance of the Vendor Terms and Seller Agreement: which version,

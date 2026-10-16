@@ -37,7 +37,7 @@ const STATE_STYLES: Record<ListingState, string> = {
 const QUICK_ACTIONS = [
   { href: '/seller/products/new', icon: '＋', label: 'Add new product' },
   { href: '/seller/orders', icon: '📦', label: 'Manage orders' },
-  { href: '/seller/ads', icon: '📣', label: 'Advertise products' },
+  { href: '/seller/advertising', icon: '📣', label: 'Advertise products' },
   { href: '/seller/payouts', icon: '₹', label: 'View payouts' },
 ];
 
@@ -247,7 +247,7 @@ export default function SellerProductsPage() {
               ✎ Edit listing
             </Link>
             <Link
-              href={`/seller/ads/new?productId=${row.id}`}
+              href="/seller/advertising"
               className="block px-3 py-2 hover:bg-cream-50"
             >
               📣 Promote this product

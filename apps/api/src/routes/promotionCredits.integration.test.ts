@@ -4,9 +4,7 @@ import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
-import { DEFAULT_SETTINGS } from '../services/settingsService';
 import { balance } from '../services/sellerLedgerService';
-import { availableBalance } from '../services/payoutService';
 import { signAccessToken } from '../utils/jwt';
 
 /**
@@ -26,8 +24,6 @@ let base: string;
 let categoryId: string;
 let seq = 0;
 
-const CATEGORY_7_DAYS = DEFAULT_SETTINGS.adPricing.CATEGORY_SPONSORED['7']; // ₹299
-const HOME_30_DAYS = DEFAULT_SETTINGS.adPricing.HOME_BANNER['30']; // ₹1,499
 
 beforeAll(async () => {
   await seedFixture(prisma);
@@ -66,14 +62,6 @@ async function makeSeller() {
   return { sellerId: seller.id, token: signAccessToken({ sub: user.id, role: 'SELLER' }), productId: product.id };
 }
 
-async function makeAdmin() {
-  seq += 1;
-  const admin = await prisma.user.create({
-    data: { phone: `92900${String(seq).padStart(5, '0')}`, name: `Promo Admin ${seq}`, role: Role.ADMIN, referralCode: `PRM-A-${seq}` },
-  });
-  return signAccessToken({ sub: admin.id, role: 'ADMIN' });
-}
-
 async function call(method: string, path: string, token: string, body?: unknown) {
   const res = await fetch(`${base}${path}`, {
     method,
@@ -92,9 +80,6 @@ async function topUp(token: string, amountPaise: number, outcome: 'success' | 'f
   const settled = await call('POST', `/api/seller/promotion-credits/purchase/${purchaseId}/mock-pay`, token, { outcome });
   return { purchaseId, settled };
 }
-
-const bookAd = (token: string, productId: string, placement = 'CATEGORY_SPONSORED', durationDays = 7) =>
-  call('POST', '/api/seller/ads', token, { productId, placement, durationDays });
 
 async function both(sellerId: string) {
   return { promotion: await balance(sellerId, 'PROMOTION'), settlement: await balance(sellerId, 'SETTLEMENT') };
@@ -137,83 +122,26 @@ describe('buying credits', () => {
   });
 });
 
-describe('spending credits', () => {
-  it('deducts the placement price when an ad is booked', async () => {
-    const s = await makeSeller();
-    await topUp(s.token, 100_000);
-    const booked = await bookAd(s.token, s.productId);
-    expect(booked.status).toBe(200);
-    const { id } = booked.json.data as { id: string };
-
-    expect(await both(s.sellerId)).toEqual({ promotion: 100_000 - CATEGORY_7_DAYS, settlement: 0 });
-    const spend = await prisma.sellerLedgerEntry.findUnique({ where: { adId_type: { adId: id, type: 'PROMOTION_CREDIT_SPEND' } } });
-    expect(spend?.amountPaise).toBe(-CATEGORY_7_DAYS);
-    expect(spend?.bucket).toBe('PROMOTION');
-  });
-
-  it('refuses an ad the balance cannot cover, and books nothing', async () => {
-    const s = await makeSeller();
-    await topUp(s.token, 50_000); // ₹500, well short of the ₹1,499 home banner
-    const refused = await bookAd(s.token, s.productId, 'HOME_BANNER', 30);
-    expect(refused.status).toBe(400);
-    expect(refused.json.error?.code).toBe('INSUFFICIENT_PROMOTION_BALANCE');
-    expect(refused.json.error?.message).toContain('₹1,499');
-    expect(await prisma.ad.count({ where: { sellerId: s.sellerId } })).toBe(0);
-    expect(await both(s.sellerId)).toEqual({ promotion: 50_000, settlement: 0 });
-    expect(HOME_30_DAYS).toBeGreaterThan(50_000);
-  });
-
-  it('refuses with no balance at all', async () => {
-    const s = await makeSeller();
-    const refused = await bookAd(s.token, s.productId);
-    expect(refused.status).toBe(400);
-    expect(refused.json.error?.code).toBe('INSUFFICIENT_PROMOTION_BALANCE');
-  });
-
-  it('gives the credits back when the ad is declined, once', async () => {
-    const s = await makeSeller();
-    const admin = await makeAdmin();
-    await topUp(s.token, 100_000);
-    const { id } = (await bookAd(s.token, s.productId)).json.data as { id: string };
-    expect(await balance(s.sellerId, 'PROMOTION')).toBe(100_000 - CATEGORY_7_DAYS);
-
-    const declined = await call('PATCH', `/api/admin/ads/${id}`, admin, { action: 'reject', reason: 'Image is too dark to read' });
-    expect(declined.status).toBe(200);
-    expect(await balance(s.sellerId, 'PROMOTION')).toBe(100_000);
-
-    // Deciding again is refused by status, and the refund pair would refuse too.
-    const again = await call('PATCH', `/api/admin/ads/${id}`, admin, { action: 'reject', reason: 'Still too dark' });
-    expect(again.status).toBe(400);
-    expect(await balance(s.sellerId, 'PROMOTION')).toBe(100_000);
-  });
-
-  it('is not recovered from payouts a second time', async () => {
-    const s = await makeSeller();
-    const admin = await makeAdmin();
-    await topUp(s.token, 100_000);
-    const { id } = (await bookAd(s.token, s.productId)).json.data as { id: string };
-    await call('PATCH', `/api/admin/ads/${id}`, admin, { action: 'approve' });
-
-    // An ACTIVE ad used to be "outstanding ad spend" that a payout clawed back.
-    const available = await availableBalance(s.sellerId);
-    expect(available.adjustmentsPaise).toBe(0);
-  });
-});
-
 describe('the two buckets', () => {
   it('never move each other', async () => {
     const s = await makeSeller();
     await topUp(s.token, 200_000);
-    await bookAd(s.token, s.productId);
     await topUp(s.token, 30_000);
-    expect(await both(s.sellerId)).toEqual({ promotion: 230_000 - CATEGORY_7_DAYS, settlement: 0 });
+    expect(await both(s.sellerId)).toEqual({ promotion: 230_000, settlement: 0 });
 
     const settlementPage = await call('GET', '/api/seller/ledger?bucket=SETTLEMENT', s.token);
     expect((settlementPage.json.data as { total: number }).total).toBe(0);
     const promotionPage = await call('GET', '/api/seller/ledger?bucket=PROMOTION', s.token);
     const promo = promotionPage.json.data as { total: number; balancePaise: number; rows: { type: string }[] };
-    expect(promo.total).toBe(3);
-    expect(promo.balancePaise).toBe(230_000 - CATEGORY_7_DAYS);
-    expect(promo.rows.map((r) => r.type)).toEqual(['PROMOTION_CREDIT_PURCHASE', 'PROMOTION_CREDIT_SPEND', 'PROMOTION_CREDIT_PURCHASE']);
+    expect(promo.total).toBe(2);
+    expect(promo.balancePaise).toBe(230_000);
+    expect(promo.rows.map((r) => r.type)).toEqual(['PROMOTION_CREDIT_PURCHASE', 'PROMOTION_CREDIT_PURCHASE']);
+  });
+
+  it('the old ad booking points to Advertising', async () => {
+    const s = await makeSeller();
+    const moved = await call('POST', '/api/seller/ads', s.token, { productId: s.productId, placement: 'CATEGORY_SPONSORED', durationDays: 7 });
+    expect(moved.status).toBe(410);
+    expect(moved.json.error?.code).toBe('ADS_MOVED');
   });
 });

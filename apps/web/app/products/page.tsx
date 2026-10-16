@@ -23,7 +23,7 @@ import SearchSummary from '@/components/search/SearchSummary';
 
 /** Every chip 'Clear all' removes. Kept local: it is a UI affordance, not a contract. */
 const ALL_DROPPABLE: SearchDroppable[] = ['minPrice','maxPrice','brands','onSale','category','sort'];
-import { trackAdClick, useSponsoredAds } from '@/components/SponsoredAds';
+import { AdBanners, adProductIds, trackAd, useAds } from '@/components/AdSlots';
 import FilterRail from '@/components/search/FilterRail';
 import AppliedFilters from '@/components/search/AppliedFilters';
 import FilterSheet from '@/components/search/FilterSheet';
@@ -75,14 +75,13 @@ function ProductsPageInner() {
     .filter(Boolean) as SearchDroppable[];
   const page = Number(searchParams.get('page') ?? '1');
 
-  // Sponsored products render inline at the top of category listings —
-  // identical cards, just a small "Sponsored" label. Organic duplicates skipped.
-  const sponsoredAds = useSponsoredAds(
-    category && page === 1 ? 'CATEGORY_SPONSORED' : null,
-    category || undefined,
-  );
-  const adProductIds = new Set(sponsoredAds.map((ad) => ad.product.id));
-  const organicItems = (data?.items ?? []).filter((p) => !adProductIds.has(p.id));
+  // Paid cards lead page 1 in labelled slots — Top Search first for a search,
+  // then sponsored products; for a category browse, its category ads. The
+  // organic results keep their own order (duplicates of a paid card skipped).
+  const ads = useAds(page === 1 ? (q ? 'SEARCH' : category ? 'CATEGORY' : null) : null, q ? { q } : { category });
+  const sponsoredAds = [...ads.top, ...ads.items];
+  const paidIds = adProductIds(sponsoredAds);
+  const organicItems = (data?.items ?? []).filter((p) => !paidIds.has(p.id));
 
   /** Every filter is in the URL: push the next query (shareable, and Back undoes it). */
   const pushQuery = useCallback(
@@ -365,15 +364,21 @@ function ProductsPageInner() {
             </div>
           )}
 
+          {ads.banners.length > 0 && (
+            <div className="mt-4">
+              <AdBanners banners={ads.banners} />
+            </div>
+          )}
+
           {data && (data.items.length > 0 || sponsoredAds.length > 0) && (
             <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
               {sponsoredAds.map((ad) => (
                 <ProductCard
-                  key={`ad-${ad.id}`}
+                  key={`ad-${ad.campaignId}-${ad.product.id}`}
                   product={ad.product}
                   inWishlist={wishlistIds.has(ad.product.id)}
-                  sponsored
-                  onNavigate={() => trackAdClick(ad.id)}
+                  sponsored={ad.label}
+                  onNavigate={() => trackAd({ ...ad, productId: ad.product.id })}
                 />
               ))}
               {organicItems.map((product) => (

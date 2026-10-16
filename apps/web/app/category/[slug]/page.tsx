@@ -26,7 +26,7 @@ import CategoryProductCard from '@/components/category/CategoryProductCard';
 import FilterRail from '@/components/search/FilterRail';
 import AppliedFilters from '@/components/search/AppliedFilters';
 import FilterSheet from '@/components/search/FilterSheet';
-import { trackAdClick, useSponsoredAds } from '@/components/SponsoredAds';
+import { AdBanners, adProductIds, trackAd, useAds } from '@/components/AdSlots';
 import { ChevronIcon } from '@/components/cart/CartIcons';
 
 const PAGE_SIZE = 24;
@@ -174,9 +174,11 @@ function CategoryPageInner() {
   const sort = (searchParams.get('sort') ?? 'popularity') as ProductSort;
   const page = Number(searchParams.get('page') ?? '1');
 
-  const sponsoredAds = useSponsoredAds(page === 1 ? 'CATEGORY_SPONSORED' : null, selectedCategory);
-  const adProductIds = new Set(sponsoredAds.map((ad) => ad.product.id));
-  const organicItems = (data?.items ?? []).filter((p) => !adProductIds.has(p.id));
+  // Paid cards sit first on page 1, each labelled; the organic order is untouched.
+  const ads = useAds(page === 1 ? 'CATEGORY' : null, { category: selectedCategory });
+  const sponsoredAds = ads.items;
+  const paidIds = adProductIds(sponsoredAds);
+  const organicItems = (data?.items ?? []).filter((p) => !paidIds.has(p.id));
 
   /** Update query params on this category route (resets paging). */
   const setParams = useCallback(
@@ -472,15 +474,21 @@ function CategoryPageInner() {
             </div>
           )}
 
+          {ads.banners.length > 0 && (
+            <div className="mt-4">
+              <AdBanners banners={ads.banners} />
+            </div>
+          )}
+
           {data && (data.items.length > 0 || sponsoredAds.length > 0) && (
             <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
               {sponsoredAds.map((ad) => (
                 <CategoryProductCard
-                  key={`ad-${ad.id}`}
+                  key={`ad-${ad.campaignId}-${ad.product.id}`}
                   product={ad.product}
                   inWishlist={wishlistIds.has(ad.product.id)}
-                  sponsored
-                  onNavigate={() => trackAdClick(ad.id)}
+                  sponsored={ad.label}
+                  onNavigate={() => trackAd({ ...ad, productId: ad.product.id })}
                 />
               ))}
               {organicItems.map((product) => (

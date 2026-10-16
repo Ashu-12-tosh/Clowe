@@ -28,6 +28,7 @@ import { complaintsRouter } from './routes/complaints';
 import { settingsRouter } from './routes/settings';
 import { deliveryRouter } from './routes/delivery';
 import { adsRouter } from './routes/ads';
+import { adminAdReviewRouter, adServeRouter, sellerAdsRouter } from './routes/advertising';
 import { creditsRouter } from './routes/credits';
 import { uploadsRouter, uploadDir } from './routes/uploads';
 import { homeRouter } from './routes/home';
@@ -157,6 +158,7 @@ export function createApp() {
   app.use('/api/seller/support', sellerSupportRouter);
   app.use('/api/seller/customer-complaints', sellerComplaintsRouter);
   app.use('/api/seller/billing', sellerBillingRouter);
+  app.use('/api/seller/advertising', sellerAdsRouter);
   app.use('/api/seller/store', sellerStoreRouter);
   app.use('/api/seller/tryon', sellerTryonRouter);
   app.use('/api/seller/kyc', sellerKycRouter);
@@ -179,6 +181,7 @@ export function createApp() {
   app.use('/api/admin/returns', adminReturnsRouter);
   app.use('/api/admin/cod-refunds', adminCodRefundsRouter);
   app.use('/api/admin/support', adminSupportRouter);
+  app.use('/api/admin/ad-review', adminAdReviewRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/admin', adminContentRouter);
   app.use('/api/cart', cartRouter);
@@ -194,6 +197,7 @@ export function createApp() {
   app.use('/api/complaints', complaintsRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/ads', adsRouter);
+  app.use('/api/ad-serve', adServeRouter);
   app.use('/api/credits', creditsRouter);
   app.use('/api/uploads', uploadsRouter);
 

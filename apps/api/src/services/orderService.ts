@@ -4,6 +4,12 @@ import { prisma } from '../db';
 import { sendMessageSafe, sendToUserSafe } from './messaging';
 import { creditExpiryFrom } from '../routes/credits';
 import { returnStock } from './stockService';
+import { attributeOrder } from './advertising';
+
+/** A confirmed order credited to the ads its shopper clicked (never blocks the order). */
+function attributeAdsSafe(orderId: string) {
+  void attributeOrder(orderId).catch((err) => console.error('[clowe-api] ad attribution failed:', err));
+}
 
 /** Unique order number for a new order, e.g. CLW-7KQ3MX9P2T (random, not in sequence). */
 export async function generateOrderNumber(): Promise<string> {
@@ -56,6 +62,8 @@ export async function settlePaymentSuccess(orderId: string, providerPaymentId?: 
       },
     }),
   ]);
+
+  attributeAdsSafe(order.id);
 
   // Shopping credits: 1 credit per ₹20 actually paid (1 credit = 50 paise).
   const earned = creditsEarnedFor(order.totalPaise);
@@ -273,6 +281,8 @@ export async function confirmCodOrder(orderId: string) {
       },
     }),
   ]);
+
+  attributeAdsSafe(order.id);
 
   // Credits are earned the same way as a prepaid order; a cancellation
   // reverses the redeemed credits through the existing cancel path.

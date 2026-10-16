@@ -7,6 +7,7 @@ import { api, ApiRequestError } from '@/lib/api';
 import HeroCarousel from '@/components/home/HeroCarousel';
 import { PromoCard, PromoStrip } from '@/components/home/PromoTiles';
 import RecentlyViewed from '@/components/home/RecentlyViewed';
+import { HomeAds } from '@/components/AdSlots';
 import { CategoryGlyph } from '@/components/DesignedArt';
 import {
   Countdown,
@@ -222,6 +223,9 @@ export default function HomeClient({ initial = null }: { initial?: HomePayload |
           </div>
         </section>
       )}
+
+      {/* Paid placements, each labelled "Ad" or "Sponsored" */}
+      <HomeAds />
 
       {/* 5 ─ Shop by Category */}
       <section className="mt-10">

@@ -764,7 +764,7 @@ export default function TryOnPage({ params: paramsPromise }: { params: Promise<{
       )}
       {howOpen && <HowItWorks onClose={() => setHowOpen(false)} />}
 
-      <RelatedProducts categorySlug={product.category.slug} excludeId={product.id} />
+      <RelatedProducts categorySlug={product.category.slug} excludeId={product.id} adSurface="TRYON" />
     </main>
   );
 }

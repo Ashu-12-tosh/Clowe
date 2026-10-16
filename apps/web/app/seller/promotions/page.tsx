@@ -192,7 +192,7 @@ export default function SellerPromotionsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            href="/seller/ads"
+            href="/seller/advertising"
             className="rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-semibold hover:bg-gray-50"
           >
             📣 Ads manager

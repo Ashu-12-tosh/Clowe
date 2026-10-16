@@ -13,8 +13,6 @@ import {
   parcelProblems,
   variantOptionFields,
   type CategoryRules,
-  AD_PLACEMENT_LABELS,
-  adCreateSchema,
   phoneSchema,
   sellerApplicationId,
   sellerApplicationSchema,
@@ -48,7 +46,6 @@ import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { applyReturnDecision, findSellerReturn } from '../services/returnService';
 import { getSettings } from '../services/settingsService';
-import { spendPromotionCredits } from '../services/sellerLedgerService';
 import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
 import { isListingBelowTryOnAge } from '../services/tryon/ageGate';
 import { expireDueAds } from './ads';
@@ -1112,45 +1109,9 @@ sellerRouter.get('/ads', requireSeller, async (req, res, next) => {
   }
 });
 
-// Create an ad request for one of the seller's LIVE products.
-sellerRouter.post('/ads', requireSeller, requireApprovedSeller, async (req, res, next) => {
-  try {
-    const input = adCreateSchema.parse(req.body);
-    const product = await prisma.product.findUnique({ where: { id: input.productId } });
-    if (!product || product.sellerId !== req.seller!.id) throw ApiError.notFound('Product not found');
-    if (product.status !== 'APPROVED') {
-      throw ApiError.badRequest('Only live (approved) products can be advertised', 'PRODUCT_NOT_LIVE');
-    }
-
-    const { adPricing } = await getSettings();
-    const pricePaise = adPricing[input.placement][String(input.durationDays) as '7' | '15' | '30'];
-
-    // Paid up front from promotion credits, in the same transaction as the
-    // booking: either the ad exists and its credits are spent, or neither.
-    const ad = await prisma.$transaction(async (tx) => {
-      const created = await tx.ad.create({
-        data: {
-          sellerId: req.seller!.id,
-          productId: product.id,
-          placement: input.placement,
-          durationDays: input.durationDays,
-          pricePaise, // snapshot of admin pricing at booking
-        },
-        include: { product: { select: { title: true, slug: true, images: { orderBy: { sortOrder: 'asc' }, take: 1 } } } },
-      });
-      await spendPromotionCredits(
-        tx,
-        req.seller!.id,
-        pricePaise,
-        created.id,
-        `${AD_PLACEMENT_LABELS[input.placement]} · ${input.durationDays} days · "${product.title}"`,
-      );
-      return created;
-    });
-    res.json({ success: true, data: toSellerAdRow(ad) });
-  } catch (err) {
-    next(err);
-  }
+// Ad booking moved to Advertising (owner's Batch 2): /api/seller/advertising.
+sellerRouter.post('/ads', requireSeller, (_req, _res, next) => {
+  next(new ApiError(410, 'ADS_MOVED', 'Ads are booked from Advertising now — Seller dashboard → Advertising'));
 });
 
 // ---------------------------------------------------------------------------

@@ -28,7 +28,7 @@ const NAV: DashNavItem[] = [
   { href: '/admin/cod-refunds', label: 'COD refunds to pay', icon: '🏦' },
   { href: '/admin/support', label: 'Support inbox', icon: '📮' },
   { href: '/admin/inventory', label: 'Inventory & Warehouse', icon: '🏭' },
-  { href: '/admin/ads', label: 'Ads', icon: '📣' },
+  { href: '/admin/ads', label: 'Ads & sponsorship', icon: '📣' },
   { href: '/admin/seller-referrals', label: 'Referrals', icon: '🤝' },
   { href: '/admin/audit', label: 'Audit Logs', icon: '📋' },
   { href: '/admin/csp-reports', label: 'CSP Reports', icon: '🛡' },
