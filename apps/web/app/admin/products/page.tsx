@@ -119,6 +119,11 @@ function ProductReviewPanel({ productId }: { productId: string }) {
             className="aspect-[3/4] w-full rounded-xl border border-gray-100 bg-cream-100 object-cover"
           />
         )}
+        {detail.imageNotes.some(Boolean) && (
+          <p className="mt-1 text-[11px] font-semibold text-amber-700" data-image-notes>
+            {detail.imageNotes.filter(Boolean).length} of {detail.imageUrls.length} pictures: {[...new Set(detail.imageNotes.filter(Boolean))].join(', ')}
+          </p>
+        )}
         {detail.imageUrls.length > 1 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {detail.imageUrls.map((url, i) => (

@@ -1230,6 +1230,8 @@ model ProductImage {
   url       String
   altText   String?
   sortOrder Int     @default(0)
+  /// An internal note on the picture, e.g. "low-res, replace later" (never shown to shoppers).
+  qualityNote String?
 
   @@map("product_images")
 }

@@ -182,6 +182,29 @@ describe('an admin’s listing edit', () => {
     expect(JSON.stringify(log[0]!.metadata)).toContain('Inida'); // the value before is kept
   });
 
+  it('sets the pictures in order, each with its internal note, and shows the note to admins', async () => {
+    const urls = ['http://localhost:4000/uploads/a-w2000.webp', 'http://localhost:4000/uploads/b-w2000.webp', 'http://localhost:4000/uploads/old.jpg'];
+    const r = await call<{ after: { images: { url: string; qualityNote: string | null }[] } }>('PATCH', `/api/admin/products/${productId}/listing`, adminToken, {
+      images: [
+        { url: urls[0], qualityNote: 'low-res, replace later' },
+        { url: urls[1], qualityNote: 'low-res, replace later' },
+        { url: urls[2] },
+      ],
+      reason: 'Seller photos uploaded by Clowe admin',
+    });
+    expect(r.status).toBe(200);
+    expect(r.json.data.after.images).toEqual([
+      { url: urls[0], qualityNote: 'low-res, replace later' },
+      { url: urls[1], qualityNote: 'low-res, replace later' },
+      { url: urls[2], qualityNote: null },
+    ]);
+    const detail = await call<{ imageUrls: string[]; imageNotes: (string | null)[] }>('GET', `/api/admin/products/${productId}`, adminToken);
+    expect(detail.json.data.imageNotes).toEqual(['low-res, replace later', 'low-res, replace later', null]);
+    // Shoppers see the pictures, never the note.
+    const pub = await call<Record<string, unknown>>('GET', `/api/products/${slug}`, null);
+    expect(JSON.stringify(pub.json)).not.toContain('replace later');
+  });
+
   it('keeps a variant already in one of the sizes, with its order history', async () => {
     const t = await prisma.product.create({
       data: {

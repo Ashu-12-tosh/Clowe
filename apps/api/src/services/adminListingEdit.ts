@@ -13,6 +13,9 @@ import { invalidateSearchCatalog } from './productSearch';
  * — an admin's edit needs no review — and kept on the record as "Listing
  * edited by Clowe admin" with every value before and after.
  *
+ * Pictures replace the listing's set in order (the first is the main one),
+ * each with an optional internal note such as "low-res, replace later".
+ *
  * Sizes turn the listing's variants into one per size at today's price: a
  * variant already carrying one of the sizes keeps it (and its order history),
  * the first one without becomes the first missing size, the rest are retired
@@ -28,6 +31,7 @@ interface Snapshot {
   attributes: unknown;
   isVisible: boolean;
   variants: { id: string; label: string; size: string; color: string; stock: number; pricePaise: number }[];
+  images: { url: string; qualityNote: string | null }[];
 }
 
 async function snapshot(productId: string): Promise<Snapshot> {
@@ -41,6 +45,7 @@ async function snapshot(productId: string): Promise<Snapshot> {
       attributes: true,
       isVisible: true,
       variants: { where: { retiredAt: null }, orderBy: { createdAt: 'asc' }, select: { id: true, label: true, size: true, color: true, stock: true, pricePaise: true } },
+      images: { orderBy: { sortOrder: 'asc' }, select: { url: true, qualityNote: true } },
     },
   });
   return p;
@@ -143,6 +148,15 @@ export async function adminEditListing(productId: string, input: AdminListingEdi
   await prisma.$transaction([
     prisma.product.update({ where: { id: productId }, data }),
     ...(input.sizes ? await sizeWrites(productId, input.sizes) : []),
+    // Pictures: the set given, in order; the first is the main one.
+    ...(input.images
+      ? [
+          prisma.productImage.deleteMany({ where: { productId } }),
+          prisma.productImage.createMany({
+            data: input.images.map((img, i) => ({ productId, url: img.url, altText: input.title ?? before.title, sortOrder: i, qualityNote: img.qualityNote || null })),
+          }),
+        ]
+      : []),
   ]);
   const after = await snapshot(productId);
   invalidateSearchCatalog();

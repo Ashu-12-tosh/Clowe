@@ -266,6 +266,7 @@ adminRouter.get('/products/:id', async (req, res, next) => {
       categoryName: p.category.name,
       description: p.description,
       imageUrls: p.images.map((i) => i.url),
+      imageNotes: p.images.map((i) => i.qualityNote),
       variants: p.variants.map((v) => ({
         sku: v.sku,
         size: v.size,

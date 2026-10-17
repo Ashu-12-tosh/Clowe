@@ -150,6 +150,8 @@ export interface AdminProductDetail {
   categoryName: string;
   description: string;
   imageUrls: string[];
+  /** Internal notes on pictures, by position ("low-res, replace later"); null where none. */
+  imageNotes: (string | null)[];
   /** Packing video uploaded with the listing (expires after 10 days). */
   variants: {
     sku: string;
@@ -240,6 +242,15 @@ export const adminListingEditSchema = z.object({
   description: z.string().trim().min(20).max(5000).optional(),
   attributes: z.array(productAttributeInputSchema).max(20).optional(),
   sizes: z.array(z.string().trim().min(1).max(20)).min(1).max(12).optional(),
+  /**
+   * The listing's pictures in order (the first is the main one), each URL from
+   * POST /api/uploads; `qualityNote` is internal ("low-res, replace later").
+   */
+  images: z
+    .array(z.object({ url: imageUrlSchema, qualityNote: z.string().trim().max(80).optional() }))
+    .min(1)
+    .max(8)
+    .optional(),
   visible: z.boolean().optional(),
   /** Why: kept with the edit. */
   reason: z.string().trim().min(5).max(300),
