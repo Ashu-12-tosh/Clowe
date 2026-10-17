@@ -6,6 +6,7 @@ import { GSTIN_APPROVAL_BLOCKER, GSTIN_EXAMPLE, type TaxInvoice } from '@clowe/s
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
 import { signAccessToken } from '../utils/jwt';
+import { reviewSellerKyc } from '../services/kyc/sellerKyc';
 
 /**
  * The buyer's tax invoice is the seller's: issued under the seller's legal
@@ -200,6 +201,9 @@ describe('GSTIN', () => {
 
     await prisma.sellerProfile.update({ where: { id: sellerId }, data: { gstNumber: '27ABCDE1234F1Z5' } });
     expect((await call<{ hasGstin: boolean }>('GET', '/api/seller/profile', sellerToken)).json.data.hasGstin).toBe(true);
+    // On file, it still waits for Clowe to verify it; then the hold lifts.
+    expect((await call<{ gstinBlock: { code: string } | null }>('GET', '/api/seller/payouts/overview', sellerToken)).json.data.gstinBlock?.code).toBe('GSTIN_NOT_VERIFIED');
+    await reviewSellerKyc({ sellerId, check: 'GSTIN', decision: 'VERIFY', reviewerId: 'test-admin' });
     expect((await call<{ gstinBlock: unknown }>('GET', '/api/seller/payouts/overview', sellerToken)).json.data.gstinBlock).toBeNull();
   });
 });
