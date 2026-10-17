@@ -1,3 +1,4 @@
+import { z } from 'zod';
 // ---------------------------------------------------------------------------
 // Seller KYC verification — PAN, GSTIN and bank account checks.
 //
@@ -154,7 +155,15 @@ export type KycCheckState =
   /** Fails the format check, so it was never sent. */
   | 'INVALID_FORMAT'
   /** Details are there and have not been verified — or changed since. */
-  | 'NOT_RUN';
+  | 'NOT_RUN'
+  /**
+   * Waiting for an admin to check it against the documents: what a check by
+   * the mock provider (or none) leaves. Never "Verified" until an admin or a
+   * real provider says so.
+   */
+  | 'PENDING_REVIEW'
+  /** An admin rejected it, with a reason. */
+  | 'REJECTED';
 
 export const KYC_CHECK_STATE_LABELS: Record<KycCheckState, string> = {
   VERIFIED: 'Verified',
@@ -163,7 +172,12 @@ export const KYC_CHECK_STATE_LABELS: Record<KycCheckState, string> = {
   NOT_PROVIDED: 'Not provided',
   INVALID_FORMAT: 'Invalid format',
   NOT_RUN: 'Not verified',
+  PENDING_REVIEW: 'Pending review',
+  REJECTED: 'Rejected',
 };
+
+/** How a check was decided: an admin against the documents, or a real verification provider. */
+export type KycDecisionMethod = 'MANUAL' | 'PROVIDER';
 
 /** One check as the admin sees it: everything stored, nothing raw. */
 export interface KycCheckView {
@@ -177,6 +191,10 @@ export interface KycCheckView {
   nameMeetsThreshold: boolean | null;
   provider: string | null;
   checkedAt: string | null;
+  /** Set when VERIFIED or REJECTED: how, by whom (admin name) and the rejection reason. */
+  method: KycDecisionMethod | null;
+  decidedBy: string | null;
+  rejectReason: string | null;
 }
 
 export interface SellerKycSummary {
@@ -191,6 +209,8 @@ export interface SellerKycSummary {
   /** The provider flagged the bank account as fraudulent. */
   fraudAccount: boolean;
   nameMatchThreshold: number;
+  /** MANUAL while the verification provider is the mock: an admin decides every check. */
+  reviewMode: 'MANUAL' | 'PROVIDER';
 }
 
 /** One check as the seller sees it — no scores, which would only teach a fraudster to tune a name. */
@@ -201,6 +221,8 @@ export interface SellerKycCheckView {
   /** The name matched below the threshold: worth checking it is exactly as on the document. */
   nameNeedsReview: boolean;
   checkedAt: string | null;
+  method: KycDecisionMethod | null;
+  rejectReason: string | null;
 }
 
 export interface SellerKycStatus {
@@ -208,8 +230,9 @@ export interface SellerKycStatus {
   gstin: SellerKycCheckView;
   bank: SellerKycCheckView;
   panGstinMismatch: boolean;
-  /** Something is waiting to be checked or can be retried. */
+  /** Something is waiting to be checked by a real provider or can be retried. */
   canVerify: boolean;
+  reviewMode: 'MANUAL' | 'PROVIDER';
 }
 
 /** Narrow the admin's view to the seller's. */
@@ -220,6 +243,8 @@ export function toSellerKycStatus(summary: SellerKycSummary): SellerKycStatus {
     reasonLabel: c.reason ? KYC_REASON_LABELS[c.reason] : null,
     nameNeedsReview: c.nameMeetsThreshold === false,
     checkedAt: c.checkedAt,
+    method: c.method,
+    rejectReason: c.rejectReason,
   });
   const checks = [summary.pan, summary.gstin, summary.bank];
   return {
@@ -227,7 +252,9 @@ export function toSellerKycStatus(summary: SellerKycSummary): SellerKycStatus {
     gstin: view(summary.gstin),
     bank: view(summary.bank),
     panGstinMismatch: summary.panGstinMismatch,
-    canVerify: checks.some((c) => c.state === 'NOT_RUN' || c.state === 'ERROR'),
+    // With manual review there is nothing for the seller to run: an admin checks the documents.
+    canVerify: summary.reviewMode === 'PROVIDER' && checks.some((c) => c.state === 'NOT_RUN' || c.state === 'ERROR' || c.state === 'PENDING_REVIEW'),
+    reviewMode: summary.reviewMode,
   };
 }
 
@@ -286,7 +313,81 @@ export function kycApprovalWarnings(summary: SellerKycSummary): string[] {
             : `${label} has not been verified yet.`,
         );
         break;
+      case 'PENDING_REVIEW':
+        out.push(`${label} is waiting for manual review against the documents.`);
+        break;
+      case 'REJECTED':
+        out.push(`${label} was rejected${view.rejectReason ? `: ${view.rejectReason}` : ''}.`);
+        break;
     }
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// The seller's own bank account (Store Settings) and manual review
+// ---------------------------------------------------------------------------
+
+export const BANK_ACCOUNT_TYPES = ['SAVINGS', 'CURRENT'] as const;
+export type BankAccountType = (typeof BANK_ACCOUNT_TYPES)[number];
+export const BANK_ACCOUNT_TYPE_LABELS: Record<BankAccountType, string> = { SAVINGS: 'Savings', CURRENT: 'Current' };
+
+/** PUT /api/seller/store/bank — entered by the seller, verified by an admin against the cheque. */
+export const sellerBankAccountSchema = z
+  .object({
+    accountName: z.string().trim().min(2, 'Enter the account holder name as the bank has it').max(80),
+    accountNumber: z.string().trim().regex(/^\d{9,18}$/, 'An account number is 9 to 18 digits'),
+    confirmAccountNumber: z.string().trim(),
+    ifsc: z
+      .string()
+      .trim()
+      .transform((v) => v.toUpperCase())
+      .refine((v) => IFSC_PATTERN.test(v), 'An IFSC is 11 characters, like HDFC0001234'),
+    accountType: z.enum(BANK_ACCOUNT_TYPES),
+    bankName: z.string().trim().max(60).optional(),
+    /** The cancelled cheque (or bank statement first page), from POST /api/uploads/seller-document. */
+    chequeDoc: z.string().trim().min(1, 'Upload a cancelled cheque'),
+  })
+  .refine((v) => v.accountNumber === v.confirmAccountNumber, { path: ['confirmAccountNumber'], message: 'The two account numbers do not match' });
+export type SellerBankAccountInput = z.infer<typeof sellerBankAccountSchema>;
+
+/** POST /api/admin/sellers/:id/kyc-review */
+export const kycReviewDecisionSchema = z
+  .object({
+    check: z.enum(KYC_CHECK_TYPES),
+    decision: z.enum(['VERIFY', 'REJECT']),
+    reason: z.string().trim().max(300).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.decision === 'REJECT' && (v.reason ?? '').length < 5) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['reason'], message: 'Say why (at least 5 characters) — the seller sees it' });
+    }
+  });
+export type KycReviewDecisionInput = z.infer<typeof kycReviewDecisionSchema>;
+
+/** The seller documents an admin can open (each opening is audit-logged). */
+export const SELLER_DOCUMENT_KINDS = ['constitutionDoc', 'cancelledChequeDoc', 'signatoryKycDoc', 'brandAuthorisationDoc', 'bankChequeDoc'] as const;
+export type SellerDocumentKind = (typeof SELLER_DOCUMENT_KINDS)[number];
+
+/** What an admin reviews: the values as entered, beside the documents. */
+export interface AdminKycReviewView {
+  summary: SellerKycSummary;
+  values: {
+    pan: string | null;
+    panName: string | null;
+    gstin: string | null;
+    /** The full number, decrypted for the admin who checks it against the cheque (this read is audit-logged). */
+    bankAccountNumber: string | null;
+    bankAccountLast4: string | null;
+    bankIfsc: string | null;
+    bankAccountName: string | null;
+    bankAccountType: string | null;
+    bankName: string | null;
+  };
+  /** Which documents are on file; open each through the audited view endpoint. */
+  documents: { kind: SellerDocumentKind; label: string }[];
+  /** The GST portal's public taxpayer search, to check the GSTIN by hand. */
+  gstSearchUrl: string;
+}
+
+export const GST_PUBLIC_SEARCH_URL = 'https://services.gst.gov.in/services/searchtp';

@@ -96,7 +96,9 @@ describe('submitting an application', () => {
 
     const admin = (await call<AdminSellerDetail>('GET', `/api/admin/sellers/${p.id}`, adminToken)).json.data;
     expect(admin.application.applicationId).toBe(res.json.data.applicationId);
-    expect(admin.application.documents.filter((d) => d.url).map((d) => d.key)).toEqual(['constitutionDoc', 'cancelledChequeDoc', 'signatoryKycDoc']);
+    // On file, but never as a link here: each opens through the audited view endpoint.
+    expect(admin.application.documents.filter((d) => d.onFile).map((d) => d.key)).toEqual(['constitutionDoc', 'cancelledChequeDoc', 'signatoryKycDoc']);
+    expect(admin.application.documents.every((d) => d.url === null)).toBe(true);
     expect(admin.application.termsAcceptances[0]?.version).toBe(VENDOR_TERMS_VERSION);
   });
 });

@@ -5,7 +5,6 @@ import { ApiError } from '../utils/ApiError';
 import { categoryRulesFor } from './categoryRules';
 import { ensureSellerPrices, recordOrderLineGstRates, repriceProducts } from './sellerPricing';
 import { isSensitiveForTryOn } from './tryon/sensitiveGarment';
-import { brandAuthResetIfChanged } from './brandAuthorization';
 
 // ---------------------------------------------------------------------------
 // Edits to live listings.
@@ -159,7 +158,6 @@ export async function applyRevision(productId: string): Promise<void> {
         categoryId: content.categoryId,
         brand: content.brand,
         brandId: content.brandId,
-        ...brandAuthResetIfChanged(product, content),
         shortDescription: content.shortDescription,
         description: content.description,
         videoUrl: content.videoUrl,

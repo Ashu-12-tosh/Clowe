@@ -99,6 +99,11 @@ export interface SellerStoreSettings {
   bankAccountName: string | null;
   bankAccountLast4: string | null;
   bankIfsc: string | null;
+  /** SAVINGS or CURRENT. */
+  bankAccountType: string | null;
+  /** A cancelled cheque is on file for the admin to verify the account against. */
+  bankChequeOnFile: boolean;
+  bankSubmittedAt: string | null;
   payoutMethodCount: number;
 
   /** Pickup + fulfilment. */

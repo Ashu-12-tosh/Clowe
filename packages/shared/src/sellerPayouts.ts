@@ -168,6 +168,8 @@ export interface SellerPayoutOverview {
   panBlock: PayoutPanBlock | null;
   /** Set while payouts are blocked for want of a GSTIN. */
   gstinBlock: PayoutGstinBlock | null;
+  /** No payouts to a bank account Clowe has not verified (against the cancelled cheque, or by the bank). */
+  bankBlock: PayoutBankBlock | null;
 }
 
 /**
@@ -176,9 +178,56 @@ export interface SellerPayoutOverview {
  * they add one.
  */
 export interface PayoutGstinBlock {
-  code: 'GSTIN_REQUIRED';
+  code: 'GSTIN_REQUIRED' | 'GSTIN_NOT_VERIFIED';
   reason: string;
   action: string;
+}
+
+export interface PayoutBankBlock {
+  code: 'BANK_NOT_VERIFIED';
+  bankState: KycCheckState;
+  reason: string;
+  action: string;
+}
+
+const BANK_WHERE = 'Store settings → Bank';
+
+/** Null when the GSTIN on file is verified; the missing GSTIN has its own block. */
+export function payoutGstinVerificationBlock(gstin: { state: KycCheckState; rejectReason?: string | null }): PayoutGstinBlock | null {
+  if (gstin.state === 'VERIFIED' || gstin.state === 'NOT_PROVIDED') return null;
+  const block = (reason: string, action: string): PayoutGstinBlock => ({ code: 'GSTIN_NOT_VERIFIED', reason, action });
+  switch (gstin.state) {
+    case 'REJECTED':
+      return block(`Your GSTIN was not accepted${gstin.rejectReason ? `: ${gstin.rejectReason}` : ''}.`, `Correct it in ${WHERE}; Clowe checks it again.`);
+    case 'INVALID_FORMAT':
+      return block('The GSTIN on file is not a valid GSTIN.', `Correct it in ${WHERE}.`);
+    case 'FAILED':
+      return block('Your GSTIN could not be verified.', `Check it in ${WHERE}, or contact seller support.`);
+    default:
+      return block('Your GSTIN is waiting for Clowe to verify it.', 'Nothing to do — payouts start once it is verified.');
+  }
+}
+
+/** Null when the bank account on file is verified. */
+export function payoutBankBlock(bank: { state: KycCheckState; rejectReason?: string | null }): PayoutBankBlock | null {
+  if (bank.state === 'VERIFIED') return null;
+  const block = (reason: string, action: string): PayoutBankBlock => ({ code: 'BANK_NOT_VERIFIED', bankState: bank.state, reason, action });
+  switch (bank.state) {
+    case 'NOT_PROVIDED':
+      return block('There is no bank account on file for payouts.', `Add it, with a cancelled cheque, in ${BANK_WHERE}.`);
+    case 'REJECTED':
+      return block(`Your bank account was not accepted${bank.rejectReason ? `: ${bank.rejectReason}` : ''}.`, `Correct it in ${BANK_WHERE}.`);
+    case 'INVALID_FORMAT':
+    case 'FAILED':
+      return block('Your bank account could not be verified.', `Check the details in ${BANK_WHERE}.`);
+    default:
+      return block('Your bank account is waiting for Clowe to verify it against your cancelled cheque.', 'Nothing to do — payouts start once it is verified.');
+  }
+}
+
+/** The error text when a payout is refused for want of a verified GSTIN or bank account. */
+export function payoutVerificationMessage(block: PayoutGstinBlock | PayoutBankBlock): string {
+  return `${block.reason} ${block.action}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +250,7 @@ export interface PayoutPanBlock {
 const WHERE = 'Store settings → Business';
 
 /** Null when the PAN is verified; otherwise why payouts wait, and how to fix it. */
-export function payoutPanBlock(pan: { state: KycCheckState; reason: KycReason | null }): PayoutPanBlock | null {
+export function payoutPanBlock(pan: { state: KycCheckState; reason: KycReason | null; rejectReason?: string | null }): PayoutPanBlock | null {
   const block = (reason: string, action: string): PayoutPanBlock => ({
     code: 'PAN_NOT_VERIFIED',
     panState: pan.state,
@@ -238,6 +287,13 @@ export function payoutPanBlock(pan: { state: KycCheckState; reason: KycReason | 
       return block(
         `Your PAN could not be verified${why ? `: ${why}` : ''}.`,
         `Check the PAN and name in ${WHERE}, correct them and verify again, or contact seller support.`,
+      );
+    case 'PENDING_REVIEW':
+      return block('Your PAN is waiting for Clowe to verify it.', 'Nothing to do — payouts start once it is verified.');
+    case 'REJECTED':
+      return block(
+        `Your PAN was not accepted${pan.rejectReason ? `: ${pan.rejectReason}` : ''}.`,
+        `Correct the PAN and name in ${WHERE}; Clowe checks it again.`,
       );
   }
 }

@@ -8,6 +8,8 @@ import { seedFixture } from '../test/fixture';
 import { signAccessToken } from '../utils/jwt';
 import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
 import { postDeliveryEntries } from '../services/sellerLedgerService';
+import { encryptBankAccount } from '../services/bankAccountCrypto';
+import { reviewSellerKyc } from '../services/kyc/sellerKyc';
 
 /**
  * No payout without a verified PAN — checked when the money moves, not only
@@ -82,11 +84,17 @@ async function payableSeller(profile: Profile = {}) {
       approvedAt: status === SellerStatus.APPROVED ? new Date() : null,
       panNumber: profile.panNumber ?? null,
       panName: profile.panName ?? null,
-      // A GSTIN is required for approval and payouts; these tests are about the PAN.
+      // A GSTIN and a bank account are required for payouts; these tests are
+      // about the PAN, so both are on file and verified by an admin below.
       gstNumber: '27ABCDE1234F1Z0',
+      bankAccountEnc: encryptBankAccount('1234567890'),
+      bankAccountLast4: '7890',
+      bankIfsc: 'HDFC0001234',
+      bankAccountName: `PAN Seller ${seq}`,
       ...(profile.kycStatus ? { kycStatus: profile.kycStatus } : {}),
     },
   });
+  for (const check of ['GSTIN', 'BANK'] as const) await reviewSellerKyc({ sellerId: seller.id, check, decision: 'VERIFY', reviewerId: 'test-admin' });
   const product = await prisma.product.create({
     data: {
       sellerId: seller.id,
@@ -174,7 +182,9 @@ async function expectBlocked(s: { sellerId: string; token: string }, panState: s
 
   const overview = (await call('GET', '/api/seller/payouts/overview', s.token)).json.data as SellerPayoutOverview;
   expect(overview.panBlock).toMatchObject({ code: 'PAN_NOT_VERIFIED', panState });
-  expect(overview.panBlock!.action).toContain('Store settings → Business');
+  // Waiting for an admin: nothing for the seller to do. Otherwise, where to fix it.
+  if (panState === 'PENDING_REVIEW') expect(overview.panBlock!.action).toMatch(/Nothing to do/);
+  else expect(overview.panBlock!.action).toContain('Store settings → Business');
   // Not "you can request a payout now" while it cannot be done.
   expect(overview.insights.map((i) => i.key)).toContain('pan');
   expect(overview.insights.map((i) => i.key)).not.toContain('payable');
@@ -195,12 +205,13 @@ describe('a payout without a verified PAN', () => {
     await expectBlocked(s, 'NOT_PROVIDED', /no PAN on file/);
   });
 
-  it('is refused while the PAN on file has not been verified, saying what is missing', async () => {
-    await expectBlocked(await payableSeller({ panNumber: 'ABCDE1234F' }), 'NOT_RUN', /name printed on it/);
+  it('is refused while the PAN on file waits for review, saying so', async () => {
+    // No verification provider: an admin checks the PAN against the card.
+    await expectBlocked(await payableSeller({ panNumber: 'ABCDE1234F' }), 'PENDING_REVIEW', /waiting for Clowe to verify it/);
     await expectBlocked(
       await payableSeller({ panNumber: 'ABCDE1234F', panName: 'Pan Holder' }),
-      'NOT_RUN',
-      /not been verified yet/,
+      'PENDING_REVIEW',
+      /waiting for Clowe to verify it/,
     );
     await expectBlocked(
       await payableSeller({ panNumber: 'ABC1234', panName: 'Pan Holder' }),
@@ -209,18 +220,18 @@ describe('a payout without a verified PAN', () => {
     );
   });
 
-  it('is refused when the PAN check failed or could not complete', async () => {
-    // Magic PANs of the mock KYC provider (tests never use a real one).
-    const failed = await payableSeller({ panNumber: 'ZZZZZ1234F', panName: 'Pan Holder' });
-    expect((await call('POST', '/api/seller/kyc/verify', failed.token)).status).toBe(200);
-    await expectBlocked(failed, 'FAILED', /PAN does not exist/);
+  it('is refused after a mock check (never a verification) and when an admin rejected the PAN', async () => {
+    // A mock "verified" is no verification: the PAN still waits for review.
+    const mocked = await payableSeller({ panNumber: 'ABCDE1234F', panName: 'Pan Holder' });
+    expect((await call('POST', '/api/seller/kyc/verify', mocked.token)).status).toBe(200);
+    await expectBlocked(mocked, 'PENDING_REVIEW', /waiting for Clowe to verify it/);
 
-    const errored = await payableSeller({ panNumber: 'EEEEE1234F', panName: 'Pan Holder' });
-    expect((await call('POST', '/api/seller/kyc/verify', errored.token)).status).toBe(200);
-    await expectBlocked(errored, 'ERROR', /could not complete/);
+    const rejected = await payableSeller({ panNumber: 'ZZZZZ1234F', panName: 'Pan Holder' });
+    await reviewSellerKyc({ sellerId: rejected.sellerId, check: 'PAN', decision: 'REJECT', reason: 'The name does not match the PAN card', reviewerId: 'test-admin' });
+    await expectBlocked(rejected, 'REJECTED', /not accepted: The name does not match the PAN card/);
   });
 
-  it('goes through once the seller adds the PAN and verifies it', async () => {
+  it('goes through once the seller adds the PAN and an admin verifies it', async () => {
     const s = await payableSeller();
     await expectBlocked(s, 'NOT_PROVIDED', /no PAN on file/);
     // The business form saves every field, the GSTIN on file included.
@@ -231,6 +242,8 @@ describe('a payout without a verified PAN', () => {
     });
     expect(saved.status).toBe(200);
     expect((await call('POST', '/api/seller/kyc/verify', s.token)).status).toBe(200);
+    await expectBlocked(s, 'PENDING_REVIEW', /waiting for Clowe/); // the mock check verified nothing
+    await reviewSellerKyc({ sellerId: s.sellerId, check: 'PAN', decision: 'VERIFY', reviewerId: 'test-admin' });
 
     const overview = (await call('GET', '/api/seller/payouts/overview', s.token)).json.data as SellerPayoutOverview;
     expect(overview.panBlock).toBeNull();
@@ -240,8 +253,8 @@ describe('a payout without a verified PAN', () => {
   });
 });
 
-describe('a shop whose KYC is locked', () => {
-  it('can still add a PAN that was never on file, but not change one that was', async () => {
+describe('a verified PAN is locked', () => {
+  it('can be added when never on file, but not changed once an admin verified it', async () => {
     const s = await payableSeller({ kycStatus: 'VERIFIED' });
     const added = await call('PUT', '/api/seller/store/business', s.token, {
       panNumber: 'ABCDE1234F',
@@ -252,6 +265,7 @@ describe('a shop whose KYC is locked', () => {
       panNumber: 'ABCDE1234F',
       panName: 'Pan Holder',
     });
+    await reviewSellerKyc({ sellerId: s.sellerId, check: 'PAN', decision: 'VERIFY', reviewerId: 'test-admin' });
 
     const changed = await call('PUT', '/api/seller/store/business', s.token, {
       panNumber: 'PQRST5678K',

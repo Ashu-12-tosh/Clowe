@@ -15,12 +15,17 @@ import {
   type AdminDealRow,
   type AdminPromoTileRow,
   type NewsletterSubscriberRow,
+  brandProofDecisionSchema,
+  type AdminBrandProofRow,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { bustHomeCache } from './home';
 import { auditSafe } from '../services/auditService';
+import { z } from 'zod';
+import { resolveFileUrl } from '../services/assets';
+import { proofStatus } from '../services/brandAuthorization';
 
 export const adminContentRouter = Router();
 
@@ -121,6 +126,110 @@ adminContentRouter.patch('/brands/:id', async (req, res, next) => {
     }
     bustHomeCache();
     res.json({ success: true, data: { id: brand.id } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Brand proofs: a seller's proof for a brand that needs authorization,
+// approved per brand per seller, optionally until an expiry date.
+// ---------------------------------------------------------------------------
+
+adminContentRouter.get('/brand-proofs', async (req, res, next) => {
+  try {
+    const status = z.enum(['PENDING', 'ALL']).default('PENDING').parse(req.query.status ?? undefined);
+    const proofs = await prisma.sellerBrandProof.findMany({
+      where: status === 'PENDING' ? { status: 'PENDING' } : {},
+      orderBy: { submittedAt: 'asc' },
+      take: 200,
+      include: { seller: { select: { shopName: true } }, brand: { select: { name: true } } },
+    });
+    const rows: AdminBrandProofRow[] = await Promise.all(
+      proofs.map(async (p) => ({
+        id: p.id,
+        sellerId: p.sellerId,
+        shopName: p.seller.shopName,
+        brandId: p.brandId,
+        brandName: p.brand.name,
+        proofType: p.proofType as AdminBrandProofRow['proofType'],
+        status: proofStatus(p),
+        note: p.note,
+        submittedAt: p.submittedAt.toISOString(),
+        reviewedAt: p.reviewedAt?.toISOString() ?? null,
+        expiresAt: p.expiresAt ? new Date(p.expiresAt.getTime() + 5.5 * 3_600_000).toISOString().slice(0, 10) : null,
+        listingCount: await prisma.product.count({
+          where: { sellerId: p.sellerId, status: { not: 'ARCHIVED' }, OR: [{ brandId: p.brandId }, { brand: { equals: p.brand.name, mode: 'insensitive' } }] },
+        }),
+      })),
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminContentRouter.post('/brand-proofs/:id', async (req, res, next) => {
+  try {
+    const input = brandProofDecisionSchema.parse(req.body);
+    const proof = await prisma.sellerBrandProof.findUnique({
+      where: { id: req.params.id },
+      include: { seller: { select: { userId: true, shopName: true } }, brand: { select: { name: true } } },
+    });
+    if (!proof) throw ApiError.notFound('Brand proof not found');
+    if (proof.status !== 'PENDING') throw ApiError.badRequest('This brand proof is not waiting for review', 'NO_BRAND_PROOF_PENDING');
+    const approve = input.decision === 'APPROVE';
+    // The expiry is the end of that day, India time.
+    const expiresAt = approve && input.expiresAt ? new Date(`${input.expiresAt}T23:59:59+05:30`) : null;
+    await prisma.sellerBrandProof.update({
+      where: { id: proof.id },
+      data: { status: approve ? 'APPROVED' : 'REJECTED', note: approve ? null : input.note!, expiresAt, reviewedAt: new Date(), reviewerId: req.auth!.userId },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: proof.seller.userId,
+        type: 'BRAND_AUTH',
+        title: approve ? `${proof.brand.name}: brand proof approved` : `${proof.brand.name}: brand proof not accepted`,
+        body: approve
+          ? `Your ${proof.brand.name} brand proof is approved${input.expiresAt ? ` until ${input.expiresAt}` : ''}. Your ${proof.brand.name} listings can now be shown to shoppers.`
+          : `Your ${proof.brand.name} brand proof was not accepted: ${input.note}. Upload a new one from My Products; your ${proof.brand.name} listings stay hidden until one is approved.`,
+        linkHref: '/seller/products',
+      },
+    });
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'PRODUCTS',
+      action: approve ? 'Brand proof approved' : 'Brand proof rejected',
+      entityType: 'SellerBrandProof',
+      entityId: proof.id,
+      summary: `${proof.seller.shopName} · ${proof.brand.name}: ${approve ? `approved${input.expiresAt ? ` until ${input.expiresAt}` : ''}` : `rejected — ${input.note}`}`,
+      metadata: { sellerId: proof.sellerId, brand: proof.brand.name, proofType: proof.proofType, decision: input.decision, expiresAt: input.expiresAt ?? null, note: input.note ?? null },
+    });
+    res.json({ success: true, data: { id: proof.id, status: approve ? 'APPROVED' : 'REJECTED' } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Open a brand proof: a short-lived signed link, every opening audit-logged. */
+adminContentRouter.post('/brand-proofs/:id/view', async (req, res, next) => {
+  try {
+    const proof = await prisma.sellerBrandProof.findUnique({ where: { id: req.params.id }, include: { seller: { select: { shopName: true } }, brand: { select: { name: true } } } });
+    if (!proof) throw ApiError.notFound('Brand proof not found');
+    const url = await resolveFileUrl(proof.doc);
+    if (!url) throw ApiError.notFound('That document could not be found', 'DOCUMENT_MISSING');
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'SELLERS',
+      action: 'Seller document viewed',
+      entityType: 'SellerBrandProof',
+      entityId: proof.id,
+      summary: `${proof.seller.shopName}: ${proof.brand.name} brand proof opened`,
+      metadata: { document: 'brandProof', brand: proof.brand.name },
+    });
+    res.json({ success: true, data: { url } });
   } catch (err) {
     next(err);
   }

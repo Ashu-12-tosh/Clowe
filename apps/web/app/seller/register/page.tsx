@@ -28,8 +28,16 @@ type DocKey = keyof typeof SELLER_DOCUMENT_LABELS;
 const DOCS: { key: DocKey; hint: string; required: boolean }[] = [
   { key: 'constitutionDoc', hint: 'Certificate of incorporation, partnership deed, LLP agreement or proprietorship declaration', required: true },
   { key: 'cancelledChequeDoc', hint: 'A cancelled cheque of the bank account below', required: true },
-  { key: 'signatoryKycDoc', hint: "The authorised signatory's Aadhaar, passport, voter ID or driving licence", required: true },
-  { key: 'brandAuthorisationDoc', hint: 'Trade mark registration or a brand / reseller authorisation letter, for branded goods', required: false },
+  {
+    key: 'signatoryKycDoc',
+    hint: "The authorised signatory's Aadhaar, passport, voter ID or driving licence. If you upload Aadhaar, upload the masked Aadhaar (only the last 4 digits visible, downloadable from UIDAI).",
+    required: true,
+  },
+  {
+    key: 'brandAuthorisationDoc',
+    hint: 'For brands that need it (such as Apple, Allen Solly, Van Heusen, Louis Philippe, Peter England, Levi’s, Nike, Adidas, Puma): an authorization letter from the brand or its authorized distributor, or a GST purchase invoice from them.',
+    required: false,
+  },
 ];
 
 /**
@@ -350,6 +358,15 @@ export default function SellerRegisterPage() {
                   {SELLER_DOCUMENT_LABELS[d.key].replace(' (optional)', '')} {d.required ? <span className="text-red-600">*</span> : <span className="text-xs font-normal text-gray-400">(optional)</span>}
                 </p>
                 <p className="text-xs text-gray-500">{d.hint}</p>
+                {d.key === 'constitutionDoc' && (
+                  <p className="text-xs">
+                    Sole proprietor?{' '}
+                    <Link href="/templates/proprietorship-declaration" target="_blank" rel="noopener noreferrer" className="font-semibold text-brand-600 underline" data-proprietorship-template>
+                      Download proprietorship declaration template
+                    </Link>{' '}
+                    — fill it in, sign it and upload it here.
+                  </p>
+                )}
                 <div className="mt-1 flex items-center gap-2">
                   <input
                     type="file"

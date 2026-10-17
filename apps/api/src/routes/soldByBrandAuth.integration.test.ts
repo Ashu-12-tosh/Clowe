@@ -3,7 +3,6 @@ import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
-import { brandAuthResetIfChanged } from '../services/brandAuthorization';
 import { signAccessToken } from '../utils/jwt';
 
 /**
@@ -112,62 +111,81 @@ describe('a seller without a business address', () => {
   });
 });
 
-describe('brand authorization', () => {
-  let doc: string;
+describe('brand proof', () => {
+  let proofId: string;
 
-  it('an admin marks a brand: its listings (any spelling) hide until a document is approved', async () => {
+  it('an admin marks a brand: the seller’s listings (any spelling) hide until a proof for the brand is approved', async () => {
     const p = await product(withAddress.sellerId, 'Fruitco Phone 1', 'FRUITCO', 3);
-    const slug = p.slug;
-    expect((await call('GET', `/api/products/${slug}`, null)).status).toBe(200);
+    const p2 = await product(withAddress.sellerId, 'Fruitco Phone 2', 'Fruitco', 4);
+    expect((await call('GET', `/api/products/${p.slug}`, null)).status).toBe(200);
     const mark = await call('PATCH', `/api/admin/brands/${brandId}`, adminToken, { authorizationRequired: true });
     expect(mark.status).toBe(200);
     await new Promise((r) => setTimeout(r, 300)); // the audit entry is written in the background
     expect(await prisma.auditLog.count({ where: { entityType: 'Brand', entityId: brandId, action: 'Brand authorization required' } })).toBe(1);
-    expect((await call('GET', `/api/products/${slug}`, null)).status).toBe(404);
+    expect((await call('GET', `/api/products/${p.slug}`, null)).status).toBe(404);
+    expect((await call('GET', `/api/products/${p2.slug}`, null)).status).toBe(404);
     const brands = await call<{ id: string; authorizationRequired: boolean }[]>('GET', '/api/admin/brands', adminToken);
     expect(brands.json.data.find((b) => b.id === brandId)?.authorizationRequired).toBe(true);
     // Other brands are untouched.
     expect((await call('GET', `/api/products/${withAddress.productSlug}`, null)).status).toBe(200);
 
-    // The seller sees where it stands, uploads a document: waiting for review, still hidden.
-    const mine = await call<{ rows: { id: string; brandAuth: { status: string } | null }[] }>('GET', '/api/seller/products?pageSize=50', sellerToken);
-    expect(mine.json.data.rows.find((r) => r.id === p.id)?.brandAuth?.status).toBe('NONE');
+    // The seller sees where it stands per brand, and uploads one proof for the brand.
+    const mine = await call<{ rows: { id: string; brandAuth: { status: string; brandId: string } | null }[] }>('GET', '/api/seller/products?pageSize=50', sellerToken);
+    expect(mine.json.data.rows.find((r) => r.id === p.id)?.brandAuth).toMatchObject({ status: 'NONE', brandId });
     expect(mine.json.data.rows.find((r) => r.id === withAddress.productId)?.brandAuth).toBeNull();
+    const list = await call<{ brandId: string; status: string }[]>('GET', '/api/seller/brand-proofs', sellerToken);
+    expect(list.json.data.find((b) => b.brandId === brandId)?.status).toBe('NONE');
     const form = new FormData();
-    form.append('document', new Blob([Buffer.from('%PDF-1.4\n%brand letter\n')], { type: 'application/pdf' }), 'letter.pdf');
+    form.append('document', new Blob([Buffer.from('%PDF-1.4\n%purchase invoice\n')], { type: 'application/pdf' }), 'invoice.pdf');
     const up = await fetch(`${base}/api/uploads/seller-document`, { method: 'POST', headers: { authorization: `Bearer ${sellerToken}` }, body: form });
-    doc = ((await up.json()) as { data: { ref: string } }).data.ref;
-    const sent = await call<{ brandAuth: { status: string; docUrl: string } }>('PUT', `/api/seller/products/${p.id}/brand-authorization`, sellerToken, { doc });
-    expect(sent.json.data.brandAuth.status).toBe('PENDING');
-    expect(sent.json.data.brandAuth.docUrl).toBeTruthy();
-    expect((await call('GET', `/api/products/${slug}`, null)).status).toBe(404);
-    // Not needed for a brand without the rule.
-    expect((await call('PUT', `/api/seller/products/${withAddress.productId}/brand-authorization`, sellerToken, { doc })).json.error?.code).toBe('BRAND_AUTH_NOT_NEEDED');
+    const doc = ((await up.json()) as { data: { ref: string } }).data.ref;
+    expect((await call('PUT', `/api/seller/brand-proofs/${brandId}`, sellerToken, { doc, proofType: 'RECEIPT' })).status).toBe(400);
+    const sent = await call<{ status: string; proofType: string }>('PUT', `/api/seller/brand-proofs/${brandId}`, sellerToken, { doc, proofType: 'PURCHASE_INVOICE' });
+    expect(sent.json.data).toMatchObject({ status: 'PENDING', proofType: 'PURCHASE_INVOICE' });
+    expect((await call('GET', `/api/products/${p.slug}`, null)).status).toBe(404);
+    // Not for a brand without the rule.
+    const other = await prisma.brand.create({ data: { name: 'Plainco', slug: `plainco-${Date.now()}` } });
+    expect((await call('PUT', `/api/seller/brand-proofs/${other.id}`, sellerToken, { doc, proofType: 'AUTHORIZATION_LETTER' })).json.error?.code).toBe('BRAND_AUTH_NOT_NEEDED');
 
-    // Admins review it: a rejection needs a reason and tells the seller.
-    const queue = await call<{ id: string; brandAuth: { status: string; docUrl: string | null } }[]>('GET', '/api/admin/products?status=BRAND_AUTH', adminToken);
-    expect(queue.json.data.find((r) => r.id === p.id)?.brandAuth).toMatchObject({ status: 'PENDING' });
-    expect((await call('POST', `/api/admin/products/${p.id}/brand-authorization`, adminToken, { decision: 'REJECT' })).status).toBe(400);
-    await call('POST', `/api/admin/products/${p.id}/brand-authorization`, adminToken, { decision: 'REJECT', note: 'The letter is not signed' });
-    expect((await prisma.product.findUniqueOrThrow({ where: { id: p.id } })).brandAuthStatus).toBe('REJECTED');
-    expect(await prisma.notification.findFirst({ where: { type: 'BRAND_AUTH', body: { contains: 'not signed' } } })).toBeTruthy();
-    expect((await call('GET', `/api/products/${slug}`, null)).status).toBe(404);
+    // Admins review it: opening it is audited; a rejection needs a reason and tells the seller.
+    const queue = await call<{ id: string; brandId: string; status: string; listingCount: number; proofType: string }[]>('GET', '/api/admin/brand-proofs', adminToken);
+    const row = queue.json.data.find((r) => r.brandId === brandId)!;
+    expect(row).toMatchObject({ status: 'PENDING', listingCount: 2, proofType: 'PURCHASE_INVOICE' });
+    proofId = row.id;
+    const viewed = await call<{ url: string }>('POST', `/api/admin/brand-proofs/${proofId}/view`, adminToken);
+    expect(viewed.json.data.url).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await prisma.auditLog.count({ where: { entityId: proofId, action: 'Seller document viewed' } })).toBe(1);
+    expect((await call('POST', `/api/admin/brand-proofs/${proofId}`, adminToken, { decision: 'REJECT' })).status).toBe(400);
+    await call('POST', `/api/admin/brand-proofs/${proofId}`, adminToken, { decision: 'REJECT', note: 'The invoice is not from an authorized distributor' });
+    expect(await prisma.notification.findFirst({ where: { type: 'BRAND_AUTH', body: { contains: 'authorized distributor' } } })).toBeTruthy();
+    expect((await call('GET', `/api/products/${p.slug}`, null)).status).toBe(404);
 
-    // A new document, approved: the listing is shown.
-    await call('PUT', `/api/seller/products/${p.id}/brand-authorization`, sellerToken, { doc });
-    const ok = await call('POST', `/api/admin/products/${p.id}/brand-authorization`, adminToken, { decision: 'APPROVE' });
+    // A new proof, approved with an expiry: every listing of the brand is shown.
+    await call('PUT', `/api/seller/brand-proofs/${brandId}`, sellerToken, { doc, proofType: 'AUTHORIZATION_LETTER' });
+    expect((await call('POST', `/api/admin/brand-proofs/${proofId}`, adminToken, { decision: 'APPROVE', expiresAt: '2020-01-01' })).status).toBe(400);
+    const ok = await call('POST', `/api/admin/brand-proofs/${proofId}`, adminToken, { decision: 'APPROVE', expiresAt: '2099-12-31' });
     expect(ok.status).toBe(200);
-    expect((await call('GET', `/api/products/${slug}`, null)).status).toBe(200);
-    // Nothing waiting any more.
-    expect((await call('POST', `/api/admin/products/${p.id}/brand-authorization`, adminToken, { decision: 'APPROVE' })).json.error?.code).toBe('NO_BRAND_DOC_PENDING');
+    expect((await call('GET', `/api/products/${p.slug}`, null)).status).toBe(200);
+    expect((await call('GET', `/api/products/${p2.slug}`, null)).status).toBe(200);
+    expect((await call('POST', `/api/admin/brand-proofs/${proofId}`, adminToken, { decision: 'APPROVE' })).json.error?.code).toBe('NO_BRAND_PROOF_PENDING');
+    const after = await call<{ rows: { id: string; brandAuth: { status: string; expiresAt: string } | null }[] }>('GET', '/api/seller/products?pageSize=50', sellerToken);
+    expect(after.json.data.rows.find((r) => r.id === p.id)?.brandAuth).toMatchObject({ status: 'APPROVED', expiresAt: '2099-12-31' });
   });
 
-  it('a listing linked to the brand by id hides too, and a new brand resets the approval', async () => {
-    const p = await prisma.product.update({ where: { id: withAddress.productId }, data: { brandId } });
+  it('once the approval expires, the listings hide again', async () => {
+    await prisma.sellerBrandProof.update({ where: { id: proofId }, data: { expiresAt: new Date(Date.now() - 60_000) } });
+    const p = await prisma.product.findFirstOrThrow({ where: { title: 'Fruitco Phone 1' } });
+    expect((await call('GET', `/api/products/${p.slug}`, null)).status).toBe(404);
+    const mine = await call<{ rows: { id: string; brandAuth: { status: string } | null }[] }>('GET', '/api/seller/products?pageSize=50', sellerToken);
+    expect(mine.json.data.rows.find((r) => r.id === p.id)?.brandAuth?.status).toBe('EXPIRED');
+  });
+
+  it('a listing linked to the brand by id is covered the same way', async () => {
+    await prisma.product.update({ where: { id: withAddress.productId }, data: { brandId } });
     expect((await call('GET', `/api/products/${withAddress.productSlug}`, null)).status).toBe(404);
-    expect(brandAuthResetIfChanged({ brand: 'Fruitco', brandId }, { brand: ' fruitco ', brandId })).toEqual({});
-    expect(brandAuthResetIfChanged({ brand: 'Fruitco', brandId }, { brand: 'Other', brandId: null })).toMatchObject({ brandAuthStatus: 'NONE', brandAuthDoc: null });
-    await prisma.product.update({ where: { id: p.id }, data: { brandId: null } });
+    await prisma.sellerBrandProof.update({ where: { id: proofId }, data: { expiresAt: null } });
     expect((await call('GET', `/api/products/${withAddress.productSlug}`, null)).status).toBe(200);
+    await prisma.product.update({ where: { id: withAddress.productId }, data: { brandId: null } });
   });
 });

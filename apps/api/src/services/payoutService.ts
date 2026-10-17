@@ -1,6 +1,10 @@
 import {
   computeListingEconomics,
+  payoutBankBlock,
+  payoutGstinVerificationBlock,
   payoutPanBlock,
+  payoutVerificationMessage,
+  type PayoutBankBlock,
   payoutPanMessage,
   type CategoryRules,
   type PayoutGstinBlock,
@@ -273,15 +277,25 @@ async function nextReference(): Promise<string> {
  * Why this seller cannot be paid for want of a verified PAN, or null. Reads
  * the stored checks only: it never calls the KYC provider.
  */
-/** No payouts without a GSTIN: the buyer's tax invoice is issued under it. */
+/**
+ * No payouts without a GSTIN — the buyer's tax invoice is issued under it —
+ * and none until Clowe (an admin, or a real provider) has verified it.
+ */
 export async function gstinBlockFor(sellerId: string): Promise<PayoutGstinBlock | null> {
   const seller = await prisma.sellerProfile.findUnique({ where: { id: sellerId }, select: { gstNumber: true } });
-  if (seller?.gstNumber?.trim()) return null;
-  return {
-    code: 'GSTIN_REQUIRED',
-    reason: 'Every tax invoice to your buyers is issued under your GSTIN, and there is none on file.',
-    action: 'Add it in Store settings → Business.',
-  };
+  if (!seller?.gstNumber?.trim()) {
+    return {
+      code: 'GSTIN_REQUIRED',
+      reason: 'Every tax invoice to your buyers is issued under your GSTIN, and there is none on file.',
+      action: 'Add it in Store settings → Business.',
+    };
+  }
+  return payoutGstinVerificationBlock((await getSellerKycSummary(sellerId)).gstin);
+}
+
+/** No payouts to a bank account Clowe has not verified (against the cancelled cheque, or by the bank). */
+export async function bankBlockFor(sellerId: string): Promise<PayoutBankBlock | null> {
+  return payoutBankBlock((await getSellerKycSummary(sellerId)).bank);
 }
 
 export async function panBlockFor(sellerId: string): Promise<PayoutPanBlock | null> {
@@ -312,15 +326,19 @@ export async function requestPayout(sellerId: string, methodId?: string) {
   // whatever the admin accepted at approval.
   const panBlock = await panBlockFor(sellerId);
   if (panBlock) throw ApiError.forbidden(payoutPanMessage(panBlock), panBlock.code);
+  const bankBlock = await bankBlockFor(sellerId);
+  if (bankBlock) throw ApiError.forbidden(payoutVerificationMessage(bankBlock), bankBlock.code);
 
   const settings = await getSettings();
 
+  // Unless one is chosen: the default if it is verified, else the first verified one.
   const method = methodId
     ? await prisma.sellerPayoutMethod.findFirst({ where: { id: methodId, sellerId } })
-    : await prisma.sellerPayoutMethod.findFirst({
-        where: { sellerId },
+    : ((await prisma.sellerPayoutMethod.findFirst({
+        where: { sellerId, verified: true },
         orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
-      });
+      })) ??
+      (await prisma.sellerPayoutMethod.findFirst({ where: { sellerId }, orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }] })));
   if (!method) {
     throw ApiError.badRequest('Add a payout method before requesting a payout', 'NO_PAYOUT_METHOD');
   }

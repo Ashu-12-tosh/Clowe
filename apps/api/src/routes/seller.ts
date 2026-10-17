@@ -30,7 +30,7 @@ import {
   type SellerReturnRow,
   type SellerStats,
   NOT_A_SALE_STATUSES,
-  brandAuthSubmitSchema,
+  brandProofSubmitSchema,
 } from '@clowe/shared';
 import { bookReversePickup } from '../services/shipping/reversePickup';
 import { prisma } from '../db';
@@ -40,7 +40,8 @@ import { gstSettings } from '../services/economicsRates';
 import { priceInput, sellerPricesOf, type PricedUpsertInput } from '../services/sellerPricing';
 import { brandSuggestions, linkBrand } from '../services/brands';
 import { sellerAddressComplete } from '../services/sellerAddress';
-import { brandAuthResetIfChanged, brandAuthView, brandNeedsAuthorization } from '../services/brandAuthorization';
+import { brandProofView, brandsRequiringAuthorization } from '../services/brandAuthorization';
+import { encryptBankAccount } from '../services/bankAccountCrypto';
 import { packingVideoView } from '../services/packingVideos';
 import { claimEvidenceView } from '../services/returnClaims';
 import { assertOwnAssets } from '../services/assets';
@@ -204,7 +205,7 @@ sellerRouter.post('/register', async (req, res, next) => {
     // The whole application is checked; the profile takes its business details.
     const { vendorTermsVersion, constitutionDoc, cancelledChequeDoc, signatoryKycDoc, brandAuthorisationDoc } =
       sellerApplicationSchema.parse(req.body);
-    const { referralCode, ...input } = sellerRegisterSchema.parse(req.body);
+    const { referralCode, bankAccountNo, ...input } = sellerRegisterSchema.parse(req.body);
     if (vendorTermsVersion !== VENDOR_TERMS_VERSION) {
       throw ApiError.badRequest('The Vendor Terms have changed — please read and accept them again', 'VENDOR_TERMS_OUTDATED');
     }
@@ -239,6 +240,11 @@ sellerRouter.post('/register', async (req, res, next) => {
       data: {
         userId: req.auth!.userId,
         ...input,
+        // The account number is kept encrypted, shown by its last 4 digits; the
+        // application's cancelled cheque is what an admin verifies it against.
+        ...(bankAccountNo
+          ? { bankAccountEnc: encryptBankAccount(bankAccountNo), bankAccountLast4: bankAccountNo.slice(-4), bankChequeDoc: cancelledChequeDoc, bankSubmittedAt: now }
+          : {}),
         constitutionDoc,
         cancelledChequeDoc,
         signatoryKycDoc,
@@ -410,31 +416,46 @@ sellerRouter.post('/application', requireSeller, async (req, res, next) => {
 // ---------------------------------------------------------------------------
 
 /** Fetch one of the seller's own products or 404. */
-// The brand authorization document for one listing of a brand an admin marked
-// "authorization required". The listing stays hidden until an admin approves it.
-sellerRouter.put('/products/:id/brand-authorization', requireSeller, async (req, res, next) => {
+// Brand proof for one brand an admin marked "authorization required": an
+// authorization letter, or a GST purchase invoice from the brand or its
+// authorized distributor. Approved, it covers all this seller's listings of
+// the brand; until then they stay hidden from shoppers.
+sellerRouter.get('/brand-proofs', requireSeller, async (req, res, next) => {
   try {
-    const { doc } = brandAuthSubmitSchema.parse(req.body);
-    const product = await ownProduct(req, req.params.id);
-    if (!(await brandNeedsAuthorization(product))) {
-      throw ApiError.badRequest('This brand does not need an authorization document', 'BRAND_AUTH_NOT_NEEDED');
-    }
-    await assertOwnAssets([doc], { ownerId: req.auth!.userId, purpose: 'SELLER_DOCUMENT' });
-    const updated = await prisma.product.update({
-      where: { id: product.id },
-      data: { brandAuthDoc: doc, brandAuthStatus: 'PENDING', brandAuthNote: null, brandAuthSubmittedAt: new Date(), brandAuthReviewedAt: null },
+    const b = await brandsRequiringAuthorization();
+    const proofs = await prisma.sellerBrandProof.findMany({ where: { sellerId: req.seller!.id, brandId: { in: b.ids } } });
+    const byBrand = new Map(proofs.map((p) => [p.brandId, p]));
+    const rows = await Promise.all(b.ids.map((id) => brandProofView(id, b.nameById.get(id)!, byBrand.get(id) ?? null)));
+    res.json({ success: true, data: rows.sort((x, y) => x.brandName.localeCompare(y.brandName)) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+sellerRouter.put('/brand-proofs/:brandId', requireSeller, async (req, res, next) => {
+  try {
+    const input = brandProofSubmitSchema.parse(req.body);
+    const brand = await prisma.brand.findUnique({ where: { id: req.params.brandId }, select: { id: true, name: true, authorizationRequired: true } });
+    if (!brand?.authorizationRequired) throw ApiError.badRequest('This brand does not need a brand proof', 'BRAND_AUTH_NOT_NEEDED');
+    await assertOwnAssets([input.doc], { ownerId: req.auth!.userId, purpose: 'SELLER_DOCUMENT' });
+    const sellerId = req.seller!.id;
+    const fresh = { proofType: input.proofType, doc: input.doc, status: 'PENDING' as const, note: null, expiresAt: null, submittedAt: new Date(), reviewedAt: null, reviewerId: null };
+    const proof = await prisma.sellerBrandProof.upsert({
+      where: { sellerId_brandId: { sellerId, brandId: brand.id } },
+      update: fresh,
+      create: { sellerId, brandId: brand.id, ...fresh },
     });
     const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
     await prisma.notification.createMany({
       data: admins.map((a) => ({
         userId: a.id,
         type: 'BRAND_AUTH_REVIEW',
-        title: `Brand authorization to review — ${product.brand ?? ''}`.trim(),
-        body: `${product.title}: the seller uploaded a brand authorization document. Review it in Products → Brand authorization.`,
-        linkHref: '/admin/products?status=BRAND_AUTH',
+        title: `Brand proof to review — ${brand.name}`,
+        body: `${req.seller!.shopName} uploaded a ${input.proofType === 'PURCHASE_INVOICE' ? 'purchase invoice' : 'authorization letter'} for ${brand.name}. Review it in Brands → Brand proofs.`,
+        linkHref: '/admin/brands',
       })),
     });
-    res.json({ success: true, data: { brandAuth: await brandAuthView(updated) } });
+    res.json({ success: true, data: await brandProofView(brand.id, brand.name, proof) });
   } catch (err) {
     next(err);
   }
@@ -941,7 +962,6 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
         where: { id: product.id },
         data: {
           ...productDataFrom(input, rules),
-          ...brandAuthResetIfChanged(product, { brand: input.brand?.trim() || null, brandId: input.brandId || null }),
           basePricePaise: basePriceOf(input),
           // Saving a draft keeps it private; submitting sends it for re-approval.
           status: input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING',

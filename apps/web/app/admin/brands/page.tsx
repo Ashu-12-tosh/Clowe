@@ -6,6 +6,7 @@ import { api, ApiRequestError } from '@/lib/api';
 import { usePending } from '@/lib/usePending';
 import Spinner from '@/components/Spinner';
 import ImageUploadField from '@/components/admin/ImageUploadField';
+import BrandProofsReview from '@/components/admin/BrandProofsReview';
 import { IMAGE_SLOTS } from '@clowe/shared';
 
 const field =
@@ -177,6 +178,8 @@ export default function AdminBrandsPage() {
           </tbody>
         </table>
       </div>
+
+      <BrandProofsReview />
     </div>
   );
 }

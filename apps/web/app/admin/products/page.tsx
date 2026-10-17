@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { BRAND_AUTH_LABELS, safeHref, type AdminProductDetail, type AdminProductRevision, type AdminProductRow } from '@clowe/shared';
+import { BRAND_AUTH_LABELS, type AdminProductDetail, type AdminProductRevision, type AdminProductRow } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { usePending } from '@/lib/usePending';
 import Spinner from '@/components/Spinner';
@@ -10,12 +10,10 @@ import { formatPaise } from '@/lib/format';
 import SpinReviews from '@/components/admin/SpinReviews';
 
 // REVISION: live listings with an edit waiting for review.
-// BRAND_AUTH: brand authorization documents waiting for review.
-const TABS = ['PENDING', 'REVISION', 'BRAND_AUTH', 'APPROVED', 'REJECTED'] as const;
+const TABS = ['PENDING', 'REVISION', 'APPROVED', 'REJECTED'] as const;
 const TAB_LABELS: Record<(typeof TABS)[number], string> = {
   PENDING: 'PENDING',
   REVISION: 'EDITS',
-  BRAND_AUTH: 'BRAND DOCUMENTS',
   APPROVED: 'APPROVED',
   REJECTED: 'REJECTED',
 };
@@ -239,35 +237,6 @@ export default function AdminProductsPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const { run, isPending } = usePending();
 
-  // A link can open a tab: /admin/products?status=BRAND_AUTH
-  useEffect(() => {
-    const wanted = new URLSearchParams(window.location.search).get('status');
-    if (wanted && (TABS as readonly string[]).includes(wanted)) setTab(wanted);
-  }, []);
-
-  /** A brand authorization document: approved, the listing can be shown; rejected, the seller is told why. */
-  async function decideBrandDoc(id: string, decision: 'APPROVE' | 'REJECT') {
-    setError('');
-    let note: string | undefined;
-    if (decision === 'REJECT') {
-      note = window.prompt('Why is the document not accepted? (shown to the seller)') ?? undefined;
-      if (note === undefined) return;
-    }
-    await run(id, async () => {
-      try {
-        await api(`/api/admin/products/${id}/brand-authorization`, {
-          method: 'POST',
-          body: { decision, note },
-          auth: true,
-          success: decision === 'APPROVE' ? 'Brand authorization approved' : 'Brand authorization rejected — the seller has been told why',
-        });
-        load();
-      } catch (err) {
-        setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
-      }
-    });
-  }
-
   const load = useCallback(() => {
     setRows(null);
     setOpenId(null);
@@ -365,16 +334,11 @@ export default function AdminProductsPage() {
                 )}
                 {p.brandAuth && (
                   <p className={`mt-0.5 text-xs font-semibold ${p.brandAuth.status === 'APPROVED' ? 'text-green-700' : 'text-amber-700'}`} data-brand-auth={p.brandAuth.status}>
-                    {BRAND_AUTH_LABELS[p.brandAuth.status]}
-                    {safeHref(p.brandAuth.docUrl) && (
-                      <>
-                        {' · '}
-                        <a href={safeHref(p.brandAuth.docUrl) ?? undefined} target="_blank" rel="noopener noreferrer" className="text-brand-600 underline">
-                          View document
-                        </a>
-                      </>
-                    )}
-                    {p.brandAuth.note && <span className="font-normal text-red-600"> · {p.brandAuth.note}</span>}
+                    {p.brandAuth.brandName}: {BRAND_AUTH_LABELS[p.brandAuth.status]}
+                    {p.brandAuth.status === 'APPROVED' && p.brandAuth.expiresAt && ` until ${p.brandAuth.expiresAt}`} ·{' '}
+                    <Link href="/admin/brands" className="text-brand-600 underline">
+                      brand proofs
+                    </Link>
                   </p>
                 )}
                 {tab === 'REVISION' && (
@@ -400,27 +364,6 @@ export default function AdminProductsPage() {
                 </div>
               </div>
               <div className="flex shrink-0 flex-col gap-2">
-                {tab === 'BRAND_AUTH' && (
-                  <>
-                    <button
-                      onClick={() => void decideBrandDoc(p.id, 'APPROVE')}
-                      disabled={isPending(p.id)}
-                      data-action="approve-brand-doc"
-                      className="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
-                    >
-                      {isPending(p.id) && <Spinner className="mr-1" />}
-                      Approve document
-                    </button>
-                    <button
-                      onClick={() => void decideBrandDoc(p.id, 'REJECT')}
-                      disabled={isPending(p.id)}
-                      data-action="reject-brand-doc"
-                      className="rounded-lg border border-red-300 px-4 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
-                    >
-                      Reject document
-                    </button>
-                  </>
-                )}
                 {tab === 'REVISION' && (
                   <>
                     <button
@@ -443,7 +386,7 @@ export default function AdminProductsPage() {
                     </button>
                   </>
                 )}
-                {tab !== 'REVISION' && tab !== 'BRAND_AUTH' && p.status !== 'APPROVED' && (
+                {tab !== 'REVISION' && p.status !== 'APPROVED' && (
                   <button
                     onClick={() => void decide(p.id, 'approve')}
                     disabled={isPending(p.id)}
@@ -455,7 +398,7 @@ export default function AdminProductsPage() {
                     Approve
                   </button>
                 )}
-                {tab !== 'REVISION' && tab !== 'BRAND_AUTH' && p.status !== 'REJECTED' && (
+                {tab !== 'REVISION' && p.status !== 'REJECTED' && (
                   <button
                     onClick={() => void decide(p.id, 'reject')}
                     disabled={isPending(p.id)}

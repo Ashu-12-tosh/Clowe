@@ -497,6 +497,17 @@ async function flow2Seller() {
       await page.locator(`input[type=file][name=${n}]`).setInputFiles(pdf);
     }
     await page.getByText('✓ uploaded').nth(2).waitFor({ timeout: 60_000 });
+    check(await page.getByText(/upload the masked Aadhaar \(only the last 4 digits visible/).count(), 'the masked Aadhaar note is not on the form');
+    check(await page.getByText('Brand proof (authorization letter or purchase invoice)').count(), 'the brand proof field is not named as such');
+    check(await page.locator('[data-proprietorship-template]').count(), 'no proprietorship declaration template link');
+    {
+      const t = await newPage('template');
+      await goto(t, '/templates/proprietorship-declaration');
+      await t.getByRole('heading', { name: /Declaration of Sole Proprietorship/ }).waitFor({ timeout: 60_000 });
+      const text = await t.locator('[data-proprietorship-declaration]').innerText();
+      check(['Name of the business', 'Name of the proprietor', 'Address of the business', 'PAN', 'GSTIN', 'Signature of the proprietor'].every((w) => text.includes(w)), 'the declaration template lacks a field');
+      await t.context().close();
+    }
     await page.getByRole('button', { name: /^Submit$/ }).click();
     const terms = page.locator('[data-vendor-terms]');
     await terms.waitFor({ timeout: 30_000 });
@@ -539,16 +550,6 @@ async function flow2Seller() {
 async function sellerSetup() {
   const F = '3 Seller setup';
   const page = S.sellerPage;
-  await step(F, 'KYC verification (mock) from Business info', async () => {
-    await goto(page, '/seller/settings?tab=BUSINESS');
-    const verify = page.getByRole('button', { name: /Verify now|Try again/ });
-    await verify.first().click({ timeout: 120_000 });
-    await toast(page, /Verification (done|ran)/);
-    const checks = await prisma.sellerKycCheck.findMany({ where: { sellerId: S.sellerId } });
-    check(checks.length > 0, 'no KYC checks recorded');
-    check(checks.every((c) => c.provider === 'mock'), `a KYC check used ${checks.map((c) => c.provider).join(',')}`);
-  }, { page, needs: ['approved'] });
-
   await step(F, 'store profile saves (URL, tagline, contact)', async () => {
     await goto(page, '/seller/settings');
     await page.getByRole('button', { name: /Store profile/ }).click({ timeout: 120_000 });
@@ -570,7 +571,60 @@ async function sellerSetup() {
     check(p.panName === 'E2E SELLER' && p.panNumber === S.sellerPan, `stored panName=${p.panName} pan=${p.panNumber}`);
   }, { page, needs: ['approved'] });
 
-  await step(F, 'payout method (Payouts page) verified and saved', async () => {
+  await step(F, 'KYC: the mock never verifies — PAN and GSTIN wait for review until an admin verifies them', async () => {
+    await goto(page, '/seller/settings?tab=BUSINESS');
+    await page.getByText('Pending review').first().waitFor({ timeout: 120_000 });
+    check(!(await page.getByRole('button', { name: /Verify now/ }).count()), 'a Verify button is offered while the mock is the provider');
+    const admin = S.adminPage;
+    await openSellerKyc(admin, S.shopName);
+    const review = admin.locator('[data-kyc-review]');
+    await review.waitFor({ timeout: 60_000 });
+    check(/Check .* on the GST portal/.test(await review.innerText()), 'no GST portal search link in KYC review');
+    for (const c of ['PAN', 'GSTIN']) {
+      await review.locator(`[data-kyc-verify=${c}]`).click();
+      await toast(admin, new RegExp(`${c} verified`));
+    }
+    await review.locator('[data-kyc-check=PAN] [data-kyc-decided]').waitFor({ timeout: 30_000 });
+    check(/By hand/.test(await review.locator('[data-kyc-check=PAN]').innerText()), 'the PAN decision does not say it was made by hand');
+    await admin.keyboard.press('Escape');
+    await goto(page, '/seller/settings?tab=BUSINESS');
+    await page.getByText('Verified').first().waitFor({ timeout: 60_000 });
+  }, { page, needs: ['approved', 'admin'] });
+
+  await step(F, 'bank account: the seller adds it with a cancelled cheque (encrypted, masked); an admin verifies it', async () => {
+    await goto(page, '/seller/settings?tab=BANK');
+    const form = page.locator('[data-bank-account]');
+    await form.waitFor({ timeout: 120_000 });
+    if (await form.getByRole('button', { name: 'Change bank account' }).count()) await form.getByRole('button', { name: 'Change bank account' }).click();
+    await form.locator('[name=accountName]').fill('E2E Seller');
+    await form.locator('[name=accountNumber]').fill('50100012345678');
+    await form.locator('[name=confirmAccountNumber]').fill('50100012345670');
+    await form.locator('[name=ifsc]').fill('HDFC0001234');
+    await form.locator('[data-cheque-file]').setInputFiles(makePdf('bank-cheque.pdf'));
+    await form.getByText(/bank-cheque\.pdf — replace/).waitFor({ timeout: 60_000 });
+    await form.getByRole('button', { name: 'Save bank account' }).click();
+    await form.getByText('The two account numbers do not match').waitFor({ timeout: 10_000 });
+    await form.locator('[name=confirmAccountNumber]').fill('50100012345678');
+    await form.getByRole('button', { name: 'Save bank account' }).click();
+    await toast(page, /Bank account saved/);
+    await form.getByText('•••• •••• 5678').waitFor({ timeout: 30_000 });
+    await form.locator('[data-bank-state=PENDING_REVIEW]').waitFor({ timeout: 30_000 });
+    const p = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
+    check(p.bankAccountEnc?.startsWith('v1:') && !p.bankAccountEnc.includes('50100012345678') && !p.bankAccountNo, 'the bank account number is not stored encrypted only');
+    const admin = S.adminPage;
+    await openSellerKyc(admin, S.shopName);
+    const review = admin.locator('[data-kyc-review]');
+    await review.locator('[data-kyc-check=BANK]').getByText('50100012345678').waitFor({ timeout: 60_000 });
+    await review.locator('[data-kyc-verify=BANK]').click();
+    await toast(admin, /Bank account verified|BANK verified|Bank verified/i);
+    await admin.keyboard.press('Escape');
+    const s2 = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
+    check(s2.kycStatus === 'VERIFIED', `the shop is not KYC verified after all three checks: ${s2.kycStatus}`);
+    const method = await prisma.sellerPayoutMethod.findFirst({ where: { sellerId: S.sellerId, accountLast4: '5678', verified: true } });
+    check(method, 'the verified bank account did not become a verified payout account');
+  }, { page, needs: ['approved', 'admin'] });
+
+  await step(F, 'payout method (Payouts page) saved — waiting for Clowe to verify it', async () => {
     await goto(page, '/seller/payouts');
     const add = page.getByRole('button', { name: '＋ Add' }).first();
     {
@@ -579,11 +633,11 @@ async function sellerSetup() {
       await page.locator('[name=accountName]').fill('E2E Seller');
       await page.locator('[name=accountNumber]').fill('123456789012');
       await page.locator('[name=ifsc]').fill('HDFC0001234');
-      await page.getByRole('button', { name: /Verify & save/ }).click();
-      await toast(page, /Payout method verified and saved/);
+      await page.getByRole('button', { name: /^Save$/ }).click();
+      await toast(page, /Payout method saved — Clowe verifies it/);
     }
-    const methods = await prisma.sellerPayoutMethod.count({ where: { sellerId: S.sellerId } });
-    check(methods > 0, 'no payout method stored');
+    const added = await prisma.sellerPayoutMethod.findFirst({ where: { sellerId: S.sellerId, label: 'E2E HDFC' } });
+    check(added && !added.verified, `the mock verified a payout method: ${JSON.stringify(added && { verified: added.verified })}`);
   }, { page, needs: ['approved'] });
 
   await step(F, 'pickup address (same as business) saves', async () => {
@@ -610,6 +664,14 @@ async function sellerSetup() {
 // ---------------------------------------------------------------------------
 // 3 Admin approval
 // ---------------------------------------------------------------------------
+/** The seller's panel, at its KYC review (an approved seller has no Approve button to wait for). */
+async function openSellerKyc(page, shopName) {
+  await goto(page, '/admin/sellers');
+  await page.getByPlaceholder(/Search shop/).fill(shopName);
+  await page.locator('tr').filter({ hasText: shopName }).first().getByRole('button', { name: 'View' }).click({ timeout: 120_000 });
+  await page.locator('[data-kyc-review]').waitFor({ timeout: 60_000 });
+}
+
 async function openSellerPanel(page, shopName) {
   await goto(page, '/admin/sellers');
   await page.getByPlaceholder(/Search shop/).fill(shopName);
@@ -640,7 +702,14 @@ async function flow3Approval() {
     await page.keyboard.press('Escape');
     await openSellerPanel(page, S.shopName);
     const app = page.locator('[data-application]');
-    check((await app.getByRole('link', { name: 'open' }).count()) === 3, 'the three documents are not linked for the admin');
+    check((await app.getByRole('button', { name: 'open' }).count()) === 3, 'the three documents cannot be opened by the admin');
+    check(/check it is masked/.test(await app.innerText()), 'no masked-Aadhaar reminder beside the signatory KYC');
+    // Opening one goes through the API: a fresh link, and an audit entry.
+    const [doc] = await Promise.all([page.waitForEvent('popup'), app.getByRole('button', { name: 'open' }).first().click()]);
+    await doc.waitForLoadState().catch(() => {});
+    await doc.close();
+    await new Promise((r) => setTimeout(r, 500));
+    check(await prisma.auditLog.count({ where: { action: 'Seller document viewed', entityId: S.sellerId } }) >= 1, 'opening a seller document was not audit-logged');
     check(/current version accepted/.test(await app.innerText()), 'the Vendor Terms acceptance is not shown');
     await page.locator('[data-action=request-info]').click();
     await toast(page, /Asked the seller for more/);

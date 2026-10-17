@@ -19,6 +19,8 @@ const STATE_STYLES: Record<KycCheckState, string> = {
   NOT_PROVIDED: 'bg-gray-100 text-gray-500',
   INVALID_FORMAT: 'bg-red-100 text-red-700',
   NOT_RUN: 'bg-yellow-100 text-yellow-700',
+  PENDING_REVIEW: 'bg-yellow-100 text-yellow-700',
+  REJECTED: 'bg-red-100 text-red-700',
 };
 
 /** What the seller can do about a check, in their terms. Never a score. */
@@ -31,7 +33,7 @@ function guidance(view: SellerKycCheckView): string | null {
         : null;
     case 'FAILED':
       return view.check === 'BANK'
-        ? `${view.reasonLabel ?? 'Not verified'}. Contact support to change your bank account.`
+        ? `${view.reasonLabel ?? 'Not verified'}. Correct your bank account in the Bank tab.`
         : `${view.reasonLabel ?? 'Not verified'}. Correct the number above and save to check it again.`;
     case 'ERROR':
       return `We could not finish this check (${view.reasonLabel ?? 'provider error'}). Try again later.`;
@@ -40,13 +42,17 @@ function guidance(view: SellerKycCheckView): string | null {
         ? 'Optional — add it above if your business is GST-registered.'
         : view.check === 'PAN'
           ? 'Add your PAN above.'
-          : 'No bank account on file. Contact support to add one.';
+          : 'No bank account on file. Add it, with a cancelled cheque, in the Bank tab.';
     case 'INVALID_FORMAT':
       return `This does not look like a valid ${label} — check it above.`;
     case 'NOT_RUN':
       return view.reasonLabel
         ? 'Add your name exactly as printed on your PAN card above, then save.'
         : 'Not verified yet.';
+    case 'PENDING_REVIEW':
+      return 'Clowe checks this against your documents. Payouts start once it is verified.';
+    case 'REJECTED':
+      return `Not accepted${view.rejectReason ? `: ${view.rejectReason}` : ''}. ${view.check === 'BANK' ? 'Correct it in the Bank tab' : 'Correct it above and save'} — Clowe checks it again.`;
   }
 }
 
@@ -106,7 +112,9 @@ export default function KycVerificationCard({ refresh }: { refresh: unknown }) {
         <div>
           <h2 className="text-sm font-bold text-ink-900">Verification</h2>
           <p className="text-[11px] text-gray-400">
-            We check your PAN, GSTIN and bank account with the issuing records.
+            {status.reviewMode === 'MANUAL'
+              ? 'Clowe checks your PAN, GSTIN and bank account against your documents. "Verified" shows only once that is done.'
+              : 'We check your PAN, GSTIN and bank account with the issuing records.'}
           </p>
         </div>
         {status.canVerify && (

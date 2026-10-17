@@ -29,6 +29,7 @@ import {
   availableBalance,
   describeMethod,
   feesFor,
+  bankBlockFor,
   gstinBlockFor,
   panBlockFor,
   requestPayout,
@@ -161,6 +162,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         panBlockFor(sellerId),
       ]);
     const gstinBlock = await gstinBlockFor(sellerId);
+    const bankBlock = await bankBlockFor(sellerId);
 
     // Delhivery's charges are per parcel, posted to the ledger on delivery (or
     // on return): read from there, each kind its own line. The old flat
@@ -306,9 +308,11 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       });
     }
     if (gstinBlock) {
-      insights.push({ key: 'gstin', tone: 'WARN', title: 'Payouts need your GSTIN', body: gstinBlock.reason });
+      insights.push({ key: 'gstin', tone: 'WARN', title: gstinBlock.code === 'GSTIN_REQUIRED' ? 'Payouts need your GSTIN' : 'Payouts need a verified GSTIN', body: gstinBlock.reason });
     } else if (panBlock) {
       insights.push({ key: 'pan', tone: 'WARN', title: 'Payouts need a verified PAN', body: panBlock.reason });
+    } else if (bankBlock) {
+      insights.push({ key: 'bank', tone: 'WARN', title: 'Payouts need a verified bank account', body: `${bankBlock.reason} ${bankBlock.action}` });
     } else if (balance.payablePaise >= settings.payoutMinPaise) {
       insights.push({
         key: 'payable',
@@ -399,6 +403,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       insights,
       panBlock,
       gstinBlock,
+      bankBlock,
     };
 
     res.json({ success: true, data: body });

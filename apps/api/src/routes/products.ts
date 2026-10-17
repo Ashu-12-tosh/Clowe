@@ -319,6 +319,7 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
             city: true,
             state: true,
             status: true,
+            kycStatus: true,
             slug: true,
             vacationMode: true,
             tryOnCredits: true,
@@ -422,7 +423,8 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
         shopName: product.seller.shopName,
         city: product.seller.city,
         state: product.seller.state,
-        isVerified: product.seller.status === 'APPROVED',
+        // "Verified Seller" only once PAN, GSTIN and bank account are verified (by an admin or a real provider).
+        isVerified: product.seller.status === 'APPROVED' && product.seller.kycStatus === 'VERIFIED',
         slug: product.seller.slug,
         // The registered business name, when it differs from the shop's name.
         legalName: product.seller.panName?.trim() || product.seller.shopName,

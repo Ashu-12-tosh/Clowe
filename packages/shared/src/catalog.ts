@@ -417,7 +417,7 @@ export interface ProductDetail {
     shopName: string;
     city: string | null;
     state: string | null;
-    /** Admin-approved store. */
+    /** KYC verified: PAN, GSTIN and bank account checked by an admin or a real provider. */
     isVerified: boolean;
     /** Store URL slug, when the seller has claimed one. */
     slug: string | null;

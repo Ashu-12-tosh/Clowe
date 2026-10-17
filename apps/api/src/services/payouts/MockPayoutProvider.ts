@@ -23,13 +23,17 @@ export class MockPayoutProvider implements PayoutProvider {
     };
   }
 
+  /**
+   * The mock never verifies an account — in any environment. A payout account
+   * is verified by an admin against the cancelled cheque (the bank account in
+   * Store Settings), or by a real provider's penny drop.
+   */
   async verifyMethod(input: {
     accountLast4?: string | null;
     ifsc?: string | null;
     upiId?: string | null;
   }): Promise<PayoutVerification> {
-    if (input.upiId) return { verified: true };
-    if (input.accountLast4 && input.ifsc) return { verified: true };
-    return { verified: false, reason: 'Account number and IFSC are required' };
+    if (!input.upiId && !(input.accountLast4 && input.ifsc)) return { verified: false, reason: 'Account number and IFSC are required' };
+    return { verified: false, reason: 'Waiting for Clowe to verify it' };
   }
 }

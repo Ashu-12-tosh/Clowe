@@ -36,8 +36,15 @@ import {
   sellerApplicationId,
   sellerInfoRequestSchema,
   VENDOR_TERMS_VERSION,
+  BANK_CHEQUE_DOC_LABEL,
+  GST_PUBLIC_SEARCH_URL,
+  SELLER_DOCUMENT_KINDS,
+  kycReviewDecisionSchema,
+  type AdminKycReviewView,
+  type SellerDocumentKind,
 } from '@clowe/shared';
-import { resolveFileUrls } from '../services/assets';
+import { resolveFileUrl } from '../services/assets';
+import { bankAccountNumberOf } from '../services/bankAccountCrypto';
 import { grantWelcomeCredit } from '../services/advertising';
 import { adminAddCredits, grantFreeCredits } from '../services/tryonCredits';
 import { getCommercial } from '../services/commercial';
@@ -53,6 +60,7 @@ import { sellerAddressComplete } from '../services/sellerAddress';
 import {
   KycCheckRunningError,
   getSellerKycSummary,
+  reviewSellerKyc,
   runSellerKyc,
   sellersWithFraudFlag,
 } from '../services/kyc/sellerKyc';
@@ -584,6 +592,15 @@ adminSellersRouter.patch('/:id/kyc', async (req, res, next) => {
       include: { user: { select: { id: true } } },
     });
     if (!seller) throw ApiError.notFound('Seller not found');
+    // "Verified" is earned check by check: never set over a PAN, GSTIN or bank
+    // account that no admin or real provider has verified.
+    if (input.kycStatus === 'VERIFIED') {
+      const kyc = await getSellerKycSummary(seller.id);
+      const open = [kyc.pan, kyc.gstin, kyc.bank].filter((c) => c.state !== 'VERIFIED').map((c) => (c.check === 'BANK' ? 'bank account' : c.check));
+      if (open.length) {
+        throw ApiError.badRequest(`Verify the ${open.join(', ')} first, in KYC review`, 'KYC_CHECKS_PENDING');
+      }
+    }
 
     await prisma.sellerProfile.update({
       where: { id: seller.id },
@@ -631,6 +648,120 @@ adminSellersRouter.post('/:id/kyc-checks', kycAdminRunLimiter, async (req, res, 
       next(new ApiError(409, 'KYC_CHECK_RUNNING', 'Verification is already running for this seller.'));
       return;
     }
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Manual KYC review: PAN, GSTIN and bank account checked by an admin against
+// the documents. Every decision is recorded (who, when, how) and audited; the
+// seller sees "Verified" only after one (or a real provider's answer).
+// ---------------------------------------------------------------------------
+
+const SELLER_DOCUMENT_NAMES: Record<SellerDocumentKind, string> = { ...SELLER_DOCUMENT_LABELS, bankChequeDoc: BANK_CHEQUE_DOC_LABEL };
+
+adminSellersRouter.get('/:id/kyc-review', async (req, res, next) => {
+  try {
+    const s = await prisma.sellerProfile.findUnique({ where: { id: req.params.id } });
+    if (!s) throw ApiError.notFound('Seller not found');
+    const accountNumber = bankAccountNumberOf(s);
+    const body: AdminKycReviewView = {
+      summary: await getSellerKycSummary(s.id),
+      values: {
+        pan: s.panNumber,
+        panName: s.panName,
+        gstin: s.gstNumber,
+        bankAccountNumber: accountNumber,
+        bankAccountLast4: s.bankAccountLast4 ?? accountNumber?.slice(-4) ?? null,
+        bankIfsc: s.bankIfsc,
+        bankAccountName: s.bankAccountName,
+        bankAccountType: s.bankAccountType,
+        bankName: s.bankName,
+      },
+      documents: SELLER_DOCUMENT_KINDS.filter((k) => !!s[k]).map((kind) => ({ kind, label: SELLER_DOCUMENT_NAMES[kind] })),
+      gstSearchUrl: GST_PUBLIC_SEARCH_URL,
+    };
+    // The full bank account number was shown: on the record.
+    if (accountNumber) {
+      auditSafe({
+        actorId: req.auth!.userId,
+        actorRole: 'ADMIN',
+        module: 'SELLERS',
+        action: 'Seller bank details viewed',
+        entityType: 'SellerProfile',
+        entityId: s.id,
+        summary: `${s.shopName}: KYC review opened, bank account ending ${accountNumber.slice(-4)} shown in full`,
+        ipAddress: ipFrom(req),
+      });
+    }
+    res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminSellersRouter.post('/:id/kyc-review', async (req, res, next) => {
+  try {
+    const input = kycReviewDecisionSchema.parse(req.body);
+    const seller = await prisma.sellerProfile.findUnique({ where: { id: req.params.id }, select: { id: true, userId: true, shopName: true } });
+    if (!seller) throw ApiError.notFound('Seller not found');
+    const summary = await reviewSellerKyc({ sellerId: seller.id, check: input.check, decision: input.decision, reason: input.reason, reviewerId: req.auth!.userId });
+    const label = input.check === 'BANK' ? 'bank account' : input.check;
+    const verified = input.decision === 'VERIFY';
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'SELLERS',
+      action: verified ? `KYC ${input.check} verified (manual)` : `KYC ${input.check} rejected`,
+      entityType: 'SellerProfile',
+      entityId: seller.id,
+      summary: `${seller.shopName}: ${label} ${verified ? 'verified by hand against the documents' : `rejected — ${input.reason}`}`,
+      metadata: { check: input.check, decision: input.decision, method: 'MANUAL', reason: input.reason ?? null },
+      ipAddress: ipFrom(req),
+    });
+    await prisma.notification.create({
+      data: {
+        userId: seller.userId,
+        type: 'SELLER_KYC_REVIEW',
+        title: verified ? `Your ${label} is verified ✅` : `Your ${label} was not accepted`,
+        body: verified
+          ? `Clowe has verified your ${label}.`
+          : `Clowe could not accept your ${label}: ${input.reason}. Correct it in Store Settings and it will be checked again.`,
+        linkHref: '/seller/settings?tab=BUSINESS',
+      },
+    });
+    res.json({ success: true, data: { kyc: summary, kycApprovalWarnings: kycApprovalWarnings(summary) } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Open one of a seller's private documents: a short-lived signed link, made
+ * here so every opening is audit-logged (who, which document, when).
+ */
+adminSellersRouter.post('/:id/documents/:kind/view', async (req, res, next) => {
+  try {
+    const kind = z.enum(SELLER_DOCUMENT_KINDS).parse(req.params.kind);
+    const s = await prisma.sellerProfile.findUnique({ where: { id: req.params.id } });
+    if (!s) throw ApiError.notFound('Seller not found');
+    const ref = s[kind];
+    if (!ref) throw ApiError.notFound('That document is not on file', 'DOCUMENT_NOT_ON_FILE');
+    const url = await resolveFileUrl(ref);
+    if (!url) throw ApiError.notFound('That document could not be found', 'DOCUMENT_MISSING');
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'SELLERS',
+      action: 'Seller document viewed',
+      entityType: 'SellerProfile',
+      entityId: s.id,
+      summary: `${s.shopName}: ${SELLER_DOCUMENT_NAMES[kind]} opened`,
+      metadata: { document: kind },
+      ipAddress: ipFrom(req),
+    });
+    res.json({ success: true, data: { url } });
+  } catch (err) {
     next(err);
   }
 });
@@ -809,11 +940,11 @@ async function applicationView(sellerId: string): Promise<AdminSellerDetail['app
     include: { termsAcceptances: { orderBy: { acceptedAt: 'desc' }, take: 10 } },
   });
   const keys = ['constitutionDoc', 'cancelledChequeDoc', 'signatoryKycDoc', 'brandAuthorisationDoc'] as const;
-  const urls = await resolveFileUrls(keys.map((k) => s[k]));
   return {
     applicationId: sellerApplicationId(s.id),
     submittedAt: s.applicationSubmittedAt?.toISOString() ?? null,
-    documents: keys.map((key, i) => ({ key, label: SELLER_DOCUMENT_LABELS[key], url: urls[i] ?? null })),
+    // No links here: each document opens through the audited view endpoint.
+    documents: keys.map((key) => ({ key, label: SELLER_DOCUMENT_LABELS[key], url: null, onFile: !!s[key] })),
     infoRequest: s.infoRequest,
     infoRequestedAt: s.infoRequestedAt?.toISOString() ?? null,
     vendorTermsCurrent: s.vendorTermsVersion === VENDOR_TERMS_VERSION,
@@ -978,7 +1109,7 @@ adminSellersRouter.get('/:id', async (req, res, next) => {
       bankName: seller.bankName,
       bankAccountName: seller.bankAccountName,
       // Never echo a full account number back to the browser.
-      bankAccountNo: seller.bankAccountNo ? `••••${seller.bankAccountNo.slice(-4)}` : null,
+      bankAccountNo: (seller.bankAccountLast4 ?? seller.bankAccountNo?.slice(-4)) ? `••••${seller.bankAccountLast4 ?? seller.bankAccountNo!.slice(-4)}` : null,
       bankIfsc: seller.bankIfsc,
       kycReviewedAt: seller.kycReviewedAt?.toISOString() ?? null,
       approvedAt: seller.approvedAt?.toISOString() ?? null,

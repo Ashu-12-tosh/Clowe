@@ -132,7 +132,8 @@ export interface AdminSellerDetail extends AdminSellerListRow {
   application: {
     applicationId: string;
     submittedAt: string | null;
-    documents: { key: 'constitutionDoc' | 'cancelledChequeDoc' | 'signatoryKycDoc' | 'brandAuthorisationDoc'; label: string; url: string | null }[];
+    /** Open each through POST /api/admin/sellers/:id/documents/:key/view (audit-logged); url is always null here. */
+    documents: { key: 'constitutionDoc' | 'cancelledChequeDoc' | 'signatoryKycDoc' | 'brandAuthorisationDoc'; label: string; url: string | null; onFile: boolean }[];
     infoRequest: string | null;
     infoRequestedAt: string | null;
     vendorTermsCurrent: boolean;
@@ -231,8 +232,11 @@ export const SELLER_DOCUMENT_LABELS = {
   constitutionDoc: 'Constitution document',
   cancelledChequeDoc: 'Cancelled cheque',
   signatoryKycDoc: 'Authorised signatory KYC',
-  brandAuthorisationDoc: 'Brand authorisation (optional)',
+  brandAuthorisationDoc: 'Brand proof (authorization letter or purchase invoice) (optional)',
 } as const;
+
+/** Also openable by an admin: the cheque given with the bank account in Store Settings. */
+export const BANK_CHEQUE_DOC_LABEL = 'Cancelled cheque (bank account in Store Settings)';
 
 export const GSTIN_APPROVAL_BLOCKER = 'GSTIN required before approval — every tax invoice to a buyer is issued under it';
 

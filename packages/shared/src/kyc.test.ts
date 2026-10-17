@@ -54,6 +54,9 @@ function view(check: KycCheckView['check'], over: Partial<KycCheckView> = {}): K
     nameMeetsThreshold: check === 'GSTIN' ? null : true,
     provider: 'cashfree',
     checkedAt: '2026-09-18T10:00:00.000Z',
+    method: 'PROVIDER',
+    decidedBy: null,
+    rejectReason: null,
     ...over,
   };
 }
@@ -68,6 +71,7 @@ function summary(over: Partial<SellerKycSummary> = {}): SellerKycSummary {
     panInGstin: null,
     fraudAccount: false,
     nameMatchThreshold: 85,
+    reviewMode: 'PROVIDER',
     ...over,
   };
 }
@@ -154,5 +158,29 @@ describe("the seller's own view", () => {
     expect(toSellerKycStatus(summary()).canVerify).toBe(false);
     expect(toSellerKycStatus(summary({ bank: view('BANK', { state: 'ERROR' }) })).canVerify).toBe(true);
     expect(toSellerKycStatus(summary({ pan: view('PAN', { state: 'NOT_RUN' }) })).canVerify).toBe(true);
+  });
+
+  it('offers nothing to run under manual review — an admin checks the documents', () => {
+    const manual = summary({ reviewMode: 'MANUAL', pan: view('PAN', { state: 'PENDING_REVIEW', method: null }) });
+    expect(toSellerKycStatus(manual)).toMatchObject({ canVerify: false, reviewMode: 'MANUAL', pan: { state: 'PENDING_REVIEW' } });
+  });
+
+  it('carries an admin rejection and its reason to the seller', () => {
+    const rejected = toSellerKycStatus(summary({ gstin: view('GSTIN', { state: 'REJECTED', method: 'MANUAL', rejectReason: 'Not active' }) }));
+    expect(rejected.gstin).toMatchObject({ state: 'REJECTED', method: 'MANUAL', rejectReason: 'Not active' });
+    expect(kycApprovalWarnings(summary({ gstin: view('GSTIN', { state: 'REJECTED', rejectReason: 'Not active' }) }))).toContain('GSTIN was rejected: Not active.');
+  });
+});
+
+describe('payout blocks for an unverified GSTIN or bank account', () => {
+  it('wait for review with nothing to do, say a rejection and its reason, and clear once verified', async () => {
+    const { payoutBankBlock, payoutGstinVerificationBlock } = await import('./sellerPayouts');
+    expect(payoutBankBlock({ state: 'VERIFIED' })).toBeNull();
+    expect(payoutBankBlock({ state: 'NOT_PROVIDED' })).toMatchObject({ code: 'BANK_NOT_VERIFIED', action: expect.stringContaining('cancelled cheque') });
+    expect(payoutBankBlock({ state: 'PENDING_REVIEW' })?.reason).toMatch(/waiting for Clowe/);
+    expect(payoutBankBlock({ state: 'REJECTED', rejectReason: 'Name differs from the cheque' })?.reason).toMatch(/not accepted: Name differs/);
+    expect(payoutGstinVerificationBlock({ state: 'VERIFIED' })).toBeNull();
+    expect(payoutGstinVerificationBlock({ state: 'NOT_PROVIDED' })).toBeNull(); // its own GSTIN_REQUIRED block covers it
+    expect(payoutGstinVerificationBlock({ state: 'PENDING_REVIEW' })).toMatchObject({ code: 'GSTIN_NOT_VERIFIED' });
   });
 });

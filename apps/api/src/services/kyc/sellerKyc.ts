@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import type { SellerKycCheck, SellerProfile } from '@prisma/client';
+import type { SellerKycCheck, SellerKycReview, SellerKycStatus, SellerProfile } from '@prisma/client';
 import {
   BANK_ACCOUNT_PATTERN,
   GSTIN_PATTERN,
@@ -16,6 +16,8 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../../db';
 import { kycFingerprintSecret } from '../../env';
+import { ApiError } from '../../utils/ApiError';
+import { bankAccountNumberOf } from '../bankAccountCrypto';
 import { getSettings } from '../settingsService';
 import { kycProvider } from './index';
 import { KycProviderError, type KycResult } from './KycProvider';
@@ -42,7 +44,7 @@ import { KycProviderError, type KycResult } from './KycProvider';
 
 type KycFields = Pick<
   SellerProfile,
-  'id' | 'panNumber' | 'panName' | 'gstNumber' | 'bankAccountNo' | 'bankIfsc' | 'bankAccountName'
+  'id' | 'panNumber' | 'panName' | 'gstNumber' | 'bankAccountNo' | 'bankAccountEnc' | 'bankIfsc' | 'bankAccountName'
 >;
 
 const KYC_FIELDS = {
@@ -51,9 +53,17 @@ const KYC_FIELDS = {
   panName: true,
   gstNumber: true,
   bankAccountNo: true,
+  bankAccountEnc: true,
   bankIfsc: true,
   bankAccountName: true,
 } as const;
+
+/**
+ * No real provider (the mock): every check is decided by an admin against the
+ * documents. A mock answer is never "Verified", in any environment.
+ */
+const MOCK = 'mock';
+export const reviewMode = (): 'MANUAL' | 'PROVIDER' => (kycProvider.name === MOCK ? 'MANUAL' : 'PROVIDER');
 
 /** A crashed run's claim is taken over after this. Three 15s calls fit well inside it. */
 const CLAIM_STALE_MS = 2 * 60 * 1000;
@@ -124,10 +134,11 @@ function checkableFor(kind: KycCheckType, seller: KycFields): Checkable | NotChe
       };
     }
     case 'BANK': {
-      if (!seller.bankAccountNo?.trim() || !seller.bankIfsc?.trim()) {
+      const number = bankAccountNumberOf(seller);
+      if (!number || !seller.bankIfsc?.trim()) {
         return { state: 'NOT_PROVIDED', reason: null };
       }
-      const account = normalizeTaxId(seller.bankAccountNo);
+      const account = normalizeTaxId(number);
       const ifsc = normalizeTaxId(seller.bankIfsc);
       if (!BANK_ACCOUNT_PATTERN.test(account) || !IFSC_PATTERN.test(ifsc)) {
         return { state: 'INVALID_FORMAT', reason: null };
@@ -145,6 +156,30 @@ function checkableFor(kind: KycCheckType, seller: KycFields): Checkable | NotChe
 
 function isCheckable(c: Checkable | NotCheckable): c is Checkable {
   return 'call' in c;
+}
+
+/**
+ * The fingerprint of what an admin decides on: the PAN, the GSTIN, or account
+ * number + IFSC. Null when there is nothing valid on file to decide on. (A PAN
+ * without the name on it can still be checked by an admin against the card.)
+ */
+export function reviewSubjectFor(kind: KycCheckType, seller: KycFields): string | null {
+  switch (kind) {
+    case 'PAN': {
+      const pan = seller.panNumber ? normalizeTaxId(seller.panNumber) : '';
+      return PAN_PATTERN.test(pan) ? fingerprint('PAN', pan) : null;
+    }
+    case 'GSTIN': {
+      const gstin = seller.gstNumber ? normalizeTaxId(seller.gstNumber) : '';
+      return GSTIN_PATTERN.test(gstin) ? fingerprint('GSTIN', gstin) : null;
+    }
+    case 'BANK': {
+      const number = bankAccountNumberOf(seller);
+      const account = number ? normalizeTaxId(number) : '';
+      const ifsc = seller.bankIfsc ? normalizeTaxId(seller.bankIfsc) : '';
+      return BANK_ACCOUNT_PATTERN.test(account) && IFSC_PATTERN.test(ifsc) ? fingerprint('BANK', `${account}:${ifsc}`) : null;
+    }
+  }
 }
 
 /** The latest answer (VERIFIED or FAILED) and the latest error, for one subject. */
@@ -264,17 +299,50 @@ export async function runSellerKyc(sellerId: string, only?: KycCheckType[]): Pro
 // What the admin sees
 // ---------------------------------------------------------------------------
 
-export async function getSellerKycSummary(sellerId: string): Promise<SellerKycSummary> {
-  const [seller, rows, settings] = await Promise.all([
-    loadSeller(sellerId),
-    loadChecks(sellerId),
-    getSettings(),
-  ]);
-  return summarize(seller, rows, settings.kycNameMatchMinScore);
+type ReviewRow = SellerKycReview & { reviewerName: string | null };
+
+async function loadReviews(sellerId: string): Promise<ReviewRow[]> {
+  const rows = await prisma.sellerKycReview.findMany({ where: { sellerId }, orderBy: { createdAt: 'desc' } });
+  const ids = [...new Set(rows.map((r) => r.reviewerId))];
+  const users = ids.length ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, phone: true } }) : [];
+  const names = new Map(users.map((u) => [u.id, u.name || u.phone]));
+  return rows.map((r) => ({ ...r, reviewerName: names.get(r.reviewerId) ?? null }));
 }
 
-/** Judged against the threshold at read time, so moving it needs no re-verification. */
-export function summarize(seller: KycFields, rows: SellerKycCheck[], threshold: number): SellerKycSummary {
+/** Every provider's answers: mock rows are read only to be set aside. */
+async function loadAllChecks(sellerId: string): Promise<SellerKycCheck[]> {
+  return prisma.sellerKycCheck.findMany({ where: { sellerId }, orderBy: { createdAt: 'desc' } });
+}
+
+export async function getSellerKycSummary(sellerId: string): Promise<SellerKycSummary> {
+  const [seller, rows, reviews, settings] = await Promise.all([
+    loadSeller(sellerId),
+    loadAllChecks(sellerId),
+    loadReviews(sellerId),
+    getSettings(),
+  ]);
+  return summarize(seller, rows, settings.kycNameMatchMinScore, reviews, reviewMode());
+}
+
+/**
+ * Where each check stands. Judged against the threshold at read time, so
+ * moving it needs no re-verification.
+ *
+ * What decides, for the details on file now: the latest of an admin's review
+ * and a real provider's answer. A mock provider's answer never decides — with
+ * no real provider every check waits for an admin ("Pending review").
+ */
+export function summarize(
+  seller: KycFields,
+  rows: SellerKycCheck[],
+  threshold: number,
+  reviews: ReviewRow[] = [],
+  mode: 'MANUAL' | 'PROVIDER' = reviewMode(),
+): SellerKycSummary {
+  // Real answers only. With a real provider live, only its own answers count
+  // (answers from one provider never stand for another); with none, any real
+  // answer given earlier still does.
+  const real = rows.filter((r) => r.provider !== MOCK && (mode === 'MANUAL' || r.provider === kycProvider.name));
   const view = (kind: KycCheckType): KycCheckView => {
     const empty: KycCheckView = {
       check: kind,
@@ -285,23 +353,52 @@ export function summarize(seller: KycFields, rows: SellerKycCheck[], threshold: 
       nameMeetsThreshold: null,
       provider: null,
       checkedAt: null,
+      method: null,
+      decidedBy: null,
+      rejectReason: null,
     };
     const target = checkableFor(kind, seller);
-    if (!isCheckable(target)) return { ...empty, state: target.state, reason: target.reason };
+    const subject = reviewSubjectFor(kind, seller);
+    if (!subject) {
+      // Nothing valid on file: NOT_PROVIDED or INVALID_FORMAT.
+      return isCheckable(target) ? empty : { ...empty, state: target.state, reason: target.reason };
+    }
 
-    const { answer, lastError } = historyFor(kind, target.subject, rows);
-    const row = answer ?? lastError;
-    if (!row) return empty;
-    return {
-      check: kind,
-      state: row.outcome,
-      reason: (row.reason as KycReason | null) ?? null,
-      nameScore: row.nameScore,
-      nameBand: row.nameBand,
-      nameMeetsThreshold: row.nameScore === null ? null : row.nameScore >= threshold,
-      provider: row.provider,
-      checkedAt: row.createdAt.toISOString(),
-    };
+    const review = reviews.find((r) => r.kind === kind && r.subject === subject) ?? null;
+    const history = isCheckable(target) ? historyFor(kind, target.subject, real) : { answer: null, lastError: null };
+    const answer = history.answer;
+    // The later of the admin's decision and the provider's answer stands.
+    if (review && (!answer || review.createdAt >= answer.createdAt)) {
+      return {
+        ...empty,
+        state: review.status === 'VERIFIED' ? 'VERIFIED' : 'REJECTED',
+        provider: 'manual',
+        checkedAt: review.createdAt.toISOString(),
+        method: 'MANUAL',
+        decidedBy: review.reviewerName,
+        rejectReason: review.status === 'REJECTED' ? review.reason : null,
+      };
+    }
+    if (answer) {
+      return {
+        ...empty,
+        state: answer.outcome,
+        reason: (answer.reason as KycReason | null) ?? null,
+        nameScore: answer.nameScore,
+        nameBand: answer.nameBand,
+        nameMeetsThreshold: answer.nameScore === null ? null : answer.nameScore >= threshold,
+        provider: answer.provider,
+        checkedAt: answer.createdAt.toISOString(),
+        method: 'PROVIDER',
+      };
+    }
+    if (mode === 'MANUAL') return { ...empty, state: 'PENDING_REVIEW' };
+    if (!isCheckable(target)) return { ...empty, state: target.state, reason: target.reason };
+    if (history.lastError) {
+      const e = history.lastError;
+      return { ...empty, state: 'ERROR', reason: (e.reason as KycReason | null) ?? null, provider: e.provider, checkedAt: e.createdAt.toISOString() };
+    }
+    return empty;
   };
 
   const pan = seller.panNumber ? normalizeTaxId(seller.panNumber) : null;
@@ -315,14 +412,15 @@ export function summarize(seller: KycFields, rows: SellerKycCheck[], threshold: 
     panInGstin: mismatch && seller.gstNumber ? panFromGstin(seller.gstNumber) : null,
     // Any account this seller submitted, not just the current one: switching
     // accounts after a fraud flag is itself worth knowing about.
-    fraudAccount: rows.some((r) => r.kind === 'BANK' && r.reason === 'FRAUD_ACCOUNT'),
+    fraudAccount: real.some((r) => r.kind === 'BANK' && r.reason === 'FRAUD_ACCOUNT'),
     nameMatchThreshold: threshold,
+    reviewMode: mode,
   };
 }
 
 /**
  * Which of these sellers have had a bank account flagged as fraudulent by
- * the provider — for the list view, in one query. The PAN–GSTIN mismatch
+ * a real provider — for the list view, in one query. The PAN–GSTIN mismatch
  * needs no query; it is read straight off the profile.
  */
 export async function sellersWithFraudFlag(sellerIds: string[]): Promise<Set<string>> {
@@ -330,7 +428,7 @@ export async function sellersWithFraudFlag(sellerIds: string[]): Promise<Set<str
   const flagged = await prisma.sellerKycCheck.findMany({
     where: {
       sellerId: { in: sellerIds },
-      provider: kycProvider.name,
+      provider: { not: MOCK },
       kind: 'BANK',
       reason: 'FRAUD_ACCOUNT',
     },
@@ -338,4 +436,99 @@ export async function sellersWithFraudFlag(sellerIds: string[]): Promise<Set<str
     distinct: ['sellerId'],
   });
   return new Set(flagged.map((r) => r.sellerId));
+}
+
+// ---------------------------------------------------------------------------
+// Manual review (an admin, against the documents)
+// ---------------------------------------------------------------------------
+
+/**
+ * The shop's overall KYC status follows the three checks: VERIFIED once PAN,
+ * GSTIN and bank account are all verified; REJECTED when any is rejected;
+ * otherwise UNDER_REVIEW. A seller who has not finished the application keeps
+ * PENDING_DOCS.
+ */
+export function overallKycStatus(summary: SellerKycSummary, current: SellerKycStatus): SellerKycStatus {
+  const checks = [summary.pan, summary.gstin, summary.bank];
+  if (checks.every((c) => c.state === 'VERIFIED')) return 'VERIFIED';
+  if (checks.some((c) => c.state === 'REJECTED')) return 'REJECTED';
+  return current === 'PENDING_DOCS' ? 'PENDING_DOCS' : 'UNDER_REVIEW';
+}
+
+/** Bring the stored overall status in line with the checks; returns it. */
+export async function refreshOverallKycStatus(sellerId: string): Promise<SellerKycStatus> {
+  const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: sellerId }, select: { kycStatus: true } });
+  const next = overallKycStatus(await getSellerKycSummary(sellerId), seller.kycStatus);
+  if (next !== seller.kycStatus) {
+    await prisma.sellerProfile.update({ where: { id: sellerId }, data: { kycStatus: next, kycReviewedAt: new Date() } });
+  }
+  return next;
+}
+
+/**
+ * An admin verifies or rejects one check against the documents. The decision
+ * holds for the details on file; changing them needs a new one. A verified
+ * bank account becomes the shop's verified payout account.
+ */
+export async function reviewSellerKyc(input: {
+  sellerId: string;
+  check: KycCheckType;
+  decision: 'VERIFY' | 'REJECT';
+  reason?: string;
+  reviewerId: string;
+}): Promise<SellerKycSummary> {
+  const seller = await prisma.sellerProfile.findUniqueOrThrow({
+    where: { id: input.sellerId },
+    select: { ...KYC_FIELDS, bankName: true, bankAccountLast4: true },
+  });
+  const subject = reviewSubjectFor(input.check, seller);
+  if (!subject) {
+    throw ApiError.badRequest(`There is no valid ${input.check === 'BANK' ? 'bank account' : input.check} on file to review`, 'NOTHING_TO_REVIEW');
+  }
+  const verified = input.decision === 'VERIFY';
+  await prisma.sellerKycReview.create({
+    data: {
+      sellerId: seller.id,
+      kind: input.check,
+      status: verified ? 'VERIFIED' : 'REJECTED',
+      subject,
+      reason: verified ? null : input.reason ?? null,
+      reviewerId: input.reviewerId,
+    },
+  });
+  if (input.check === 'BANK' && verified) await useAsPayoutAccount(seller);
+  await refreshOverallKycStatus(seller.id);
+  return getSellerKycSummary(seller.id);
+}
+
+/** The verified bank account as the shop's default payout method (verified). */
+async function useAsPayoutAccount(seller: KycFields & { bankName: string | null; bankAccountLast4: string | null }): Promise<void> {
+  const number = bankAccountNumberOf(seller);
+  if (!number || !seller.bankIfsc) return;
+  const last4 = number.slice(-4);
+  const ifsc = normalizeTaxId(seller.bankIfsc);
+  const existing = await prisma.sellerPayoutMethod.findFirst({ where: { sellerId: seller.id, type: 'BANK', accountLast4: last4, ifsc } });
+  await prisma.$transaction(async (tx) => {
+    await tx.sellerPayoutMethod.updateMany({ where: { sellerId: seller.id }, data: { isDefault: false } });
+    if (existing) {
+      await tx.sellerPayoutMethod.update({
+        where: { id: existing.id },
+        data: { verified: true, verifiedAt: new Date(), isDefault: true, accountName: seller.bankAccountName ?? existing.accountName },
+      });
+    } else {
+      await tx.sellerPayoutMethod.create({
+        data: {
+          sellerId: seller.id,
+          type: 'BANK',
+          label: seller.bankName?.trim() || `Bank ${ifsc.slice(0, 4)}`,
+          accountName: seller.bankAccountName ?? '',
+          accountLast4: last4,
+          ifsc,
+          isDefault: true,
+          verified: true,
+          verifiedAt: new Date(),
+        },
+      });
+    }
+  });
 }

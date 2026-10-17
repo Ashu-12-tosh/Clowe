@@ -234,6 +234,7 @@ export default function SellerPayoutsPage() {
     !!overview &&
     !overview.panBlock &&
     !overview.gstinBlock &&
+    !overview.bankBlock &&
     k.payablePaise >= overview.rates.minPayoutPaise &&
     overview.methods.length > 0;
 
@@ -288,9 +289,11 @@ export default function SellerPayoutsPage() {
               !overview
                 ? undefined
                 : overview.gstinBlock
-                  ? 'Payouts need your GSTIN'
+                  ? overview.gstinBlock.code === 'GSTIN_REQUIRED' ? 'Payouts need your GSTIN' : 'Payouts need a verified GSTIN'
                   : overview.panBlock
                   ? 'Payouts need a verified PAN'
+                  : overview.bankBlock
+                  ? 'Payouts need a verified bank account'
                   : overview.methods.length === 0
                   ? 'Add a payout method first'
                   : k && k.payablePaise < overview.rates.minPayoutPaise
@@ -310,7 +313,9 @@ export default function SellerPayoutsPage() {
           className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
         >
           <div>
-            <p className="font-semibold">Payouts are on hold until your GSTIN is on file</p>
+            <p className="font-semibold">
+              {overview.gstinBlock.code === 'GSTIN_REQUIRED' ? 'Payouts are on hold until your GSTIN is on file' : 'Payouts are on hold until your GSTIN is verified'}
+            </p>
             <p className="mt-0.5 text-xs">
               {overview.gstinBlock.reason} {overview.gstinBlock.action}
             </p>
@@ -320,6 +325,26 @@ export default function SellerPayoutsPage() {
             className="shrink-0 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-700"
           >
             Add GSTIN
+          </Link>
+        </div>
+      )}
+
+      {overview?.bankBlock && (
+        <div
+          data-bank-block={overview.bankBlock.bankState}
+          className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <div>
+            <p className="font-semibold">Payouts are on hold until your bank account is verified</p>
+            <p className="mt-0.5 text-xs">
+              {overview.bankBlock.reason} {overview.bankBlock.action}
+            </p>
+          </div>
+          <Link
+            href="/seller/settings?tab=BANK"
+            className="shrink-0 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-amber-700"
+          >
+            Bank account
           </Link>
         </div>
       )}
@@ -899,9 +924,9 @@ export default function SellerPayoutsPage() {
       {addingMethod && (
         <AddMethodModal
           onClose={() => setAddingMethod(false)}
-          onSaved={() => {
+          onSaved={(method) => {
             void loadOverview();
-            setNotice('Payout method added and verified.');
+            setNotice(method.verified ? 'Payout method added and verified.' : 'Payout method added — Clowe verifies it before any payout goes there.');
           }}
         />
       )}

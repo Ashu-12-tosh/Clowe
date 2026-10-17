@@ -15,7 +15,7 @@ import { api, ApiRequestError } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
-import SellerKycPanel, { KycFraudBanner } from './SellerKycPanel';
+import SellerKycPanel, { KycFraudBanner, openSellerDocument } from './SellerKycPanel';
 import SellerLedgerTab from './SellerLedgerTab';
 import { ExternalLink } from '@/components/ExternalLink';
 
@@ -350,16 +350,6 @@ export default function SellerDetailPanel({
             {tab === 'OVERVIEW' && (
               <SellerKycPanel
                 sellerId={detail.id}
-                kyc={detail.kyc}
-                subjects={{
-                  PAN: detail.panNumber
-                    ? `${detail.panNumber} · ${detail.panName ?? 'no name on PAN given'}`
-                    : null,
-                  GSTIN: detail.gstNumber,
-                  BANK: detail.bankAccountNo
-                    ? `${detail.bankName ? `${detail.bankName} · ` : ''}${detail.bankAccountNo} · ${detail.bankIfsc ?? ''} · ${detail.bankAccountName ?? 'no holder name given'}`
-                    : null,
-                }}
                 onChanged={async () => {
                   await load();
                   onChanged();
@@ -739,12 +729,23 @@ export default function SellerDetailPanel({
                   {detail.application.documents.map((d) => (
                     <li key={d.key}>
                       {d.label}:{' '}
-                      {d.url ? (
-                        <ExternalLink href={d.url} className="font-semibold text-brand-600 underline">
+                      {d.onFile ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void openSellerDocument(`/api/admin/sellers/${detail.id}/documents/${d.key}/view`).catch((err) =>
+                              setError(err instanceof ApiRequestError ? err.message : 'Could not open the document'),
+                            )
+                          }
+                          className="font-semibold text-brand-600 underline"
+                        >
                           open
-                        </ExternalLink>
+                        </button>
                       ) : (
                         <span className="text-gray-400">not given</span>
+                      )}
+                      {d.key === 'signatoryKycDoc' && d.onFile && (
+                        <span className="ml-1 text-amber-700">— if it is an Aadhaar, check it is masked (last 4 digits only)</span>
                       )}
                     </li>
                   ))}

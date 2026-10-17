@@ -1,17 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   KYC_CHECK_LABELS,
   KYC_CHECK_STATE_LABELS,
   KYC_REASON_LABELS,
   NAME_MATCH_BAND_LABELS,
+  BANK_ACCOUNT_TYPE_LABELS,
+  GST_PUBLIC_SEARCH_URL,
+  type AdminKycReviewView,
+  type BankAccountType,
   type KycCheckState,
   type KycCheckView,
+  type SellerDocumentKind,
   type SellerKycSummary,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import Spinner from '@/components/Spinner';
+import { ExternalLink } from '@/components/ExternalLink';
 
 const STATE_STYLES: Record<KycCheckState, string> = {
   VERIFIED: 'bg-green-100 text-green-700',
@@ -20,6 +26,8 @@ const STATE_STYLES: Record<KycCheckState, string> = {
   NOT_PROVIDED: 'bg-gray-100 text-gray-500',
   INVALID_FORMAT: 'bg-red-100 text-red-700',
   NOT_RUN: 'bg-yellow-100 text-yellow-700',
+  PENDING_REVIEW: 'bg-yellow-100 text-yellow-700',
+  REJECTED: 'bg-red-100 text-red-700',
 };
 
 /**
@@ -66,81 +74,158 @@ function NameMatch({ view, threshold }: { view: KycCheckView; threshold: number 
 }
 
 /**
- * Each automated check with its status, name-match score and band, provider
- * and time — what the admin needs in front of them before approving.
+ * Open a seller's private document: a fresh signed link, made by the API so
+ * every opening is audit-logged. The tab opens first (a click's own popup is
+ * never blocked), then goes to the document.
  */
-export default function SellerKycPanel({
-  sellerId,
-  kyc,
-  subjects,
-  onChanged,
-}: {
-  sellerId: string;
-  kyc: SellerKycSummary;
-  /** What each check is about, so the admin can compare it with the result. */
-  subjects: Record<KycCheckView['check'], string | null>;
-  onChanged: () => Promise<void> | void;
-}) {
-  const [running, setRunning] = useState<KycCheckView['check'] | null>(null);
-  const [error, setError] = useState('');
-  const checks = [kyc.pan, kyc.gstin, kyc.bank];
-  const onMock = checks.some((c) => c.provider === 'mock');
+export async function openSellerDocument(path: string): Promise<void> {
+  const tab = window.open('', '_blank');
+  try {
+    const { url } = await api<{ url: string }>(path, { method: 'POST', auth: true });
+    if (tab) {
+      tab.opener = null;
+      tab.location.href = url;
+    } else {
+      window.open(url, '_blank', 'noopener');
+    }
+  } catch (err) {
+    tab?.close();
+    throw err;
+  }
+}
 
-  async function rerun(check: KycCheckView['check']) {
-    if (running) return;
-    setRunning(check);
+/**
+ * Manual KYC review: PAN, GSTIN and bank account, each with the values as
+ * entered beside the documents, and Mark verified / Reject. Every decision is
+ * recorded with who made it, when and how (by hand, or by a real provider).
+ * Until then the seller sees "Pending review" — a mock check never verifies.
+ */
+export default function SellerKycPanel({ sellerId, onChanged }: { sellerId: string; onChanged: () => Promise<void> | void }) {
+  const [review, setReview] = useState<AdminKycReviewView | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      setReview(await api<AdminKycReviewView>(`/api/admin/sellers/${sellerId}/kyc-review`, { auth: true }));
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Could not load the KYC review');
+    }
+  }, [sellerId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function decide(check: KycCheckView['check'], decision: 'VERIFY' | 'REJECT') {
+    let reason: string | undefined;
+    if (decision === 'REJECT') {
+      reason = window.prompt(`Why is the ${KYC_CHECK_LABELS[check]} rejected? (the seller sees this)`) ?? undefined;
+      if (reason === undefined) return;
+    } else if (!window.confirm(`Mark the ${KYC_CHECK_LABELS[check]} verified? Check it against the document first.`)) {
+      return;
+    }
+    setBusy(`${check}:${decision}`);
     setError('');
     try {
-      await api(`/api/admin/sellers/${sellerId}/kyc-checks`, {
+      await api(`/api/admin/sellers/${sellerId}/kyc-review`, {
         method: 'POST',
-        body: { check },
         auth: true,
-        success: `${KYC_CHECK_LABELS[check]} check done — the result is below`,
+        body: { check, decision, reason },
+        success: decision === 'VERIFY' ? `${KYC_CHECK_LABELS[check]} verified` : `${KYC_CHECK_LABELS[check]} rejected — the seller has been told why`,
       });
+      await load();
+      await onChanged();
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Could not save the decision');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function rerun(check: KycCheckView['check']) {
+    setBusy(`${check}:RUN`);
+    setError('');
+    try {
+      await api(`/api/admin/sellers/${sellerId}/kyc-checks`, { method: 'POST', body: { check }, auth: true, success: `${KYC_CHECK_LABELS[check]} check done` });
+      await load();
       await onChanged();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not run the check');
     } finally {
-      setRunning(null);
+      setBusy(null);
     }
   }
 
-  return (
-    <section className="mt-3 rounded-xl border border-gray-100 p-3">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Verification checks</p>
-        <p className="text-[11px] text-gray-400">Name match threshold: {kyc.nameMatchThreshold}</p>
-      </div>
+  async function open(kind: SellerDocumentKind) {
+    setError('');
+    try {
+      await openSellerDocument(`/api/admin/sellers/${sellerId}/documents/${kind}/view`);
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Could not open the document');
+    }
+  }
 
-      {onMock && (
-        <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
-          Checked by the mock provider — these are not real verifications.
+  if (!review) {
+    return <section className="mt-3 rounded-xl border border-gray-100 p-3 text-xs text-gray-500">{error || 'Loading KYC review…'}</section>;
+  }
+  const { summary: kyc, values: v } = review;
+  const checks = [kyc.pan, kyc.gstin, kyc.bank];
+  const entered: Record<KycCheckView['check'], { label: string; value: string }[]> = {
+    PAN: [
+      { label: 'PAN', value: v.pan ?? '—' },
+      { label: 'Name on PAN', value: v.panName ?? '—' },
+    ],
+    GSTIN: [{ label: 'GSTIN', value: v.gstin ?? '—' }],
+    BANK: [
+      { label: 'Account holder', value: v.bankAccountName ?? '—' },
+      { label: 'Account number', value: v.bankAccountNumber ?? '—' },
+      { label: 'IFSC', value: v.bankIfsc ?? '—' },
+      { label: 'Type', value: v.bankAccountType ? (BANK_ACCOUNT_TYPE_LABELS[v.bankAccountType as BankAccountType] ?? v.bankAccountType) : '—' },
+      { label: 'Bank', value: v.bankName ?? '—' },
+    ],
+  };
+  const hasValue = (view: KycCheckView) => view.state !== 'NOT_PROVIDED' && view.state !== 'INVALID_FORMAT';
+  const hasSignatory = review.documents.some((d) => d.kind === 'signatoryKycDoc');
+
+  return (
+    <section className="mt-3 rounded-xl border border-gray-100 p-3" data-kyc-review>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-xs font-bold uppercase tracking-wide text-gray-500">KYC review</p>
+        <p className="text-[11px] text-gray-400">
+          {kyc.reviewMode === 'MANUAL'
+            ? 'Manual review — no verification provider is connected'
+            : `Provider checks · name match threshold ${kyc.nameMatchThreshold}`}
         </p>
-      )}
+      </div>
       {error && <p className="mt-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700">{error}</p>}
 
       <ul className="mt-2 divide-y divide-gray-50 text-xs">
-        {checks.map((view) => {
-          // A re-run only asks the provider about checks without an answer;
-          // offer it where it can do something.
-          const canRun =
-            view.state === 'ERROR' || (view.state === 'NOT_RUN' && view.reason !== 'NAME_MISSING');
-          return (
-            <li key={view.check} className="flex items-start justify-between gap-3 py-2">
+        {checks.map((view) => (
+          <li key={view.check} className="py-2.5" data-kyc-check={view.check}>
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-semibold text-ink-900">{KYC_CHECK_LABELS[view.check]}</p>
-                {subjects[view.check] && (
-                  <p className="break-words text-[11px] text-gray-500">{subjects[view.check]}</p>
+                <dl className="mt-1 space-y-0.5 text-[11px]">
+                  {entered[view.check].map((e) => (
+                    <div key={e.label} className="flex gap-2">
+                      <dt className="w-28 shrink-0 text-gray-500">{e.label}</dt>
+                      <dd className="min-w-0 break-all font-mono text-ink-900">{e.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {view.check === 'GSTIN' && v.gstin && (
+                  <ExternalLink href={GST_PUBLIC_SEARCH_URL} className="mt-1 inline-block text-[11px] font-semibold text-brand-600 underline">
+                    Check {v.gstin} on the GST portal ↗
+                  </ExternalLink>
                 )}
                 {view.reason && (
-                  <p className={view.state === 'ERROR' ? 'mt-0.5 text-amber-700' : 'mt-0.5 text-red-700'}>
-                    {KYC_REASON_LABELS[view.reason]}
-                  </p>
+                  <p className={view.state === 'ERROR' ? 'mt-0.5 text-amber-700' : 'mt-0.5 text-red-700'}>{KYC_REASON_LABELS[view.reason]}</p>
                 )}
+                {view.rejectReason && <p className="mt-0.5 text-red-700">Rejected: {view.rejectReason}</p>}
                 <NameMatch view={view} threshold={kyc.nameMatchThreshold} />
-                {view.checkedAt && (
-                  <p className="mt-0.5 text-[11px] text-gray-400">
-                    {view.provider} · {when(view.checkedAt)}
+                {view.checkedAt && (view.state === 'VERIFIED' || view.state === 'REJECTED' || view.state === 'FAILED') && (
+                  <p className="mt-0.5 text-[11px] text-gray-400" data-kyc-decided>
+                    {view.method === 'MANUAL' ? `By hand · ${view.decidedBy ?? 'an admin'}` : `By ${view.provider}`} · {when(view.checkedAt)}
                   </p>
                 )}
               </div>
@@ -148,26 +233,67 @@ export default function SellerKycPanel({
                 <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATE_STYLES[view.state]}`}>
                   {KYC_CHECK_STATE_LABELS[view.state]}
                 </span>
-                {canRun && (
+                {hasValue(view) && view.state !== 'VERIFIED' && (
                   <button
-                    onClick={() => void rerun(view.check)}
-                    disabled={running !== null}
-                    aria-busy={running === view.check}
-                    className="rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] font-semibold hover:bg-gray-50 disabled:opacity-50"
+                    onClick={() => void decide(view.check, 'VERIFY')}
+                    disabled={busy !== null}
+                    data-kyc-verify={view.check}
+                    className="rounded-lg bg-green-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-green-700 disabled:opacity-50"
                   >
-                    {running === view.check && <Spinner className="mr-1" />}
-                    {running === view.check ? 'Checking…' : view.state === 'ERROR' ? 'Retry' : 'Run check'}
+                    {busy === `${view.check}:VERIFY` && <Spinner className="mr-1" />}
+                    Mark verified
                   </button>
                 )}
+                {hasValue(view) && (
+                  <button
+                    onClick={() => void decide(view.check, 'REJECT')}
+                    disabled={busy !== null}
+                    data-kyc-reject={view.check}
+                    className="rounded-lg border border-red-300 px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Reject…
+                  </button>
+                )}
+                {kyc.reviewMode === 'PROVIDER' &&
+                  (view.state === 'ERROR' || view.state === 'PENDING_REVIEW' || (view.state === 'NOT_RUN' && view.reason !== 'NAME_MISSING')) && (
+                    <button
+                      onClick={() => void rerun(view.check)}
+                      disabled={busy !== null}
+                      className="rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] font-semibold hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {busy === `${view.check}:RUN` ? 'Checking…' : 'Run provider check'}
+                    </button>
+                  )}
               </div>
-            </li>
-          );
-        })}
+            </div>
+          </li>
+        ))}
       </ul>
-      <p className="mt-1 text-[11px] text-gray-400">
-        Each check is a paid call. Passed checks are never re-run; the bank account is checked again
-        only when it changes.
-      </p>
+
+      <div className="mt-2 border-t border-gray-100 pt-2">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Documents</p>
+        {review.documents.length === 0 ? (
+          <p className="mt-1 text-[11px] text-gray-400">No documents on file.</p>
+        ) : (
+          <ul className="mt-1 space-y-1 text-[11px]">
+            {review.documents.map((d) => (
+              <li key={d.kind} className="flex items-center justify-between gap-2">
+                <span>{d.label}</span>
+                <button type="button" onClick={() => void open(d.kind)} data-open-document={d.kind} className="font-semibold text-brand-600 underline">
+                  Open
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {hasSignatory && (
+          <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800" data-aadhaar-warning>
+            ⚠ If the signatory KYC is an Aadhaar card, check that it is the <strong>masked Aadhaar</strong> — only the last 4
+            digits visible. A full Aadhaar number must not be kept: ask the seller for the masked copy from UIDAI instead.
+          </p>
+        )}
+        <p className="mt-2 text-[11px] text-gray-400">Every document you open is recorded in the audit log.</p>
+      </div>
     </section>
   );
 }

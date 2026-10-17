@@ -30,6 +30,7 @@ import FieldError from '@/components/FieldError';
 import Spinner from '@/components/Spinner';
 import StorePreview from '@/components/seller/store/StorePreview';
 import KycVerificationCard from '@/components/seller/KycVerificationCard';
+import BankAccountForm from '@/components/seller/BankAccountForm';
 import { ExternalLink } from '@/components/ExternalLink';
 import { DispatchRulesNote } from '@/components/seller/DispatchRulesNote';
 
@@ -727,44 +728,21 @@ export default function SellerStoreSettingsPage() {
 
           {/* --- Bank ---------------------------------------------------- */}
           {tab === 'BANK' && (
-            <Section
-              title="Bank & payouts"
-              subtitle="Payout methods live on the Payouts page, where they are verified"
-            >
-              <dl className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <dt className="text-gray-500">Bank</dt>
-                  <dd className="text-ink-900">{form.bankName ?? '— not set'}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-gray-500">Account holder</dt>
-                  <dd className="text-ink-900">{form.bankAccountName ?? '— not set'}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-gray-500">Account number</dt>
-                  <dd className="text-ink-900">
-                    {form.bankAccountLast4 ? `•••• ${form.bankAccountLast4}` : '— not set'}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-gray-500">IFSC</dt>
-                  <dd className="text-ink-900">{form.bankIfsc ?? '— not set'}</dd>
-                </div>
-                <div className="flex justify-between border-t border-gray-100 pt-2">
-                  <dt className="text-gray-500">Verified payout methods</dt>
-                  <dd className="font-semibold text-ink-900">{form.payoutMethodCount}</dd>
-                </div>
-              </dl>
-              <Link
-                href="/seller/payouts"
-                className="mt-3 inline-block rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800"
-              >
-                Manage payout methods →
-              </Link>
-              <p className="mt-2 text-[11px] text-gray-400">
-                Money only moves to a verified method.
-              </p>
-            </Section>
+            <>
+              <BankAccountForm settings={data.settings} onSaved={() => void load()} />
+              <Section title="Payout methods" subtitle="Your verified bank account becomes your payout method">
+                <p className="text-xs text-gray-600">
+                  Verified payout methods: <span className="font-semibold text-ink-900">{form.payoutMethodCount}</span>
+                </p>
+                <Link
+                  href="/seller/payouts"
+                  className="mt-3 inline-block rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800"
+                >
+                  Payouts →
+                </Link>
+                <p className="mt-2 text-[11px] text-gray-400">Money only moves to a verified account.</p>
+              </Section>
+            </>
           )}
 
           {/* --- Shipping ------------------------------------------------ */}

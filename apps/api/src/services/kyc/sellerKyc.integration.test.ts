@@ -9,8 +9,9 @@ import { signAccessToken } from '../../utils/jwt';
 import { kycProvider } from './index';
 
 /**
- * Seller KYC end to end, on the mock provider: real Postgres, real routes,
- * real rate limiter.
+ * Seller KYC end to end, with the mock standing in for a real provider (under
+ * another name: a mock answer itself never verifies — kycManualReview tests
+ * that): real Postgres, real routes, real rate limiter.
  *
  * Every provider method is spied on, so the tests can count calls — and the
  * count is the point. A call is money: these pin that an answer is never
@@ -33,7 +34,11 @@ const DETAILS = {
   bankAccountName: 'Rahul Sharma',
 };
 
+const realName = kycProvider.name;
 beforeAll(async () => {
+  // The provider's rules (never pay twice, retries on demand, name matches)
+  // are what these tests pin, so the mock answers as a real provider would.
+  Object.defineProperty(kycProvider, 'name', { value: 'standin', configurable: true, writable: true });
   await seedFixture(prisma);
   const admin = await prisma.user.create({
     data: { phone: '9100099999', name: 'KYC Admin', role: Role.ADMIN, referralCode: 'KYC-ADMIN' },
@@ -48,6 +53,7 @@ afterEach(() => {
 });
 
 afterAll(async () => {
+  Object.defineProperty(kycProvider, 'name', { value: realName, configurable: true, writable: true });
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await prisma.$disconnect();
 });
@@ -107,7 +113,7 @@ describe('verifying', () => {
     const rows = await prisma.sellerKycCheck.findMany({ where: { sellerId: s.id } });
     expect(rows.map((r) => r.kind).sort()).toEqual(['BANK', 'GSTIN', 'PAN']);
     for (const row of rows) {
-      expect(row.provider).toBe('mock');
+      expect(row.provider).toBe('standin');
       expect(row.createdAt).toBeInstanceOf(Date);
     }
     const pan = rows.find((r) => r.kind === 'PAN')!;

@@ -80,8 +80,10 @@ export function AddMethodModal({
         method: 'POST',
         body,
         auth: true,
-        success: 'Payout method verified and saved',
       });
+      // Verified by a real provider's penny drop; otherwise Clowe verifies it by hand first.
+      if (method.verified) toast.success('Payout method verified and saved');
+      else toast.success('Payout method saved — Clowe verifies it before any payout goes there');
       onSaved(method);
       onClose();
     } catch (err) {
@@ -202,7 +204,7 @@ export function AddMethodModal({
             disabled={busy}
             className="rounded-lg bg-ink-900 px-5 py-2 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
           >
-            {busy ? <><Spinner className="mr-1" />Verifying…</> : 'Verify & save'}
+            {busy ? <><Spinner className="mr-1" />Saving…</> : 'Save'}
           </button>
         </div>
       </div>

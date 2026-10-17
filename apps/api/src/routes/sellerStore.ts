@@ -12,12 +12,16 @@ import {
   type SellerStoreSettings,
   type StoreHealthItem,
   type StoreHighlight,
+  sellerBankAccountSchema,
 } from '@clowe/shared';
 import { syncWarehouseSafe } from '../services/shipping/warehouses';
 import { prisma } from '../db';
 import { getSettings } from '../services/settingsService';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
+import { assertOwnAssets } from '../services/assets';
+import { encryptBankAccount } from '../services/bankAccountCrypto';
+import { getSellerKycSummary, refreshOverallKycStatus } from '../services/kyc/sellerKyc';
 import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerStoreRouter = Router();
@@ -107,8 +111,11 @@ async function toSettings(seller: SellerProfile): Promise<SellerStoreSettings> {
     bankName: seller.bankName,
     bankAccountName: seller.bankAccountName,
     // Only the tail of the account number ever leaves the server.
-    bankAccountLast4: seller.bankAccountNo ? seller.bankAccountNo.slice(-4) : null,
+    bankAccountLast4: seller.bankAccountLast4 ?? (seller.bankAccountNo ? seller.bankAccountNo.slice(-4) : null),
     bankIfsc: seller.bankIfsc,
+    bankAccountType: seller.bankAccountType,
+    bankChequeOnFile: !!seller.bankChequeDoc,
+    bankSubmittedAt: seller.bankSubmittedAt?.toISOString() ?? null,
     payoutMethodCount: methodCount,
 
     pickupSameAsBusiness: seller.pickupSameAsBusiness,
@@ -317,40 +324,26 @@ sellerStoreRouter.put('/business', async (req, res, next) => {
   try {
     const seller = req.seller!;
     const input = storeBusinessSchema.parse(req.body);
-    const locked = seller.kycStatus === 'VERIFIED';
-    // The lock protects what was verified. A PAN that was never on file can
-    // still be added: payouts wait for one, so a seller approved without it
-    // must have a way to supply it.
-    const addingPan = locked && !seller.panNumber && !!input.panNumber;
-    const addingPanName = locked && !seller.panName && !!input.panName;
-
-    if (locked) {
-      const changingGst = input.gstNumber && input.gstNumber !== seller.gstNumber;
-      const changingPan = input.panNumber && input.panNumber !== seller.panNumber && !addingPan;
-      const changingPanName = input.panName && input.panName !== seller.panName && !addingPanName;
-      if (changingGst || changingPan || changingPanName) {
-        throw ApiError.badRequest(
-          'GSTIN and PAN details are locked after verification — raise a support ticket to change them',
-          'KYC_LOCKED',
-        );
-      }
+    // The lock protects what was verified — by an admin or a real provider —
+    // item by item. A PAN or GSTIN that was never on file (or not verified)
+    // can still be added or corrected: payouts wait for it.
+    const kyc = await getSellerKycSummary(seller.id);
+    const panLocked = kyc.pan.state === 'VERIFIED';
+    const gstLocked = kyc.gstin.state === 'VERIFIED';
+    const changingGst = gstLocked && !!input.gstNumber && input.gstNumber !== seller.gstNumber;
+    const changingPan = panLocked && !!input.panNumber && input.panNumber !== seller.panNumber;
+    const changingPanName = panLocked && !!input.panName && input.panName !== seller.panName;
+    if (changingGst || changingPan || changingPanName) {
+      throw ApiError.badRequest('A verified GSTIN or PAN is locked — raise a support ticket to change it', 'KYC_LOCKED');
     }
 
     await prisma.sellerProfile.update({
       where: { id: seller.id },
       data: {
         businessType: fieldUpdate(input.businessType),
-        ...(locked
-          ? {
-              ...(addingPan ? { panNumber: input.panNumber } : {}),
-              ...(addingPanName ? { panName: input.panName } : {}),
-            }
-          : {
-              // Payouts and every tax invoice depend on the GSTIN: never wiped by omission.
-              gstNumber: fieldUpdate(input.gstNumber),
-              panNumber: fieldUpdate(input.panNumber),
-              panName: fieldUpdate(input.panName),
-            }),
+        // Payouts and every tax invoice depend on the GSTIN: never wiped by omission.
+        ...(gstLocked ? {} : { gstNumber: fieldUpdate(input.gstNumber) }),
+        ...(panLocked ? {} : { panNumber: fieldUpdate(input.panNumber), panName: fieldUpdate(input.panName) }),
         addressLine1: fieldUpdate(input.addressLine1),
         addressLine2: fieldUpdate(input.addressLine2),
         landmark: fieldUpdate(input.landmark),
@@ -360,6 +353,51 @@ sellerStoreRouter.put('/business', async (req, res, next) => {
         // Editing documents after a rejection puts the shop back in the queue.
         ...(seller.kycStatus === 'REJECTED' ? { kycStatus: 'UNDER_REVIEW' as const } : {}),
       },
+    });
+    // New details wait for review: the overall status follows the checks.
+    if (seller.kycStatus !== 'PENDING_DOCS') await refreshOverallKycStatus(seller.id);
+    await respond(seller.id, res);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /bank — the bank account payouts go to, entered by the seller and
+// verified by an admin against the cancelled cheque (later: a penny drop).
+// The number is stored encrypted; only its last 4 digits are ever shown.
+// ---------------------------------------------------------------------------
+
+sellerStoreRouter.put('/bank', async (req, res, next) => {
+  try {
+    const seller = req.seller!;
+    const input = sellerBankAccountSchema.parse(req.body);
+    await assertOwnAssets([input.chequeDoc], { ownerId: req.auth!.userId, purpose: 'SELLER_DOCUMENT' });
+    await prisma.sellerProfile.update({
+      where: { id: seller.id },
+      data: {
+        bankAccountEnc: encryptBankAccount(input.accountNumber),
+        bankAccountLast4: input.accountNumber.slice(-4),
+        // The old plain column is emptied: the number now lives encrypted only.
+        bankAccountNo: null,
+        bankIfsc: input.ifsc,
+        bankAccountName: input.accountName,
+        bankAccountType: input.accountType,
+        bankName: input.bankName?.trim() || seller.bankName,
+        bankChequeDoc: input.chequeDoc,
+        bankSubmittedAt: new Date(),
+      },
+    });
+    if (seller.kycStatus !== 'PENDING_DOCS') await refreshOverallKycStatus(seller.id);
+    const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+    await prisma.notification.createMany({
+      data: admins.map((a) => ({
+        userId: a.id,
+        type: 'SELLER_KYC_REVIEW',
+        title: `Bank account to verify — ${seller.shopName}`,
+        body: `${seller.shopName} added a bank account ending ${input.accountNumber.slice(-4)} with a cancelled cheque. Verify it in Sellers → KYC review.`,
+        linkHref: '/admin/sellers',
+      })),
     });
     await respond(seller.id, res);
   } catch (err) {

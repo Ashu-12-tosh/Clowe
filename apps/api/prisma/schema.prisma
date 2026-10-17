@@ -451,6 +451,15 @@ model SellerProfile {
   bankAccountName String?
   bankAccountNo   String?
   bankIfsc        String?
+  // The seller's bank account as entered in Store Settings: the number
+  // AES-256-GCM encrypted (bankAccountEnc), shown by its last 4 digits, with
+  // the account type and a cancelled cheque (private asset ref) to verify it.
+  // bankAccountNo is the old plain column and stays empty for new entries.
+  bankAccountEnc   String?
+  bankAccountLast4 String?
+  bankAccountType  String?
+  bankChequeDoc    String?
+  bankSubmittedAt  DateTime?
   addressLine1    String?
   city            String?
   state           String?
@@ -587,6 +596,8 @@ model SellerProfile {
   tickets           SupportTicket[]
   customerComplaints Complaint[]
   kycChecks         SellerKycCheck[]
+  kycReviews        SellerKycReview[]
+  brandProofs       SellerBrandProof[]
   ledgerEntries     SellerLedgerEntry[]
   promotionCreditPurchases PromotionCreditPurchase[]
 
@@ -666,6 +677,57 @@ model SellerNote {
 /// What it holds is the outcome — status, score, band, provider, time — and
 /// never the provider's response: no registered names, no bank-side account
 /// holder, nothing the provider returned beyond the verdict.
+/// An admin's manual decision on a seller's PAN, GSTIN or bank account, made
+/// against the documents (the fallback while no real verification provider is
+/// set up, and an override after one). The latest decision or real-provider
+/// answer for the details on file is what counts; a mock answer never does.
+enum KycReviewStatus {
+  VERIFIED
+  REJECTED
+}
+
+model SellerKycReview {
+  id         String          @id @default(cuid())
+  sellerId   String
+  seller     SellerProfile   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  kind       KycCheckType
+  status     KycReviewStatus
+  /// Fingerprint (HMAC) of the details decided on: a change to them needs a new decision.
+  subject    String
+  reason     String?
+  reviewerId String
+  createdAt  DateTime        @default(now())
+
+  @@index([sellerId, kind, createdAt])
+  @@map("seller_kyc_reviews")
+}
+
+/// A seller's proof for a brand that needs authorization (an authorization
+/// letter from the brand or its distributor, or a GST purchase invoice from
+/// them). Approved, it covers all that seller's listings of the brand until
+/// the optional expiry.
+model SellerBrandProof {
+  id          String          @id @default(cuid())
+  sellerId    String
+  seller      SellerProfile   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  brandId     String
+  brand       Brand           @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  /// AUTHORIZATION_LETTER or PURCHASE_INVOICE
+  proofType   String
+  /// Private asset ref (seller document upload).
+  doc         String
+  status      BrandAuthStatus @default(PENDING)
+  note        String?
+  expiresAt   DateTime?
+  submittedAt DateTime        @default(now())
+  reviewedAt  DateTime?
+  reviewerId  String?
+
+  @@unique([sellerId, brandId])
+  @@index([status, submittedAt])
+  @@map("seller_brand_proofs")
+}
+
 model SellerKycCheck {
   id          String          @id @default(cuid())
   sellerId    String
@@ -932,6 +994,7 @@ model Brand {
   createdAt DateTime @default(now())
 
   products Product[]
+  sellerProofs SellerBrandProof[]
 
   @@map("brands")
 }
