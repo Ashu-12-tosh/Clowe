@@ -460,6 +460,14 @@ model SellerProfile {
   bankAccountType  String?
   bankChequeDoc    String?
   bankSubmittedAt  DateTime?
+  // Onboarding exception (an admin's, per seller): while on — and only until
+  // the store opens for orders, or the optional end date — approved listings
+  // may be live without a complete business address or KYC. Never for payouts.
+  onboardingException       Boolean   @default(false)
+  onboardingExceptionReason String?
+  onboardingExceptionUntil  DateTime?
+  onboardingExceptionSetAt  DateTime?
+  onboardingExceptionSetBy  String?
   addressLine1    String?
   city            String?
   state           String?

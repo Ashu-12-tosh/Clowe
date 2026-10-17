@@ -79,12 +79,22 @@ describe('store closed for orders', () => {
     await expect.poll(() => prisma.auditLog.count({ where: { entityId: shopper.id, action: 'Marked as test account' } })).toBe(1);
   });
 
-  it('the admin closes and opens it from Settings', async () => {
+  it('the admin closes it from Settings; opening waits for every live seller to be complete', async () => {
     const admin = await user(Role.ADMIN);
     const shopper = await user();
     expect((await call('PUT', '/api/admin/settings', admin.token, { storeOpenForOrders: false })).status).toBe(200);
     expect((await call<{ open: boolean }>('GET', '/api/orders/availability', shopper.token)).json.data.open).toBe(false);
-    expect((await call('PUT', '/api/admin/settings', admin.token, { storeOpenForOrders: true })).status).toBe(200);
+    // A seller with a live listing and no address or verified KYC blocks opening.
+    const sellerUser = await user(Role.SELLER);
+    const cat = await prisma.category.create({ data: { name: 'Launch Cat', slug: `launch-cat-${Date.now()}`, isActive: true } });
+    const shop = await prisma.sellerProfile.create({ data: { userId: sellerUser.id, shopName: 'Launch Shop', status: 'APPROVED', approvedAt: new Date() } });
+    await prisma.product.create({ data: { sellerId: shop.id, categoryId: cat.id, title: 'Launch item', slug: `launch-item-${Date.now()}`, description: 'A live listing.', basePricePaise: 10_000, status: 'APPROVED', approvedAt: new Date() } });
+    const blockers = (await call<{ shopName: string; missing: string[] }[]>('GET', '/api/admin/store-open-checklist', admin.token)).json.data;
+    expect(blockers.find((b) => b.shopName === 'Launch Shop')?.missing).toContain('business address');
+    const open = await call('PUT', '/api/admin/settings', admin.token, { storeOpenForOrders: true });
+    expect(open.json.error?.code).toBe('STORE_OPEN_CHECKLIST');
+    expect((await call<{ open: boolean }>('GET', '/api/orders/availability', shopper.token)).json.data.open).toBe(false);
+    await setSetting('storeOpenForOrders', true);
     expect((await call<{ open: boolean }>('GET', '/api/orders/availability', shopper.token)).json.data.open).toBe(true);
   });
 });

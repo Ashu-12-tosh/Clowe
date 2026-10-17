@@ -4,6 +4,7 @@ import { categoryRulesInputSchema, type CategoryRuleFields, type CategoryRules }
 import type { ProductStatusValue, SellerReturnRow, SellerStatusValue } from './seller';
 import type { UserRole } from './index';
 import type { BrandAuthView } from './brandAuth';
+import { productAttributeInputSchema } from './productAttributes';
 
 // ---------------------------------------------------------------------------
 // Moderation decisions
@@ -225,3 +226,22 @@ export const adminReturnOverrideSchema = z.object({
   note: z.string().trim().max(300).optional(),
 });
 export type AdminReturnOverrideInput = z.infer<typeof adminReturnOverrideSchema>;
+
+/**
+ * PATCH /api/admin/products/:id/listing — an admin fixes a listing on the
+ * seller's behalf, applied at once and recorded as "Listing edited by Clowe
+ * admin" with every value before and after. `sizes` turns the variants into
+ * one per size at today's price, the stock split evenly (at least 1 each).
+ */
+export const adminListingEditSchema = z.object({
+  title: z.string().trim().min(3).max(150).optional(),
+  brand: z.string().trim().min(1).max(40).optional(),
+  shortDescription: z.string().trim().max(200).optional(),
+  description: z.string().trim().min(20).max(5000).optional(),
+  attributes: z.array(productAttributeInputSchema).max(20).optional(),
+  sizes: z.array(z.string().trim().min(1).max(20)).min(1).max(12).optional(),
+  visible: z.boolean().optional(),
+  /** Why: kept with the edit. */
+  reason: z.string().trim().min(5).max(300),
+});
+export type AdminListingEditInput = z.infer<typeof adminListingEditSchema>;

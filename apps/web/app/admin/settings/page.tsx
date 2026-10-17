@@ -9,6 +9,7 @@ import {
   type LegalEntity,
   type PlatformSettings,
   updateSettingsSchema,
+  type StoreOpenChecklistRow,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
@@ -64,6 +65,14 @@ export default function AdminSettingsPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const { errors: fieldErrors, show: showFieldErrors, fromError } = useFieldErrors();
+  // What blocks opening the store: live sellers without a business address or verified KYC.
+  const [openBlockers, setOpenBlockers] = useState<StoreOpenChecklistRow[] | null>(null);
+  useEffect(() => {
+    api<StoreOpenChecklistRow[]>('/api/admin/store-open-checklist', { auth: true })
+      .then(setOpenBlockers)
+      .catch(() => setOpenBlockers(null));
+  }, []);
+  const openBlocked = !settings?.storeOpenForOrders && (openBlockers?.length ?? 0) > 0;
 
   useEffect(() => {
     api<PlatformSettings>('/api/admin/settings', { auth: true })
@@ -247,9 +256,29 @@ export default function AdminSettingsPage() {
       <div className="mt-3 rounded-2xl border border-amber-200 bg-white p-4" data-store-open>
         <h2 className="text-sm font-bold">&#128722; Store open for orders</h2>
         <label className="mt-2 flex items-start gap-2 text-sm">
-          <input type="checkbox" name="storeOpenForOrders" checked={storeOpen} onChange={(e) => setStoreOpen(e.target.checked)} className="mt-0.5" />
+          <input
+            type="checkbox"
+            name="storeOpenForOrders"
+            checked={storeOpen}
+            disabled={openBlocked && !storeOpen}
+            onChange={(e) => setStoreOpen(e.target.checked)}
+            className="mt-0.5"
+          />
           <span>Shoppers can place orders</span>
         </label>
+        {openBlocked && (
+          <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800" data-store-open-checklist>
+            <p className="font-semibold">The store cannot open until every seller with live listings has a business address and verified KYC:</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              {openBlockers!.map((b) => (
+                <li key={b.sellerId}>
+                  <strong>{b.shopName}</strong> ({b.liveListings} live{b.onboardingException ? ', onboarding exception' : ''}): {b.missing.join(', ')}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1">Onboarding exceptions end when the store opens.</p>
+          </div>
+        )}
         <p className="mt-1 text-xs text-gray-400">
           Leave off until payments and shipping are live. While off, browsing, search, wishlist and
           cart work; &ldquo;Buy now&rdquo;, checkout and &ldquo;Place order&rdquo; say &ldquo;We&apos;re

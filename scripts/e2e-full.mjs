@@ -1317,7 +1317,13 @@ async function flow8Shopper() {
       const open = await apiOk('GET', '/api/orders/availability', token);
       check(open.open === true, 'a test account cannot order while closed');
     } finally {
-      await apiOk('PUT', '/api/admin/settings', S.adminToken, { storeOpenForOrders: true });
+      // Opening is refused while any seller with live listings lacks an address
+      // or verified KYC (earlier runs' sellers in this database do): checked,
+      // then the switch is put back directly for the rest of the run.
+      const reopen = await api('PUT', '/api/admin/settings', S.adminToken, { storeOpenForOrders: true });
+      const blockers = await apiOk('GET', '/api/admin/store-open-checklist', S.adminToken);
+      if (blockers.length) check(reopen.json?.error?.code === 'STORE_OPEN_CHECKLIST', `opening with ${blockers.length} incomplete sellers: ${reopen.status} ${reopen.json?.error?.code}`);
+      await prisma.platformSetting.upsert({ where: { key: 'storeOpenForOrders' }, update: { value: true }, create: { key: 'storeOpenForOrders', value: true } });
     }
   }, { page, needs: ['admin'] });
 

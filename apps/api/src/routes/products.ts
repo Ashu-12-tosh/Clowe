@@ -32,7 +32,9 @@ import {
   resolveCategory,
 } from '../services/categoryRules';
 import { returnableFor } from '../services/returnability';
-import { sellerAddressLine } from '../services/sellerAddress';
+import { sellerAddressComplete, sellerAddressLine } from '../services/sellerAddress';
+import { exceptionActive } from '../services/onboardingException';
+import { getSettings } from '../services/settingsService';
 import { isHiddenCategory, isHiddenProduct, visibleProductWhere } from '../services/shopperVisibility';
 import {
   ENGINE_SELECT,
@@ -334,6 +336,8 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
             storeEmail: true,
             pickupPhone: true,
             user: { select: { phone: true, email: true } },
+            onboardingException: true,
+            onboardingExceptionUntil: true,
           },
         },
         // The product's own gallery, untouched: variant pictures live in their
@@ -372,6 +376,12 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
 
     const resolved = await resolveCategory(product.categoryId);
     const returnable = await returnableFor(product.categoryId, product.nonReturnable);
+    // An onboarding exception lets a seller sell before their address or KYC
+    // is complete: the box then gives what is known and Clowe's support contact.
+    const settings = await getSettings();
+    const viaClowe =
+      exceptionActive(product.seller, settings.storeOpenForOrders) &&
+      (!sellerAddressComplete(product.seller) || product.seller.kycStatus !== 'VERIFIED');
     const variants: ProductVariantInfo[] = product.variants.map((v) => ({
       id: v.id,
       size: v.size,
@@ -429,9 +439,15 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
         // The registered business name, when it differs from the shop's name.
         legalName: product.seller.panName?.trim() || product.seller.shopName,
         address: sellerAddressLine(product.seller),
-        customerCarePhone: product.seller.storePhone || product.seller.pickupPhone || product.seller.user.phone,
-        customerCareEmail: product.seller.storeEmail || product.seller.user.email || null,
-        gstin: product.seller.gstNumber || null,
+        customerCarePhone: viaClowe
+          ? settings.legalEntity.supportPhone || settings.legalEntity.supportPhoneAlt || ''
+          : product.seller.storePhone || product.seller.pickupPhone || product.seller.user.phone,
+        customerCareEmail: viaClowe
+          ? settings.supportEmails?.customer || settings.legalEntity.supportEmail || null
+          : product.seller.storeEmail || product.seller.user.email || null,
+        // Not shown until verified while the exception holds.
+        gstin: viaClowe ? null : product.seller.gstNumber || null,
+        contactViaClowe: viaClowe,
       },
       images: product.images.map((i) => ({ url: i.url, altText: i.altText })),
       variants,

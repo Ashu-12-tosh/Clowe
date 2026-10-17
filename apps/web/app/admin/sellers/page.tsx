@@ -358,10 +358,15 @@ function SellersView() {
                   )}
                   {row.addressMissing && (
                     <span
-                      title="No business address in Store Settings: listings and store are hidden from shoppers until it is filled"
+                      title="No business address in Store Settings: listings and store are hidden from shoppers until it is filled (unless an onboarding exception holds)"
                       className="mt-1 block whitespace-nowrap text-[11px] font-bold text-red-600"
                     >
-                      ⚠ No address — listings hidden
+                      ⚠ No address{row.onboardingException.active ? ' — live on an exception' : ' — listings hidden'}
+                    </span>
+                  )}
+                  {row.onboardingException.active && (
+                    <span className="mt-1 block whitespace-nowrap text-[11px] font-bold text-sky-700" title={row.onboardingException.reason ?? undefined}>
+                      Onboarding exception
                     </span>
                   )}
                   {row.kycAlerts.fraudAccount && (

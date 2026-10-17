@@ -92,6 +92,7 @@ export interface AdminSellerListRow {
    * until the seller fills it in.
    */
   addressMissing: boolean;
+  onboardingException: OnboardingExceptionView;
 }
 
 export interface AdminSellerPage {
@@ -244,4 +245,52 @@ export const GSTIN_APPROVAL_BLOCKER = 'GSTIN required before approval — every 
 export function approvalBlockersFor(seller: { approvedAt: string | Date | null; gstNumber: string | null }): string[] {
   if (seller.approvedAt) return [];
   return seller.gstNumber?.trim() ? [] : [GSTIN_APPROVAL_BLOCKER];
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding exception and the store-open checklist
+// ---------------------------------------------------------------------------
+
+/**
+ * PUT /api/admin/sellers/:id/onboarding-exception. On: the seller's approved
+ * listings may be live before the business address or KYC is complete, until
+ * the store opens for orders (always) or the optional end date. Payouts never.
+ */
+export const onboardingExceptionSchema = z
+  .object({
+    enabled: z.boolean(),
+    reason: z.string().trim().max(300).optional(),
+    /** Optional last day (YYYY-MM-DD); the exception also ends when the store opens. */
+    until: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date like 2026-11-30')
+      .optional()
+      .or(z.literal('')),
+  })
+  .superRefine((v, ctx) => {
+    if (v.enabled && (v.reason ?? '').length < 5) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['reason'], message: 'Give the reason (at least 5 characters)' });
+    }
+  });
+export type OnboardingExceptionInput = z.infer<typeof onboardingExceptionSchema>;
+
+/** A seller's onboarding exception as admins see it. */
+export interface OnboardingExceptionView {
+  enabled: boolean;
+  /** On, and holding now (the store is not open and the end date has not passed). */
+  active: boolean;
+  reason: string | null;
+  /** YYYY-MM-DD, or null: until the store opens. */
+  until: string | null;
+  setAt: string | null;
+}
+
+/** One line of the blocking checklist shown before the store can open for orders. */
+export interface StoreOpenChecklistRow {
+  sellerId: string;
+  shopName: string;
+  liveListings: number;
+  onboardingException: boolean;
+  /** "business address", "PAN not verified", "GSTIN not verified", "bank account not verified". */
+  missing: string[];
 }

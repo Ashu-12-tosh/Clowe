@@ -4,6 +4,7 @@ import { categoryRows } from './categoryRules';
 import { getSettings } from './settingsService';
 import { brandAuthHiddenProductIds } from './brandAuthorization';
 import { sellerAddressComplete } from './sellerAddress';
+import { exceptionActive } from './onboardingException';
 
 /**
  * What shoppers must not see, and the one place that decides it. Two platform
@@ -23,7 +24,8 @@ import { sellerAddressComplete } from './sellerAddress';
  * Two seller-side rules hide the same way:
  * - a seller without a complete business address (Store Settings): the
  *   "Sold by" box must show it, so their listings and store stay hidden
- *   until it is filled;
+ *   until it is filled — unless an admin's onboarding exception holds (only
+ *   while the store is not yet open for orders);
  * - a listing of a brand an admin marked "authorization required", until its
  *   brand authorization document is approved.
  */
@@ -69,9 +71,13 @@ export async function shopperHidden(): Promise<ShopperHidden> {
 
   const sellers = await prisma.sellerProfile.findMany({
     where: { status: 'APPROVED' },
-    select: { id: true, addressLine1: true, city: true, state: true, pincode: true },
+    select: { id: true, addressLine1: true, city: true, state: true, pincode: true, onboardingException: true, onboardingExceptionUntil: true },
   });
-  for (const s of sellers) if (!sellerAddressComplete(s)) out.sellerIds.add(s.id);
+  // An admin's onboarding exception (only until the store opens) lets a seller
+  // without an address sell for now.
+  for (const s of sellers) {
+    if (!sellerAddressComplete(s) && !exceptionActive(s, settings.storeOpenForOrders)) out.sellerIds.add(s.id);
+  }
   out.productIds = await brandAuthHiddenProductIds();
   return out;
 }

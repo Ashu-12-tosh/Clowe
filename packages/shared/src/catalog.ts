@@ -431,6 +431,11 @@ export interface ProductDetail {
     customerCarePhone: string;
     customerCareEmail: string | null;
     gstin: string | null;
+    /**
+     * An onboarding exception lets this seller sell before their address or
+     * KYC is complete: customer care is then Clowe's support contact.
+     */
+    contactViaClowe: boolean;
   };
   images: { url: string; altText: string | null }[];
   variants: ProductVariantInfo[];

@@ -25,6 +25,7 @@ import {
   aiSettingsPatchSchema,
   istMonthOf,
   type BrandAuthView,
+  adminListingEditSchema,
 } from '@clowe/shared';
 import { getCommercial, updateCommercial } from '../services/commercial';
 import { cancelFeeChange, listFeeChanges, scheduleFeeChange } from '../services/feeChanges';
@@ -33,6 +34,8 @@ import { admitToPlan } from '../services/planService';
 import { auditSafe } from '../services/auditService';
 import { brandAuthForListings, brandsRequiringAuthorization } from '../services/brandAuthorization';
 import { sellerAddressComplete } from '../services/sellerAddress';
+import { endExceptionsOnStoreOpen, storeOpenChecklist } from '../services/onboardingException';
+import { adminEditListing } from '../services/adminListingEdit';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { bustHomeCache } from './home';
@@ -428,6 +431,17 @@ adminRouter.patch('/products/:id/revision', async (req, res, next) => {
       },
     });
     res.json({ success: true, data: { id: product.id, revision: action === 'approve' ? null : 'REJECTED' } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// An admin fixes a listing on the seller's behalf: applied at once, recorded
+// with every value before and after as "Listing edited by Clowe admin".
+adminRouter.patch('/products/:id/listing', async (req, res, next) => {
+  try {
+    const input = adminListingEditSchema.parse(req.body);
+    res.json({ success: true, data: await adminEditListing(req.params.id, input, req.auth!.userId) });
   } catch (err) {
     next(err);
   }
@@ -1003,6 +1017,18 @@ adminRouter.put('/settings', async (req, res, next) => {
     // line without a recorded rate gets one (past sales are never re-taxed)
     // and any variant without a seller price gets one.
     const before = await getSettings();
+    // Opening the store is refused while any seller with live listings lacks a
+    // business address or verified KYC — onboarding exceptions included.
+    const opening = input.storeOpenForOrders === true && !before.storeOpenForOrders;
+    if (opening) {
+      const blockers = await storeOpenChecklist();
+      if (blockers.length) {
+        throw ApiError.badRequest(
+          `The store cannot open yet — ${blockers.map((b) => `${b.shopName}: ${b.missing.join(', ')}`).join('; ')}`,
+          'STORE_OPEN_CHECKLIST',
+        );
+      }
+    }
     const gstChanging = (
       ['gstMeritPercent', 'gstStandardPercent', 'gstValueSlabThresholdPaise', 'gstUniformPercent'] as const
     ).some((key) => input[key] !== undefined && input[key] !== before[key]);
@@ -1068,7 +1094,18 @@ adminRouter.put('/settings', async (req, res, next) => {
         console.error('[clowe-api] query suggestions: rebuild after a catalog visibility change failed', err),
       );
     }
+    // Open: every onboarding exception ends with it.
+    if (opening) await endExceptionsOnStoreOpen(req.auth!.userId);
     res.json({ success: true, data: await getSettings() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// What must be settled before the store can open for orders (blocking).
+adminRouter.get('/store-open-checklist', async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await storeOpenChecklist() });
   } catch (err) {
     next(err);
   }

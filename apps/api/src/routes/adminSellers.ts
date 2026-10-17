@@ -42,6 +42,7 @@ import {
   kycReviewDecisionSchema,
   type AdminKycReviewView,
   type SellerDocumentKind,
+  onboardingExceptionSchema,
 } from '@clowe/shared';
 import { resolveFileUrl } from '../services/assets';
 import { bankAccountNumberOf } from '../services/bankAccountCrypto';
@@ -57,6 +58,8 @@ import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService
 import { history, postPenaltyGst, waivePenalty } from '../services/sellerLedgerService';
 import { kycAdminRunLimiter } from '../middleware/rateLimits';
 import { sellerAddressComplete } from '../services/sellerAddress';
+import { exceptionActive } from '../services/onboardingException';
+import { getSettings } from '../services/settingsService';
 import {
   KycCheckRunningError,
   getSellerKycSummary,
@@ -170,6 +173,7 @@ function toRow(
   sales: SalesRollup | undefined,
   liveProducts: number,
   ratingAvg: number | null,
+  storeOpen = false,
 ): AdminSellerListRow {
   const topCategory = sales
     ? [...sales.categoryGmv.values()].sort((a, b) => b.gmvPaise - a.gmvPaise)[0]?.name ?? null
@@ -204,6 +208,13 @@ function toRow(
       fraudAccount: false,
     },
     addressMissing: !sellerAddressComplete(seller),
+    onboardingException: {
+      enabled: seller.onboardingException,
+      active: exceptionActive(seller, storeOpen),
+      reason: seller.onboardingExceptionReason,
+      until: seller.onboardingExceptionUntil ? new Date(seller.onboardingExceptionUntil.getTime() + 5.5 * 3_600_000).toISOString().slice(0, 10) : null,
+      setAt: seller.onboardingExceptionSetAt?.toISOString() ?? null,
+    },
   };
 }
 
@@ -285,6 +296,7 @@ async function loadRows(query: z.infer<typeof listQuery>): Promise<AdminSellerLi
     salesBySeller(),
     sellerAggregates(),
   ]);
+  const storeOpen = (await getSettings()).storeOpenForOrders;
 
   return sellers
     .map((s) => {
@@ -294,6 +306,7 @@ async function loadRows(query: z.infer<typeof listQuery>): Promise<AdminSellerLi
         sales.get(s.id),
         aggregates.live.get(s.id) ?? 0,
         rating && rating.count > 0 ? Math.round((rating.sum / rating.count) * 10) / 10 : null,
+        storeOpen,
       );
     })
     .sort((a, b) => compare(a, b, query.sort));
@@ -648,6 +661,52 @@ adminSellersRouter.post('/:id/kyc-checks', kycAdminRunLimiter, async (req, res, 
       next(new ApiError(409, 'KYC_CHECK_RUNNING', 'Verification is already running for this seller.'));
       return;
     }
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Onboarding exception: this seller's approved listings may be live before the
+// business address or KYC is complete — until the store opens for orders (or
+// the optional end date). Payouts are never part of it.
+// ---------------------------------------------------------------------------
+
+adminSellersRouter.put('/:id/onboarding-exception', async (req, res, next) => {
+  try {
+    const input = onboardingExceptionSchema.parse(req.body);
+    const seller = await prisma.sellerProfile.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, shopName: true, onboardingException: true, onboardingExceptionReason: true, onboardingExceptionUntil: true },
+    });
+    if (!seller) throw ApiError.notFound('Seller not found');
+    if (input.enabled && (await getSettings()).storeOpenForOrders) {
+      throw ApiError.badRequest('The store is open for orders: onboarding exceptions have ended', 'STORE_ALREADY_OPEN');
+    }
+    const until = input.enabled && input.until ? new Date(`${input.until}T23:59:59+05:30`) : null;
+    await prisma.sellerProfile.update({
+      where: { id: seller.id },
+      data: input.enabled
+        ? { onboardingException: true, onboardingExceptionReason: input.reason!, onboardingExceptionUntil: until, onboardingExceptionSetAt: new Date(), onboardingExceptionSetBy: req.auth!.userId }
+        : { onboardingException: false },
+    });
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'SELLERS',
+      action: input.enabled ? 'Onboarding exception set' : 'Onboarding exception ended',
+      entityType: 'SellerProfile',
+      entityId: seller.id,
+      summary: input.enabled
+        ? `${seller.shopName}: onboarding exception until the store opens for orders${input.until ? ` (or ${input.until})` : ''} — ${input.reason}`
+        : `${seller.shopName}: onboarding exception ended by an admin`,
+      metadata: {
+        before: { enabled: seller.onboardingException, reason: seller.onboardingExceptionReason, until: seller.onboardingExceptionUntil },
+        after: { enabled: input.enabled, reason: input.enabled ? input.reason : seller.onboardingExceptionReason, until: input.until || null },
+      },
+      ipAddress: ipFrom(req),
+    });
+    res.json({ success: true, data: { id: seller.id, enabled: input.enabled } });
+  } catch (err) {
     next(err);
   }
 });
@@ -1100,6 +1159,7 @@ adminSellersRouter.get('/:id', async (req, res, next) => {
         roll,
         aggregates.live.get(seller.id) ?? 0,
         rating && rating.count > 0 ? Math.round((rating.sum / rating.count) * 10) / 10 : null,
+        (await getSettings()).storeOpenForOrders,
       ),
       description: seller.description,
       addressLine1: seller.addressLine1,

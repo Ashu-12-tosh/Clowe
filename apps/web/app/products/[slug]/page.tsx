@@ -609,14 +609,21 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
                   <dd className="min-w-0 break-words text-ink-900">{product.seller.legalName}</dd>
                 </div>
               )}
-              {product.seller.address && (
+              {product.seller.address ? (
                 <div className="flex gap-2">
                   <dt className="w-24 shrink-0 text-gray-500">Address</dt>
                   <dd className="min-w-0 break-words text-ink-900">{product.seller.address}</dd>
                 </div>
+              ) : (
+                (product.seller.city || product.seller.state) && (
+                  <div className="flex gap-2">
+                    <dt className="w-24 shrink-0 text-gray-500">Location</dt>
+                    <dd className="min-w-0 break-words text-ink-900">{[product.seller.city, product.seller.state].filter(Boolean).join(', ')}</dd>
+                  </div>
+                )
               )}
               <div className="flex gap-2">
-                <dt className="w-24 shrink-0 text-gray-500">Customer care</dt>
+                <dt className="w-24 shrink-0 text-gray-500">{product.seller.contactViaClowe ? 'Customer care (Clowe)' : 'Customer care'}</dt>
                 <dd className="min-w-0 break-words text-ink-900">
                   <a href={`tel:${careTel(product.seller.customerCarePhone)}`} className="hover:underline">
                     {careDisplay(product.seller.customerCarePhone)}
@@ -631,11 +638,18 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
                   )}
                 </dd>
               </div>
-              <div className="flex gap-2">
-                <dt className="w-24 shrink-0 text-gray-500">GSTIN</dt>
-                <dd className="min-w-0 break-all text-ink-900">{product.seller.gstin ?? 'Not registered for GST'}</dd>
-              </div>
+              {!product.seller.contactViaClowe && (
+                <div className="flex gap-2">
+                  <dt className="w-24 shrink-0 text-gray-500">GSTIN</dt>
+                  <dd className="min-w-0 break-all text-ink-900">{product.seller.gstin ?? 'Not registered for GST'}</dd>
+                </div>
+              )}
             </dl>
+            {product.seller.contactViaClowe && (
+              <p className="mt-2 text-[11px] text-gray-500" data-contact-via-clowe>
+                This seller is completing their verification with Clowe. For anything about this order, contact Clowe customer care.
+              </p>
+            )}
             {product.seller.isVerified && (
               <span className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-brand-50 px-2.5 py-1 text-[11px] font-bold text-brand-700">
                 <ShieldCheckIcon className="h-3.5 w-3.5" />

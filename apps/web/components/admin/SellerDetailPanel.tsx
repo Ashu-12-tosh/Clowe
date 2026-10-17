@@ -16,6 +16,7 @@ import { toast } from '@/lib/toast';
 import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import SellerKycPanel, { KycFraudBanner, openSellerDocument } from './SellerKycPanel';
+import OnboardingExceptionPanel from './OnboardingExceptionPanel';
 import SellerLedgerTab from './SellerLedgerTab';
 import { ExternalLink } from '@/components/ExternalLink';
 
@@ -295,6 +296,14 @@ export default function SellerDetailPanel({
 
         {detail && (
           <div className="p-5">
+            <OnboardingExceptionPanel
+              sellerId={detail.id}
+              view={detail.onboardingException}
+              onChanged={async () => {
+                await load();
+                onChanged();
+              }}
+            />
             {detail.addressMissing && (
               <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" data-address-missing>
                 ⚠ <strong>No business address.</strong> The &quot;Sold by&quot; box on product pages must show it, so this
