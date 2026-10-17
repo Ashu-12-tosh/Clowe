@@ -1291,7 +1291,22 @@ async function flow8Shopper() {
   }, { page, needs: ['shopper', 'live'], key: 'cart' });
 
   await step(F, 'prepaid checkout with the mock payment: confirmation, invoice, notification', async () => {
+    // No email on the account yet: My Account offers a gentle prompt to add one…
+    await goto(page, '/account');
+    await page.locator('[data-email-prompt]').waitFor({ timeout: 60_000 });
+    await page.locator('[data-email-prompt]').screenshot({ path: path.join(OUT, 'account-email-prompt.png') }).catch(() => {});
     await goto(page, '/checkout');
+    // …and checkout asks for one (order updates and invoice).
+    const emailBox = page.locator('#checkout-email');
+    await emailBox.waitFor({ timeout: 120_000 });
+    await page.getByRole('button', { name: /Continue to Payment/ }).last().click();
+    await page.getByText('Add your email for your order updates and invoice').first().waitFor({ timeout: 20_000 });
+    await emailBox.fill('not-an-email');
+    await page.getByRole('button', { name: /Continue to Payment/ }).last().click();
+    await page.getByText(/Enter a valid email address/).first().waitFor({ timeout: 20_000 });
+    await page.locator('[data-checkout-email]').screenshot({ path: path.join(OUT, 'checkout-email-error.png') }).catch(() => {});
+    S.shopperEmail = `e2e.${S.shopperId.slice(-8)}@example.com`;
+    await emailBox.fill(S.shopperEmail);
     await page.getByRole('button', { name: /Continue to Payment/ }).last().click({ timeout: 120_000 });
     // A business purchase: the buyer's GSTIN, given at checkout, goes on the invoice (Payment Policy).
     S.buyerGstin = gstinFor(randomPan('C'));
@@ -1313,6 +1328,20 @@ async function flow8Shopper() {
     check(order.etaTo && etaDays >= 3 && etaDays <= 8, `metro estimate ${etaDays.toFixed(1)} days`);
     const notes = await apiOk('GET', '/api/notifications', S.shopperToken);
     check(JSON.stringify(notes).includes(order.orderNumber), 'no notification about the order');
+    // The email given at checkout is saved unconfirmed, with a one-time link queued (mock email).
+    const buyer = await prisma.user.findUnique({ where: { id: S.shopperId } });
+    check(buyer.email === S.shopperEmail && !buyer.emailVerifiedAt, `checkout email ${buyer.email} verified=${!!buyer.emailVerifiedAt}`);
+    const link = await prisma.emailOutbox.findFirst({ where: { toEmail: S.shopperEmail, kind: 'EMAIL_VERIFY' }, orderBy: { createdAt: 'desc' } });
+    const token = /verify-email\?token=([A-Za-z0-9_-]+)/.exec(link?.text ?? '')?.[1];
+    check(token, 'no confirmation link queued for the checkout email');
+    await goto(page, `/verify-email?token=${token}`);
+    await page.getByRole('button', { name: 'Confirm my email' }).click({ timeout: 60_000 });
+    await page.locator('[data-verify-done]').waitFor({ timeout: 60_000 });
+    await page.screenshot({ path: path.join(OUT, 'verify-email-done.png') }).catch(() => {});
+    check(!!(await prisma.user.findUnique({ where: { id: S.shopperId } })).emailVerifiedAt, 'email not confirmed by the link');
+    await goto(page, `/verify-email?token=${token}`);
+    await page.getByRole('button', { name: 'Confirm my email' }).click({ timeout: 60_000 });
+    await page.locator('[data-verify-error]').waitFor({ timeout: 60_000 }); // one-time
   }, { page, needs: ['cart'], key: 'prepaid' });
 
   await step(F, 'COD order under the cap is placed', async () => {

@@ -49,7 +49,8 @@ export function buildContentSecurityPolicy(o: CspOptions): string {
     // React style props render as style attributes; there is no nonce for those.
     ['style-src', ["'self'", "'unsafe-inline'"]],
     ['img-src', ["'self'", 'data:', 'blob:', ...api, ...images, ...PRIVATE_FILE_ORIGINS, ...DEMO_IMAGE_ORIGINS]],
-    ['media-src', ["'self'", 'blob:', ...api, ...PRIVATE_FILE_ORIGINS]],
+    // data: for the video preview while a seller adds a product (/seller/products/new).
+    ['media-src', ["'self'", 'blob:', 'data:', ...api, ...PRIVATE_FILE_ORIGINS]],
     ['font-src', ["'self'"]],
     ['connect-src', ["'self'", ...api, ...(o.dev ? ['ws:', 'wss:'] : [])]],
     ['frame-src', PAYMENT_FRAME_ORIGINS],

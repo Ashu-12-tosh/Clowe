@@ -16,7 +16,7 @@ let noEmail: string;
 const cap = env.EMAIL_DAILY_CAP;
 
 beforeAll(async () => {
-  withEmail = (await prisma.user.create({ data: { phone: '9177400001', name: 'Mail Shopper', email: 'mail-shopper@example.com', referralCode: 'MAIL-1' } })).id;
+  withEmail = (await prisma.user.create({ data: { phone: '9177400001', name: 'Mail Shopper', email: 'mail-shopper@example.com', emailVerifiedAt: new Date(), referralCode: 'MAIL-1' } })).id;
   noEmail = (await prisma.user.create({ data: { phone: '9177400002', name: 'No Mail', referralCode: 'MAIL-2' } })).id;
   await prisma.platformSetting.deleteMany({ where: { key: 'email.bridge' } });
   setCap(1_000_000); // other test files' emails count towards today too

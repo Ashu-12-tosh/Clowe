@@ -63,9 +63,17 @@ export const PROFESSION_OPTIONS = [
 const shortList = (max: number) =>
   z.array(z.string().trim().min(1).max(40)).max(max).optional();
 
+/** An email address as customers type it: trimmed, a real-looking address. */
+export const customerEmailSchema = z
+  .string()
+  .trim()
+  .max(120, 'That email address is too long')
+  .email('Enter a valid email address, like name@example.com');
+
 export const updateProfileSchema = z.object({
   name: z.string().trim().min(2).max(60).optional(),
-  email: z.string().trim().email().optional(),
+  /** '' removes the address. A new one is confirmed by a one-time link. */
+  email: customerEmailSchema.or(z.literal('')).optional(),
   location: z.string().trim().max(80).nullable().optional(),
   profession: z.string().trim().max(60).nullable().optional(),
   interests: shortList(12),
@@ -90,6 +98,9 @@ export const updateProfileSchema = z.object({
     ),
 });
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+/** POST /api/auth/verify-email — the token from the one-time link. */
+export const verifyEmailSchema = z.object({ token: z.string().trim().min(20).max(200) });
 
 /** PATCH /api/auth/me/preferences */
 export const updatePreferencesSchema = z.object({

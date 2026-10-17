@@ -9,7 +9,9 @@ import {
   addressUpsertSchema,
   CREDIT_VALUE_PAISE,
   creditsToPaise,
+  customerEmailSchema,
   type AddressInfo,
+  type AuthUser,
   type AddressLabel,
   type CartView,
   type CreditsInfo,
@@ -17,7 +19,7 @@ import {
   type DeliveryOption, imageAt
 } from '@clowe/shared';
 import { useCouponsEnabled } from '@/lib/coupons';
-import { api, ApiRequestError, getStoredUser } from '@/lib/api';
+import { api, ApiRequestError, getStoredUser, setStoredUser } from '@/lib/api';
 import NotReturnable from '@/components/NotReturnable';
 import NonCancellable from '@/components/NonCancellable';
 import { formatPaise } from '@/lib/format';
@@ -109,6 +111,13 @@ export default function CheckoutPage() {
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('STANDARD');
   const [isGift, setIsGift] = useState(false);
   const [giftMessage, setGiftMessage] = useState('');
+  // Email for the order updates and invoice: required when the account has none.
+  const [me, setMe] = useState<AuthUser | null>(null);
+  const [orderEmail, setOrderEmail] = useState('');
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
+  const needsEmail = !me?.email || editingEmail;
 
   const applyCart = useCallback((next: CartView) => {
     setCart(next);
@@ -134,6 +143,7 @@ export default function CheckoutPage() {
       return;
     }
     api<CartView>('/api/cart', { auth: true }).then(setCart).catch(() => {});
+    api<AuthUser>('/api/auth/me', { auth: true }).then(setMe).catch(() => {});
     api<CreditsInfo>('/api/credits', { auth: true }).then(setCredits).catch(() => {});
     api<AddressInfo[]>('/api/addresses', { auth: true })
       .then((list) => {
@@ -180,12 +190,33 @@ export default function CheckoutPage() {
     }
   }
 
-  /** Carry the choices made here into the payment step. */
-  function continueToPayment() {
+  /** Carry the choices made here into the payment step (saving a new email first). */
+  async function continueToPayment() {
     if (ordersOpen === false) return;
     if (!selectedAddress) {
       setError('Pick a delivery address to continue');
       return;
+    }
+    if (needsEmail) {
+      const parsed = customerEmailSchema.safeParse(orderEmail);
+      if (!parsed.success) {
+        setEmailError(orderEmail.trim() ? parsed.error.issues[0]?.message ?? 'Enter a valid email address' : 'Add your email for your order updates and invoice');
+        document.getElementById('checkout-email')?.focus();
+        return;
+      }
+      setSavingEmail(true);
+      setEmailError('');
+      try {
+        const fresh = await api<AuthUser>('/api/auth/me', { method: 'PATCH', auth: true, body: { email: parsed.data } });
+        setMe(fresh);
+        setStoredUser(fresh);
+        setEditingEmail(false);
+      } catch (err) {
+        setEmailError(err instanceof ApiRequestError ? err.message : 'Could not save your email');
+        return;
+      } finally {
+        setSavingEmail(false);
+      }
     }
     const params = new URLSearchParams({
       addressId: selectedAddress,
@@ -394,6 +425,53 @@ export default function CheckoutPage() {
                 </div>
               </form>
             )}
+
+            {/* Email for the order updates and invoice (required when the account has none) */}
+            <div className="mt-5 border-t border-gray-100 pt-4" data-checkout-email>
+              <label htmlFor="checkout-email" className="text-sm font-semibold text-ink-900">
+                Email <span className="font-normal text-gray-500">— for your order updates and invoice</span>
+              </label>
+              {me?.email && !editingEmail ? (
+                <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-gray-700">
+                  <span className="break-all">{me.email}</span>
+                  {me.emailVerified ? (
+                    <span className="text-xs font-semibold text-green-700">✓ Confirmed</span>
+                  ) : (
+                    <span className="text-xs text-orange-600">Not confirmed yet — open the link we emailed you</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOrderEmail(me.email ?? '');
+                      setEditingEmail(true);
+                    }}
+                    className="text-xs font-semibold text-brand-600 hover:underline"
+                  >
+                    Change
+                  </button>
+                </p>
+              ) : (
+                <>
+                  <input
+                    id="checkout-email"
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    required
+                    value={orderEmail}
+                    onChange={(e) => {
+                      setOrderEmail(e.target.value);
+                      setEmailError('');
+                    }}
+                    placeholder="you@example.com"
+                    aria-invalid={!!emailError}
+                    className={`mt-1.5 w-full rounded-lg border px-3 py-2.5 text-sm ${emailError ? 'border-red-400' : 'border-gray-200'}`}
+                  />
+                  <p className="mt-1 text-[11px] text-gray-500">We&apos;ll send one link to confirm it. You still sign in with your phone.</p>
+                </>
+              )}
+              {emailError && <p className="mt-1 text-xs font-medium text-red-600">{emailError}</p>}
+            </div>
           </Step>
 
           {/* 2 ─ Delivery options */}
@@ -724,8 +802,8 @@ export default function CheckoutPage() {
 
           <div className="hidden lg:block">
             <button
-              onClick={continueToPayment}
-              disabled={!selectedAddress || ordersOpen === false}
+              onClick={() => void continueToPayment()}
+              disabled={!selectedAddress || ordersOpen === false || savingEmail}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 py-3.5 text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-50"
             >
               <LockIcon className="h-4 w-4" />
@@ -739,6 +817,9 @@ export default function CheckoutPage() {
               <p className="mt-1 text-center text-xs font-medium text-orange-600">
                 Pick a delivery address to continue
               </p>
+            )}
+            {selectedAddress && needsEmail && !orderEmail.trim() && (
+              <p className="mt-1 text-center text-xs font-medium text-orange-600">Add your email to continue</p>
             )}
           </div>
         </aside>
@@ -766,8 +847,8 @@ export default function CheckoutPage() {
           </p>
         </div>
         <button
-          onClick={continueToPayment}
-          disabled={!selectedAddress || ordersOpen === false}
+          onClick={() => void continueToPayment()}
+          disabled={!selectedAddress || ordersOpen === false || savingEmail}
           className="rounded-lg bg-brand-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-50"
         >
           Continue to Payment

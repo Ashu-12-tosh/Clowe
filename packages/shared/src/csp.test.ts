@@ -29,6 +29,10 @@ describe('buildContentSecurityPolicy', () => {
     expect(directive(prod, 'form-action')).toEqual(["'self'"]);
   });
 
+  it('lets media play from data: URLs (the seller’s video preview) and blob:', () => {
+    expect(directive(prod, 'media-src')).toEqual(expect.arrayContaining(["'self'", 'blob:', 'data:']));
+  });
+
   it('reports to the endpoint it is given', () => {
     expect(directive(prod, 'report-uri')).toEqual(['/api/csp-reports']);
   });

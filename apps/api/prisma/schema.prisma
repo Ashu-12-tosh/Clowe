@@ -257,6 +257,9 @@ model User {
   preferredCategories String[] @default([])
   // Set once the shopper confirms their email address.
   emailVerifiedAt    DateTime?
+  // The one-time confirmation link (sha256 of its token) and when it was sent; cleared once used.
+  emailVerifyTokenHash String?  @unique
+  emailVerifySentAt  DateTime?
   // Quick-login PIN (4 digits, hashed; OTP always works as fallback)
   pinHash     String?
   pinAttempts Int     @default(0)

@@ -14,6 +14,7 @@ import {
   refreshTokenSchema,
   updatePreferencesSchema,
   updateProfileSchema,
+  verifyEmailSchema,
   TERMS_VERSION,
 } from '@clowe/shared';
 import { prisma } from '../db';
@@ -23,6 +24,7 @@ import { authService } from '../services/authService';
 import { auditLogin } from '../services/auditService';
 import { requireAuth } from '../middleware/auth';
 import { otpRequestLimiter, otpVerifyLimiter } from '../middleware/rateLimits';
+import { confirmEmail, sendVerificationLink, setUserEmail } from '../services/emailVerification';
 
 export const authRouter = Router();
 
@@ -194,17 +196,12 @@ authRouter.post('/logout-all', requireAuth, async (req, res, next) => {
 authRouter.patch('/me', requireAuth, async (req, res, next) => {
   try {
     const input = updateProfileSchema.parse(req.body);
-    if (input.email) {
-      const taken = await prisma.user.findFirst({
-        where: { email: input.email, id: { not: req.auth!.userId } },
-      });
-      if (taken) throw ApiError.badRequest('This email is already in use', 'EMAIL_TAKEN');
-    }
+    // A new email address is saved unconfirmed and gets a one-time link.
+    if (input.email !== undefined) await setUserEmail(req.auth!.userId, input.email || null);
     await prisma.user.update({
       where: { id: req.auth!.userId },
       data: {
         ...(input.name ? { name: input.name } : {}),
-        ...(input.email !== undefined ? { email: input.email || null } : {}),
         ...(input.avatarUrl !== undefined ? { avatarUrl: input.avatarUrl } : {}),
         ...(input.gender !== undefined ? { gender: input.gender } : {}),
         ...(input.dateOfBirth !== undefined
@@ -221,6 +218,25 @@ authRouter.patch('/me', requireAuth, async (req, res, next) => {
     });
     const data = await authService.getMe(req.auth!.userId);
     res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Email confirmation: the one-time link from the email (no sign-in needed).
+authRouter.post('/verify-email', otpVerifyLimiter, async (req, res, next) => {
+  try {
+    const { token } = verifyEmailSchema.parse(req.body);
+    res.json({ success: true, data: await confirmEmail(token) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// A new confirmation link for the address on my account.
+authRouter.post('/me/email/resend', requireAuth, async (req, res, next) => {
+  try {
+    res.json({ success: true, data: await sendVerificationLink(req.auth!.userId) });
   } catch (err) {
     next(err);
   }

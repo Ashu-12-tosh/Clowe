@@ -9,7 +9,7 @@ import ResendOtp from '@/components/auth/ResendOtp';
 import LoginMethodChoice from '@/components/auth/LoginMethodChoice';
 import { lastLoginMethod, rememberLoginMethod as rememberMethod, type LoginMethod } from '@/lib/loginMethod';
 import { closeLogin } from '@/lib/returnTo';
-import { TERMS_VERSION, phoneSubmitAction, preselectedLoginMethod, type AuthTokensResponse, type AuthUser, type OtpRequestResult, type UserRole } from '@clowe/shared';
+import { TERMS_VERSION, customerEmailSchema, phoneSubmitAction, preselectedLoginMethod, type AuthTokensResponse, type AuthUser, type OtpRequestResult, type UserRole } from '@clowe/shared';
 import {
   api,
   ApiRequestError,
@@ -159,6 +159,7 @@ export default function LoginPage() {
 
   // Onboarding (new users only)
   const [name, setName] = useState('');
+  const [signupEmail, setSignupEmail] = useState('');
   const [line1, setLine1] = useState('');
   const [city, setCity] = useState('');
   const [stateName, setStateName] = useState('');
@@ -297,11 +298,18 @@ export default function LoginPage() {
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    // Optional: when given, it must look like an address; a one-time link confirms it.
+    const typed = signupEmail.trim();
+    const emailCheck = typed ? customerEmailSchema.safeParse(typed) : null;
+    if (emailCheck && !emailCheck.success) {
+      setError(emailCheck.error.issues[0]?.message ?? 'Enter a valid email address');
+      return;
+    }
     setBusy(true);
     try {
       const me = await api<AuthUser>('/api/auth/me', {
         method: 'PATCH',
-        body: { name: name.trim() },
+        body: { name: name.trim(), ...(emailCheck?.success ? { email: emailCheck.data } : {}) },
         auth: true,
       });
       setStoredUser(me);
@@ -654,6 +662,18 @@ export default function LoginPage() {
             {step === 'profile' && (
               <form className="mt-6 space-y-3" onSubmit={(e) => void saveProfile(e)}>
                 <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name *" required minLength={2} className={field} autoFocus />
+                <div>
+                  <input
+                    type="email"
+                    name="email"
+                    autoComplete="email"
+                    value={signupEmail}
+                    onChange={(e) => setSignupEmail(e.target.value)}
+                    placeholder="Email (optional)"
+                    className={field}
+                  />
+                  <p className="mt-1 text-left text-[11px] text-gray-500">For order updates and invoices. You&apos;ll still sign in with your phone.</p>
+                </div>
                 <input value={line1} onChange={(e) => setLine1(e.target.value)} placeholder="Address (house no, street) *" required minLength={3} className={field} />
                 <div className="grid grid-cols-2 gap-3">
                   <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City *" required minLength={2} className={field} />

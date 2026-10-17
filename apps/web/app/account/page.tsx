@@ -15,6 +15,7 @@ import {
   ShieldCheckIcon,
 } from '@/components/cart/CartIcons';
 import PolicyText from '@/components/PolicyText';
+import EmailPrompt from '@/components/account/EmailPrompt';
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: 'Free Shipping', text: 'On all orders' },
@@ -108,6 +109,8 @@ export default function AccountOverviewPage() {
           Manage your account, orders and preferences all in one place.
         </p>
       </div>
+
+      <EmailPrompt />
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

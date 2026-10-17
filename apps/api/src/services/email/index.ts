@@ -14,8 +14,8 @@ import { renderEmail, type EmailContent } from './templates';
  *
  * Most emails come from the in-app notifications: the bridge below turns the
  * notification types in EMAIL_NOTIFICATIONS into emails for users with an
- * email address. Notifications from before the bridge first ran are never
- * emailed.
+ * email address — confirmed, for shoppers. Notifications from before the
+ * bridge first ran are never emailed.
  */
 
 export const emailProviderName: 'smtp' | 'mock' =
@@ -223,7 +223,14 @@ export async function bridgeNotifications(now = new Date()): Promise<number> {
   const startedAt = new Date(state.startedAt);
   const from = new Date(Math.max(startedAt.getTime(), new Date(state.lastRunAt ?? state.startedAt).getTime() - OVERLAP_MS));
   const rows = await prisma.notification.findMany({
-    where: { createdAt: { gte: from }, type: { in: Object.keys(EMAIL_NOTIFICATIONS) }, user: { email: { not: null } } },
+    where: {
+      createdAt: { gte: from },
+      type: { in: Object.keys(EMAIL_NOTIFICATIONS) },
+      // Shoppers' addresses must be confirmed first (a one-time link), so a
+      // mistyped address never gets someone's orders. Sellers' come with
+      // their application.
+      user: { email: { not: null }, OR: [{ emailVerifiedAt: { not: null } }, { role: { not: 'CUSTOMER' } }] },
+    },
     select: { id: true, type: true, title: true, body: true, linkHref: true, userId: true, user: { select: { email: true } } },
     orderBy: { createdAt: 'asc' },
     take: 500,
