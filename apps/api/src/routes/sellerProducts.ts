@@ -19,6 +19,7 @@ import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { blockSuspendedWrites, requireSeller } from './seller';
+import { brandAuthView, brandsRequiringAuthorization } from '../services/brandAuthorization';
 
 export const sellerProductsRouter = Router();
 sellerProductsRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
@@ -111,7 +112,24 @@ function toRow(product: ProductRecord, sales: SalesRow | undefined): SellerProdu
     salesPaise: sales?.salesPaise ?? 0,
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
+    // Filled for the page shown (it needs a document link).
+    brandAuth: null,
   };
+}
+
+/** Brand authorization for the rows on one page. */
+async function withBrandAuth(rows: SellerProductRow[]): Promise<SellerProductRow[]> {
+  const authBrands = await brandsRequiringAuthorization();
+  if (authBrands.ids.length === 0 && authBrands.names.length === 0) return rows;
+  const recs = await prisma.product.findMany({
+    where: { id: { in: rows.map((r) => r.id) } },
+    select: { id: true, brand: true, brandId: true, brandAuthDoc: true, brandAuthStatus: true, brandAuthNote: true, brandAuthSubmittedAt: true, brandAuthReviewedAt: true },
+  });
+  const byId = new Map(recs.map((r) => [r.id, r]));
+  return Promise.all(rows.map(async (row) => {
+    const r = byId.get(row.id);
+    return { ...row, brandAuth: r ? await brandAuthView(r, authBrands) : null };
+  }));
 }
 
 function compare(a: SellerProductRow, b: SellerProductRow, sort: SellerProductSort): number {
@@ -180,7 +198,7 @@ sellerProductsRouter.get('/', async (req, res, next) => {
     const query = listQuery.parse(req.query);
     const rows = await loadRows(req.seller!.id, query);
     const body: SellerProductPage = {
-      rows: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize),
+      rows: await withBrandAuth(rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize)),
       total: rows.length,
       page: query.page,
       pageSize: query.pageSize,

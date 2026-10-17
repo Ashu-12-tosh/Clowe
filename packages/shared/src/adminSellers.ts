@@ -86,6 +86,12 @@ export interface AdminSellerListRow {
    * they cannot be missed by an admin who never opens the seller.
    */
   kycAlerts: { panGstinMismatch: boolean; fraudAccount: boolean };
+  /**
+   * No complete business address in Store Settings: the "Sold by" box cannot
+   * show one, so every listing and the store page stay hidden from shoppers
+   * until the seller fills it in.
+   */
+  addressMissing: boolean;
 }
 
 export interface AdminSellerPage {

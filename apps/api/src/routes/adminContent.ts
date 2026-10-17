@@ -20,6 +20,7 @@ import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { bustHomeCache } from './home';
+import { auditSafe } from '../services/auditService';
 
 export const adminContentRouter = Router();
 
@@ -55,6 +56,7 @@ adminContentRouter.get('/brands', async (_req, res, next) => {
       isActive: b.isActive,
       sortOrder: b.sortOrder,
       productCount: b._count.products,
+      authorizationRequired: b.authorizationRequired,
     }));
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -76,6 +78,7 @@ adminContentRouter.post('/brands', async (req, res, next) => {
         logoUrl: input.logoUrl ?? null,
         isActive: input.isActive ?? true,
         sortOrder: input.sortOrder ?? 0,
+        authorizationRequired: input.authorizationRequired ?? false,
       },
     });
     bustHomeCache();
@@ -97,8 +100,21 @@ adminContentRouter.patch('/brands/:id', async (req, res, next) => {
         logoUrl: input.logoUrl,
         isActive: input.isActive,
         sortOrder: input.sortOrder,
+        authorizationRequired: input.authorizationRequired,
       },
     });
+    if (input.authorizationRequired !== undefined && input.authorizationRequired !== brand.authorizationRequired) {
+      auditSafe({
+        actorId: req.auth!.userId,
+        actorRole: 'ADMIN',
+        module: 'PRODUCTS',
+        action: input.authorizationRequired ? 'Brand authorization required' : 'Brand authorization no longer required',
+        entityType: 'Brand',
+        entityId: brand.id,
+        summary: `${brand.name}: listings ${input.authorizationRequired ? 'now need an approved brand authorization document to be shown' : 'no longer need a brand authorization document'}`,
+        metadata: { brand: brand.name, before: brand.authorizationRequired, after: input.authorizationRequired },
+      });
+    }
     // Keep product brand snapshots in step when the name changes.
     if (input.name && input.name !== brand.name) {
       await prisma.product.updateMany({ where: { brandId: brand.id }, data: { brand: input.name } });

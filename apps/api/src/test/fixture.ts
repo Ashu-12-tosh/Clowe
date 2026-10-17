@@ -12,6 +12,13 @@ import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client'
  * Prices are in PAISE throughout, as everywhere else in the codebase.
  */
 
+/**
+ * A seller's business address for tests. Sellers without one are hidden from
+ * shoppers (the "Sold by" box must show it), so a seller whose products a test
+ * expects to see needs this.
+ */
+export const TEST_SELLER_ADDRESS = { addressLine1: '1 Test Market Road', city: 'Pune', state: 'Maharashtra', pincode: '411001' } as const;
+
 export const FIXTURE = {
   /** Under the ₹15,000 cap, inside the category the parser guesses for "phone". */
   phoneCheapInMobiles: 'fx-phone-cheap-mobiles',

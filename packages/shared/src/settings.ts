@@ -224,6 +224,12 @@ export interface PublicSettings {
    * shows the window that applies to each item.
    */
   returnWindowDays: number;
+  /**
+   * Hours after delivery to claim a damaged, wrong or defective item (Return
+   * Policy 3): what product, cart, checkout and order pages quote. There are
+   * no change-of-mind returns.
+   */
+  claimWindowHours: number;
   /** The one GST rate on every product, when set (null: rates by slab). */
   gstUniformPercent: number | null;
   /** What a seller is charged, as published on the seller fee page and Seller Terms. */

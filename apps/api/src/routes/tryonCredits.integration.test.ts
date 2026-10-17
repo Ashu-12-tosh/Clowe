@@ -10,6 +10,7 @@ import { expireLots, grantFreeCredits, renewPacks, tryOnProfitReport } from '../
 import { walletView } from '../services/wallet';
 import { TINY_PNG } from '../test/images';
 import { signAccessToken } from '../utils/jwt';
+import { TEST_SELLER_ADDRESS } from '../test/fixture';
 
 /**
  * AI Try-On credits (owner's Batch 2): one credit per successful image;
@@ -30,7 +31,7 @@ const DAY = 86_400_000;
 async function seller(credits = 0) {
   seq += 1;
   const user = await prisma.user.create({ data: { phone: `91985${String(seq).padStart(5, '0')}`, name: `Tryon Seller ${seq}`, role: Role.SELLER, referralCode: `TRC-${seq}` } });
-  const s = await prisma.sellerProfile.create({ data: { userId: user.id, shopName: `Tryon Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date() } });
+  const s = await prisma.sellerProfile.create({ data: { ...TEST_SELLER_ADDRESS, userId: user.id, shopName: `Tryon Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date() } });
   if (credits) await prisma.$transaction(async (tx) => (await import('../services/tryonCredits')).addLot(s.id, credits, 'ADMIN', 'test', tx));
   const product = await prisma.product.create({
     data: {

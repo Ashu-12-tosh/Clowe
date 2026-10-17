@@ -49,6 +49,7 @@ import { sendToUserSafe } from '../services/messaging';
 import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
 import { history, postPenaltyGst, waivePenalty } from '../services/sellerLedgerService';
 import { kycAdminRunLimiter } from '../middleware/rateLimits';
+import { sellerAddressComplete } from '../services/sellerAddress';
 import {
   KycCheckRunningError,
   getSellerKycSummary,
@@ -194,6 +195,7 @@ function toRow(
       // Needs a query; the list route and the detail fill it in.
       fraudAccount: false,
     },
+    addressMissing: !sellerAddressComplete(seller),
   };
 }
 

@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
-import { FIXTURE, seedFixture } from '../test/fixture';
+import { FIXTURE, seedFixture, TEST_SELLER_ADDRESS } from '../test/fixture';
 import { invalidateSearchCatalog } from '../services/productSearch';
 import { invalidateCategoryRules } from '../services/categoryRules';
 
@@ -37,7 +37,7 @@ beforeAll(async () => {
   const furniture = await prisma.category.create({ data: { name: 'Furniture', slug: 'furniture', isActive: true } });
   const user = await prisma.user.create({ data: { phone: '9191000001', name: 'Names Seller', role: Role.SELLER, referralCode: 'NAMES-S' } });
   const seller = await prisma.sellerProfile.create({
-    data: { userId: user.id, shopName: 'Names Shop', status: SellerStatus.APPROVED, approvedAt: new Date() },
+    data: { ...TEST_SELLER_ADDRESS, userId: user.id, shopName: 'Names Shop', status: SellerStatus.APPROVED, approvedAt: new Date() },
   });
   const products: [string, string, string][] = [
     [NAMES.bookGo, 'Zenlite Book Go 15 Laptop', laptops.id],

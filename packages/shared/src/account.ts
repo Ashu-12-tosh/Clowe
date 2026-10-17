@@ -151,8 +151,8 @@ export interface MyReturnsResponse {
     /** Refunds initiated but not yet processed. */
     pendingRefundPaise: number;
   };
-  /** Days after delivery a return can still be raised. */
-  returnWindowDays: number;
+  /** Hours after delivery to claim a damaged, wrong or defective item (no change-of-mind returns). */
+  claimWindowHours: number;
 }
 
 // ---------------------------------------------------------------------------

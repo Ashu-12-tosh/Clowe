@@ -27,6 +27,7 @@ import {
   LOST_PARCEL_CHOICES,
   type LostParcelChoice,
   PO_BOX_MESSAGE,
+  CLAIM_WINDOW_HOURS,
 } from '@clowe/shared';
 import { chooseLostOutcome } from '../services/shipping/lostParcels';
 import { cancelOrderLines } from '../services/lineCancellation';
@@ -144,6 +145,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
       include: {
         product: {
           select: {
+            id: true,
             sellerId: true,
             title: true,
             status: true,
@@ -503,6 +505,7 @@ ordersRouter.get('/', async (req, res, next) => {
             include: {
               product: {
                 select: {
+                  id: true,
                   status: true,
                   categoryId: true,
                   sellerId: true,
@@ -593,7 +596,7 @@ ordersRouter.post('/:id/buy-again', async (req, res, next) => {
       include: {
         items: {
           include: {
-            variant: { include: { product: { select: { status: true, categoryId: true, sellerId: true } } } },
+            variant: { include: { product: { select: { id: true, status: true, categoryId: true, sellerId: true } } } },
           },
         },
       },
@@ -649,7 +652,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
         items: {
           include: {
             product: { include: { images: { orderBy: { sortOrder: 'asc' }, take: 1 } } },
-            variant: { include: { product: { select: { status: true, categoryId: true, sellerId: true } } } },
+            variant: { include: { product: { select: { id: true, status: true, categoryId: true, sellerId: true } } } },
             seller: { select: { shopName: true, returnWindowDays: true } },
             return: { include: { refund: true } },
             shipment: {
@@ -853,9 +856,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
         liveItems.some((i) => !lockedByNonCancellable(i)),
       canRequestIntercept: !intercept && liveItems.some((i) => i.status === 'SHIPPED'),
       interceptRequest: intercept ? { complaintId: intercept.complaintId, status: intercept.status } : null,
-      returnWindowDays: windowDaysByItem.size
-        ? Math.max(...windowDaysByItem.values())
-        : platformWindowDays,
+      claimWindowHours: CLAIM_WINDOW_HOURS,
     };
     // Return photos are private; this is the buyer's own order.
     const returnBlocks = body.items.flatMap((i) => (i.returnInfo ? [i.returnInfo] : []));

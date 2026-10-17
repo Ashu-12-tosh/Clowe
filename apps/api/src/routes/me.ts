@@ -15,6 +15,7 @@ import {
   type ProductListItem,
   type SavedPaymentMethodInfo,
   selfShipReceiptSchema,
+  CLAIM_WINDOW_HOURS,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { assertOwnAssets } from '../services/assets';
@@ -350,7 +351,7 @@ meRouter.get('/returns', async (req, res, next) => {
           .filter((r) => r.refund && r.refund.status !== 'PROCESSED')
           .reduce((sum, r) => sum + (r.refund?.amountPaise ?? 0), 0),
       },
-      returnWindowDays: (await getSettings()).returnWindowDays,
+      claimWindowHours: CLAIM_WINDOW_HOURS,
     };
     res.json({ success: true, data: body });
   } catch (err) {

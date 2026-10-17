@@ -1,10 +1,9 @@
 import type { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
-import { type PublicStore, type StoreHighlight } from '@clowe/shared';
+import { CLAIM_WINDOW_HOURS, type PublicStore, type StoreHighlight } from '@clowe/shared';
 import { prisma } from '../db';
 import { isHiddenSeller, visibleProductWhere } from '../services/shopperVisibility';
-import { getSettings } from '../services/settingsService';
 import { ApiError } from '../utils/ApiError';
 
 export const storesRouter = Router();
@@ -61,7 +60,7 @@ storesRouter.get('/:slug', async (req, res, next) => {
       ratingCount: reviews._count._all,
       productCount,
       memberSince: seller.approvedAt?.toISOString() ?? seller.createdAt.toISOString(),
-      returnWindowDays: seller.returnWindowDays ?? (await getSettings()).returnWindowDays,
+      claimWindowHours: CLAIM_WINDOW_HOURS,
     };
     res.json({ success: true, data: body });
   } catch (err) {

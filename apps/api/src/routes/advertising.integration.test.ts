@@ -8,6 +8,7 @@ import { updateCommercial } from '../services/commercial';
 import { postEntry } from '../services/sellerLedgerService';
 import { walletView } from '../services/wallet';
 import { signAccessToken } from '../utils/jwt';
+import { TEST_SELLER_ADDRESS } from '../test/fixture';
 
 /**
  * Advertising and sponsorship (owner's Batch 2): a click counts (and is
@@ -32,7 +33,7 @@ async function seller(plan?: 'FREE' | 'PREMIUM') {
   seq += 1;
   const user = await prisma.user.create({ data: { phone: `91975${String(seq).padStart(5, '0')}`, name: `Ad Seller ${seq}`, role: Role.SELLER, referralCode: `ADS-${seq}` } });
   const s = await prisma.sellerProfile.create({
-    data: { userId: user.id, shopName: `Ad Shop ${seq}`, slug: `ad-shop-${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date(), ...(plan ? { subscription: { create: { plan } } } : {}) },
+    data: { ...TEST_SELLER_ADDRESS, userId: user.id, shopName: `Ad Shop ${seq}`, slug: `ad-shop-${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date(), ...(plan ? { subscription: { create: { plan } } } : {}) },
   });
   const product = await prisma.product.create({
     data: { sellerId: s.id, categoryId, title: `Kurta Advert ${seq}`, slug: `kurta-advert-${seq}`, description: 'Ad test.', basePricePaise: 100_000, status: ProductStatus.APPROVED, approvedAt: new Date() },

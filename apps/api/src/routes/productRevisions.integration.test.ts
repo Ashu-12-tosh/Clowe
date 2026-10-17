@@ -4,7 +4,7 @@ import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AdminProductDetail, AdminProductRow, SellerProductDetail } from '@clowe/shared';
 import { createApp } from '../app';
-import { seedFixture } from '../test/fixture';
+import { seedFixture, TEST_SELLER_ADDRESS } from '../test/fixture';
 import { signAccessToken } from '../utils/jwt';
 
 /**
@@ -43,7 +43,7 @@ async function listing(status: ProductStatus = ProductStatus.APPROVED) {
     data: { phone: `91100${String(seq).padStart(5, '0')}`, name: `Rev Seller ${seq}`, role: Role.SELLER, referralCode: `REV-S-${seq}` },
   });
   const seller = await prisma.sellerProfile.create({
-    data: { userId: user.id, shopName: `Rev Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date() },
+    data: { ...TEST_SELLER_ADDRESS, userId: user.id, shopName: `Rev Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date() },
   });
   const product = await prisma.product.create({
     data: {

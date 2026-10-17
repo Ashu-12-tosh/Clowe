@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
-import { seedFixture } from '../test/fixture';
+import { seedFixture, TEST_SELLER_ADDRESS } from '../test/fixture';
 import { invalidateCategoryRules } from '../services/categoryRules';
 import { invalidateSearchCatalog } from '../services/productSearch';
 import { setSetting } from '../services/settingsService';
@@ -75,7 +75,7 @@ beforeAll(async () => {
     data: { phone: '9198000001', name: 'Demo Owner', role: Role.SELLER, referralCode: 'DEMO-S' },
   });
   const demoSeller = await prisma.sellerProfile.create({
-    data: { userId: demoUser.id, shopName: 'Clowe Demo Store', slug: 'demo-store-test', status: SellerStatus.APPROVED, isDemo: true },
+    data: { ...TEST_SELLER_ADDRESS, userId: demoUser.id, shopName: 'Clowe Demo Store', slug: 'demo-store-test', status: SellerStatus.APPROVED, isDemo: true },
   });
   demoSellerToken = signAccessToken({ sub: demoUser.id, role: 'SELLER' });
   const product = await prisma.product.create({

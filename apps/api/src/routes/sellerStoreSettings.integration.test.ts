@@ -4,7 +4,7 @@ import { PrismaClient, Role, SellerStatus } from '@prisma/client';
 import { STORE_TABS, STORE_TAB_LABELS } from '@clowe/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
-import { seedFixture } from '../test/fixture';
+import { seedFixture, TEST_SELLER_ADDRESS } from '../test/fixture';
 import { signAccessToken } from '../utils/jwt';
 
 /**
@@ -45,7 +45,7 @@ async function storeWithHours() {
     data: { phone: '9170000001', name: 'Hours Seller', role: Role.SELLER, referralCode: 'HOURS-S' },
   });
   const seller = await prisma.sellerProfile.create({
-    data: {
+    data: { ...TEST_SELLER_ADDRESS,
       userId: user.id,
       shopName: 'Hours Shop',
       slug: 'hours-shop',

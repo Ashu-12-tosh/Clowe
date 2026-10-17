@@ -282,7 +282,7 @@ cartRouter.post('/items', async (req, res, next) => {
     const { variantId, quantity } = cartItemAddSchema.parse(req.body);
     const variant = await prisma.productVariant.findUnique({
       where: { id: variantId },
-      include: { product: { select: { status: true, categoryId: true, sellerId: true } } },
+      include: { product: { select: { id: true, status: true, categoryId: true, sellerId: true } } },
     });
     if (
       !variant ||

@@ -24,12 +24,15 @@ import {
   feeChangeScheduleSchema,
   aiSettingsPatchSchema,
   istMonthOf,
+  brandAuthDecisionSchema,
 } from '@clowe/shared';
 import { getCommercial, updateCommercial } from '../services/commercial';
 import { cancelFeeChange, listFeeChanges, scheduleFeeChange } from '../services/feeChanges';
 import { aiUsageView, updateAiSettings } from '../services/aiMeter';
 import { admitToPlan } from '../services/planService';
 import { auditSafe } from '../services/auditService';
+import { brandAuthView, brandsRequiringAuthorization } from '../services/brandAuthorization';
+import { sellerAddressComplete } from '../services/sellerAddress';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { bustHomeCache } from './home';
@@ -191,19 +194,23 @@ adminRouter.get('/products', async (req, res, next) => {
     const status = typeof req.query.status === 'string' ? req.query.status : 'PENDING';
     // REVISION: live listings with an edit waiting for review, oldest first.
     const edits = status === 'REVISION';
+    // BRAND_AUTH: brand authorization documents waiting for review, oldest first.
+    const brandDocs = status === 'BRAND_AUTH';
     const products = await prisma.product.findMany({
-      where: edits ? { revision: { status: 'PENDING' } } : { status: status as never },
-      orderBy: edits ? { revision: { submittedAt: 'asc' } } : { createdAt: 'desc' },
+      where: edits ? { revision: { status: 'PENDING' } } : brandDocs ? { brandAuthStatus: 'PENDING' } : { status: status as never },
+      orderBy: edits ? { revision: { submittedAt: 'asc' } } : brandDocs ? { brandAuthSubmittedAt: 'asc' } : { createdAt: 'desc' },
       take: 100,
       include: {
         category: { select: { name: true } },
-        seller: { select: { shopName: true } },
+        seller: { select: { shopName: true, addressLine1: true, city: true, state: true, pincode: true } },
         images: { orderBy: { sortOrder: 'asc' }, take: 1 },
         variants: { where: { retiredAt: null }, select: { pricePaise: true } },
         revision: { select: { status: true, submittedAt: true } },
       },
     });
-    const rows: AdminProductRow[] = products.map((p) => ({
+    const authBrands = await brandsRequiringAuthorization();
+    const brandAuths = await Promise.all(products.map((p) => brandAuthView(p, authBrands)));
+    const rows: AdminProductRow[] = products.map((p, i) => ({
       id: p.id,
       title: p.title,
       slug: p.slug,
@@ -218,6 +225,8 @@ adminRouter.get('/products', async (req, res, next) => {
       createdAt: p.createdAt.toISOString(),
       revisionSubmittedAt:
         p.revision?.status === 'PENDING' ? (p.revision.submittedAt?.toISOString() ?? null) : null,
+      sellerAddressMissing: !sellerAddressComplete(p.seller),
+      brandAuth: brandAuths[i] ?? null,
     }));
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -416,6 +425,49 @@ adminRouter.patch('/products/:id/revision', async (req, res, next) => {
       },
     });
     res.json({ success: true, data: { id: product.id, revision: action === 'approve' ? null : 'REJECTED' } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// A listing's brand authorization document (a brand marked "authorization
+// required"): approved, the listing can be shown; rejected, it stays hidden
+// and the seller is told why.
+adminRouter.post('/products/:id/brand-authorization', async (req, res, next) => {
+  try {
+    const input = brandAuthDecisionSchema.parse(req.body);
+    const product = await prisma.product.findUnique({ where: { id: req.params.id }, include: { seller: { select: { userId: true } } } });
+    if (!product) throw ApiError.notFound('Product not found');
+    if (product.brandAuthStatus !== 'PENDING' || !product.brandAuthDoc) {
+      throw ApiError.badRequest('There is no brand authorization document waiting for review on this listing', 'NO_BRAND_DOC_PENDING');
+    }
+    const approve = input.decision === 'APPROVE';
+    await prisma.product.update({
+      where: { id: product.id },
+      data: { brandAuthStatus: approve ? 'APPROVED' : 'REJECTED', brandAuthNote: approve ? null : input.note!, brandAuthReviewedAt: new Date() },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: product.seller.userId,
+        type: 'BRAND_AUTH',
+        title: approve ? `Brand authorization approved — ${product.title}` : `Brand authorization not accepted — ${product.title}`,
+        body: approve
+          ? `Your ${product.brand ?? 'brand'} authorization document is approved. The listing can now be shown to shoppers once it is live.`
+          : `Your ${product.brand ?? 'brand'} authorization document was not accepted: ${input.note}. Upload a new document from My Products; the listing stays hidden until one is approved.`,
+        linkHref: '/seller/products',
+      },
+    });
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'PRODUCTS',
+      action: approve ? 'Brand authorization approved' : 'Brand authorization rejected',
+      entityType: 'Product',
+      entityId: product.id,
+      summary: `${product.title} (${product.brand ?? 'no brand'}): ${approve ? 'approved' : `rejected — ${input.note}`}`,
+      metadata: { brand: product.brand, decision: input.decision, note: input.note ?? null },
+    });
+    res.json({ success: true, data: { id: product.id, brandAuthStatus: approve ? 'APPROVED' : 'REJECTED' } });
   } catch (err) {
     next(err);
   }

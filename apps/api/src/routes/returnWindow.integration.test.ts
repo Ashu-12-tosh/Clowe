@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { FIXTURE, seedFixture } from '../test/fixture';
 import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
-import { invalidateCategoryRules } from '../services/categoryRules';
+import { invalidateCategoryRules, returnWindowDaysFor } from '../services/categoryRules';
 import { signAccessToken } from '../utils/jwt';
 import { useEarlierReturnRules } from '../test/returnRules';
 
@@ -148,15 +148,19 @@ describe('the setting', () => {
     expect(DEFAULT_SETTINGS.returnWindowDays).toBe(5);
     const pub = await call('GET', '/api/settings/public', null);
     expect(pub.json.data?.returnWindowDays).toBe(5);
+    expect(pub.json.data?.claimWindowHours).toBe(48);
+    // Shoppers see the claim rule, never a "5-day return" (no change-of-mind returns).
     const product = await call('GET', `/api/products/${FIXTURE.phoneWordedPlainly}`, null);
-    expect(product.json.data?.returnWindowDays).toBe(5);
+    expect(product.json.data?.returnWindowDays).toBeUndefined();
+    expect(product.json.data).toMatchObject({ claimWindowHours: 48, returnRule: '48-hour claim window for damaged, wrong or defective items' });
   });
 
   it('is followed everywhere when an admin changes it', async () => {
     await setSetting('returnWindowDays', 9);
     expect((await call('GET', '/api/settings/public', null)).json.data?.returnWindowDays).toBe(9);
+    // The product page quotes the claim rule, which the legacy day window does not change.
     const product = await call('GET', `/api/products/${FIXTURE.phoneWordedPlainly}`, null);
-    expect(product.json.data?.returnWindowDays).toBe(9);
+    expect(product.json.data?.returnRule).toBe('48-hour claim window for damaged, wrong or defective items');
   });
 
   it("sets the floor for a seller's own window", async () => {
@@ -196,7 +200,8 @@ describe('a line already sold', () => {
   it('keeps a 7-day window after the platform moves to 5', async () => {
     const line = await deliveredLine(7, 6);
     const detail = await call('GET', `/api/orders/${line.orderId}`, line.token);
-    expect(detail.json.data?.returnWindowDays).toBe(7);
+    expect(detail.json.data?.returnWindowDays).toBeUndefined();
+    expect(detail.json.data?.claimWindowHours).toBe(48);
     expect((detail.json.data?.items as { canReturn: boolean }[])[0].canReturn).toBe(true);
     const res = await requestReturn(line);
     expect(res.status).toBe(200);
@@ -326,8 +331,8 @@ describe('category windows', () => {
     invalidateCategoryRules();
     expect((await prisma.category.findUniqueOrThrow({ where: { slug: 'electronics' } })).returnWindowDays).toBeNull();
     expect((await prisma.category.findUniqueOrThrow({ where: { slug: 'books' } })).returnWindowDays).toBe(2);
-    const product = await call('GET', `/api/products/${FIXTURE.phoneCheapInElectronics}`, null);
-    expect(product.json.data?.returnWindowDays).toBe(5);
+    const product = await prisma.product.findUniqueOrThrow({ where: { slug: FIXTURE.phoneCheapInElectronics } });
+    expect(await returnWindowDaysFor(product.categoryId, null)).toBe(5);
   });
 
   it('leaves the payout hold at 7 days', () => {

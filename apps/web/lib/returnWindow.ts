@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { PublicSettings } from '@clowe/shared';
+import { CLAIM_WINDOW_HOURS, type PublicSettings } from '@clowe/shared';
 import { getPublicSettings } from './settings';
 
 /**
@@ -23,20 +23,20 @@ export function usePolicySettings(): PublicSettings | null {
 }
 
 /**
- * The platform return window in days, from settings. Null until it arrives
- * (or if it cannot be read): fillReturnWindow then writes a phrase that is
- * true without a number.
+ * Hours after delivery to claim a damaged, wrong or defective item, from
+ * settings (the policy's own figure until they arrive). There are no
+ * change-of-mind returns.
  */
-export function useReturnWindowDays(): number | null {
-  const [days, setDays] = useState<number | null>(null);
+export function useClaimWindowHours(): number {
+  const [hours, setHours] = useState<number>(CLAIM_WINDOW_HOURS);
   useEffect(() => {
     let alive = true;
     getPublicSettings()
-      .then((s) => alive && setDays(s.returnWindowDays))
+      .then((s) => alive && s.claimWindowHours && setHours(s.claimWindowHours))
       .catch(() => {});
     return () => {
       alive = false;
     };
   }, []);
-  return days;
+  return hours;
 }

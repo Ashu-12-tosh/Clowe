@@ -926,11 +926,22 @@ model Brand {
   logoUrl   String?
   isActive  Boolean  @default(true)
   sortOrder Int      @default(0)
+  // Listings of this brand stay hidden from shoppers until the seller uploads
+  // a brand authorization document and an admin approves it.
+  authorizationRequired Boolean @default(false)
   createdAt DateTime @default(now())
 
   products Product[]
 
   @@map("brands")
+}
+
+/// A listing's brand authorization document, for brands that need one.
+enum BrandAuthStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 model Product {
@@ -947,6 +958,13 @@ model Product {
   brand           String?
   brandId         String?
   brandRef        Brand?        @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  // Brand authorization (a brand an admin marked "authorization required"):
+  // the seller's document (a private asset ref) and the admin's decision.
+  brandAuthDoc         String?
+  brandAuthStatus      BrandAuthStatus @default(NONE)
+  brandAuthNote        String?
+  brandAuthSubmittedAt DateTime?
+  brandAuthReviewedAt  DateTime?
   // Prices in paise (integer) to avoid floating-point money bugs.
   basePricePaise  Int
   // List price for strike-through / "% OFF". Null = no discount shown.

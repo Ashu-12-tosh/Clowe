@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { applyRevision } from '../services/productRevisions';
 import { signAccessToken } from '../utils/jwt';
+import { TEST_SELLER_ADDRESS } from '../test/fixture';
 
 /**
  * Removing a variant in the product form. One that was never ordered is
@@ -47,7 +48,7 @@ beforeAll(async () => {
     data: { phone: '9198800001', name: 'Removal Seller', role: Role.SELLER, referralCode: 'RMV-S' },
   });
   const seller = await prisma.sellerProfile.create({
-    data: { userId: sellerUser.id, shopName: 'Removal Shop', status: SellerStatus.APPROVED, approvedAt: new Date(), gstNumber: '27ABCDE1234F1Z5' },
+    data: { ...TEST_SELLER_ADDRESS, userId: sellerUser.id, shopName: 'Removal Shop', status: SellerStatus.APPROVED, approvedAt: new Date(), gstNumber: '27ABCDE1234F1Z5' },
   });
   token = signAccessToken({ sub: sellerUser.id, role: 'SELLER' });
   const category = await prisma.category.create({ data: { name: 'Removal Tees', slug: 'removal-tees', isActive: true } });

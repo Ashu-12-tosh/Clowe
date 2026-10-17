@@ -4,7 +4,7 @@ import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { CategoryNode, ProductListResponse, SuggestResponse } from '@clowe/shared';
 import { createApp } from '../app';
-import { seedFixture } from '../test/fixture';
+import { seedFixture, TEST_SELLER_ADDRESS } from '../test/fixture';
 import { signAccessToken } from '../utils/jwt';
 import { invalidateCategoryRules } from '../services/categoryRules';
 import { invalidateSearchCatalog } from '../services/productSearch';
@@ -62,7 +62,7 @@ async function listing(opts: { brand: string; brandId?: string; status?: Product
 beforeAll(async () => {
   await seedFixture(prisma);
   const user = await prisma.user.create({ data: { phone: '9170000001', name: 'Hygiene Seller', role: Role.SELLER, referralCode: 'HYG-S' } });
-  sellerId = (await prisma.sellerProfile.create({ data: { userId: user.id, shopName: 'Hygiene Shop', status: SellerStatus.APPROVED, approvedAt: new Date() } })).id;
+  sellerId = (await prisma.sellerProfile.create({ data: { ...TEST_SELLER_ADDRESS, userId: user.id, shopName: 'Hygiene Shop', status: SellerStatus.APPROVED, approvedAt: new Date() } })).id;
   sellerToken = signAccessToken({ sub: user.id, role: 'SELLER' });
   categoryId = (
     await prisma.category.create({

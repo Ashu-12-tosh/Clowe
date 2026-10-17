@@ -1,6 +1,6 @@
 'use client';
 
-import type { SellerStoreSettings } from '@clowe/shared';
+import { CLAIM_WINDOW_HOURS, type SellerStoreSettings } from '@clowe/shared';
 
 /**
  * Live mock of the public store page, driven by the form state. Only the logo
@@ -77,7 +77,7 @@ export default function StorePreview({ s }: { s: SellerStoreSettings }) {
 
         <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-2 text-[11px] text-gray-500">
           <span>{s.liveProductCount} live products</span>
-          <span>{s.effectiveReturnWindowDays}-day returns</span>
+          <span>{CLAIM_WINDOW_HOURS}-hour claims for damaged, wrong or defective items</span>
         </div>
       </div>
     </div>

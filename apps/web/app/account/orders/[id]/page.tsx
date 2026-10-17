@@ -20,7 +20,7 @@ import { ReturnModal, ReturnTimeline } from '@/components/orders/ReturnBits';
 import { ParcelStatus } from '@/components/orders/ParcelBits';
 import { ClaimModal } from '@/components/orders/ClaimModal';
 import ReviewModal from '@/components/orders/ReviewModal';
-import NotReturnable from '@/components/NotReturnable';
+import ReturnRule from '@/components/ReturnRule';
 import NonCancellable from '@/components/NonCancellable';
 import { CheckIcon, HeadsetIcon, MapPinIcon, ReturnIcon } from '@/components/cart/CartIcons';
 
@@ -369,6 +369,7 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
                     {item.status === 'CANCELLED' && item.cancelReason && (
                       <p className="t-caption mt-1 text-gray-600">Cancelled: {item.cancelReason}</p>
                     )}
+                    {item.status !== 'CANCELLED' && <ReturnRule returnable={item.returnable} className="mt-1" />}
                     <ParcelStatus orderId={order.id} item={item} onChanged={load} />
                     <ScanTimeline scans={item.scans} />
                     {item.returnInfo && <ReturnTimeline info={item.returnInfo} />}
@@ -405,7 +406,6 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
                         {item.claim ? 'Report a problem' : 'Return item'}
                       </button>
                     )}
-                    {!item.returnable && item.status === 'DELIVERED' && <NotReturnable className="self-center" />}
                     {item.nonCancellable && ['PLACED', 'CONFIRMED', 'PACKED'].includes(item.status) && (
                       <NonCancellable className="self-center" />
                     )}

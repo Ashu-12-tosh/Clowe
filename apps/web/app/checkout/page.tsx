@@ -20,7 +20,7 @@ import {
 } from '@clowe/shared';
 import { useCouponsEnabled } from '@/lib/coupons';
 import { api, ApiRequestError, getStoredUser, setStoredUser } from '@/lib/api';
-import NotReturnable from '@/components/NotReturnable';
+import ReturnRule from '@/components/ReturnRule';
 import NonCancellable from '@/components/NonCancellable';
 import { formatPaise } from '@/lib/format';
 import { LaunchingSoon, useOrdersOpen } from '@/lib/ordersOpen';
@@ -641,7 +641,7 @@ export default function CheckoutPage() {
                   <p className="mt-0.5 text-[11px] text-gray-500">
                     {line.label ? ` | ` : ''}Qty: {line.quantity}
                   </p>
-                  {!line.returnable && <NotReturnable className="mt-1" />}
+                  <ReturnRule returnable={line.returnable} className="mt-1" />
                   {line.nonCancellable && <NonCancellable className="mt-1" />}
                   <p className="mt-0.5 text-xs font-bold text-ink-900">
                     {formatPaise(line.pricePaise * line.quantity)}
@@ -681,7 +681,7 @@ export default function CheckoutPage() {
                     <p className="mt-0.5 text-[11px] text-gray-500">
                       {line.label ? ` | ` : ''}Qty: {line.quantity}
                     </p>
-                    {!line.returnable && <NotReturnable className="mt-1" />}
+                    <ReturnRule returnable={line.returnable} className="mt-1" />
                     {line.nonCancellable && <NonCancellable className="mt-1" />}
                   </div>
                   <span className="shrink-0 text-xs font-bold text-ink-900">

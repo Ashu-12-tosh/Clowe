@@ -40,6 +40,15 @@ export const CLAIM_REMEDIES = ['EXCHANGE', 'REFUND'] as const;
 export type ClaimRemedy = (typeof CLAIM_REMEDIES)[number];
 
 export const CLAIM_WINDOW_HOURS = 48;
+
+/**
+ * The returns rule as every product, cart, checkout, order and compare page
+ * shows it: no change-of-mind returns, a claim window for damaged, wrong or
+ * defective items — or "Not returnable" for an item whose category says so.
+ */
+export function returnRuleText(returnable: boolean, claimWindowHours: number = CLAIM_WINDOW_HOURS): string {
+  return returnable ? `${claimWindowHours}-hour claim window for damaged, wrong or defective items` : 'Not returnable';
+}
 /** A latent defect: claimed within 7 days of noticing it (3.3). */
 export const LATENT_DEFECT_DAYS = 7;
 /**

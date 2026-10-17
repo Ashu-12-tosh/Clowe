@@ -6,6 +6,7 @@ import type { SellerFeesV2 } from '@clowe/shared';
 import { createApp } from '../app';
 import { postDeliveryEntries } from '../services/sellerLedgerService';
 import { signAccessToken } from '../utils/jwt';
+import { TEST_SELLER_ADDRESS } from '../test/fixture';
 
 /**
  * The owner's Batch 2 fees on an order line: fixed at checkout (new orders
@@ -56,7 +57,7 @@ beforeAll(async () => {
   sellerUserId = sellerUser.id;
   sellerId = (
     await prisma.sellerProfile.create({
-      data: { userId: sellerUser.id, shopName: 'Fees Shop', slug: 'fees-shop', status: SellerStatus.APPROVED, approvedAt: new Date(), gstNumber: '27ABCDE1234F1Z5' },
+      data: { ...TEST_SELLER_ADDRESS, userId: sellerUser.id, shopName: 'Fees Shop', slug: 'fees-shop', status: SellerStatus.APPROVED, approvedAt: new Date(), gstNumber: '27ABCDE1234F1Z5' },
     })
   ).id;
   const buyer = await prisma.user.create({ data: { phone: '9177200002', name: 'Fees Buyer', referralCode: 'FEE-B' } });

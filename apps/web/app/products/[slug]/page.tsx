@@ -28,7 +28,8 @@ import {
 import PolicyText from '@/components/PolicyText';
 import NonCancellable from '@/components/NonCancellable';
 import SpinViewer from '@/components/SpinViewer';
-import { responsiveImage, imageAt } from '@clowe/shared';
+import { responsiveImage, imageAt, returnRuleText } from '@clowe/shared';
+import { useClaimWindowHours } from '@/lib/returnWindow';
 
 /** "12K+ Sold" / "845 Sold". */
 function compactCount(n: number): string {
@@ -96,11 +97,16 @@ function defaultVariant(variants: ProductVariantInfo[]): ProductVariantInfo | nu
   );
 }
 
+/** A seller's customer-care number as typed ("9822000000", "+91 98220 00000"): shown, and dialled. */
+const careDisplay = (phone: string) => (phone.trim().startsWith('+') ? phone.trim() : `+91 ${phone.trim()}`);
+const careTel = (phone: string) => careDisplay(phone).replace(/[^\d+]/g, '');
+
 export default function ProductDetailPage({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {
   const params = use(paramsPromise);
   const { slug } = params;
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const claimHours = useClaimWindowHours();
   const [inWishlist, setInWishlist] = useState(false);
   const [imageIndex, setImageIndex] = useState(0);
   /** Chosen value per option axis, e.g. { color: "Black", size: "L" }. */
@@ -252,7 +258,7 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
   const trustRow = [
     { Icon: BoxIcon, title: 'Approved', text: 'Sellers' },
     product.returnable
-      ? { Icon: ReturnIcon, title: 'Exchange or Refund', text: 'If it arrives defective, damaged or wrong' }
+      ? { Icon: ReturnIcon, title: `${claimHours}-hour claim window`, text: 'For damaged, wrong or defective items' }
       : { Icon: ReturnIcon, title: 'Not returnable', text: 'Unless wrong, counterfeit or not as described' },
     { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
     { Icon: TruckIcon, title: 'Free Delivery', text: 'On all orders' },
@@ -260,7 +266,7 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
   const trustStrip = [
     { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
     product.returnable
-      ? { Icon: ReturnIcon, title: 'Exchange or Refund', text: 'Claim within 48 hours of delivery if it is defective, damaged or wrong — not for a change of mind' }
+      ? { Icon: ReturnIcon, title: 'Exchange or Refund', text: `${returnRuleText(true, claimHours)} — no change-of-mind returns` }
       : { Icon: ReturnIcon, title: 'Not returnable', text: 'Only a wrong, counterfeit or not-as-described item can be claimed' },
     { Icon: ShieldCheckIcon, title: 'Secure Payments', text: 'Safe & secure checkout' },
     { Icon: TruckIcon, title: 'Free Delivery', text: 'On all orders' },
@@ -578,7 +584,7 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
             </div>
           )}
 
-          <div className="rounded-2xl border border-gray-100 bg-white p-4">
+          <div className="rounded-2xl border border-gray-100 bg-white p-4" data-sold-by>
             <p className="text-sm font-bold text-ink-900">Sold by</p>
             <div className="mt-3 flex items-center gap-3">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cream-100 font-display text-base font-bold text-ink-900">
@@ -595,6 +601,41 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
                 )}
               </div>
             </div>
+            {/* The seller's details, as the Consumer Protection (E-Commerce) Rules ask. */}
+            <dl className="mt-3 space-y-1.5 border-t border-gray-100 pt-3 text-xs">
+              {product.seller.legalName !== product.seller.shopName && (
+                <div className="flex gap-2">
+                  <dt className="w-24 shrink-0 text-gray-500">Business name</dt>
+                  <dd className="min-w-0 break-words text-ink-900">{product.seller.legalName}</dd>
+                </div>
+              )}
+              {product.seller.address && (
+                <div className="flex gap-2">
+                  <dt className="w-24 shrink-0 text-gray-500">Address</dt>
+                  <dd className="min-w-0 break-words text-ink-900">{product.seller.address}</dd>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <dt className="w-24 shrink-0 text-gray-500">Customer care</dt>
+                <dd className="min-w-0 break-words text-ink-900">
+                  <a href={`tel:${careTel(product.seller.customerCarePhone)}`} className="hover:underline">
+                    {careDisplay(product.seller.customerCarePhone)}
+                  </a>
+                  {product.seller.customerCareEmail && (
+                    <>
+                      {' · '}
+                      <a href={`mailto:${product.seller.customerCareEmail}`} className="break-all hover:underline">
+                        {product.seller.customerCareEmail}
+                      </a>
+                    </>
+                  )}
+                </dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="w-24 shrink-0 text-gray-500">GSTIN</dt>
+                <dd className="min-w-0 break-all text-ink-900">{product.seller.gstin ?? 'Not registered for GST'}</dd>
+              </div>
+            </dl>
             {product.seller.isVerified && (
               <span className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-brand-50 px-2.5 py-1 text-[11px] font-bold text-brand-700">
                 <ShieldCheckIcon className="h-3.5 w-3.5" />

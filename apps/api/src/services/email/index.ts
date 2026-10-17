@@ -204,6 +204,7 @@ export const EMAIL_NOTIFICATIONS: Record<string, string> = {
   SELLER_REJECTED: 'Open your seller dashboard',
   SELLER_TRYON: 'Try-on credits',
   SELLER_INVOICE: 'View the invoice',
+  BRAND_AUTH: 'Open your listings',
 };
 
 const BRIDGE_KEY = 'email.bridge';

@@ -6,7 +6,7 @@ import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client'
 import { buyerPriceFor, sellerPriceFromBuyer } from '@clowe/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
-import { seedFixture } from '../test/fixture';
+import { seedFixture, TEST_SELLER_ADDRESS } from '../test/fixture';
 import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
 import { invalidateCategoryRules } from '../services/categoryRules';
 import { changeGstRules, ensureSellerPrices, repriceProducts, saleGstRates } from '../services/sellerPricing';
@@ -69,7 +69,7 @@ async function seller() {
     data: { phone: `91810${String(seq).padStart(5, '0')}`, name: `Price Seller ${seq}`, role: Role.SELLER, referralCode: `PRICE-S-${seq}` },
   });
   const profile = await prisma.sellerProfile.create({
-    data: { userId: user.id, shopName: `Price Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date() },
+    data: { ...TEST_SELLER_ADDRESS, userId: user.id, shopName: `Price Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date() },
   });
   return { sellerId: profile.id, token: signAccessToken({ sub: user.id, role: 'SELLER' }) };
 }

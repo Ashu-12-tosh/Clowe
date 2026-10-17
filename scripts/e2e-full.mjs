@@ -825,6 +825,13 @@ async function flow4Products() {
     const shop = await newPage('storefront');
     await goto(shop, `/products/${S.simpleSlug}`);
     await shop.getByRole('heading', { name: S.simpleTitle }).waitFor({ timeout: 120_000 });
+    // The returns rule (no change-of-mind returns) and the "Sold by" box with the seller's address and contact.
+    const pageText = await shop.locator('body').innerText();
+    check(/48-hour claim window/.test(pageText), 'the 48-hour claim rule is not on the product page');
+    check(!/\d+-day return/i.test(pageText), 'an old "N-day return" text is on the product page');
+    const soldBy = await shop.locator('[data-sold-by]').innerText();
+    check(/12 Defence Enclave/.test(soldBy) && /110059/.test(soldBy), `Sold by has no address: ${soldBy.replace(/\s+/g, ' ')}`);
+    check(/Customer care/.test(soldBy) && /GSTIN/.test(soldBy), `Sold by lacks contact or GSTIN: ${soldBy.replace(/\s+/g, ' ')}`);
     const search = await apiOk('GET', `/api/products?q=${encodeURIComponent('E2E Power Bank')}`, null);
     const items = search.items ?? search.products ?? search;
     check(JSON.stringify(items).includes(S.simpleId), 'not found by search');

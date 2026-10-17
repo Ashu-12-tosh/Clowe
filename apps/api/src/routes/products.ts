@@ -25,14 +25,14 @@ import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
 import { isListingBelowTryOnAge } from '../services/tryon/ageGate';
 import { searchFacets, searchProducts } from '../services/productSearch';
 import { logSearch } from '../services/searchAnalytics';
-import { searchDroppableValues, type SearchDroppable } from '@clowe/shared';
+import { CLAIM_WINDOW_HOURS, returnRuleText, searchDroppableValues, type SearchDroppable } from '@clowe/shared';
 import {
   categoryRows,
   descendantIds,
   resolveCategory,
-  returnWindowDaysFor,
 } from '../services/categoryRules';
 import { returnableFor } from '../services/returnability';
+import { sellerAddressLine } from '../services/sellerAddress';
 import { isHiddenCategory, isHiddenProduct, visibleProductWhere } from '../services/shopperVisibility';
 import {
   ENGINE_SELECT,
@@ -321,8 +321,18 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
             status: true,
             slug: true,
             vacationMode: true,
-            returnWindowDays: true,
             tryOnCredits: true,
+            // The "Sold by" box (Consumer Protection (E-Commerce) Rules, 2020).
+            panName: true,
+            gstNumber: true,
+            addressLine1: true,
+            addressLine2: true,
+            landmark: true,
+            pincode: true,
+            storePhone: true,
+            storeEmail: true,
+            pickupPhone: true,
+            user: { select: { phone: true, email: true } },
           },
         },
         // The product's own gallery, untouched: variant pictures live in their
@@ -360,6 +370,7 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
       .catch(() => {});
 
     const resolved = await resolveCategory(product.categoryId);
+    const returnable = await returnableFor(product.categoryId, product.nonReturnable);
     const variants: ProductVariantInfo[] = product.variants.map((v) => ({
       id: v.id,
       size: v.size,
@@ -401,8 +412,9 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
         product.seller.tryOnCredits > 0 &&
         (product.tryOnLimit == null || product.tryOnUsed < product.tryOnLimit),
       sizeGuide: resolved.rules.sizeGuide && variantAxes.some((a) => a.key === 'size'),
-      returnWindowDays: await returnWindowDaysFor(product.categoryId, product.seller.returnWindowDays),
-      returnable: await returnableFor(product.categoryId, product.nonReturnable),
+      returnable,
+      claimWindowHours: CLAIM_WINDOW_HOURS,
+      returnRule: returnRuleText(returnable),
       nonCancellable: product.nonCancellable,
       spinImages: product.spinImages,
       sellerShopName: product.seller.shopName,
@@ -412,6 +424,12 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
         state: product.seller.state,
         isVerified: product.seller.status === 'APPROVED',
         slug: product.seller.slug,
+        // The registered business name, when it differs from the shop's name.
+        legalName: product.seller.panName?.trim() || product.seller.shopName,
+        address: sellerAddressLine(product.seller),
+        customerCarePhone: product.seller.storePhone || product.seller.pickupPhone || product.seller.user.phone,
+        customerCareEmail: product.seller.storeEmail || product.seller.user.email || null,
+        gstin: product.seller.gstNumber || null,
       },
       images: product.images.map((i) => ({ url: i.url, altText: i.altText })),
       variants,

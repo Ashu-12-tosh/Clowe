@@ -30,6 +30,7 @@ import {
   type SellerReturnRow,
   type SellerStats,
   NOT_A_SALE_STATUSES,
+  brandAuthSubmitSchema,
 } from '@clowe/shared';
 import { bookReversePickup } from '../services/shipping/reversePickup';
 import { prisma } from '../db';
@@ -38,6 +39,8 @@ import { categoryRulesFor, categoryRulesMap } from '../services/categoryRules';
 import { gstSettings } from '../services/economicsRates';
 import { priceInput, sellerPricesOf, type PricedUpsertInput } from '../services/sellerPricing';
 import { brandSuggestions, linkBrand } from '../services/brands';
+import { sellerAddressComplete } from '../services/sellerAddress';
+import { brandAuthResetIfChanged, brandAuthView, brandNeedsAuthorization } from '../services/brandAuthorization';
 import { packingVideoView } from '../services/packingVideos';
 import { claimEvidenceView } from '../services/returnClaims';
 import { assertOwnAssets } from '../services/assets';
@@ -150,6 +153,7 @@ function toProfileInfo(p: SellerProfile): SellerProfileInfo {
     state: p.state,
     createdAt: p.createdAt.toISOString(),
     hasGstin: Boolean(p.gstNumber?.trim()),
+    addressComplete: sellerAddressComplete(p),
     applicationId: sellerApplicationId(p.id),
     applicationSubmittedAt: (p.applicationSubmittedAt ?? p.createdAt).toISOString(),
     infoRequest: p.status === 'PENDING' ? p.infoRequest : null,
@@ -406,6 +410,36 @@ sellerRouter.post('/application', requireSeller, async (req, res, next) => {
 // ---------------------------------------------------------------------------
 
 /** Fetch one of the seller's own products or 404. */
+// The brand authorization document for one listing of a brand an admin marked
+// "authorization required". The listing stays hidden until an admin approves it.
+sellerRouter.put('/products/:id/brand-authorization', requireSeller, async (req, res, next) => {
+  try {
+    const { doc } = brandAuthSubmitSchema.parse(req.body);
+    const product = await ownProduct(req, req.params.id);
+    if (!(await brandNeedsAuthorization(product))) {
+      throw ApiError.badRequest('This brand does not need an authorization document', 'BRAND_AUTH_NOT_NEEDED');
+    }
+    await assertOwnAssets([doc], { ownerId: req.auth!.userId, purpose: 'SELLER_DOCUMENT' });
+    const updated = await prisma.product.update({
+      where: { id: product.id },
+      data: { brandAuthDoc: doc, brandAuthStatus: 'PENDING', brandAuthNote: null, brandAuthSubmittedAt: new Date(), brandAuthReviewedAt: null },
+    });
+    const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+    await prisma.notification.createMany({
+      data: admins.map((a) => ({
+        userId: a.id,
+        type: 'BRAND_AUTH_REVIEW',
+        title: `Brand authorization to review — ${product.brand ?? ''}`.trim(),
+        body: `${product.title}: the seller uploaded a brand authorization document. Review it in Products → Brand authorization.`,
+        linkHref: '/admin/products?status=BRAND_AUTH',
+      })),
+    });
+    res.json({ success: true, data: { brandAuth: await brandAuthView(updated) } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 async function ownProduct(req: Request, id: string) {
   const product = await prisma.product.findUnique({
     where: { id },
@@ -907,6 +941,7 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
         where: { id: product.id },
         data: {
           ...productDataFrom(input, rules),
+          ...brandAuthResetIfChanged(product, { brand: input.brand?.trim() || null, brandId: input.brandId || null }),
           basePricePaise: basePriceOf(input),
           // Saving a draft keeps it private; submitting sends it for re-approval.
           status: input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING',

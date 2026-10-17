@@ -1,3 +1,4 @@
+import type { BrandAuthView } from './brandAuth';
 // ---------------------------------------------------------------------------
 // Seller product dashboard (list, filters and catalogue KPIs)
 // ---------------------------------------------------------------------------
@@ -72,6 +73,8 @@ export interface SellerProductRow {
   salesPaise: number;
   createdAt: string;
   updatedAt: string;
+  /** For a brand that needs authorization: the document and where it stands (null otherwise). */
+  brandAuth: BrandAuthView | null;
 }
 
 export interface SellerProductPage {

@@ -119,6 +119,12 @@ export interface SellerProfileInfo {
   createdAt: string;
   /** Whether a GSTIN is on file. Without one there are no payouts: every tax invoice is issued under it. */
   hasGstin: boolean;
+  /**
+   * Whether Store Settings has the full business address. Without it the
+   * "Sold by" box on product pages cannot show one, so every listing and the
+   * store page stay hidden from shoppers.
+   */
+  addressComplete: boolean;
   /** The number to quote for the application, e.g. SA-4F2A9C1B. */
   applicationId: string;
   applicationSubmittedAt: string | null;

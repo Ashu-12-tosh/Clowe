@@ -9,6 +9,7 @@ import { addMonth, admitToPlan, changePlan, enforceProductLimit, limitNoticeSwee
 import { postEntry } from '../services/sellerLedgerService';
 import { walletView } from '../services/wallet';
 import { signAccessToken } from '../utils/jwt';
+import { TEST_SELLER_ADDRESS } from '../test/fixture';
 
 /**
  * Seller plans (owner's Batch 2): FREE, GROWTH ₹599, PRO ₹999, PREMIUM ₹1,999
@@ -29,7 +30,7 @@ async function seller(plan?: 'FREE' | 'GROWTH' | 'PRO' | 'PREMIUM') {
   seq += 1;
   const user = await prisma.user.create({ data: { phone: `91964${String(seq).padStart(5, '0')}`, name: `Plan Seller ${seq}`, role: Role.SELLER, referralCode: `PLN-${seq}` } });
   const s = await prisma.sellerProfile.create({
-    data: { userId: user.id, shopName: `Plan Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date(), ...(plan ? { subscription: { create: { plan } } } : {}) },
+    data: { ...TEST_SELLER_ADDRESS, userId: user.id, shopName: `Plan Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date(), ...(plan ? { subscription: { create: { plan } } } : {}) },
   });
   return { id: s.id, userId: user.id, token: signAccessToken({ sub: user.id, role: 'SELLER' }) };
 }

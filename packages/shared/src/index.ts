@@ -108,3 +108,4 @@ export * from './legal';
 export * from './codRemittance';
 export * from './adminShipments';
 export * from './aiFeatures';
+export * from './brandAuth';

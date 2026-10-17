@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
-import { seedFixture } from '../test/fixture';
+import { seedFixture, TEST_SELLER_ADDRESS } from '../test/fixture';
 import { setSetting } from '../services/settingsService';
 import { cancelPenaltyKey, latePenaltyKey, postEntry } from '../services/sellerLedgerService';
 import { signAccessToken } from '../utils/jwt';
@@ -66,7 +66,7 @@ beforeAll(async () => {
   const fixtureSeller = await prisma.sellerProfile.findUniqueOrThrow({ where: { slug: 'fixture-store' }, include: { user: true } });
   const other = await prisma.user.create({ data: { phone: '9197099999', name: 'Second Shop', role: Role.SELLER, referralCode: 'SCP-B' } });
   const otherShop = await prisma.sellerProfile.create({
-    data: { userId: other.id, shopName: 'Second Shop', slug: 'second-shop-scp', status: SellerStatus.APPROVED, approvedAt: new Date(), gstNumber: '27ABCDE1234F1Z5' },
+    data: { ...TEST_SELLER_ADDRESS, userId: other.id, shopName: 'Second Shop', slug: 'second-shop-scp', status: SellerStatus.APPROVED, approvedAt: new Date(), gstNumber: '27ABCDE1234F1Z5' },
   });
   for (const [key, seller, userId] of [['A', fixtureSeller, fixtureSeller.userId], ['B', otherShop, other.id]] as const) {
     const product = await prisma.product.create({

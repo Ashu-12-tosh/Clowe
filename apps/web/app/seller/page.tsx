@@ -141,7 +141,27 @@ function Panel({
 function StatusBanner() {
   const { state } = useSeller();
   if (state.kind !== 'ready') return null;
-  const { status, rejectionReason, hasGstin } = state.profile;
+  const { status, rejectionReason, hasGstin, addressComplete } = state.profile;
+  if (status === 'APPROVED' && !addressComplete) {
+    // The "Sold by" box needs it (Consumer Protection (E-Commerce) Rules): nothing is shown without it.
+    return (
+      <div
+        data-address-banner
+        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+      >
+        <span>
+          <span className="font-semibold">Add your business address</span> — shoppers see it in the &quot;Sold by&quot; box on
+          every product page, as the law requires. Until it is filled in, your listings and store page are hidden.
+        </span>
+        <Link
+          href="/seller/settings?tab=BUSINESS"
+          className="shrink-0 rounded-lg bg-red-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-red-700"
+        >
+          Add address
+        </Link>
+      </div>
+    );
+  }
   if (status === 'APPROVED') {
     if (hasGstin) return null;
     // Approved before a GSTIN was required: selling goes on, payouts wait.

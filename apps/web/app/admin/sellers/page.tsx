@@ -356,6 +356,14 @@ function SellersView() {
                       ⚠ PAN–GSTIN mismatch
                     </span>
                   )}
+                  {row.addressMissing && (
+                    <span
+                      title="No business address in Store Settings: listings and store are hidden from shoppers until it is filled"
+                      className="mt-1 block whitespace-nowrap text-[11px] font-bold text-red-600"
+                    >
+                      ⚠ No address — listings hidden
+                    </span>
+                  )}
                   {row.kycAlerts.fraudAccount && (
                     <span
                       title="The verification provider flagged the bank account as fraudulent"

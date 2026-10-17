@@ -12,13 +12,14 @@ import {
   type CompareView,
   type ProductListItem,
   type ProductListResponse,
+  returnRuleText,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { env } from '../env';
 import { optionalAuth } from '../middleware/auth';
 import { aiLimiter } from '../middleware/rateLimits';
 import { aiCall, aiUserKey, AiUnavailable } from '../services/aiMeter';
-import { categoryRulesFor, returnWindowDaysFor } from '../services/categoryRules';
+import { categoryRulesFor } from '../services/categoryRules';
 import { getCommercial } from '../services/commercial';
 import { returnableFor } from '../services/returnability';
 import { LIVE_PRODUCT_WHERE } from '../services/productSearch';
@@ -150,7 +151,7 @@ async function categoryVisibleWhere() {
 async function compareView(ids: string[]): Promise<CompareView> {
   const rows = await prisma.product.findMany({
     where: { id: { in: ids }, ...LIVE_PRODUCT_WHERE, ...(await visibleProductWhere()) },
-    include: { ...productListItemInclude, seller: { select: { shopName: true, returnWindowDays: true } } },
+    include: { ...productListItemInclude, seller: { select: { shopName: true } } },
   });
   const byId = new Map(rows.map((r) => [r.id, r]));
   const products: CompareProduct[] = [];
@@ -167,7 +168,6 @@ async function compareView(ids: string[]): Promise<CompareView> {
       if (!labels.includes(a.label)) labels.push(a.label);
     }
     const returnable = await returnableFor(p.categoryId, p.nonReturnable);
-    const days = await returnWindowDaysFor(p.categoryId, p.seller.returnWindowDays);
     products.push({
       id: p.id,
       slug: p.slug,
@@ -181,7 +181,7 @@ async function compareView(ids: string[]): Promise<CompareView> {
       ratingAvg: item.ratingAvg,
       ratingCount: item.ratingCount,
       sellerName: p.seller.shopName,
-      returns: returnable ? `Claim within ${days > 2 ? `${days} days` : '48 hours'} if damaged, defective or wrong` : 'Not returnable',
+      returns: returnRuleText(returnable),
       attributes,
       inStock: item.inStock,
     });

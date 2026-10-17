@@ -295,6 +295,13 @@ export default function SellerDetailPanel({
 
         {detail && (
           <div className="p-5">
+            {detail.addressMissing && (
+              <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" data-address-missing>
+                ⚠ <strong>No business address.</strong> The &quot;Sold by&quot; box on product pages must show it, so this
+                seller&apos;s listings and store page are hidden from shoppers until the address line, city, state and
+                PIN code are filled in Store Settings.
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${SELLER_STATUS_STYLES[detail.status]}`}

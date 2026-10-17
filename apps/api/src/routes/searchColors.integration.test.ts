@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
-import { seedFixture } from '../test/fixture';
+import { seedFixture, TEST_SELLER_ADDRESS } from '../test/fixture';
 import { invalidateSearchCatalog } from '../services/productSearch';
 
 /**
@@ -23,7 +23,7 @@ beforeAll(async () => {
   const category = await prisma.category.findFirstOrThrow({ where: { isActive: true } });
   const user = await prisma.user.create({ data: { phone: '9190000001', name: 'Colour Seller', role: Role.SELLER, referralCode: 'COLOUR-S' } });
   const seller = await prisma.sellerProfile.create({
-    data: { userId: user.id, shopName: 'Colour Shop', status: SellerStatus.APPROVED, approvedAt: new Date() },
+    data: { ...TEST_SELLER_ADDRESS, userId: user.id, shopName: 'Colour Shop', status: SellerStatus.APPROVED, approvedAt: new Date() },
   });
   slug = 'colour-test-linen-shirt';
   const product = await prisma.product.create({

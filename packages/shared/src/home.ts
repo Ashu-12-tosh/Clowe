@@ -165,6 +165,8 @@ export const brandUpsertSchema = z.object({
   logoUrl: imageUrlSchema.nullable().optional(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(0).optional(),
+  /** Listings stay hidden until a brand authorization document is approved. */
+  authorizationRequired: z.boolean().optional(),
 });
 export type BrandUpsertInput = z.infer<typeof brandUpsertSchema>;
 
@@ -176,6 +178,7 @@ export interface AdminBrandRow {
   isActive: boolean;
   sortOrder: number;
   productCount: number;
+  authorizationRequired: boolean;
 }
 
 // ---------------------------------------------------------------------------

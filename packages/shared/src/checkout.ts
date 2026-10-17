@@ -638,8 +638,8 @@ export interface OrderDetailView {
   /** True while payment is still pending (mock/razorpay not completed). */
   awaitingPayment: boolean;
   canCancel: boolean;
-  /** Days after delivery during which a return can be requested. */
-  returnWindowDays: number;
+  /** Hours after delivery to claim a damaged, wrong or defective item (no change-of-mind returns). */
+  claimWindowHours: number;
 }
 
 export const returnRequestSchema = z

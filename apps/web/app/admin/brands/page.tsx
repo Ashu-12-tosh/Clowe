@@ -63,6 +63,25 @@ export default function AdminBrandsPage() {
     });
   }
 
+  /** Brand authorization: its listings stay hidden until a document is approved. */
+  async function toggleAuthorization(row: AdminBrandRow) {
+    const next = !row.authorizationRequired;
+    if (next && !window.confirm(`Require brand authorization for ${row.name}? Its listings will be hidden from shoppers until the seller's document is approved.`)) return;
+    await run(`auth-${row.id}`, async () => {
+      try {
+        await api(`/api/admin/brands/${row.id}`, {
+          method: 'PATCH',
+          body: { authorizationRequired: next },
+          auth: true,
+          success: next ? `${row.name}: authorization required` : `${row.name}: authorization no longer required`,
+        });
+        load();
+      } catch (err) {
+        setError(err instanceof ApiRequestError ? err.message : 'Something went wrong');
+      }
+    });
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-bold">Brands</h1>
@@ -104,12 +123,13 @@ export default function AdminBrandsPage() {
               <th className="px-4 py-3">Slug</th>
               <th className="px-4 py-3">Products</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Brand authorization</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
             {rows === null && (
-              <tr><td colSpan={5} className="px-4 py-6 text-gray-500">Loading…</td></tr>
+              <tr><td colSpan={6} className="px-4 py-6 text-gray-500">Loading…</td></tr>
             )}
             {rows?.map((row) => (
               <tr key={row.id} className="border-b border-gray-50">
@@ -128,6 +148,18 @@ export default function AdminBrandsPage() {
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${row.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                     {row.isActive ? 'Active' : 'Hidden'}
                   </span>
+                </td>
+                <td className="px-4 py-2.5">
+                  <label className="inline-flex items-center gap-2 text-xs" title="Listings stay hidden until the seller's brand authorization document is approved">
+                    <input
+                      type="checkbox"
+                      checked={row.authorizationRequired}
+                      disabled={isPending(`auth-${row.id}`)}
+                      onChange={() => void toggleAuthorization(row)}
+                      data-brand-auth-required={row.name}
+                    />
+                    {row.authorizationRequired ? <span className="font-semibold text-amber-700">Required</span> : 'Not required'}
+                  </label>
                 </td>
                 <td className="px-4 py-2.5 text-right">
                   <button

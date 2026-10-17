@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { categoryRulesInputSchema, type CategoryRuleFields, type CategoryRules } from './categoryRules';
 import type { ProductStatusValue, SellerReturnRow, SellerStatusValue } from './seller';
 import type { UserRole } from './index';
+import type { BrandAuthView } from './brandAuth';
 
 // ---------------------------------------------------------------------------
 // Moderation decisions
@@ -105,6 +106,10 @@ export interface AdminProductRow {
   createdAt: string;
   /** When the row is an edit to a live listing waiting for review. */
   revisionSubmittedAt: string | null;
+  /** The seller has no business address: the listing is hidden from shoppers until it is filled. */
+  sellerAddressMissing: boolean;
+  /** For a brand that needs authorization; null for every other brand. */
+  brandAuth: BrandAuthView | null;
 }
 
 /** An edit to a live listing, as the review screen shows it beside the live version. */

@@ -1,4 +1,5 @@
 import {
+  CLAIM_WINDOW_HOURS,
   DEFAULT_KYC_NAME_MATCH_MIN_SCORE,
   DEFAULT_LEGAL_ENTITY,
   publicCommercial,
@@ -237,6 +238,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     storeOpenForOrders: s.storeOpenForOrders,
     legalEntity: s.legalEntity,
     returnWindowDays: s.returnWindowDays,
+    claimWindowHours: CLAIM_WINDOW_HOURS,
     gstUniformPercent: s.gstUniformPercent,
     sellerFees: {
       commissionPercent: s.payoutCommissionPercent,

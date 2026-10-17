@@ -2,6 +2,8 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { categoryRows } from './categoryRules';
 import { getSettings } from './settingsService';
+import { brandAuthHiddenProductIds } from './brandAuthorization';
+import { sellerAddressComplete } from './sellerAddress';
 
 /**
  * What shoppers must not see, and the one place that decides it. Two platform
@@ -17,6 +19,13 @@ import { getSettings } from './settingsService';
  * The rows stay in the database untouched — categories, products, cart lines,
  * wishlist entries, orders — and the setting going on brings all of it back
  * with no other change. Admin screens still see everything.
+ *
+ * Two seller-side rules hide the same way:
+ * - a seller without a complete business address (Store Settings): the
+ *   "Sold by" box must show it, so their listings and store stay hidden
+ *   until it is filled;
+ * - a listing of a brand an admin marked "authorization required", until its
+ *   brand authorization document is approved.
  */
 export const FOOD_CATEGORY_ROOT_SLUGS = ['grocery', 'supplements'] as const;
 
@@ -24,14 +33,16 @@ export interface ShopperHidden {
   /** Food categories (roots and everything under them) while closed. */
   categoryIds: Set<string>;
   categorySlugs: Set<string>;
-  /** Demo sellers while the demo catalog is off. */
+  /** Demo sellers while the demo catalog is off, and sellers with no business address. */
   sellerIds: Set<string>;
+  /** Listings waiting for an approved brand authorization document. */
+  productIds: Set<string>;
 }
 
 /** One read of both settings; empty sets for whatever is open. */
 export async function shopperHidden(): Promise<ShopperHidden> {
   const settings = await getSettings();
-  const out: ShopperHidden = { categoryIds: new Set(), categorySlugs: new Set(), sellerIds: new Set() };
+  const out: ShopperHidden = { categoryIds: new Set(), categorySlugs: new Set(), sellerIds: new Set(), productIds: new Set() };
 
   if (!settings.foodCategoriesEnabled) {
     const rows = [...(await categoryRows()).values()];
@@ -55,6 +66,13 @@ export async function shopperHidden(): Promise<ShopperHidden> {
     const demo = await prisma.sellerProfile.findMany({ where: { isDemo: true }, select: { id: true } });
     out.sellerIds = new Set(demo.map((s) => s.id));
   }
+
+  const sellers = await prisma.sellerProfile.findMany({
+    where: { status: 'APPROVED' },
+    select: { id: true, addressLine1: true, city: true, state: true, pincode: true },
+  });
+  for (const s of sellers) if (!sellerAddressComplete(s)) out.sellerIds.add(s.id);
+  out.productIds = await brandAuthHiddenProductIds();
   return out;
 }
 
@@ -86,13 +104,18 @@ export function whereFrom(hidden: ShopperHidden): Prisma.ProductWhereInput {
   const or: Prisma.ProductWhereInput[] = [];
   if (hidden.categoryIds.size) or.push({ categoryId: { in: [...hidden.categoryIds] } });
   if (hidden.sellerIds.size) or.push({ sellerId: { in: [...hidden.sellerIds] } });
+  if (hidden.productIds.size) or.push({ id: { in: [...hidden.productIds] } });
   return or.length ? { NOT: { OR: or } } : {};
 }
 
-type ProductKey = { categoryId: string; sellerId: string; planHidden?: boolean };
+type ProductKey = { id: string; categoryId: string; sellerId: string; planHidden?: boolean };
 
 export function productTestFrom(hidden: ShopperHidden): (p: ProductKey) => boolean {
-  return (p) => p.planHidden === true || hidden.categoryIds.has(p.categoryId) || hidden.sellerIds.has(p.sellerId);
+  return (p) =>
+    p.planHidden === true ||
+    hidden.categoryIds.has(p.categoryId) ||
+    hidden.sellerIds.has(p.sellerId) ||
+    hidden.productIds.has(p.id);
 }
 
 /** For filtering rows already loaded: true when shoppers must not see the product. */

@@ -401,10 +401,12 @@ export interface ProductDetail {
   tryOnEligible: boolean;
   /** Show the size guide (wearable categories with a size axis). */
   sizeGuide: boolean;
-  /** Days after delivery a return can be requested. */
-  returnWindowDays: number;
   /** False: this product cannot be returned (its category says so). */
   returnable: boolean;
+  /** Hours after delivery to claim a damaged, wrong or defective item. No change-of-mind returns. */
+  claimWindowHours: number;
+  /** "48-hour claim window for damaged, wrong or defective items", or "Not returnable". */
+  returnRule: string;
   /** True: cannot be cancelled once the order is confirmed (Cancellation Policy 2.1). */
   nonCancellable: boolean;
   /** The 360° view's images, in order; empty when there is none. */
@@ -419,6 +421,16 @@ export interface ProductDetail {
     isVerified: boolean;
     /** Store URL slug, when the seller has claimed one. */
     slug: string | null;
+    /**
+     * The "Sold by" box, as the Consumer Protection (E-Commerce) Rules ask:
+     * the business's name, its full address (Store Settings), customer care
+     * and GSTIN. A seller without an address is not shown at all.
+     */
+    legalName: string;
+    address: string | null;
+    customerCarePhone: string;
+    customerCareEmail: string | null;
+    gstin: string | null;
   };
   images: { url: string; altText: string | null }[];
   variants: ProductVariantInfo[];

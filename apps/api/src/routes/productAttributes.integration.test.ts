@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SellerProductDetail } from '@clowe/shared';
 import type { AttributeDef } from '@clowe/shared';
 import { createApp } from '../app';
-import { seedFixture } from '../test/fixture';
+import { seedFixture, TEST_SELLER_ADDRESS } from '../test/fixture';
 import { signAccessToken } from '../utils/jwt';
 import { backfillAttributeKeys } from '../../prisma/seed/attributeKeys';
 
@@ -57,7 +57,7 @@ async function makeSeller() {
     },
   });
   const seller = await prisma.sellerProfile.create({
-    data: { userId: user.id, shopName: `Attr Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date() },
+    data: { ...TEST_SELLER_ADDRESS, userId: user.id, shopName: `Attr Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date() },
   });
   // The packing clip a submitted listing needs: a private upload of this seller's.
   const clip = await prisma.asset.create({

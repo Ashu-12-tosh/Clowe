@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { CartLine, CartView } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
-import NotReturnable from '@/components/NotReturnable';
+import ReturnRule from '@/components/ReturnRule';
 import NonCancellable from '@/components/NonCancellable';
 import { discountPercent, formatPaise } from '@/lib/format';
 import { BADGES_EVENT } from '@/components/Header';
@@ -345,7 +345,7 @@ export default function CartPage() {
                             ✨ AI Try-On
                           </span>
                         )}
-                        {!line.returnable && <NotReturnable className="ml-1 mt-1.5" />}
+                        <ReturnRule returnable={line.returnable} className="ml-1 mt-1.5" />
                         {line.nonCancellable && <NonCancellable className="ml-1 mt-1.5" />}
                       </div>
 

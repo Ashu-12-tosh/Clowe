@@ -15,6 +15,7 @@ import {
 } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
 import Spinner from '@/components/Spinner';
+import BrandAuthCell from '@/components/seller/BrandAuthCell';
 import { formatPaise, istDay, istRange } from '@/lib/format';
 import { DonutChart } from '@/components/charts/Charts';
 
@@ -517,6 +518,7 @@ export default function SellerProductsPage() {
                           {REVISION_NOTES[row.revisionStatus].label}
                         </span>
                       )}
+                      {row.brandAuth && <BrandAuthCell productId={row.id} brandAuth={row.brandAuth} onChanged={() => void loadList()} />}
                     </td>
                     <td className="px-3 py-2.5" data-product-actions>
                       {rowActions(row)}
@@ -572,6 +574,7 @@ export default function SellerProductsPage() {
                         </span>
                       )}
                     </div>
+                    {row.brandAuth && <BrandAuthCell productId={row.id} brandAuth={row.brandAuth} onChanged={() => void loadList()} />}
                     <p className="mt-1 break-words text-[11px] text-gray-400">{rowFacts(row)}</p>
                     <div className="mt-2" data-product-actions>
                       {rowActions(row)}

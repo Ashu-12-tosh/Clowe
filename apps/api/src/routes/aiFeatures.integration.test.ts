@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { updateAiSettings } from '../services/aiMeter';
 import { signAccessToken } from '../utils/jwt';
+import { TEST_SELLER_ADDRESS } from '../test/fixture';
 
 /**
  * AI with a budget and limits (mock provider here): every call is logged with
@@ -33,7 +34,7 @@ beforeAll(async () => {
   const cat = await prisma.category.create({ data: { name: 'Kurtas', slug: 'ai-kurtas', isActive: true } });
   categoryId = cat.id;
   const u = await prisma.user.create({ data: { phone: '9177300001', name: 'AI Seller', role: Role.SELLER, referralCode: 'AI-S-1' } });
-  const s = await prisma.sellerProfile.create({ data: { userId: u.id, shopName: 'AI Shop', status: SellerStatus.APPROVED, approvedAt: new Date(), subscription: { create: { plan: 'GROWTH' } } } });
+  const s = await prisma.sellerProfile.create({ data: { ...TEST_SELLER_ADDRESS, userId: u.id, shopName: 'AI Shop', status: SellerStatus.APPROVED, approvedAt: new Date(), subscription: { create: { plan: 'GROWTH' } } } });
   for (const [i, title] of ['Cotton Kurta Blue', 'Silk Kurta Red', 'Linen Kurta White'].entries()) {
     const p = await prisma.product.create({
       data: {

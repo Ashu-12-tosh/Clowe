@@ -4,7 +4,7 @@ import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { INTERCEPT_SUBJECT, type OrderDetailView } from '@clowe/shared';
 import { createApp } from '../app';
-import { seedFixture } from '../test/fixture';
+import { seedFixture, TEST_SELLER_ADDRESS } from '../test/fixture';
 import { signAccessToken } from '../utils/jwt';
 
 /**
@@ -67,7 +67,7 @@ beforeAll(async () => {
   const user = await prisma.user.create({ data: { phone: '9193100001', name: 'Cancel Seller', role: Role.SELLER, referralCode: 'OCX-S' } });
   sellerId = (
     await prisma.sellerProfile.create({
-      data: { userId: user.id, shopName: 'Cancel Shop', slug: 'cancel-shop-ocx', status: SellerStatus.APPROVED, approvedAt: new Date(), gstNumber: '27ABCDE1234F1Z5' },
+      data: { ...TEST_SELLER_ADDRESS, userId: user.id, shopName: 'Cancel Shop', slug: 'cancel-shop-ocx', status: SellerStatus.APPROVED, approvedAt: new Date(), gstNumber: '27ABCDE1234F1Z5' },
     })
   ).id;
   sellerToken = signAccessToken({ sub: user.id, role: 'SELLER' });

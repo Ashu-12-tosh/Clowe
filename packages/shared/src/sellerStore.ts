@@ -295,7 +295,8 @@ export interface PublicStore {
   ratingCount: number;
   productCount: number;
   memberSince: string;
-  returnWindowDays: number;
+  /** Hours after delivery to claim a damaged, wrong or defective item (no change-of-mind returns). */
+  claimWindowHours: number;
 }
 
 /** A seller's pickup address as registered with the courier (Delhivery). */
