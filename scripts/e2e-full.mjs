@@ -1048,6 +1048,10 @@ async function flow7Ads() {
     const shopper = S.tryPage;
     const title = (await prisma.product.findUnique({ where: { id: S.simpleId } })).title;
     const word = title.split(/\s+/).find((w) => w.length >= 4 && /^[a-z]+$/i.test(w)) ?? title.split(/\s+/)[0];
+    // A reused local database still has earlier runs' power-bank campaigns
+    // live; they would fill every sponsored slot for this word. Only this
+    // run's campaign competes.
+    await prisma.adCampaign.updateMany({ where: { name: { startsWith: 'E2E CPC ' }, id: { not: S.cpcId }, status: 'ACTIVE' }, data: { status: 'ENDED' } });
     const credit0 = (await wallet()).adCreditPaise;
     for (let i = 0; i < 2; i++) {
       await goto(shopper, `/products?q=${encodeURIComponent(word)}`);
