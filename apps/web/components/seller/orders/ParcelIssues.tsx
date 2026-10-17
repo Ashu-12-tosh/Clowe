@@ -4,21 +4,12 @@ import { useState } from 'react';
 import type { SellerParcelView } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import Spinner from '@/components/Spinner';
-
-/** The next six days, as YYYY-MM-DD in India, for "deliver on another day". */
-function nextDays(): { value: string; label: string }[] {
-  return Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(Date.now() + (i + 1) * 86_400_000);
-    return {
-      value: d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
-      label: d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }),
-    };
-  });
-}
+import { NdrActions } from '@/components/NdrActions';
 
 /**
  * What needs the seller about this order's parcels: a failed delivery
- * attempt (ask Delhivery to try again, or deliver another day), a parcel on
+ * attempt (try again, another day, a corrected address, or back to the
+ * seller), a parcel on
  * its way back, or one back with them to check. Nothing when all is well.
  */
 export function ParcelIssues({
@@ -34,8 +25,6 @@ export function ParcelIssues({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
-  const [deferTo, setDeferTo] = useState<Record<string, string>>({});
-  const days = nextDays();
 
   const issues = parcels.filter(
     (p) => p.status === 'DELIVERY_FAILED' || p.status === 'RTO_IN_TRANSIT' || (p.status === 'RTO_DELIVERED' && !p.rtoReceivedCondition),
@@ -67,52 +56,20 @@ export function ParcelIssues({
       {issues.map((p) => (
         <div key={p.id} className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3 text-xs" data-parcel-issue={p.status}>
           {p.status === 'DELIVERY_FAILED' && (
-            <>
-              <p className="font-semibold text-ink-900">Delivery attempt failed — AWB {p.awbNumber}</p>
-              <p className="mt-0.5 text-gray-600">{p.statusText ?? 'Delhivery could not deliver it.'}</p>
-              {p.ndrAction ? (
-                <p className="mt-1 text-gray-600">
-                  Asked Delhivery to {p.ndrAction === 'RE_ATTEMPT' ? 'try again' : 'deliver on another day'}
-                  {p.ndrActionAt ? ` on ${new Date(p.ndrActionAt).toLocaleDateString('en-IN')}` : ''}.
-                </p>
-              ) : (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => void post(p.id, 'ndr', { action: 'RE_ATTEMPT' }, 'Asked Delhivery to try again.')}
-                    className="rounded-lg bg-ink-900 px-3 py-1.5 font-bold uppercase tracking-wide text-white disabled:opacity-50"
-                  >
-                    {busy === `${p.id}:Asked Delhivery to try again.` && <Spinner className="mr-1" />}
-                    Try again
-                  </button>
-                  <span className="text-gray-500">or deliver on</span>
-                  <select
-                    aria-label="Day to deliver"
-                    value={deferTo[p.id] ?? days[0]!.value}
-                    onChange={(e) => setDeferTo((d) => ({ ...d, [p.id]: e.target.value }))}
-                    className="rounded-lg border border-gray-300 bg-white px-2 py-1"
-                  >
-                    {days.map((d) => (
-                      <option key={d.value} value={d.value}>
-                        {d.label}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() =>
-                      void post(p.id, 'ndr', { action: 'DEFER_DELIVERY', deferTo: deferTo[p.id] ?? days[0]!.value }, 'Asked Delhivery to deliver on that day.')
-                    }
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 font-semibold disabled:opacity-50"
-                  >
-                    {busy === `${p.id}:Asked Delhivery to deliver on that day.` && <Spinner className="mr-1" />}
-                    Deliver that day
-                  </button>
-                </div>
-              )}
-            </>
+            <NdrActions
+              path={`/api/seller/orders/parcels/${p.id}/ndr`}
+              awbNumber={p.awbNumber}
+              reason={p.statusText}
+              attempts={p.deliveryAttempts}
+              ndrAction={p.ndrAction}
+              ndrActionAt={p.ndrActionAt}
+              deliverTo={p.deliverTo}
+              canEditPhone={false}
+              onDone={(message) => {
+                flash(message);
+                onChanged();
+              }}
+            />
           )}
           {p.status === 'RTO_IN_TRANSIT' && (
             <p className="text-gray-700">

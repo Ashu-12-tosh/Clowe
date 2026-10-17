@@ -11,6 +11,8 @@ import {
   storeVacationSchema,
   storeProfileSchema,
   storeReturnsSchema,
+  PICKUP_SLOTS,
+  PICKUP_WEEKDAYS,
   storeShippingSchema,
   type CategoryNode,
   type CourierWarehouseView,
@@ -197,6 +199,8 @@ export default function SellerStoreSettingsPage() {
           pickupState: form.pickupState ?? '',
           pickupPincode: form.pickupPincode ?? '',
           codEnabled: form.codEnabled,
+          pickupSlot: form.pickupSlot,
+          pickupDays: form.pickupDays,
         },
       },
       RETURNS: {
@@ -836,6 +840,53 @@ export default function SellerStoreSettingsPage() {
                   <Field label="Dispatch promise">
                     <DispatchRulesNote className="mt-1" />
                   </Field>
+                </div>
+                <div className="mt-4 rounded-xl border border-gray-200 p-3" data-pickup-schedule>
+                  <p className="text-sm font-semibold text-ink-900">When Delhivery collects</p>
+                  <p className="mt-1 text-xs text-gray-600">
+                    Press &ldquo;Ready for pickup&rdquo; before 2 PM and Delhivery comes the same day — at this time, or
+                    two hours later if that&apos;s sooner than two hours away. After 2 PM, or on a day you don&apos;t pick
+                    below, it comes on your next pickup day. Never on Sundays.
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+                    <label className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-600">Time</span>
+                      <select
+                        name="pickupSlot"
+                        value={form.pickupSlot}
+                        onChange={(e) => patch({ pickupSlot: e.target.value })}
+                        className="rounded-lg border border-gray-300 bg-white px-2 py-1 text-sm"
+                      >
+                        {PICKUP_SLOTS.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="flex flex-wrap gap-1" role="group" aria-label="Pickup days">
+                      {PICKUP_WEEKDAYS.map(({ day, label }) => {
+                        const on = form.pickupDays.includes(day);
+                        return (
+                          <label
+                            key={day}
+                            className={`cursor-pointer rounded-lg border px-2 py-1 text-xs font-semibold ${on ? 'border-ink-900 bg-ink-900 text-white' : 'border-gray-300 bg-white text-gray-600'}`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={on}
+                              onChange={() =>
+                                patch({ pickupDays: on ? form.pickupDays.filter((d) => d !== day) : [...form.pickupDays, day].sort() })
+                              }
+                            />
+                            {label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {form.pickupDays.length === 0 && <p className="mt-1 text-xs text-red-600">Pick at least one pickup day.</p>}
                 </div>
                 <div
                   className={`mt-4 rounded-xl border p-3 ${form.codEnabled ? 'border-amber-200 bg-amber-50/60' : 'border-gray-200 bg-gray-50'}`}

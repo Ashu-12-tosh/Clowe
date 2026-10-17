@@ -14,6 +14,7 @@ import { formatPaise } from '@/lib/format';
 import { StatusPill } from '@/components/seller/orders/StatusPill';
 import { DispatchCountdown } from '@/components/seller/orders/DispatchCountdown';
 import { PackingVideoPanel } from '@/components/seller/orders/PackingVideoPanel';
+import { PackagingChecklist } from '@/components/seller/orders/PackagingChecklist';
 import { CancelOrderPanel } from '@/components/seller/orders/CancelOrderPanel';
 import { BookingConfirm } from '@/components/seller/orders/BookingConfirm';
 import { announceBooking } from '@/components/seller/orders/bookingNotice';
@@ -26,6 +27,17 @@ function fmt(iso: string | null): string {
   return iso
     ? new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
     : '—';
+}
+
+/** "Fri, 23 Oct, 11:00 am" in India time — the day (and time) Delhivery comes. */
+function pickupWhen(iso: string, withTime = true): string {
+  return new Date(iso).toLocaleString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    ...(withTime ? { hour: 'numeric', minute: '2-digit' } : {}),
+    timeZone: 'Asia/Kolkata',
+  });
 }
 
 const CARD = 'rounded-2xl border border-gray-100 bg-white p-4';
@@ -81,7 +93,8 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
         method: 'PATCH',
         body: { action },
         auth: true,
-        success: action === 'assign' ? 'Booked with Delhivery' : action === 'pack' ? 'Marked packed' : action === 'ship' ? 'Shipped' : 'Marked delivered',
+        success:
+          action === 'assign' ? 'Booked with Delhivery' : action === 'pack' ? 'Marked packed' : action === 'ship' ? 'Pickup requested' : 'Marked delivered',
       });
       if (action === 'assign') flash('Booked with Delhivery — the label now carries the AWB.');
       load();
@@ -110,7 +123,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
         auth: true,
       });
       const message =
-        `${result.updated} item(s) ${action === 'assign' ? 'booked with Delhivery, in one parcel' : action === 'pack' ? 'marked packed' : action === 'ship' ? 'shipped' : 'marked delivered'}` +
+        `${result.updated} item(s) ${action === 'assign' ? 'booked with Delhivery, in one parcel' : action === 'pack' ? 'marked packed' : action === 'ship' ? 'ready for pickup — Delhivery is asked to collect' : 'marked delivered'}` +
         (result.skipped.length > 0 ? ` · ${result.skipped.length} skipped (${result.skipped[0].reason})` : '');
       flash(message);
       (result.updated === 0 || result.skipped.length > 0 ? toast.error : toast.success)(message);
@@ -210,6 +223,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
             locked={dispatched && hasClip}
             onChange={(packingVideo) => setOrder((o) => (o ? { ...o, packingVideo } : o))}
           />
+          {(packable > 0 || shippable > 0) && <PackagingChecklist />}
           {(packable > 0 || shippable > 0) && !hasClip && (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800" data-ship-blocked>
               {PACKING_VIDEO_REQUIRED_MESSAGE}
@@ -249,7 +263,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                   className="rounded-lg bg-ink-900 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                 >
                   {busy === 'all:ship' && <Spinner className="mr-1" />}
-                  🚚 Ship all ({shippable})
+                  🚚 All ready for pickup ({shippable})
                 </button>
               )}
               {deliverable > 0 && (
@@ -301,10 +315,20 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                       {formatPaise(line.pricePaise * line.quantity)}
                     </span>
                   </p>
+                  {line.pickupScheduledFor && (
+                    <p className="mt-1 text-xs font-semibold text-sky-800" data-pickup-scheduled>
+                      Delhivery collects on {pickupWhen(line.pickupScheduledFor)} — keep it packed with the label on.
+                    </p>
+                  )}
+                  {line.pickupFailedAt && (
+                    <p className="mt-1 text-xs font-semibold text-red-700" data-pickup-failed>
+                      Delhivery didn&apos;t collect it on {pickupWhen(line.pickupFailedAt, false)}. Press &ldquo;Ready for pickup&rdquo; again.
+                    </p>
+                  )}
                   {line.awbNumber && (
                     <p className="mt-1 text-xs text-gray-600">
                       {line.shipmentId && line.canShip && (
-                        <span className="font-semibold text-amber-700">Booked, not shipped · </span>
+                        <span className="font-semibold text-amber-700">Booked, not picked up · </span>
                       )}
                       {line.courierName} · AWB{' '}
                       <span className="font-mono font-semibold">{line.awbNumber}</span>
@@ -371,7 +395,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                     className="rounded-lg bg-ink-900 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
                   >
                     {busy === `${line.id}:ship` && <Spinner className="mr-1" />}
-                    🚚 Ship
+                    🚚 Ready for pickup
                   </button>
                 )}
                 {line.canDeliver && (

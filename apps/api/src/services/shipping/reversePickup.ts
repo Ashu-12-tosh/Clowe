@@ -3,6 +3,7 @@ import { ApiError } from '../../utils/ApiError';
 import { valueOfLines } from './codAmount';
 import { shippingProvider } from './index';
 import { ShippingProviderError } from './ShippingProvider';
+import { raiseWalletAlertIfWallet } from './walletAlert';
 import { syncWarehouse } from './warehouses';
 import { pincodeServiceability } from './serviceability';
 
@@ -142,7 +143,10 @@ export async function bookReversePickup(returnId: string): Promise<ReversePickup
     return { booked: true, awbNumber: booked.awbNumber };
   } catch (err) {
     await prisma.shipment.delete({ where: { id: shipment.id } });
-    if (err instanceof ShippingProviderError) return fail(`Delhivery: ${err.message}`);
+    if (err instanceof ShippingProviderError) {
+      await raiseWalletAlertIfWallet(err.message, `return pickup ${returnId}`);
+      return fail(`Delhivery: ${err.message}`);
+    }
     throw err;
   }
 }

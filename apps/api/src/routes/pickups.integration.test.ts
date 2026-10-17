@@ -87,13 +87,34 @@ afterAll(async () => {
 });
 
 describe('the pickup slot', () => {
-  it('is the next 11:00 in India at least two hours away, never a Sunday', () => {
-    // Wednesday 2026-10-21, 08:00 IST → 11:00 IST the same day.
-    expect(nextPickupSlot(new Date('2026-10-21T02:30:00Z')).toISOString()).toBe('2026-10-21T05:30:00.000Z');
-    // 10:00 IST is too close: tomorrow.
-    expect(nextPickupSlot(new Date('2026-10-21T04:30:00Z')).toISOString()).toBe('2026-10-22T05:30:00.000Z');
-    // Saturday afternoon: Monday, not Sunday.
-    expect(nextPickupSlot(new Date('2026-10-24T09:30:00Z')).toISOString()).toBe('2026-10-26T05:30:00.000Z');
+  // Wednesday 2026-10-21 (IST = UTC + 5:30).
+  const ist = (day: string, hhmm: string) => new Date(`${day}T${hhmm}:00+05:30`);
+
+  it('before 2 PM: today, at the seller’s slot or two hours from now (on the half hour), whichever is later', () => {
+    expect(nextPickupSlot(ist('2026-10-21', '08:00')).toISOString()).toBe(ist('2026-10-21', '11:00').toISOString());
+    // 10:00 is less than two hours before 11:00: 12:00 today, no longer tomorrow.
+    expect(nextPickupSlot(ist('2026-10-21', '10:00')).toISOString()).toBe(ist('2026-10-21', '12:00').toISOString());
+    expect(nextPickupSlot(ist('2026-10-21', '13:59')).toISOString()).toBe(ist('2026-10-21', '16:00').toISOString());
+  });
+
+  it('from 2 PM: the next pickup day at the slot — never a Sunday', () => {
+    expect(nextPickupSlot(ist('2026-10-21', '14:00')).toISOString()).toBe(ist('2026-10-22', '11:00').toISOString());
+    // Saturday afternoon and all of Sunday: Monday.
+    expect(nextPickupSlot(ist('2026-10-24', '15:00')).toISOString()).toBe(ist('2026-10-26', '11:00').toISOString());
+    expect(nextPickupSlot(ist('2026-10-25', '09:00')).toISOString()).toBe(ist('2026-10-26', '11:00').toISOString());
+  });
+
+  it('follows the seller’s own time and days, and skips today after a failed pickup', () => {
+    const tueThu = { slot: '15:00', days: [2, 4] };
+    // Wednesday is not a pickup day for them: Thursday at 15:00.
+    expect(nextPickupSlot(ist('2026-10-21', '09:00'), tueThu).toISOString()).toBe(ist('2026-10-22', '15:00').toISOString());
+    // Thursday morning: today at 15:00. Thursday after 2 PM: next Tuesday.
+    expect(nextPickupSlot(ist('2026-10-22', '09:00'), tueThu).toISOString()).toBe(ist('2026-10-22', '15:00').toISOString());
+    expect(nextPickupSlot(ist('2026-10-22', '14:30'), tueThu).toISOString()).toBe(ist('2026-10-27', '15:00').toISOString());
+    // Delhivery already failed to come today: tomorrow, even in the morning.
+    expect(nextPickupSlot(ist('2026-10-21', '08:00'), undefined, { notToday: true }).toISOString()).toBe(ist('2026-10-22', '11:00').toISOString());
+    // Sunday in the list, or nothing valid at all, never makes Sunday a pickup day.
+    expect(nextPickupSlot(ist('2026-10-24', '15:00'), { slot: '11:00', days: [0] }).toISOString()).toBe(ist('2026-10-26', '11:00').toISOString());
   });
 });
 
@@ -104,11 +125,13 @@ describe('shipping asks Delhivery to collect', () => {
     const b = await confirmedOrder();
     expect((await call('PATCH', `/api/seller/orders/${a.ids[0]}/status`, { action: 'ship' })).status).toBe(200);
     expect((await call('PATCH', `/api/seller/orders/${b.ids[0]}/status`, { action: 'ship' })).status).toBe(200);
-    // The second parcel joins the day's request instead of asking again.
-    expect(ask).toHaveBeenCalledTimes(1);
+    // The second parcel joins the day's request: Delhivery is sent the new count for it, not a new request.
+    expect(ask).toHaveBeenCalledTimes(2);
     expect(ask.mock.calls[0]![0]).toMatchObject({ warehouseName: `CLW-${sellerId}`, expectedPackages: 1 });
+    expect(ask.mock.calls[0]![0].existingRequestId).toBeUndefined();
     const [pa, pb] = [await parcel(a.orderId), await parcel(b.orderId)];
     expect(pa.pickupRequestId).toMatch(/^MOCK-PU-/);
+    expect(ask.mock.calls[1]![0]).toMatchObject({ expectedPackages: 2, existingRequestId: pa.pickupRequestId, pickupAt: pa.pickupScheduledFor });
     expect(pb.pickupRequestId).toBe(pa.pickupRequestId);
     expect(pa.pickupScheduledFor).not.toBeNull();
     expect(pa).toMatchObject({ status: 'IN_TRANSIT' });

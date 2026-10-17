@@ -297,6 +297,11 @@ export const adminOrderStatusSchema = z.object({
    * video is allowed from the desk only with this, and it goes on the audit log.
    */
   noClipReason: z.string().trim().min(5, 'Give a reason (min 5 chars)').max(300).optional(),
+  /**
+   * Marking a Delhivery parcel delivered by hand (its delivery scan normally
+   * does) needs this, and it goes on the audit log.
+   */
+  deliveryOverrideReason: z.string().trim().min(5, 'Give a reason (min 5 chars)').max(300).optional(),
 });
 export type AdminOrderStatusInput = z.infer<typeof adminOrderStatusSchema>;
 

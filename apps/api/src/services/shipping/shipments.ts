@@ -4,6 +4,11 @@ import { ApiError } from '../../utils/ApiError';
 import { valueOfLines, type LineValue } from './codAmount';
 import { chargeableGrams, codFeePaise, forwardFreightPaise, postCodFee, postForwardFreight, postRtoFreight } from './freight';
 import { shippingProvider } from './index';
+import { gstRateForInclusive, isValidHsn } from '@clowe/shared';
+import { categoryRulesMap } from '../categoryRules';
+import { gstSettings } from '../economicsRates';
+import { getSettings } from '../settingsService';
+import { raiseWalletAlertIfWallet } from './walletAlert';
 import { syncWarehouse } from './warehouses';
 import { ShippingProviderError, type ShippingMode } from './ShippingProvider';
 
@@ -85,7 +90,7 @@ export async function bookShipment(input: {
   const order = await prisma.order.findUnique({
     where: { id: input.orderId },
     include: {
-      items: { include: { product: { include: { category: { select: { hsnCode: true } } } } } },
+      items: { include: { product: { include: { category: { select: { id: true, name: true } } } } } },
     },
   });
   const lines = order?.items.filter((i) => input.itemIds.includes(i.id) && i.sellerId === input.sellerId) ?? [];
@@ -158,14 +163,18 @@ export async function bookShipment(input: {
       lengthMm: shipment.lengthMm,
       widthMm: shipment.widthMm,
       heightMm: shipment.heightMm,
-      products: lines.map((l) => ({ title: l.title, quantity: l.quantity, hsn: l.product.category.hsnCode })),
+      products: await shipmentProducts(lines),
       sellerGstin: seller.gstNumber,
     });
   } catch (err) {
     // Nothing was booked: free the lines and drop the empty parcel.
     await prisma.orderItem.updateMany({ where: { shipmentId: shipment.id }, data: { shipmentId: null } });
     await prisma.shipment.delete({ where: { id: shipment.id } });
-    if (err instanceof ShippingProviderError) throw ApiError.badRequest(`Delhivery: ${err.message}`, err.code);
+    if (err instanceof ShippingProviderError) {
+      // Clowe's wallet, not the seller's parcel: admins must recharge it.
+      await raiseWalletAlertIfWallet(err.message, `order ${order.orderNumber}, ${seller.shopName}`);
+      throw ApiError.badRequest(`Delhivery: ${err.message}`, err.code);
+    }
     throw err;
   }
   // Booked: from here on the parcel row stays, whatever happens. The
@@ -186,6 +195,60 @@ export async function bookShipment(input: {
     }),
   ]);
   return saved;
+}
+
+/**
+ * What goes in the box, as Delhivery is told: each line's HSN code and GST
+ * rate, worked out exactly as its tax invoice does (the category's rules,
+ * inherited down the tree; the rate the line was sold at). A category without
+ * a valid HSN code is booked without one, and admins are told — once a day per
+ * category — to add it.
+ */
+export async function shipmentProducts(
+  lines: { title: string; quantity: number; pricePaise: number; gstRatePercent: number | null; product: { category: { id: string; name: string } } }[],
+): Promise<{ title: string; quantity: number; hsn: string | null; gstRatePercent: number }[]> {
+  const rules = await categoryRulesMap(lines.map((l) => l.product.category.id));
+  const gst = gstSettings(await getSettings());
+  const missing = new Map<string, string>();
+  const products = lines.map((l) => {
+    const r = rules.get(l.product.category.id);
+    const hsn = isValidHsn(r?.hsnCode) ? r!.hsnCode!.trim() : null;
+    if (!hsn) missing.set(l.product.category.id, l.product.category.name);
+    return { title: l.title, quantity: l.quantity, hsn, gstRatePercent: l.gstRatePercent ?? gstRateForInclusive(l.pricePaise, r, gst).ratePercent };
+  });
+  if (missing.size > 0) {
+    const day = new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 10);
+    const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+    for (const [id, name] of missing) {
+      // Once a day per category: the warning is in the admin's notifications already.
+      const told = await prisma.notification.findFirst({
+        where: { type: 'CATEGORY_HSN_MISSING', linkHref: `/admin/categories?hsn=${id}`, createdAt: { gte: new Date(`${day}T00:00:00+05:30`) } },
+        select: { id: true },
+      });
+      if (told) continue;
+      await prisma.notification.createMany({
+        data: admins.map((a) => ({
+          userId: a.id,
+          type: 'CATEGORY_HSN_MISSING',
+          title: `Add an HSN code to "${name}"`,
+          body: `A parcel from "${name}" was booked with Delhivery without an HSN code, because the category (and its parents) has no valid one. Delhivery asks for the HSN of commercial goods, and invoices show it. Add a 4, 6 or 8-digit HSN code in Categories.`,
+          linkHref: `/admin/categories?hsn=${id}`,
+        })),
+      });
+    }
+  }
+  return products;
+}
+
+/**
+ * Whether a line may be marked delivered by hand: only on the mock courier.
+ * A Delhivery parcel is delivered by Delhivery's delivery scan (or by an
+ * admin, with a reason on the audit log) — never by its seller.
+ */
+export async function deliveredByHandAllowed(shipmentId: string | null): Promise<boolean> {
+  if (!shipmentId) return shippingProvider.name === 'mock';
+  const parcel = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { provider: true } });
+  return (parcel?.provider ?? shippingProvider.name) === 'mock';
 }
 
 /**

@@ -229,6 +229,7 @@ export class MockShippingProvider implements ShippingProvider {
   async requestPickup(request: PickupRequest): Promise<PickupResult> {
     if (!request.warehouseName) throw new ShippingProviderError('No pickup location given', 'NO_WAREHOUSE');
     if (request.expectedPackages < 1) throw new ShippingProviderError('Expect at least one package', 'INVALID_COUNT');
+    if (request.existingRequestId) return { pickupRequestId: request.existingRequestId, scheduledFor: request.pickupAt };
     this.requests += 1;
     return { pickupRequestId: `MOCK-PU-${this.requests}`, scheduledFor: request.pickupAt };
   }

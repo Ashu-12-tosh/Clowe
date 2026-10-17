@@ -6,6 +6,8 @@ import { syncOrderStatus } from '../orderStatusService';
 import { settleEarnedCredits } from '../purchaseCredits';
 import { markLineDelivered, markLineShipped } from './lineTransitions';
 import { flagShipmentLost } from './lostParcels';
+import { failPickup } from './pickups';
+import { isNotPicked } from './scanStatus';
 import { notifyFailedAttempt, notifyRtoArrived, startRto } from './rto';
 import { applyReverseScan } from './reversePickup';
 import { syncShipmentsFromLines } from './shipments';
@@ -77,6 +79,25 @@ export async function applyTracking(result: TrackingResult, source: TrackingSour
     skipDuplicates: true,
   });
   const lastScanAt = scans.reduce<Date | null>((max, s) => (!max || s.at > max ? s.at : max), shipment.lastScanAt);
+
+  // Asked for, and Delhivery's latest word since is "Not Picked": it did not
+  // collect the parcel. It waits for a pickup again (our own cancellation is
+  // final, and failPickup leaves cancelled parcels alone).
+  const latest = scans.reduce<(typeof scans)[number] | null>((m, s) => (!m || s.at > m.at ? s : m), null);
+  if (
+    shipment.kind === 'FORWARD' &&
+    shipment.status === 'PICKUP_REQUESTED' &&
+    latest &&
+    isNotPicked(latest) &&
+    shipment.pickupRequestedAt &&
+    latest.at > shipment.pickupRequestedAt
+  ) {
+    await prisma.shipment.update({ where: { id: shipment.id }, data: { lastScanAt } });
+    await failPickup(shipment.id, latest.at, latest.instructions || result.statusText || 'the parcel was not collected');
+    const after = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id }, select: { status: true } });
+    return { awbNumber: result.awbNumber, known: true, newScans, status: after.status };
+  }
+
   const weightChanged = result.chargedWeightGrams !== null && result.chargedWeightGrams !== shipment.chargedWeightGrams;
 
   // Only forward: a scan never undoes a later one — except on the road, where

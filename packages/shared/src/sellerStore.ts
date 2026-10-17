@@ -117,6 +117,9 @@ export interface SellerStoreSettings {
   pickupPincode: string | null;
   dispatchDays: number;
   codEnabled: boolean;
+  /** When Delhivery should come: HH:MM (India time) and weekdays, 1 = Monday … 6 = Saturday. */
+  pickupSlot: string;
+  pickupDays: number[];
   /** The pickup address as registered with Delhivery: booking waits for ACTIVE. */
   courierWarehouse: CourierWarehouseView;
 
@@ -234,6 +237,18 @@ export const storeBusinessSchema = z.object({
 }).superRefine(gstinMatchesPan);
 export type StoreBusinessInput = z.infer<typeof storeBusinessSchema>;
 
+/** The pickup times a seller can choose (India time); Delhivery collects in working hours. */
+export const PICKUP_SLOTS = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'] as const;
+/** Monday … Saturday: Delhivery doesn't collect on Sundays. */
+export const PICKUP_WEEKDAYS = [
+  { day: 1, label: 'Mon' },
+  { day: 2, label: 'Tue' },
+  { day: 3, label: 'Wed' },
+  { day: 4, label: 'Thu' },
+  { day: 5, label: 'Fri' },
+  { day: 6, label: 'Sat' },
+] as const;
+
 export const storeShippingSchema = z.object({
   pickupSameAsBusiness: z.boolean(),
   pickupName: z.string().trim().max(80).optional(),
@@ -251,6 +266,13 @@ export const storeShippingSchema = z.object({
   /** No longer sent by the form: the dispatch promise is a platform setting. Kept if absent. */
   dispatchDays: z.number().int().min(1).max(10).optional(),
   codEnabled: z.boolean(),
+  /** Kept as stored if absent. */
+  pickupSlot: z.enum(PICKUP_SLOTS).optional(),
+  pickupDays: z
+    .array(z.number().int().min(1).max(6))
+    .min(1, 'Pick at least one pickup day')
+    .max(6)
+    .optional(),
 });
 export type StoreShippingInput = z.infer<typeof storeShippingSchema>;
 

@@ -127,6 +127,8 @@ async function toSettings(seller: SellerProfile): Promise<SellerStoreSettings> {
     pickupState: seller.pickupState,
     pickupPincode: seller.pickupPincode,
     dispatchDays: seller.dispatchDays,
+    pickupSlot: seller.pickupSlot,
+    pickupDays: seller.pickupDays,
     codEnabled: seller.codEnabled,
     courierWarehouse: {
       status: seller.courierWarehouseStatus,
@@ -437,6 +439,8 @@ sellerStoreRouter.put('/shipping', async (req, res, next) => {
         pickupPincode: fieldUpdate(input.pickupPincode),
         dispatchDays: input.dispatchDays,
         codEnabled: input.codEnabled,
+        pickupSlot: input.pickupSlot,
+        ...(input.pickupDays ? { pickupDays: [...new Set(input.pickupDays)].sort() } : {}),
       },
     });
     // An approved shop's new pickup address goes to Delhivery straight away

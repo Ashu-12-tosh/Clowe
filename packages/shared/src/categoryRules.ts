@@ -126,7 +126,12 @@ export const categoryRulesInputSchema = z.object({
     })
     .nullable()
     .optional(),
-  hsnCode: z.string().trim().max(12).nullable().optional(),
+  hsnCode: z
+    .string()
+    .trim()
+    .regex(/^(\d{4}|\d{6}|\d{8})$/, 'An HSN code is 4, 6 or 8 digits')
+    .nullable()
+    .optional(),
   returnWindowDays: z.number().int().min(0).max(90).nullable().optional(),
   returnable: z.boolean().nullable().optional(),
 });
@@ -301,3 +306,6 @@ export function describeTaxDefault(
   }
   return `${rules.defaultTaxRatePercent ?? gst.standardPercent}%`;
 }
+
+/** A valid HSN code: 4, 6 or 8 digits (what Delhivery and the GST portal accept). */
+export const isValidHsn = (code: string | null | undefined): code is string => !!code && /^(\d{4}|\d{6}|\d{8})$/.test(code.trim());

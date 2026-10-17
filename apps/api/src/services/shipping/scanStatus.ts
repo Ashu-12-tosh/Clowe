@@ -19,6 +19,14 @@ export function isFailedAttempt(scan: ScanFields): boolean {
   return scan.statusType.toUpperCase() === 'UD' && /^EOD-/i.test(scan.code ?? '');
 }
 
+/**
+ * "Not Picked" (X-PNP): Delhivery did not collect the parcel. Our own
+ * cancellation before pickup reads the same, so callers check that first.
+ */
+export function isNotPicked(scan: ScanFields): boolean {
+  return (scan.code ?? '').toUpperCase() === 'X-PNP' || (scan.statusType.toUpperCase() === 'UD' && scan.status.trim().toLowerCase() === 'not picked');
+}
+
 export function shipmentStatusFromScan(scan: ScanFields): ShipmentStatus {
   const type = scan.statusType.toUpperCase();
   const status = scan.status.trim().toLowerCase();

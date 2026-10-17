@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getStoredUser } from '@/lib/api';
 import DashShell, { type DashNavItem } from '@/components/DashShell';
+import CourierWalletBanner from '@/components/admin/CourierWalletBanner';
 
 const NAV: DashNavItem[] = [
   { href: '/admin', label: 'Dashboard', icon: '▦' },
@@ -71,6 +72,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <DashShell brand="Clowe Admin" subtitle="Platform Control" nav={NAV}>
+      <CourierWalletBanner />
       <div className="mx-auto max-w-6xl">{children}</div>
     </DashShell>
   );

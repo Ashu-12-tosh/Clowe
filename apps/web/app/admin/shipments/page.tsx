@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ADMIN_SHIPMENT_FILTERS,
   ADMIN_SHIPMENT_FILTER_LABELS,
+  MAX_DELIVERY_ATTEMPTS,
   type AdminShipmentFilter,
   type AdminShipmentPage,
 } from '@clowe/shared';
@@ -11,6 +12,16 @@ import { api, ApiRequestError } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
+import { NdrActions } from '@/components/NdrActions';
+
+const when = (iso: string, withTime = true) =>
+  new Date(iso).toLocaleString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    ...(withTime ? { hour: 'numeric', minute: '2-digit' } : {}),
+    timeZone: 'Asia/Kolkata',
+  });
 
 const STATUS_TONE: Record<string, string> = {
   DELIVERY_FAILED: 'bg-red-100 text-red-700',
@@ -25,8 +36,9 @@ const STATUS_TONE: Record<string, string> = {
 /**
  * Every parcel with Delhivery, for operations: what needs someone first
  * (failed attempts, lost parcels, parcels coming back or back and unchecked,
- * bookings not collected in two days), then everything by status. Refresh
- * asks Delhivery now; "Try again" re-attempts a failed delivery.
+ * bookings not collected in two days, pickups Delhivery missed), then
+ * everything by status. Refresh asks Delhivery now; a failed delivery can be
+ * re-attempted, deferred, re-addressed (same PIN code) or sent back.
  */
 export default function AdminShipmentsPage() {
   const [filter, setFilter] = useState<AdminShipmentFilter>('ATTENTION');
@@ -119,7 +131,7 @@ export default function AdminShipmentsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {data?.rows.map((s) => (
+            {data?.rows.map((s) => [
               <tr key={s.id}>
                 <td className="px-3 py-2 font-mono">
                   {s.awbNumber ?? '—'}
@@ -132,6 +144,13 @@ export default function AdminShipmentsPage() {
                     {s.status.replace(/_/g, ' ').toLowerCase()}
                   </span>
                   {s.statusText && <span className="block text-[11px] text-gray-500">{s.statusText}</span>}
+                  {s.status === 'DELIVERY_FAILED' && (
+                    <span className="block text-[11px] text-gray-500">attempt {Math.max(s.deliveryAttempts, 1)} of {MAX_DELIVERY_ATTEMPTS}</span>
+                  )}
+                  {s.pickupScheduledFor && <span className="block text-[11px] text-sky-700">pickup {when(s.pickupScheduledFor)}</span>}
+                  {s.pickupFailedAt && (
+                    <span className="block text-[11px] font-semibold text-red-700">not collected {when(s.pickupFailedAt, false)} — seller to ask again</span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-gray-500">{s.lastScanAt ? new Date(s.lastScanAt).toLocaleString('en-IN') : '—'}</td>
                 <td className="px-3 py-2">{s.paymentType === 'COD' ? formatPaise(s.codAmountPaise) : '—'}</td>
@@ -148,21 +167,29 @@ export default function AdminShipmentsPage() {
                       Refresh
                     </button>
                   )}
-                  {s.status === 'DELIVERY_FAILED' && !s.ndrAction && (
-                    <button
-                      type="button"
-                      disabled={busy !== null}
-                      onClick={() => void run(s.id, 'ndr', { action: 'RE_ATTEMPT' }, `Asked Delhivery to try ${s.awbNumber} again.`)}
-                      aria-busy={busy === `${s.id}:ndr`}
-                      className="ml-1 rounded-lg bg-ink-900 px-2 py-0.5 text-[11px] font-semibold text-white disabled:opacity-50"
-                    >
-                      {busy === `${s.id}:ndr` && <Spinner className="mr-1" />}
-                      Try again
-                    </button>
-                  )}
                 </td>
-              </tr>
-            ))}
+              </tr>,
+              s.status === 'DELIVERY_FAILED' && s.kind === 'FORWARD' ? (
+                <tr key={`${s.id}:ndr`} className="bg-red-50/40">
+                  <td colSpan={7} className="px-3 py-2">
+                    <NdrActions
+                      path={`/api/admin/orders/shipments/${s.id}/ndr`}
+                      awbNumber={s.awbNumber}
+                      reason={s.statusText}
+                      attempts={s.deliveryAttempts}
+                      ndrAction={s.ndrAction}
+                      ndrActionAt={null}
+                      deliverTo={s.deliverTo}
+                      canEditPhone
+                      onDone={(message) => {
+                        setNotice(message);
+                        load();
+                      }}
+                    />
+                  </td>
+                </tr>
+              ) : null,
+            ])}
             {data && data.rows.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-3 py-6 text-center text-gray-400">

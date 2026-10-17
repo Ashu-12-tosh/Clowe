@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Prisma, SellerProfile } from '@prisma/client';
 import {
   packingVideoAttachSchema,
+  COURIER_DELIVERS_MESSAGE,
   PACKING_VIDEO_REQUIRED_MESSAGE,
   SELLER_ORDER_TABS,
   SELLER_ORDER_TAB_LABELS,
@@ -35,8 +36,10 @@ import { buildTaxInvoice } from '../services/taxInvoice';
 import { webPublicUrl } from '../env';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
+import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
 import { shippingProvider } from '../services/shipping';
-import { bookShipment, pickupAddress, planParcel } from '../services/shipping/shipments';
+import { bookShipment, deliveredByHandAllowed, pickupAddress, planParcel } from '../services/shipping/shipments';
+import { separateReturnAddress } from '../services/shipping/warehouses';
 import { markLineDelivered, markLineShipped } from '../services/shipping/lineTransitions';
 import { requestPickup } from '../services/shipping/pickups';
 import { receiveRto, requestNdrAction } from '../services/shipping/rto';
@@ -174,7 +177,7 @@ const ORDER_INCLUDE = (sellerId: string) =>
       where: { sellerId, kind: 'FORWARD' },
       orderBy: { createdAt: 'asc' },
       select: {
-        id: true, awbNumber: true, status: true, statusText: true, ndrAction: true, ndrActionAt: true, rtoReceivedCondition: true,
+        id: true, awbNumber: true, status: true, statusText: true, ndrAction: true, ndrActionAt: true, rtoReceivedCondition: true, deliveryAttempts: true,
         items: { select: { id: true } },
       },
     },
@@ -183,6 +186,7 @@ const ORDER_INCLUDE = (sellerId: string) =>
       include: {
         product: { select: { slug: true, images: { orderBy: { sortOrder: 'asc' }, take: 1 } } },
         return: { select: { id: true, status: true } },
+        shipment: { select: { provider: true, status: true, pickupScheduledFor: true, pickupFailedAt: true } },
       },
     },
     packingVideos: { where: { sellerId }, select: { uploadedAt: true, deletedAt: true } },
@@ -226,10 +230,17 @@ function toLine(item: OrderRecord['items'][number], orderCancelled: boolean): Se
     deliveredAt: item.deliveredAt?.toISOString() ?? null,
     returnId: item.return?.id ?? null,
     returnStatus: item.return?.status ?? null,
+    pickupScheduledFor: item.shipment?.status === 'PICKUP_REQUESTED' ? (item.shipment.pickupScheduledFor?.toISOString() ?? null) : null,
+    pickupFailedAt: item.shipment?.status === 'CREATED' ? (item.shipment.pickupFailedAt?.toISOString() ?? null) : null,
     canAssign: !orderCancelled && (item.status === 'CONFIRMED' || item.status === 'PACKED') && !item.shipmentId,
     canPack: !orderCancelled && item.status === 'CONFIRMED',
-    canShip: !orderCancelled && (item.status === 'CONFIRMED' || item.status === 'PACKED'),
-    canDeliver: !orderCancelled && item.status === 'SHIPPED',
+    // Ready for pickup: until Delhivery has been asked to come for its parcel.
+    canShip:
+      !orderCancelled &&
+      (item.status === 'CONFIRMED' || item.status === 'PACKED') &&
+      (!item.shipment || item.shipment.status === 'CREATED'),
+    // Only on the mock courier: a Delhivery parcel is delivered by its scan.
+    canDeliver: !orderCancelled && item.status === 'SHIPPED' && (item.shipment?.provider ?? shippingProvider.name) === 'mock',
   };
 }
 
@@ -289,6 +300,8 @@ function toRow(order: OrderRecord, dispatch?: DispatchContext): SellerOrderRow {
       ndrAction: p.ndrAction,
       ndrActionAt: p.ndrActionAt?.toISOString() ?? null,
       rtoReceivedCondition: p.rtoReceivedCondition,
+      deliveryAttempts: p.deliveryAttempts,
+      deliverTo: { line1: order.shipLine1, line2: order.shipLine2, city: order.shipCity, pincode: order.shipPincode },
     })),
     buyerRtoCount: order.user.rtoCount,
   };
@@ -598,6 +611,7 @@ async function applyAction(item: ItemForAction, action: Action): Promise<string 
   }
 
   if (item.status !== 'SHIPPED') return `Cannot deliver an item in status ${item.status}`;
+  if (!(await deliveredByHandAllowed(item.shipmentId))) return COURIER_DELIVERS_MESSAGE;
   await markLineDelivered(item.id);
   return null;
 }
@@ -628,17 +642,39 @@ sellerOrdersRouter.patch('/:itemId/status', async (req, res, next) => {
   }
 });
 
-// After a failed delivery attempt: ask Delhivery to try again, or to deliver
-// on a later day.
+// After a failed delivery attempt: ask Delhivery to try again, to deliver on a
+// later day, to deliver to a corrected address (same PIN code), or to bring it
+// back. Sellers never see the buyer's phone, so they can't change it.
 sellerOrdersRouter.post('/parcels/:shipmentId/ndr', async (req, res, next) => {
   try {
     const input = parcelNdrSchema.parse(req.body);
+    if (input.phone) throw ApiError.badRequest("Only Clowe can change the buyer's phone — ask support", 'NDR_PHONE_ADMIN_ONLY');
     const result = await requestNdrAction({
       shipmentId: req.params.shipmentId,
       sellerId: req.seller!.id,
       action: input.action,
       deferTo: input.deferTo ? new Date(`${input.deferTo}T12:00:00+05:30`) : undefined,
+      consignee: { line1: input.line1, line2: input.line2 || null },
     });
+    if (input.action === 'EDIT_DETAILS' || input.action === 'RETURN_TO_SELLER') {
+      auditSafe({
+        actorId: req.auth!.userId,
+        actorRole: 'SELLER',
+        module: 'ORDERS',
+        action: input.action === 'EDIT_DETAILS' ? 'Delivery address corrected' : 'Return to seller requested',
+        entityType: 'Shipment',
+        entityId: req.params.shipmentId,
+        summary:
+          input.action === 'EDIT_DETAILS'
+            ? `After a failed delivery, asked Delhivery to deliver to: ${[input.line1, input.line2].filter(Boolean).join(', ')}`
+            : 'After a failed delivery, asked Delhivery to bring the parcel back',
+        metadata: { action: input.action, line1: input.line1 ?? null, line2: input.line2 || null },
+        severity: 'MEDIUM',
+        ipAddress: ipFrom(req),
+        userAgent: req.get('user-agent') ?? null,
+        deviceType: deviceFromUserAgent(req.get('user-agent')),
+      });
+    }
     res.json({ success: true, data: result });
   } catch (err) {
     next(err);
@@ -889,6 +925,9 @@ sellerOrdersRouter.get('/labels', async (req, res, next) => {
             ...from,
             gstNumber: seller.gstNumber,
           },
+          // Delhivery's labels carry the return address: the seller's own
+          // return address when they have one, else the ship-from above.
+          returnTo: separateReturnAddress(seller).address,
           qr: await sellerOrderQr(i.orderId, { item: i.id }),
         };
       }),

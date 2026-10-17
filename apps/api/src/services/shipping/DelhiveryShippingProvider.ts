@@ -295,6 +295,9 @@ export class DelhiveryShippingProvider implements ShippingProvider {
         cod_amount: request.payment === 'COD' ? rupees(request.codAmountPaise) : 0,
         total_amount: rupees(request.invoiceValuePaise),
         products_desc: request.products.map((p) => `${p.title} x${p.quantity}`).join(', ').slice(0, 300),
+        // The categories' HSN codes. Each line's GST rate travels with the
+        // request too, but Delhivery's documented booking fields have no GST
+        // rate field, so it is not sent until Delhivery confirms one.
         hsn_code: [...new Set(request.products.map((p) => p.hsn).filter(Boolean))].join(','),
         quantity: request.products.reduce((sum, p) => sum + p.quantity, 0),
         weight: request.weightGrams,
@@ -352,6 +355,9 @@ export class DelhiveryShippingProvider implements ShippingProvider {
       `pickup ${request.warehouseName} ${date} ${time} x${request.expectedPackages}`,
     );
     const id = str(body.pickup_id ?? body.pickupId ?? body.id);
+    // Adding parcels to the day's request: Delhivery may answer that a request
+    // already exists for this address and day (pr_exist) — that is the one.
+    if (!id && request.existingRequestId && body.pr_exist) return { pickupRequestId: request.existingRequestId, scheduledFor: request.pickupAt };
     if (!id) throw new ShippingProviderError(`Delhivery refused the pickup: ${remarks(body.error, body.message, body.pr_exist) || 'no pickup id'}`, 'PICKUP_REFUSED');
     return { pickupRequestId: id, scheduledFor: request.pickupAt };
   }
@@ -369,7 +375,9 @@ export class DelhiveryShippingProvider implements ShippingProvider {
       request.action === 'DEFER_DELIVERY' && request.deferTo
         ? { deferred_date: istParts(request.deferTo).date }
         : request.action === 'EDIT_DETAILS' && request.consignee
-          ? { name: request.consignee.name, phone: request.consignee.phone, add: request.consignee.line1 }
+          ? Object.fromEntries(
+              Object.entries({ name: request.consignee.name, phone: request.consignee.phone, add: request.consignee.line1 }).filter(([, v]) => !!v),
+            )
           : undefined;
     const body = await this.post(
       '/api/p/update',

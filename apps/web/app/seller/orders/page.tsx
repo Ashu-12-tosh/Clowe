@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
+  PACKING_VIDEO_REQUIRED_MESSAGE,
   SELLER_ORDER_SORTS,
   SELLER_ORDER_SORT_LABELS,
   SELLER_ORDER_TAB_LABELS,
@@ -145,6 +146,12 @@ export default function SellerOrdersPage() {
     return data.rows.filter((r) => selected.has(r.orderId)).flatMap((r) => r.lines.map((l) => l.id));
   }, [data, selected]);
 
+  /** "Ready for pickup" needs every selected order's packing video. */
+  const selectionMissingClip = useMemo(
+    () => !!data && data.rows.some((r) => selected.has(r.orderId) && (r.packingVideo === null || r.packingVideo.deleted)),
+    [data, selected],
+  );
+
   function toggleOrder(orderId: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -166,7 +173,7 @@ export default function SellerOrdersPage() {
     const reasons = [...new Set(result.skipped.map((s) => s.reason))];
     const warn = result.updated === 0 || result.skipped.length > 0;
     const message =
-      `${result.updated} item(s) ${action === 'assign' ? 'booked with Delhivery — labels now carry the AWB' : action === 'pack' ? 'marked packed' : action === 'ship' ? 'shipped' : 'marked delivered'}` +
+      `${result.updated} item(s) ${action === 'assign' ? 'booked with Delhivery — labels now carry the AWB' : action === 'pack' ? 'marked packed' : action === 'ship' ? 'ready for pickup — Delhivery is asked to collect' : 'marked delivered'}` +
       (result.skipped.length > 0 ? ` · ${result.skipped.length} skipped: ${reasons.join('; ')}` : '');
     setNoticeWarn(warn);
     setNotice(message);
@@ -380,13 +387,14 @@ export default function SellerOrdersPage() {
               📦 Mark packed
             </button>
             <button
-              disabled={!!busy || selectedItemIds.length === 0}
+              disabled={!!busy || selectedItemIds.length === 0 || selectionMissingClip}
+              title={selectionMissingClip ? PACKING_VIDEO_REQUIRED_MESSAGE : undefined}
               onClick={() => void runBulk('ship')}
               aria-busy={busy === 'ship'}
               className="rounded-lg bg-ink-900 px-3 py-1.5 font-semibold text-white hover:bg-ink-800 disabled:opacity-50"
             >
               {busy === 'ship' && <Spinner className="mr-1" />}
-              🚚 Ship
+              🚚 Ready for pickup
             </button>
             <button
               disabled={!!busy || selectedItemIds.length === 0}

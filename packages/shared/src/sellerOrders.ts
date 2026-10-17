@@ -98,6 +98,10 @@ export interface SellerOrderLine {
   deliveredAt: string | null;
   returnId: string | null;
   returnStatus: string | null;
+  /** When Delhivery is due to collect this line's parcel (asked, not collected yet). */
+  pickupScheduledFor: string | null;
+  /** Delhivery did not collect it last time: ask for a pickup again. */
+  pickupFailedAt: string | null;
   /** True when this line can move to the next stage right now. */
   /** Can be booked with Delhivery (gets its AWB): not shipped and not booked yet. */
   canAssign: boolean;
@@ -158,14 +162,44 @@ export interface SellerParcelView {
   ndrAction: string | null;
   ndrActionAt: string | null;
   rtoReceivedCondition: string | null;
+  /** Failed delivery attempts so far, of MAX_DELIVERY_ATTEMPTS. */
+  deliveryAttempts: number;
+  /** The delivery address on the order, for correcting it (same PIN code) after a failed attempt. */
+  deliverTo: { line1: string; line2: string | null; city: string; pincode: string };
 }
 
-/** POST /api/seller/orders/parcels/:id/ndr — after a failed delivery attempt. */
-export const parcelNdrSchema = z.object({
-  action: z.enum(['RE_ATTEMPT', 'DEFER_DELIVERY']),
-  /** DEFER_DELIVERY: the day to deliver, YYYY-MM-DD, within six days. */
-  deferTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-});
+/** What can be asked of Delhivery after a failed delivery attempt (NDR). */
+export const NDR_ACTIONS = ['RE_ATTEMPT', 'DEFER_DELIVERY', 'EDIT_DETAILS', 'RETURN_TO_SELLER'] as const;
+
+/**
+ * POST …/parcels/:id/ndr (seller) and …/shipments/:id/ndr (admin) — after a
+ * failed delivery attempt: try again, deliver on a later day, correct the
+ * address (the PIN code stays: Delhivery only re-routes within it) or the
+ * phone (admins only — sellers never see the buyer's number), or send it back
+ * to the seller.
+ */
+export const parcelNdrSchema = z
+  .object({
+    action: z.enum(NDR_ACTIONS),
+    /** DEFER_DELIVERY: the day to deliver, YYYY-MM-DD, within six days. */
+    deferTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    /** EDIT_DETAILS: the corrected address, within the same PIN code. */
+    line1: z.string().trim().min(5, 'Give the full address (house, street)').max(120).optional(),
+    line2: z.string().trim().max(120).optional().or(z.literal('')),
+    /** EDIT_DETAILS, admins only: the buyer's corrected phone. */
+    phone: z
+      .string()
+      .trim()
+      .regex(/^[6-9]\d{9}$/, 'A 10-digit Indian mobile number')
+      .optional()
+      .or(z.literal('')),
+  })
+  .superRefine((v, ctx) => {
+    if (v.action === 'EDIT_DETAILS' && !v.line1 && !v.phone) {
+      ctx.addIssue({ code: 'custom', path: ['line1'], message: 'Give the corrected address or phone' });
+    }
+  });
+export type ParcelNdrInput = z.infer<typeof parcelNdrSchema>;
 
 /** POST /api/seller/orders/parcels/:id/rto-received — the parcel is back; how it came back. */
 export const parcelRtoReceivedSchema = z.object({ condition: z.enum(['GOOD', 'DAMAGED']) });
@@ -347,6 +381,8 @@ export interface SellerShippingLabel {
     pincode: string | null;
     gstNumber: string | null;
   };
+  /** Where undelivered parcels come back to, when not the ship-from address above. */
+  returnTo: { line1: string; city: string; state: string; pincode: string } | null;
   qr: SellerQr;
 }
 
@@ -441,5 +477,9 @@ export const packingVideoAttachSchema = z.object({ ref: assetRefSchema });
 export type PackingVideoAttachInput = z.infer<typeof packingVideoAttachSchema>;
 
 /** Why "Mark shipped" is refused, in the seller's terms. */
+/** Why a seller can't mark a Delhivery parcel delivered: only its delivery scan does. */
+export const COURIER_DELIVERS_MESSAGE =
+  "Delhivery marks this parcel delivered when it scans the delivery — it can't be marked delivered by hand.";
+
 export const PACKING_VIDEO_REQUIRED_MESSAGE =
   'Record the packing video for this order before you pack or ship it: it shows what went into the box if a return is disputed.';

@@ -29,6 +29,25 @@ export interface AdminShipmentRow {
   lastScanAt: string | null;
   createdAt: string;
   ndrAction: string | null;
+  /** Failed delivery attempts so far, of MAX_DELIVERY_ATTEMPTS. */
+  deliveryAttempts: number;
+  /** The order's delivery address, for correcting it after a failed attempt. */
+  deliverTo: { line1: string; line2: string | null; city: string; pincode: string };
+  /** Delhivery did not collect it ("Not Picked"): the seller has to ask again. */
+  pickupFailedAt: string | null;
+  pickupScheduledFor: string | null;
+}
+
+/** Delhivery refused a booking over Clowe's wallet: shown on every admin page until resolved. */
+export interface CourierWalletAlert {
+  /** Delhivery's words. */
+  message: string;
+  firstAt: string;
+  lastAt: string;
+  /** Refusals since the alert was raised. */
+  count: number;
+  /** The booking that was refused, e.g. "order CLW-2026-001234". */
+  context: string | null;
 }
 
 export interface AdminShipmentPage {

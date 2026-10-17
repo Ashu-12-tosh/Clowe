@@ -5,6 +5,8 @@ import { ADMIN_SHIPMENT_FILTERS, type AdminShipmentPage } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { shippingProvider } from '../services/shipping';
+import { clearWalletAlert, walletAlertView } from '../services/shipping/walletAlert';
+import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
 
 // Every parcel with the courier, for the operations desk: what needs someone
 // (failed attempts, lost parcels, coming back, waiting too long for pickup),
@@ -23,6 +25,42 @@ const query = z.object({
 /** Booked or asked for pickup more than two days ago and still not collected. */
 const STALE_MS = 2 * 86_400_000;
 
+// Delhivery refusing bookings over Clowe's wallet: the banner on every admin page.
+adminShipmentsRouter.get('/wallet-alert', async (_req, res, next) => {
+  try {
+    res.json({ success: true, data: await walletAlertView() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The wallet is recharged: the banner goes until Delhivery refuses again.
+adminShipmentsRouter.delete('/wallet-alert', async (req, res, next) => {
+  try {
+    const alert = await walletAlertView();
+    await clearWalletAlert();
+    if (alert) {
+      auditSafe({
+        actorId: req.auth!.userId,
+        actorRole: 'ADMIN',
+        module: 'ORDERS',
+        action: 'Delhivery wallet alert resolved',
+        entityType: 'PlatformSetting',
+        entityId: 'courier.walletAlert',
+        summary: `Marked the Delhivery wallet alert resolved (${alert.count} refusal(s) since ${alert.firstAt}): ${alert.message}`,
+        metadata: { ...alert },
+        severity: 'MEDIUM',
+        ipAddress: ipFrom(req),
+        userAgent: req.get('user-agent') ?? null,
+        deviceType: deviceFromUserAgent(req.get('user-agent')),
+      });
+    }
+    res.json({ success: true, data: null });
+  } catch (err) {
+    next(err);
+  }
+});
+
 adminShipmentsRouter.get('/', async (req, res, next) => {
   try {
     const input = query.parse(req.query);
@@ -33,6 +71,8 @@ adminShipmentsRouter.get('/', async (req, res, next) => {
           { status: { in: ['DELIVERY_FAILED', 'LOST', 'RTO_IN_TRANSIT'] } },
           { status: 'RTO_DELIVERED', rtoReceivedAt: null },
           { status: { in: ['CREATED', 'PICKUP_REQUESTED'] }, createdAt: { lt: stale } },
+          // Delhivery came and did not collect it: the seller has to ask again.
+          { status: 'CREATED', pickupFailedAt: { not: null } },
         ],
       },
       AWAITING_PICKUP: { status: { in: ['CREATED', 'PICKUP_REQUESTED'] } },
@@ -65,7 +105,10 @@ adminShipmentsRouter.get('/', async (req, res, next) => {
         orderBy: [{ lastScanAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
         skip: (input.page - 1) * input.pageSize,
         take: input.pageSize,
-        include: { order: { select: { id: true, orderNumber: true } }, seller: { select: { shopName: true } } },
+        include: {
+          order: { select: { id: true, orderNumber: true, shipLine1: true, shipLine2: true, shipCity: true, shipPincode: true } },
+          seller: { select: { shopName: true } },
+        },
       }),
     ]);
     const body: AdminShipmentPage = {
@@ -88,6 +131,10 @@ adminShipmentsRouter.get('/', async (req, res, next) => {
         lastScanAt: s.lastScanAt?.toISOString() ?? null,
         createdAt: s.createdAt.toISOString(),
         ndrAction: s.ndrAction,
+        deliveryAttempts: s.deliveryAttempts,
+        deliverTo: { line1: s.order.shipLine1, line2: s.order.shipLine2, city: s.order.shipCity, pincode: s.order.shipPincode },
+        pickupFailedAt: s.status === 'CREATED' ? (s.pickupFailedAt?.toISOString() ?? null) : null,
+        pickupScheduledFor: s.status === 'PICKUP_REQUESTED' ? (s.pickupScheduledFor?.toISOString() ?? null) : null,
       })),
     };
     res.json({ success: true, data: body });

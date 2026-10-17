@@ -590,7 +590,27 @@ adminOrdersRouter.post('/shipments/:shipmentId/ndr', async (req, res, next) => {
       shipmentId: req.params.shipmentId,
       action: input.action,
       deferTo: input.deferTo ? new Date(`${input.deferTo}T12:00:00+05:30`) : undefined,
+      consignee: { line1: input.line1, line2: input.line2 || null, phone: input.phone || undefined },
     });
+    if (input.action === 'EDIT_DETAILS' || input.action === 'RETURN_TO_SELLER') {
+      auditSafe({
+        actorId: req.auth!.userId,
+        actorRole: 'ADMIN',
+        module: 'ORDERS',
+        action: input.action === 'EDIT_DETAILS' ? 'Delivery details corrected' : 'Return to seller requested',
+        entityType: 'Shipment',
+        entityId: req.params.shipmentId,
+        summary:
+          input.action === 'EDIT_DETAILS'
+            ? `After a failed delivery, asked Delhivery to deliver ${input.line1 ? `to: ${[input.line1, input.line2].filter(Boolean).join(', ')}` : ''}${input.phone ? `${input.line1 ? ', ' : ''}with a corrected phone` : ''}`
+            : 'After a failed delivery, asked Delhivery to bring the parcel back to the seller',
+        metadata: { action: input.action, line1: input.line1 ?? null, line2: input.line2 || null, phoneChanged: !!input.phone },
+        severity: 'MEDIUM',
+        ipAddress: ipFrom(req),
+        userAgent: req.get('user-agent') ?? null,
+        deviceType: deviceFromUserAgent(req.get('user-agent')),
+      });
+    }
     res.json({ success: true, data: result });
   } catch (err) {
     next(err);
@@ -665,6 +685,24 @@ adminOrdersRouter.patch('/:id/status', async (req, res, next) => {
       );
     }
 
+    // A Delhivery parcel is delivered by its delivery scan. By hand only with
+    // a reason, which goes on the audit log.
+    const courierParcels =
+      input.status === 'DELIVERED'
+        ? await prisma.shipment.findMany({
+            where: { id: { in: targets.map((t) => t.shipmentId).filter((id): id is string => !!id) }, provider: { not: 'mock' } },
+            select: { id: true, awbNumber: true },
+          })
+        : [];
+    const courierLines = targets.filter((t) => courierParcels.some((p) => p.id === t.shipmentId));
+    if (courierLines.length > 0 && !input.deliveryOverrideReason) {
+      throw new ApiError(
+        400,
+        'COURIER_DELIVERY_OVERRIDE',
+        `Delhivery marks ${courierParcels.map((p) => `AWB ${p.awbNumber ?? '—'}`).join(', ')} delivered when it scans the delivery. Give a reason to mark it delivered by hand; the reason goes on the audit log.`,
+      );
+    }
+
     await prisma.orderItem.updateMany({
       where: { id: { in: targets.map((t) => t.id) } },
       data: {
@@ -686,6 +724,23 @@ adminOrdersRouter.patch('/:id/status', async (req, res, next) => {
       await prisma.order.update({
         where: { id: order.id },
         data: { adminNote: input.note },
+      });
+    }
+
+    if (courierLines.length > 0) {
+      auditSafe({
+        actorId: req.auth!.userId,
+        actorRole: 'ADMIN',
+        module: 'ORDERS',
+        action: 'Marked delivered by hand',
+        entityType: 'Order',
+        entityId: order.id,
+        summary: `Marked ${order.orderNumber} delivered without Delhivery's delivery scan (${courierParcels.map((p) => `AWB ${p.awbNumber ?? '—'}`).join(', ')}): ${input.deliveryOverrideReason}`,
+        metadata: { itemIds: courierLines.map((t) => t.id), shipmentIds: courierParcels.map((p) => p.id), reason: input.deliveryOverrideReason },
+        severity: 'HIGH',
+        ipAddress: ipFrom(req),
+        userAgent: req.get('user-agent') ?? null,
+        deviceType: deviceFromUserAgent(req.get('user-agent')),
       });
     }
 

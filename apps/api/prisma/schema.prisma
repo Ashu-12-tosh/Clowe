@@ -562,6 +562,10 @@ model SellerProfile {
   // --- Fulfilment preferences --------------------------------------------
   // Working days allowed to dispatch before a shipment counts as late.
   dispatchDays  Int      @default(2)
+  // When Delhivery should come to collect: the time (IST, HH:MM) and the
+  // weekdays (0 = Sunday … 6 = Saturday; Sunday is never offered).
+  pickupSlot    String   @default("11:00")
+  pickupDays    Int[]    @default([1, 2, 3, 4, 5, 6])
   // Seller can opt out of Cash on Delivery for their own items.
   codEnabled    Boolean  @default(true)
   // Overrides the platform return window when set.
@@ -1574,6 +1578,10 @@ model Shipment {
   pickupRequestId String?
   // When Delhivery is asked to come (one request per pickup address and day).
   pickupScheduledFor DateTime?
+  // Delhivery came for it, or should have, and did not collect it ("Not
+  // Picked"): the parcel is back to waiting, and the seller asks again.
+  pickupFailedAt DateTime?
+  pickupFailures Int       @default(0)
   // The last thing asked of Delhivery after a failed attempt (NDR).
   ndrAction    String?
   ndrRequestId String?

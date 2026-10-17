@@ -13,6 +13,7 @@ import {
   type VariantAxis,
   categoryRulesInputSchema,
   IMAGE_SLOTS,
+  isValidHsn,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { fieldError, issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
@@ -545,6 +546,15 @@ export default function AdminCategoriesPage() {
               <span className="text-xs text-gray-400">
                 /{row.slug} · {row.productCount} products
               </span>
+              {row.productCount > 0 && !isValidHsn(row.rules.hsnCode) && (
+                <span
+                  className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800"
+                  title="Parcels from this category are booked with Delhivery without an HSN code. Add a 4, 6 or 8-digit code here or on its parent."
+                  data-hsn-missing
+                >
+                  No HSN
+                </span>
+              )}
             </p>
             <p className="text-[11px] text-gray-400">
               {summary(row)}

@@ -141,28 +141,67 @@ export async function notifyRtoArrived(shipment: { orderId: string; sellerId: st
   });
 }
 
-/** Ask Delhivery to re-attempt, or to deliver on a later day (up to six days out). */
+/**
+ * After a failed delivery attempt, ask Delhivery to:
+ * - RE_ATTEMPT — try again;
+ * - DEFER_DELIVERY — deliver on a later day (up to six days out);
+ * - EDIT_DETAILS — deliver to a corrected address (same PIN code: Delhivery
+ *   re-routes only within it) or phone;
+ * - RETURN_TO_SELLER — give up and bring it back (Delhivery's cancellation of
+ *   a parcel on its way is a return to origin; its RTO scans then refund a
+ *   prepaid buyer as usual).
+ */
 export async function requestNdrAction(input: {
   shipmentId: string;
   sellerId?: string;
-  action: Extract<NdrAction, 'RE_ATTEMPT' | 'DEFER_DELIVERY'>;
+  action: NdrAction | 'RETURN_TO_SELLER';
   deferTo?: Date;
-}): Promise<{ requestId: string }> {
-  const shipment = await prisma.shipment.findUnique({ where: { id: input.shipmentId } });
+  consignee?: { line1?: string; line2?: string | null; phone?: string };
+}): Promise<{ requestId: string | null }> {
+  const shipment = await prisma.shipment.findUnique({ where: { id: input.shipmentId }, include: { order: { select: { id: true, userId: true, orderNumber: true } } } });
   if (!shipment || (input.sellerId && shipment.sellerId !== input.sellerId)) throw ApiError.notFound('Parcel not found');
   if (shipment.status !== 'DELIVERY_FAILED' || !shipment.awbNumber) {
-    throw ApiError.badRequest('Only a parcel whose delivery attempt failed can be re-attempted or deferred', 'NOT_AN_NDR');
+    throw ApiError.badRequest('Only a parcel whose delivery attempt failed can be acted on this way', 'NOT_AN_NDR');
   }
   if (input.action === 'DEFER_DELIVERY') {
     const days = input.deferTo ? (input.deferTo.getTime() - Date.now()) / 86_400_000 : -1;
     if (days < 0 || days > 6) throw ApiError.badRequest('Pick a day within the next six days', 'NDR_BAD_DATE');
   }
+  const line1 = input.consignee?.line1?.trim();
+  const phone = input.consignee?.phone?.trim();
+  if (input.action === 'EDIT_DETAILS' && !line1 && !phone) {
+    throw ApiError.badRequest('Give the corrected address or phone', 'NDR_NO_DETAILS');
+  }
   try {
-    const { requestId } = await shippingProvider.ndrAction(shipment.awbNumber, { action: input.action, deferTo: input.deferTo });
+    if (input.action === 'RETURN_TO_SELLER') {
+      await shippingProvider.cancelShipment(shipment.awbNumber);
+      await prisma.shipment.update({
+        where: { id: shipment.id },
+        data: { ndrAction: 'RETURN_TO_SELLER', ndrRequestId: null, ndrActionAt: new Date(), statusText: 'Return to the seller requested' },
+      });
+      return { requestId: null };
+    }
+    const address = line1 ? [line1, input.consignee?.line2?.trim()].filter(Boolean).join(', ') : undefined;
+    const { requestId } = await shippingProvider.ndrAction(shipment.awbNumber, {
+      action: input.action,
+      deferTo: input.deferTo,
+      ...(input.action === 'EDIT_DETAILS' ? { consignee: { ...(address ? { line1: address } : {}), ...(phone ? { phone } : {}) } } : {}),
+    });
     await prisma.shipment.update({
       where: { id: shipment.id },
       data: { ndrAction: input.action, ndrRequestId: requestId, ndrActionAt: new Date() },
     });
+    if (input.action === 'EDIT_DETAILS') {
+      await prisma.notification.create({
+        data: {
+          userId: shipment.order.userId,
+          type: 'ORDER_NDR',
+          title: `Delivery details updated — ${shipment.order.orderNumber}`,
+          body: `Delhivery will try again${address ? ` at ${address}` : ''}${phone ? `${address ? ',' : ''} calling ${phone.slice(0, 2)}xxxxxx${phone.slice(-2)}` : ''}.`,
+          linkHref: `/account/orders/${shipment.order.id}`,
+        },
+      });
+    }
     return { requestId };
   } catch (err) {
     if (err instanceof ShippingProviderError) throw ApiError.badRequest(`Delhivery: ${err.message}`, err.code);

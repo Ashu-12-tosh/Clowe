@@ -1595,6 +1595,28 @@ async function fulfil(orderId, itemId, page, { tag }) {
   }
   const label = await page.request.get(`${WEB}/seller/orders/labels?ids=${itemId}`);
   check(label.ok(), `${tag}: label page ${label.status()}`);
+  if (!S.pickupScreenChecked) {
+    S.pickupScreenChecked = true;
+    await step('9 Fulfilment', 'pack screen: "Ready for pickup" and the packing checklist; the label has real AWB and order barcodes', async () => {
+      await page.reload();
+      await hydrated(page);
+      check(await page.getByRole('button', { name: /Ready for pickup/ }).count(), 'no "Ready for pickup" button on the order page');
+      check(await page.locator('[data-packaging-checklist]').count(), 'no packing checklist on the order page');
+      const sheet = await page.context().newPage();
+      try {
+        await sheet.goto(`${WEB}/seller/orders/labels?ids=${itemId}`);
+        await sheet.locator('svg[data-barcode]').first().waitFor({ timeout: 30_000 });
+        const codes = await sheet.locator('svg[data-barcode]').evaluateAll((els) => els.map((e) => e.getAttribute('data-barcode')));
+        check(codes.includes(shipment.awbNumber), `label barcodes ${codes.join(', ')} — no AWB ${shipment.awbNumber}`);
+        check(codes.length >= 2, `label barcodes: ${codes.join(', ')}`);
+        // At least 8 mm tall, as Delhivery's scanners need.
+        const mm = await sheet.locator(`svg[data-barcode="${shipment.awbNumber}"]`).evaluate((e) => e.getBoundingClientRect().height / (96 / 25.4));
+        check(mm >= 8, `AWB barcode ${mm.toFixed(1)} mm tall`);
+      } finally {
+        await sheet.close();
+      }
+    }, { page });
+  }
   await courier(shipment.awbNumber, 'PICKED_UP');
   return shipment;
 }

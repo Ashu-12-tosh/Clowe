@@ -286,6 +286,18 @@ describe('warehouses, labels, pickups, cancellation and NDR', () => {
     expect((await refusal(provider(refused.fetchImpl).p.requestPickup({ warehouseName: 'CLW-seller1', pickupAt: new Date(), expectedPackages: 1 }))).code).toBe('PICKUP_REFUSED');
   });
 
+  it('adds parcels to the day’s request: the new count, and "already exists" is that request', async () => {
+    const exists = stub({ body: { pr_exist: true, error: 'Pickup request already exists' } });
+    const r = await provider(exists.fetchImpl).p.requestPickup({
+      warehouseName: 'CLW-seller1',
+      pickupAt: new Date('2026-10-22T05:30:00Z'),
+      expectedPackages: 4,
+      existingRequestId: '8812',
+    });
+    expect(r).toEqual({ pickupRequestId: '8812', scheduledFor: new Date('2026-10-22T05:30:00Z') });
+    expect(JSON.parse(exists.calls[0]!.body!)).toEqual({ pickup_location: 'CLW-seller1', pickup_date: '2026-10-22', pickup_time: '11:00:00', expected_package_count: 4 });
+  });
+
   it('cancels, and reports a refusal', async () => {
     const ok = stub({ body: { status: true, remark: 'Shipment has been cancelled' } });
     await provider(ok.fetchImpl).p.cancelShipment('1490810000001');
@@ -299,9 +311,14 @@ describe('warehouses, labels, pickups, cancellation and NDR', () => {
     const { p } = provider(fetchImpl);
     expect(await p.ndrAction('1490810000001', { action: 'RE_ATTEMPT' })).toEqual({ requestId: 'UPL123' });
     await p.ndrAction('1490810000001', { action: 'DEFER_DELIVERY', deferTo: new Date('2026-10-24T03:00:00Z') });
+    // A corrected address alone: only the fields given go to Delhivery.
+    await p.ndrAction('1490810000001', { action: 'EDIT_DETAILS', consignee: { line1: '12 New Lane, Near the park' } });
+    await p.ndrAction('1490810000001', { action: 'EDIT_DETAILS', consignee: { phone: '9876543210' } });
     expect(calls.map((c) => JSON.parse(c.body!))).toEqual([
       { data: [{ waybill: '1490810000001', act: 'RE-ATTEMPT' }] },
       { data: [{ waybill: '1490810000001', act: 'DEFER_DLV', action_data: { deferred_date: '2026-10-24' } }] },
+      { data: [{ waybill: '1490810000001', act: 'EDIT_DETAILS', action_data: { add: '12 New Lane, Near the park' } }] },
+      { data: [{ waybill: '1490810000001', act: 'EDIT_DETAILS', action_data: { phone: '9876543210' } }] },
     ]);
   });
 });

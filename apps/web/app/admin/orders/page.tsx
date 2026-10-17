@@ -887,8 +887,9 @@ function OrderDrawer({
     void load();
   }, [load]);
 
-  async function advance(status: AdminOrderStatus, noClipReason?: string) {
-    if (busy && !noClipReason) return;
+  async function advance(status: AdminOrderStatus, reasons: { noClipReason?: string; deliveryOverrideReason?: string } = {}) {
+    const { noClipReason, deliveryOverrideReason } = reasons;
+    if (busy && !noClipReason && !deliveryOverrideReason) return;
     setBusy(true);
     try {
       await api(`/api/admin/orders/${orderId}/status`, {
@@ -898,6 +899,7 @@ function OrderDrawer({
           status,
           ...(status === 'SHIPPED' ? { trackingNumber: awb } : {}),
           ...(noClipReason ? { noClipReason } : {}),
+          ...(deliveryOverrideReason ? { deliveryOverrideReason } : {}),
         },
         success: `Order moved to ${ADMIN_ORDER_STATUS_LABELS[status]}`,
         // A missing packing video is a question for the desk (below), not a failure.
@@ -909,16 +911,25 @@ function OrderDrawer({
       await load();
       await onChanged();
     } catch (err) {
-      // No packing video: the desk may go ahead, but only with a reason on record.
-      if (err instanceof ApiRequestError && err.code === 'PACKING_VIDEO_REQUIRED' && !noClipReason) {
-        const reason = window.prompt(`${err.message}\n\nReason:`);
+      // No packing video, or a Delhivery parcel without its delivery scan: the
+      // desk may go ahead, but only with a reason on record.
+      const ask =
+        err instanceof ApiRequestError &&
+        ((err.code === 'PACKING_VIDEO_REQUIRED' && !noClipReason) || (err.code === 'COURIER_DELIVERY_OVERRIDE' && !deliveryOverrideReason))
+          ? err
+          : null;
+      if (ask) {
+        const reason = window.prompt(`${ask.message}\n\nReason:`);
         setBusy(false);
         if (reason === null) return;
         if (reason.trim().length < 5) {
           flash('Give a reason of at least 5 characters.');
           return;
         }
-        await advance(status, reason.trim());
+        await advance(
+          status,
+          ask.code === 'PACKING_VIDEO_REQUIRED' ? { ...reasons, noClipReason: reason.trim() } : { ...reasons, deliveryOverrideReason: reason.trim() },
+        );
         return;
       }
       const message = err instanceof ApiRequestError ? err.message : 'Could not update that order.';

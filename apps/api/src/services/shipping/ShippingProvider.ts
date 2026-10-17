@@ -102,7 +102,10 @@ export interface ShipmentParty {
 export interface ShipmentProduct {
   title: string;
   quantity: number;
+  /** The HSN code (4, 6 or 8 digits) from the product's category; null when the category has none. */
   hsn: string | null;
+  /** The GST rate the line was sold at, as on its tax invoice. */
+  gstRatePercent?: number | null;
 }
 
 export interface CreateShipmentRequest {
@@ -148,7 +151,10 @@ export interface LabelData {
 export interface PickupRequest {
   warehouseName: string;
   pickupAt: Date;
+  /** Every parcel the day's request covers, including any added to it now. */
   expectedPackages: number;
+  /** Set when parcels join a request already made for that address and day. */
+  existingRequestId?: string;
 }
 
 export interface PickupResult {

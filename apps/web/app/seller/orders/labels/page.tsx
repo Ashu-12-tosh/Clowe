@@ -6,25 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import type { SellerShippingLabel } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
-
-/** Barcode-ish strip drawn from the AWB so labels scan as "real" documents. */
-function BarcodeStrip({ value }: { value: string }) {
-  const bars = Array.from(value).flatMap((char, i) => {
-    const code = char.charCodeAt(0) + i;
-    return [1 + (code % 3), 1 + ((code >> 2) % 2)];
-  });
-  return (
-    <div className="flex h-10 items-end gap-[2px]">
-      {bars.map((w, i) => (
-        <span
-          key={i}
-          className={i % 2 === 0 ? 'bg-ink-900' : 'bg-transparent'}
-          style={{ width: `${w}px`, height: '100%' }}
-        />
-      ))}
-    </div>
-  );
-}
+import { Code128 } from '@/components/Code128';
 
 function Label({ label }: { label: SellerShippingLabel }) {
   const { shipTo, shipFrom } = label;
@@ -35,7 +17,8 @@ function Label({ label }: { label: SellerShippingLabel }) {
           <p className="font-display text-lg font-bold uppercase tracking-[0.2em] text-ink-900">
             Clowe
           </p>
-          <p className="text-[11px] text-gray-500">Order {label.orderNumber}</p>
+          <Code128 value={label.orderNumber} heightMm={8} moduleMm={0.254} className="mt-1" />
+          <p className="text-[11px] text-gray-700">Order {label.orderNumber}</p>
         </div>
         <div className="text-right">
           <p className="text-xs font-bold uppercase tracking-wide">
@@ -43,7 +26,7 @@ function Label({ label }: { label: SellerShippingLabel }) {
             {label.mode && ` · ${label.mode === 'EXPRESS' ? 'Express' : 'Surface'}`}
           </p>
           {label.sortCode && <p className="font-mono text-base font-bold text-ink-900">{label.sortCode}</p>}
-          {label.destinationHub && <p className="text-[10px] text-gray-500">{label.destinationHub}</p>}
+          {label.destinationHub && <p className="text-[11px] text-gray-700">{label.destinationHub}</p>}
           {label.isCod ? (
             <p className="mt-0.5 inline-block rounded bg-ink-900 px-2 py-0.5 text-xs font-bold text-white">
               COD {formatPaise(label.codAmountPaise)}
@@ -56,7 +39,7 @@ function Label({ label }: { label: SellerShippingLabel }) {
 
       <div className="grid grid-cols-2 gap-4 py-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Deliver to</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Deliver to</p>
           <p className="mt-1 text-sm font-bold text-ink-900">{shipTo.name}</p>
           <p className="text-xs leading-relaxed text-gray-700">
             {shipTo.line1}
@@ -66,8 +49,8 @@ function Label({ label }: { label: SellerShippingLabel }) {
           </p>
         </div>
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-            Return / ship from
+          <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
+            {label.returnTo ? 'Ship from' : 'Ship from / return to'}
           </p>
           <p className="mt-1 text-sm font-semibold text-ink-900">{shipFrom.shopName}</p>
           <p className="text-xs leading-relaxed text-gray-700">
@@ -81,11 +64,21 @@ function Label({ label }: { label: SellerShippingLabel }) {
               </>
             )}
           </p>
+          {label.returnTo && (
+            <>
+              <p className="mt-2 text-[11px] font-bold uppercase tracking-wide text-gray-500">Return to</p>
+              <p className="text-xs leading-relaxed text-gray-700" data-return-to>
+                {label.returnTo.line1}
+                <br />
+                {[label.returnTo.city, label.returnTo.state, label.returnTo.pincode].join(', ')}
+              </p>
+            </>
+          )}
         </div>
       </div>
 
       <div className="border-t-2 border-dashed border-gray-300 py-2">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
           Contents{label.weightGrams ? ` · ${label.weightGrams / 1000} kg` : ''}
         </p>
         {label.contents.map((c, i) => (
@@ -102,7 +95,7 @@ function Label({ label }: { label: SellerShippingLabel }) {
         <div className="min-w-0 flex-1">
         {label.awbNumber ? (
           <>
-            <BarcodeStrip value={label.awbNumber} />
+            <Code128 value={label.awbNumber} heightMm={12} moduleMm={0.33} />
             <p className="mt-1 font-mono text-sm font-bold tracking-wider text-ink-900">
               AWB {label.awbNumber}
             </p>
@@ -120,7 +113,7 @@ function Label({ label }: { label: SellerShippingLabel }) {
             alt="QR code - open this order in the seller panel"
             className="h-24 w-24"
           />
-          <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-gray-500">
+          <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
             Scan for order details
           </p>
         </div>
