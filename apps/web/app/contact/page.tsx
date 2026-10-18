@@ -60,7 +60,10 @@ export default async function ContactPage() {
               <a
                 key={row.label}
                 href={row.kind === 'email' ? `mailto:${row.value}` : `tel:${row.value.replace(/[^\d+]/g, '')}`}
-                className="flex items-center gap-4 rounded-2xl border border-gray-100 bg-cream-100 p-4 transition hover:border-brand-600 sm:p-5"
+                // An email takes the full width: half a column is narrower than the
+                // longest address, which then ran out of its card on a computer.
+                className={`flex min-w-0 items-center gap-4 rounded-2xl border border-gray-100 bg-cream-100 p-4 transition hover:border-brand-600 sm:p-5 ${row.kind === 'email' ? 'sm:col-span-2' : ''}`}
+                data-contact-card={row.kind}
               >
                 <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-xl sm:flex">
                   {row.icon}

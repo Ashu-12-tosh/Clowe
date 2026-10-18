@@ -48,6 +48,10 @@ describe('content pages', () => {
     for (const page of CONTENT_PAGES) expect(read(page.slug), page.slug).not.toMatch(/TO FILL|TODO|\[placeholder|\[INSERT/i);
   });
 
+  it('the Blog and the App page stay unlisted (404) until they have real content', () => {
+    for (const slug of ['blog', 'app']) expect(CONTENT_PAGES.some((p) => p.slug === slug), slug).toBe(false);
+  });
+
   it('describe no feature Clowe does not have: those pages are gone (and 404)', () => {
     for (const slug of ['affiliate', 'recalls', 'accelerator', 'purchase-protection', 'shipping-info', 'returns-refunds']) {
       expect(CONTENT_PAGES.some((p) => p.slug === slug), slug).toBe(false);

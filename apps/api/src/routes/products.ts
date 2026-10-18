@@ -307,6 +307,24 @@ productsRouter.get('/by-ids', async (req, res, next) => {
   }
 });
 
+// Old product slugs → the current slug, for the web middleware's 301s
+// (/products/<old> → /products/<current>). Small — one row per renamed
+// listing — so the middleware holds the whole map and asks once a minute.
+// Declared before /:slug so "slug-redirects" isn't read as a product slug.
+productsRouter.get('/slug-redirects', async (_req, res, next) => {
+  try {
+    const rows = await prisma.productSlugRedirect.findMany({
+      select: { oldSlug: true, product: { select: { slug: true } } },
+    });
+    const map: Record<string, string> = {};
+    // A slug that became current again (renamed back) never points at itself.
+    for (const row of rows) if (row.oldSlug !== row.product.slug) map[row.oldSlug] = row.product.slug;
+    res.json({ success: true, data: map });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Product detail by slug. optionalAuth so a logged-in view lands in the
 // shopper's "Recently viewed" list as well as the trending signal.
 productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {

@@ -18,10 +18,8 @@ export const CONTENT_PAGES: ContentPageMeta[] = [
   { slug: 'brand-protection', title: 'Protect and Build Your Brand', description: 'Brand verification, takedowns and counterfeit protection on Clowe.' },
   { slug: 'supply', title: 'Supply to Clowe', description: 'Manufacture or wholesale clothing? Partner with Clowe.' },
   { slug: 'advertise', title: 'Advertise Your Products', description: 'Promoted placements for sellers — clearly labeled, admin-reviewed.' },
-  { slug: 'app', title: 'Clowe App', description: 'The Clowe mobile app — coming soon.' },
   { slug: 'help', title: 'Help Centre', description: 'Quick answers about orders, returns, accounts and selling.' },
   // Marketplace footer pages
-  { slug: 'blog', title: 'Clowe Blog', description: 'Stories, launches and shopping guides from Clowe.' },
   { slug: 'faq', title: 'FAQ', description: 'Frequently asked questions about shopping on Clowe.' },
   { slug: 'cancellation', title: 'Cancellation Policy', description: 'When an order can be cancelled, by whom, and how the refund is made.' },
   { slug: 'privacy-policy', title: 'Privacy Policy', description: 'How Clowe handles your data.' },

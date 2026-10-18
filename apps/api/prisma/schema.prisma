@@ -1091,6 +1091,8 @@ model Product {
   spinImagesPending String[]    @default([])
   spinImagesSubmittedAt DateTime?
   adCampaigns     AdCampaign[]
+  /// Slugs this listing had before: each answers with a 301 to the current one.
+  slugRedirects   ProductSlugRedirect[]
   // Seller opt-in for AI Try-On; only honoured in try-on eligible categories.
   tryOnEnabled    Boolean       @default(false)
   // Seller's "Not returnable" (pierced jewellery, customised or final-sale
@@ -2980,4 +2982,17 @@ model EmailOutbox {
   @@index([sentAt])
   @@index([createdAt])
   @@map("email_outbox")
+}
+
+/// An old product URL slug (the listing was renamed). /products/<oldSlug>
+/// answers with a permanent redirect to the product's current slug, so links
+/// already shared, indexed or sent to a payment gateway keep working.
+model ProductSlugRedirect {
+  oldSlug   String   @id
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@map("product_slug_redirects")
 }

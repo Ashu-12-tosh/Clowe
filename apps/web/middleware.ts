@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { buildContentSecurityPolicy } from '@clowe/shared';
 import { isContentPageSlug } from './lib/contentPageList';
+import { renamedProductPath } from './lib/productSlugRedirect';
 
 /**
  * Content-Security-Policy, with a fresh nonce per page.
@@ -66,6 +67,31 @@ async function isMissingStore(pathname: string): Promise<boolean> {
   }
 }
 
+/**
+ * Old product slugs (a listing was renamed) → current slug, from the API. The
+ * whole map, held for a minute: one small request a minute, not one per page.
+ * If the API cannot be asked, the last map is kept (or none: the page then
+ * renders as before).
+ */
+const SLUG_MAP_TTL_MS = 60_000;
+let slugMap: { map: Record<string, string>; expires: number } | null = null;
+
+async function productSlugRedirects(): Promise<Record<string, string>> {
+  if (slugMap && slugMap.expires > Date.now()) return slugMap.map;
+  try {
+    const res = await fetch(`${apiOrigin}/api/products/slug-redirects`, { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      const map = ((await res.json()) as { data?: Record<string, string> }).data ?? {};
+      slugMap = { map, expires: Date.now() + SLUG_MAP_TTL_MS };
+      return map;
+    }
+  } catch {
+    // keep what we had
+  }
+  if (slugMap) slugMap.expires = Date.now() + SLUG_MAP_TTL_MS;
+  return slugMap?.map ?? {};
+}
+
 function freshNonce(): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
@@ -82,6 +108,15 @@ export async function middleware(request: NextRequest) {
     dev,
     reportUri: '/api/csp-reports',
   });
+
+  // A renamed listing's old URL: permanent redirect (301) to its current one.
+  if (request.nextUrl.pathname.startsWith('/products/')) {
+    const moved = renamedProductPath(request.nextUrl.pathname, await productSlugRedirects());
+    if (moved) {
+      const target = new URL(`${moved}${request.nextUrl.search}`, origin);
+      return NextResponse.redirect(target, 301);
+    }
+  }
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(HEADER, policy);
