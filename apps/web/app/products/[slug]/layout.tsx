@@ -7,12 +7,22 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const product = await metaFetch<ProductDetail>(`/api/products/${encodeURIComponent(slug)}`);
   if (!product) return {};
+  const description = metaDescription(
+    product.shortDescription ?? product.description,
+    `${product.title} — sold by an approved seller on Clowe.`,
+  );
+  // A shared link previews with the product's own first photo.
+  const image = product.images[0]?.url;
   return {
     title: product.title,
-    description: metaDescription(
-      product.shortDescription ?? product.description,
-      `${product.title} — sold by an approved seller on Clowe.`,
-    ),
+    description,
+    openGraph: {
+      title: product.title,
+      description,
+      siteName: 'Clowe',
+      type: 'website',
+      ...(image ? { images: [{ url: image, alt: product.title }] } : {}),
+    },
   };
 }
 

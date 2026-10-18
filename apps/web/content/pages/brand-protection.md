@@ -14,4 +14,4 @@ Only list products you are authorised to sell. Listings with brand names are sub
 
 ## Report a violation
 
-Email **brand@clowe.example** with the listing link and proof of ownership. Our trust & safety team will investigate and respond.
+Email **{{legal.supportEmail}}** with the listing link and proof of ownership. Our trust & safety team will investigate and respond.

@@ -53,7 +53,7 @@ describe('store closed for orders', () => {
     for (const paymentMethod of ['COD', 'UPI']) {
       const r = await call('POST', '/api/orders/checkout', shopper.token, { addressId: 'any', paymentMethod });
       expect(r.status).toBe(403);
-      expect(r.json.error).toMatchObject({ code: 'STORE_NOT_OPEN', message: "We're launching soon — orders open shortly" });
+      expect(r.json.error).toMatchObject({ code: 'STORE_NOT_OPEN', message: 'Orders open soon' });
     }
     expect((await call('GET', '/api/cart', shopper.token)).status).toBe(200);
     expect((await call('GET', '/api/products?limit=4', null)).status).toBe(200);

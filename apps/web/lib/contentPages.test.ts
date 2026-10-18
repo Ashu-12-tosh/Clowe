@@ -8,7 +8,7 @@ import { FAQ_ENTRIES } from './support/faq-content';
 
 const PAGES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'content', 'pages');
 const read = (slug: string) => fs.readFileSync(path.join(PAGES, `${slug}.md`), 'utf8');
-const LEGAL_TOKEN = /^\{\{legal\.(name|displayName|registeredAddress|llpin|gstin|pan|supportEmail|supportPhoneAlt|supportPhone)\}\}$/;
+const LEGAL_TOKEN = /^\{\{legal\.(name|displayName|entityType|registeredAddress|llpin|gstin|pan|supportEmail|supportPhoneAlt|supportPhone)\}\}$/;
 
 /** The pages that state rules a buyer or seller is held to. */
 const POLICY_PAGES = [

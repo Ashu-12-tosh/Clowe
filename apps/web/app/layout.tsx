@@ -4,6 +4,7 @@ import CookieConsent from '@/components/CookieConsent';
 import AppShell from '@/components/AppShell';
 import SupportChat from '@/components/SupportChat';
 import Toaster from '@/components/Toaster';
+import { serverPublicSettings } from '@/lib/serverSettings';
 import './globals.css';
 
 // Inter carries ~90% of the UI; Cormorant Garamond is reserved for brand
@@ -49,11 +50,14 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // The legal entity goes into the first HTML, so the footer's registered name
+  // and address are there for every visitor and crawler, with or without JS.
+  const legal = (await serverPublicSettings())?.legalEntity ?? null;
   return (
     <html lang="en" className={`${inter.variable} ${cormorant.variable}`}>
       <body className="min-h-screen bg-cream-50 font-sans text-ink-900 antialiased">
-        <AppShell>{children}</AppShell>
+        <AppShell legal={legal}>{children}</AppShell>
         <SupportChat />
         <Toaster />
         <CookieConsent />

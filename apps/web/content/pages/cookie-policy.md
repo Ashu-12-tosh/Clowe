@@ -2,6 +2,8 @@
 
 CLOWE SHOP — www.cloweshop.com
 
+Operated by CLOWE PARTNERS LLP, registered office at {{legal.registeredAddress}}
+
 *Last updated: 16 October 2026*
 
 This Cookie Policy explains how We use cookies and similar technologies on the Platform. It forms part of the Privacy Policy and is to be read with it.

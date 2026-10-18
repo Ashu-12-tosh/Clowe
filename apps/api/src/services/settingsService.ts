@@ -90,23 +90,9 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
     HOME_BANNER: { '7': 49900, '15': 89900, '30': 149900 },
     CATEGORY_SPONSORED: { '7': 29900, '15': 49900, '30': 79900 },
   },
-  pdpOffers: [
-    {
-      label: 'Bank Offer',
-      text: '10% instant discount on HDFC Bank credit cards',
-      terms: 'Applied by the bank at payment. Min order ₹2,000, max discount ₹1,000.',
-    },
-    {
-      label: 'No Cost EMI',
-      text: 'No Cost EMI on orders above ₹3,000',
-      terms: 'Available on select cards at the payment step.',
-    },
-    {
-      label: 'Partner Offer',
-      text: 'Get ₹100 cashback on your first UPI payment',
-      terms: 'Credited to your UPI app within 7 days.',
-    },
-  ],
+  // None until a bank or partner offer is actually agreed: the product page
+  // shows no Offers box rather than a promise nobody will honour.
+  pdpOffers: [],
 };
 
 /** Full settings: DB rows merged over defaults. */

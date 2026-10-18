@@ -1303,7 +1303,7 @@ async function flow8Shopper() {
     S.addressId = u.addresses[0].id;
   }, { page, key: 'shopper' });
 
-  await step(F, 'store closed for orders: the shopper is told "launching soon" and refused; a test account is not', async () => {
+  await step(F, 'store closed for orders: the shopper is told "Orders open soon" and refused; a test account is not', async () => {
     await apiOk('PUT', '/api/admin/settings', S.adminToken, { storeOpenForOrders: false });
     try {
       const token = await tokenOf(page);
@@ -1311,7 +1311,7 @@ async function flow8Shopper() {
       check(refused.json?.error?.code === 'STORE_NOT_OPEN', `checkout while closed: ${refused.status} ${refused.json?.error?.code}`);
       await goto(page, '/checkout');
       await page.locator('[data-store-closed]').first().waitFor({ timeout: 120_000 });
-      check(/launching soon/i.test(await page.locator('[data-store-closed]').first().innerText()), 'no launching-soon notice');
+      check(/orders open soon/i.test(await page.locator('[data-store-closed]').first().innerText()), 'no "Orders open soon" notice');
       const me = await prisma.user.findFirst({ where: { phone: S.shopperPhone } });
       await apiOk('PATCH', `/api/admin/users/${me.id}/test-account`, S.adminToken, { isTestAccount: true });
       const open = await apiOk('GET', '/api/orders/availability', token);
@@ -2109,11 +2109,14 @@ async function prodChecks() {
     }, { page });
   }
 
-  await step(F, 'home banners and sponsored slots render', async () => {
+  await step(F, 'home hero (banners, or real product photos without them) and sponsored slots render', async () => {
     await page.goto(`${PROD}/`, { waitUntil: 'networkidle', timeout: 90_000 });
-    check(await page.locator('section[aria-roledescription=carousel]').count(), 'no hero carousel');
     const home = await (await fetch(`${PROD}/api/home`)).json();
-    check((home.data?.banners ?? []).length > 0, 'no home banners in /api/home');
+    // With banners up, the carousel; with none (switched off in admin), the hero of live products.
+    const hero = (home.data?.banners ?? []).length > 0 ? 'section[aria-roledescription=carousel]' : '[data-product-hero]';
+    check(await page.locator(hero).count(), `no home hero (${hero})`);
+    check((home.data?.trending ?? []).length > 0, 'no products on the home page');
+    check(await page.locator('footer [data-legal-line]').filter({ hasText: /CLOWE PARTNERS LLP/ }).count(), 'footer does not name the legal entity');
     const ads = await fetch(`${PROD}/api/ad-serve?surface=HOME`).then((r) => r.json()).catch(() => null);
     const served = (ads?.data?.items ?? []).length + (ads?.data?.banners ?? []).length;
     const labelled = await page.locator('section[aria-label=Sponsored]').count();

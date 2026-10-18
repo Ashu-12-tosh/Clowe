@@ -14,4 +14,4 @@ Consistent quality, honest lead times, and compliance with labour and safety sta
 
 ## Get in touch
 
-Write to **supply@clowe.example** with your catalogue, capacity and location. Our sourcing team reviews every proposal.
+Write to **{{legal.supportEmail}}** with your catalogue, capacity and location. Our sourcing team reviews every proposal.

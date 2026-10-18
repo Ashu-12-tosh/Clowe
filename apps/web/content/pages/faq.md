@@ -2,6 +2,8 @@
 
 CLOWE SHOP — www.cloweshop.com
 
+Operated by CLOWE PARTNERS LLP, registered office at {{legal.registeredAddress}}
+
 *Last updated: 16 October 2026*
 
 These FAQs are provided for convenience and ease of understanding. They summarise Our policies in plain language. In the event of any inconsistency between an answer below and the corresponding policy document, the policy document shall prevail.

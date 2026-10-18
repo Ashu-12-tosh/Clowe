@@ -95,8 +95,9 @@ async function trendingCards(): Promise<HomeProductCard[]> {
     .slice(0, 12)
     .map(toCard);
 
-  // Sparse signals (fresh database) — pad with all-time best sellers.
-  if (cards.length < 8) {
+  // Sparse signals (fresh database) — fill the grid with all-time best sellers,
+  // so every live product shows until there are more than it holds.
+  if (cards.length < 12) {
     const pad = await prisma.product.findMany({
       where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, ...visible, id: { notIn: cards.map((c) => c.id) } },
       orderBy: { soldCount: 'desc' },
@@ -109,24 +110,29 @@ async function trendingCards(): Promise<HomeProductCard[]> {
 }
 
 /**
- * Slugs of the categories with something a shopper can buy, counting
- * everything below them: "fashion" is stocked when a t-shirt is.
+ * The categories with something a shopper can buy, counting everything below
+ * them ("fashion" is stocked when a t-shirt is), each with the photo of a live
+ * product in it — the home tile shows real goods, never stock art.
  */
-async function stockedCategorySlugs(hidden: Awaited<ReturnType<typeof shopperHidden>>): Promise<Set<string>> {
-  const [groups, rows] = await Promise.all([
-    prisma.product.groupBy({
-      by: ['categoryId'],
-      where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, ...whereFrom(hidden) },
+async function stockedCategories(hidden: Awaited<ReturnType<typeof shopperHidden>>): Promise<Map<string, string | null>> {
+  const [perCategory, rows] = await Promise.all([
+    // One live product per category, best seller first, with its first photo.
+    prisma.product.findMany({
+      where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, planHidden: false, ...whereFrom(hidden) },
+      distinct: ['categoryId'],
+      orderBy: [{ soldCount: 'desc' }, { createdAt: 'desc' }],
+      select: { categoryId: true, images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } } },
     }),
     categoryRows(),
   ]);
-  const slugs = new Set<string>();
-  for (const { categoryId } of groups) {
+  const photos = new Map<string, string | null>();
+  for (const { categoryId, images } of perCategory) {
+    const url = images[0]?.url ?? null;
     for (let row = rows.get(categoryId); row; row = row.parentId ? rows.get(row.parentId) : undefined) {
-      slugs.add(row.slug);
+      if (!photos.get(row.slug)) photos.set(row.slug, url);
     }
   }
-  return slugs;
+  return photos;
 }
 
 async function buildHomePayload(): Promise<HomePayload> {
@@ -137,7 +143,7 @@ async function buildHomePayload(): Promise<HomePayload> {
   // "Up to 60% off" on an empty department is worse than no tile.
   const hidden = await shopperHidden();
   const isHiddenProduct = productTestFrom(hidden);
-  const stocked = await stockedCategorySlugs(hidden);
+  const stocked = await stockedCategories(hidden);
   const opensHidden = (href: string | null | undefined) => {
     const slug = linkedCategorySlug(href);
     return slug !== null && !stocked.has(slug);
@@ -217,15 +223,17 @@ async function buildHomePayload(): Promise<HomePayload> {
             .map((i) => toCard(i.product)),
         }
       : null,
+    // Only departments with something to buy, each shown by one of its own
+    // products (or its icon): an empty department's tile leads nowhere.
     categories: rootCategories
-      .filter((c) => !hidden.categoryIds.has(c.id))
+      .filter((c) => !hidden.categoryIds.has(c.id) && stocked.has(c.slug))
       .map((c) => ({
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      icon: c.icon,
-      imageUrl: c.imageUrl,
-    })),
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        icon: c.icon,
+        imageUrl: stocked.get(c.slug) ?? null,
+      })),
     trending,
     promoStrips: promoTiles
       .filter((t) => t.placement === 'PROMO_STRIP' && !opensHidden(t.href))

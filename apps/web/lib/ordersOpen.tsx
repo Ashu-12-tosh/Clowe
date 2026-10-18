@@ -29,7 +29,7 @@ export function useOrdersOpen(): boolean | null {
   return open;
 }
 
-/** "We're launching soon — orders open shortly." */
+/** "Orders open soon" — where Buy now and checkout would be. */
 export function LaunchingSoon({ className = '' }: { className?: string }) {
   return (
     <p className={`rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-center text-sm font-semibold text-amber-900 ${className}`} role="status" data-store-closed>

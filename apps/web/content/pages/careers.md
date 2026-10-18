@@ -13,7 +13,7 @@ We're always happy to hear from great people in:
 
 ## How to apply
 
-Email your resume and a short note to **careers@clowe.example** with the role in the subject line. We reply to every application.
+Email your resume and a short note to **{{legal.supportEmail}}** with the role in the subject line. We reply to every application.
 
 ## Life at Clowe
 

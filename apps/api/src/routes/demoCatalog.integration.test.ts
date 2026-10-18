@@ -164,7 +164,7 @@ describe('while the demo catalog is off (the default)', () => {
     expect((await call('POST', '/api/cart/items', shopperToken, { variantId: demoVariantId, quantity: 1 })).status).toBe(404);
   });
 
-  it('home keeps its banner with no image yet, keeps the books tile, and drops the tile into an empty department', async () => {
+  it('home keeps its banner with no image yet, shows the books tile with a real book photo, and drops the tile into an empty department', async () => {
     const home = (await get('/api/home')).json.data as {
       banners: { headline: string; imageUrl: string | null }[];
       promoCards: { href: string; imageUrl: string | null }[];
@@ -173,7 +173,15 @@ describe('while the demo catalog is off (the default)', () => {
     expect(home.banners).toEqual([expect.objectContaining({ headline: 'Shop Everything.', imageUrl: null })]);
     expect(home.promoCards.map((c) => c.href)).toEqual(['/products?category=books']);
     expect(home.promoCards[0]!.imageUrl).toBeNull();
-    expect(home.categories.find((c) => c.slug === 'books')?.imageUrl).toBeNull();
+    // The books tile shows one of its live products' own photos, never the category's stock image.
+    const booksTile = home.categories.find((c) => c.slug === 'books')?.imageUrl;
+    const bookPhotos = await prisma.productImage.findMany({
+      where: { product: { category: { slug: { startsWith: 'books' } } } },
+      select: { url: true },
+    });
+    expect(bookPhotos.map((i) => i.url)).toContain(booksTile);
+    expect(booksTile).not.toContain('loremflickr.com');
+    expect(home.categories.some((c) => c.slug === 'demo-dept')).toBe(false);
   });
 
   it('touches no row: product, image, banner, tile and category keep their stock photos in the database', async () => {

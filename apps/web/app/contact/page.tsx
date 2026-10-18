@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { DEFAULT_LEGAL_ENTITY } from '@clowe/shared';
+import { DEFAULT_LEGAL_ENTITY, legalEntityType } from '@clowe/shared';
 import { serverPublicSettings } from '@/lib/serverSettings';
 
 export const metadata: Metadata = {
@@ -9,10 +9,10 @@ export const metadata: Metadata = {
 };
 
 /**
- * Contact Us: the support emails (shoppers, sellers, general), the phones and
+ * Contact Us: the support emails (shoppers, sellers, general), the phones, the
+ * business details (legal name, entity type, LLPIN, registered address) and
  * the way to the Grievance Officer — all from the settings (admin → settings);
- * a field left empty there is not shown. The registered address and GSTIN are
- * in the legal documents, not here (owner's call).
+ * a field left empty there is not shown. The GSTIN stays in the legal documents.
  */
 export default async function ContactPage() {
   const settings = await serverPublicSettings();
@@ -26,6 +26,16 @@ export default async function ContactPage() {
     legal.supportPhone.trim() && { kind: 'phone' as const, icon: '📞', label: 'Phone & WhatsApp', value: legal.supportPhone },
     legal.supportPhoneAlt.trim() && { kind: 'phone' as const, icon: '📞', label: 'Phone', value: legal.supportPhoneAlt },
   ].filter((row): row is { kind: 'email' | 'phone'; icon: string; label: string; value: string } => Boolean(row));
+
+  // A field left empty in the settings is left out, never shown blank.
+  const businessDetails = [
+    { label: 'Legal name', value: legal.name },
+    { label: 'Entity type', value: legalEntityType(legal.name) },
+    { label: 'LLPIN', value: legal.llpin },
+    { label: 'Registered address', value: legal.registeredAddress },
+    { label: 'Support email', value: legal.supportEmail },
+    { label: 'Support phone', value: [legal.supportPhone, legal.supportPhoneAlt].filter((p) => p.trim()).join(', ') },
+  ].filter((row) => row.value.trim());
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -64,6 +74,19 @@ export default async function ContactPage() {
             ))}
           </section>
         )}
+
+        {/* Who runs the site — what a payment gateway checks for, as plain text. */}
+        <section className="mt-8 rounded-2xl border border-gray-100 p-5 sm:p-6" data-business-details>
+          <h2 className="font-display text-xl font-bold text-ink-900">Business details</h2>
+          <dl className="mt-4 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[11rem_1fr]">
+            {businessDetails.map((row) => (
+              <div key={row.label} className="contents">
+                <dt className="font-semibold text-gray-500">{row.label}</dt>
+                <dd className="text-ink-900">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
 
         <section className="mt-8">
           <h2 className="font-display text-xl font-bold text-ink-900">Grievance Officer</h2>

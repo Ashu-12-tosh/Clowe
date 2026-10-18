@@ -2,6 +2,8 @@
 
 CLOWE SHOP— www.cloweshop.com
 
+Operated by CLOWE PARTNERS LLP, registered office at {{legal.registeredAddress}}
+
 *Last updated: 12 October 2026*
 
 This Policy forms part of the Terms and Conditions of Use and the Customer Terms of Sale, and is displayed on every product page before an order is placed, in compliance with Rule 5(3)(d) of the Consumer Protection (E-Commerce) Rules, 2020.

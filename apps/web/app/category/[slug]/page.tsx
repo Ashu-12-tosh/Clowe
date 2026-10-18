@@ -13,6 +13,7 @@ import {
   type AppliedFilter,
   type CategoryCallout,
   type CategoryDetail,
+  type ProductListItem,
   type ProductListResponse,
   type ProductSort,
   type RailFacet, imageAt
@@ -32,6 +33,8 @@ import { ChevronIcon } from '@/components/cart/CartIcons';
 const PAGE_SIZE = 24;
 /** Category/brand lists collapse past this many rows until "View More". */
 const FACET_PREVIEW = 8;
+/** Fewer products than this in a category (no filters set): live products from the rest of Clowe follow. */
+const MIN_SHOWN = 10;
 /** Hero slides advance on their own; pausing on hover keeps reading possible. */
 const CAROUSEL_MS = 6000;
 
@@ -222,6 +225,28 @@ function CategoryPageInner() {
       .finally(() => setLoading(false));
   }, [searchParams, selectedCategory]);
 
+  const railCount = railFilterCount(searchParams);
+
+  // A department still filling up: what is on sale elsewhere on Clowe, so a
+  // visitor never lands on a near-empty page. Never with a filter set — then
+  // "nothing matches" is the answer — and only on page 1.
+  const [more, setMore] = useState<ProductListItem[]>([]);
+  const needsMore = data !== null && railCount === 0 && page === 1 && data.total < MIN_SHOWN;
+  useEffect(() => {
+    if (!needsMore || !data) {
+      setMore([]);
+      return;
+    }
+    const shown = new Set(data.items.map((p) => p.id));
+    let live = true;
+    api<ProductListResponse>(`/api/products?limit=${PAGE_SIZE}&sort=popularity`)
+      .then((all) => live && setMore(all.items.filter((p) => !shown.has(p.id))))
+      .catch(() => live && setMore([]));
+    return () => {
+      live = false;
+    };
+  }, [needsMore, data]);
+
   /** Every filter is in the URL: push the next query (shareable, and Back undoes it). */
   const pushQuery = useCallback(
     (next: URLSearchParams) => {
@@ -236,7 +261,6 @@ function CategoryPageInner() {
   const closeSheet = useCallback(() => setSheetOpen(false), []);
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
-  const railCount = railFilterCount(searchParams);
   const activeFilterCount = railCount + (selectedCategory !== rootSlug ? 1 : 0);
   const firstItem = data ? (page - 1) * data.limit + 1 : 0;
   const lastItem = data ? Math.min(page * data.limit, data.total) : 0;
@@ -451,13 +475,14 @@ function CategoryPageInner() {
             </div>
           )}
 
-          {/* Empty with no filters set means nothing is listed yet — the same
-              words as /products — not that a filter was too tight. */}
+          {/* Empty with no filters set means nothing is listed yet, not that a
+              filter was too tight; "More on Clowe" follows when there is any. */}
           {data && data.items.length === 0 && sponsoredAds.length === 0 && railCount === 0 && (
-            <div className="mt-4 flex h-72 flex-col items-center justify-center text-center">
-              <p className="text-sm font-semibold text-ink-900">Nothing listed here yet.</p>
+            <div className={`mt-4 flex flex-col items-center justify-center text-center ${more.length > 0 ? 'h-32' : 'h-72'}`}>
+              <p className="text-sm font-semibold text-ink-900">Nothing listed in {category?.name ?? 'this category'} yet.</p>
               <p className="mt-1 text-sm text-gray-500">
                 Sellers are setting up shop — new listings appear here as they go live.
+                {more.length > 0 && ' Meanwhile, here is what is on Clowe now.'}
               </p>
             </div>
           )}
@@ -521,6 +546,17 @@ function CategoryPageInner() {
                 Next →
               </button>
             </div>
+          )}
+
+          {more.length > 0 && (
+            <section className="mt-10" data-more-on-clowe>
+              <h2 className="t-section text-ink-900">More on Clowe</h2>
+              <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+                {more.map((product) => (
+                  <CategoryProductCard key={product.id} product={product} inWishlist={wishlistIds.has(product.id)} />
+                ))}
+              </div>
+            </section>
           )}
 
           {/* Feature strip */}

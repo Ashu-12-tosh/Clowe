@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import type { AuthUser, CategoryNode } from '@clowe/shared';
+import type { AuthUser, CategoryNode, LegalEntity } from '@clowe/shared';
 import { api, getStoredUser } from '@/lib/api';
 import { recordPage } from '@/lib/returnTo';
 import Header from './Header';
@@ -128,7 +128,7 @@ function MobileDrawer({ onNavigate }: { onNavigate: () => void }) {
  * App-wide chrome: header + category nav, content, footer.
  * Mobile gets a slide-in drawer with the category tree. Pure layout.
  */
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({ children, legal = null }: { children: React.ReactNode; legal?: LegalEntity | null }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const pathname = usePathname();
 
@@ -173,7 +173,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex-1">{children}</div>
       <CompareBar />
-      <Footer />
+      <Footer legal={legal} />
     </div>
   );
 }

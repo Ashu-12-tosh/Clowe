@@ -67,7 +67,23 @@ export function legalDisplayName(name: string): string {
     .join('');
 }
 
-const TOKEN = /\{\{legal\.(name|displayName|registeredAddress|llpin|gstin|pan|supportEmail|supportPhoneAlt|supportPhone)\}\}/g;
+/** Suffixes of a registered name and the entity type they mean, longest first. */
+const ENTITY_TYPES: [RegExp, string][] = [
+  [/\bLLP$/i, 'Limited Liability Partnership (LLP)'],
+  [/\b(PRIVATE|PVT\.?) (LIMITED|LTD\.?)$/i, 'Private Limited Company'],
+  [/\b(LIMITED|LTD\.?)$/i, 'Public Limited Company'],
+];
+
+/**
+ * The kind of entity, read off the registered name: "CLOWE PARTNERS LLP" →
+ * "Limited Liability Partnership (LLP)". Empty when the name does not say.
+ */
+export function legalEntityType(name: string): string {
+  const trimmed = name.trim();
+  return ENTITY_TYPES.find(([suffix]) => suffix.test(trimmed))?.[1] ?? '';
+}
+
+const TOKEN = /\{\{legal\.(name|displayName|entityType|registeredAddress|llpin|gstin|pan|supportEmail|supportPhoneAlt|supportPhone)\}\}/g;
 
 /**
  * Fill {{legal.*}} tokens in a policy page's markdown. A line naming a field
@@ -80,6 +96,7 @@ export function fillLegalEntity(markdown: string, legal: LegalEntity | null | un
   const values: Record<string, string> = {
     ...entity,
     displayName: legalDisplayName(entity.name),
+    entityType: legalEntityType(entity.name),
     pan: panFromGstin(entity.gstin) ?? '',
   };
   // A multi-line address reads as one line, without doubling a comma the line already ends with.

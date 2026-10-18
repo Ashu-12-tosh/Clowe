@@ -171,13 +171,13 @@ export function DealCard({ product }: { product: HomeProductCard }) {
   );
 }
 
-/** Compact card for the Trending rail. */
-export function TrendingCard({ product }: { product: HomeProductCard }) {
+/** Compact card for the Trending rail, or (`fluid`) a cell of the Trending grid. */
+export function TrendingCard({ product, fluid = false }: { product: HomeProductCard; fluid?: boolean }) {
   const [label, style] = product.badge ? BADGE_STYLES[product.badge] : ['', ''];
   return (
     <Link
       href={`/products/${product.slug}`}
-      className="group/card w-36 shrink-0 rounded-2xl border border-gray-100 bg-white p-3 text-center transition hover:-translate-y-0.5 hover:shadow-lg sm:w-40"
+      className={`group/card rounded-2xl border border-gray-100 bg-white p-3 text-center transition hover:-translate-y-0.5 hover:shadow-lg ${fluid ? 'w-full' : 'w-36 shrink-0 sm:w-40'}`}
     >
       <div className="relative overflow-hidden rounded-xl bg-cream-100">
         {product.badge && (
@@ -200,6 +200,55 @@ export function TrendingCard({ product }: { product: HomeProductCard }) {
         From <span className="font-bold text-ink-900">{formatPaise(product.pricePaise)}</span>
       </p>
     </Link>
+  );
+}
+
+/**
+ * The hero while no banner is up: what is on sale now, in its sellers' own
+ * photos — never stock art. Nothing to show: no hero at all.
+ */
+export function ProductHero({ products }: { products: HomeProductCard[] }) {
+  const shown = products.filter((p) => p.imageUrl).slice(0, 4);
+  if (shown.length === 0) return null;
+  return (
+    <section
+      className="grid items-center gap-6 overflow-hidden rounded-3xl bg-cream-100 p-5 sm:p-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:py-10 lg:pl-14"
+      data-product-hero
+    >
+      <div>
+        <p className="text-xs font-bold uppercase tracking-widest text-brand-600">Now on Clowe</p>
+        <h1 className="mt-2 font-display text-3xl font-bold leading-tight text-ink-900 sm:text-4xl xl:text-5xl">
+          Everything you need, <span className="text-brand-600">one marketplace.</span>
+        </h1>
+        <p className="mt-3 max-w-lg text-sm text-gray-600 sm:text-base">
+          Clothing, footwear, phones and more from sellers across India. Every product and price is here to browse.
+        </p>
+        <Link
+          href="/products"
+          className="mt-6 inline-block rounded-lg bg-ink-900 px-6 py-3 text-sm font-bold uppercase tracking-wide text-white hover:bg-ink-800"
+        >
+          Shop all products
+        </Link>
+      </div>
+      <div className="grid grid-cols-4 gap-2 sm:gap-3 lg:w-[24rem] lg:grid-cols-2">
+        {shown.map((product, i) => (
+          <Link
+            key={product.id}
+            href={`/products/${product.slug}`}
+            className="overflow-hidden rounded-2xl bg-white"
+            title={product.title}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              {...responsiveImage(product.imageUrl!, '(max-width: 1024px) 25vw, 192px')}
+              alt={product.title}
+              loading={i < 2 ? 'eager' : 'lazy'}
+              className="aspect-square w-full object-cover"
+            />
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 

@@ -12,6 +12,7 @@ import { CategoryGlyph } from '@/components/DesignedArt';
 import {
   Countdown,
   DealCard,
+  ProductHero,
   Scroller,
   SectionHeader,
   TrendingCard,
@@ -168,7 +169,7 @@ export default function HomeClient({ initial = null }: { initial?: HomePayload |
     <main className="mx-auto max-w-7xl px-4">
       {/* 1 ─ Hero carousel */}
       <div className="mt-4">
-        <HeroCarousel banners={home.banners} />
+        {home.banners.length > 0 ? <HeroCarousel banners={home.banners} /> : <ProductHero products={home.trending} />}
       </div>
 
       {/* 2 ─ Trust strip */}
@@ -336,12 +337,11 @@ export default function HomeClient({ initial = null }: { initial?: HomePayload |
       {home.trending.length > 0 && (
         <section className="mt-10">
           <SectionHeader title="Trending Now" href="/products" />
-          <div className="mt-4">
-            <Scroller>
-              {home.trending.map((product) => (
-                <TrendingCard key={product.id} product={product} />
-              ))}
-            </Scroller>
+          {/* A grid, not a rail: every product in view without scrolling sideways. */}
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5" data-trending-grid>
+            {home.trending.map((product) => (
+              <TrendingCard key={product.id} product={product} fluid />
+            ))}
           </div>
         </section>
       )}

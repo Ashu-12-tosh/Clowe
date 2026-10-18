@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LEGAL_ENTITY, fillLegalEntity, legalDisplayName } from './legal';
+import { DEFAULT_LEGAL_ENTITY, fillLegalEntity, legalDisplayName, legalEntityType } from './legal';
 
 describe('legalDisplayName', () => {
   it('turns the registered capitals into a name for running text, keeping LLP', () => {
@@ -73,3 +73,18 @@ describe('the PAN shown in place of a CIN', () => {
   });
 });
 
+
+describe('legalEntityType', () => {
+  it('reads the entity type off the registered name', () => {
+    expect(legalEntityType('CLOWE PARTNERS LLP')).toBe('Limited Liability Partnership (LLP)');
+    expect(legalEntityType('Acme Retail Pvt. Ltd.')).toBe('Private Limited Company');
+    expect(legalEntityType('ACME RETAIL PRIVATE LIMITED')).toBe('Private Limited Company');
+    expect(legalEntityType('ACME LIMITED')).toBe('Public Limited Company');
+  });
+
+  it('is empty when the name does not say, and the token line then drops out', () => {
+    expect(legalEntityType('Clowe')).toBe('');
+    expect(fillLegalEntity('Type: {{legal.entityType}}\nKept.', { ...DEFAULT_LEGAL_ENTITY, name: 'Clowe' })).toBe('Kept.');
+    expect(fillLegalEntity('Type: {{legal.entityType}}', DEFAULT_LEGAL_ENTITY)).toBe('Type: Limited Liability Partnership (LLP)');
+  });
+});

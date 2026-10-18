@@ -163,8 +163,9 @@ export interface PlatformSettings {
   couponsEnabled: boolean;
   /**
    * Whether shoppers can place orders (owner's pre-launch switch). Off until
-   * payments and shipping are live: browsing, search, wishlist and cart work,
-   * "Buy now", "Place order" and checkout say "We're launching soon", and the
+   * payments and shipping are live: the catalogue, product pages and prices
+   * stay visible to everyone, browsing, search, wishlist and cart work,
+   * "Buy now", "Place order" and checkout say "Orders open soon", and the
    * API refuses every order, COD too — except from admins and accounts an
    * admin marked as test accounts. Off by default on production.
    */
@@ -451,4 +452,4 @@ export const voidReferralSchema = z.object({
 });
 
 /** What shoppers are told while the store is not yet open for orders. */
-export const STORE_CLOSED_MESSAGE = "We're launching soon — orders open shortly";
+export const STORE_CLOSED_MESSAGE = 'Orders open soon';

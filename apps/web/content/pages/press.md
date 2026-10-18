@@ -1,6 +1,6 @@
 # Press Releases
 
-Welcome to the Clowe newsroom. For media enquiries, write to **press@clowe.example**.
+Welcome to the Clowe newsroom. For media enquiries, write to **{{legal.supportEmail}}**.
 
 ## Latest announcements
 

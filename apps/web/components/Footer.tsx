@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { getPublicSettings, onPublicSettingsChanged } from '@/lib/settings';
 import { ExternalLink } from '@/components/ExternalLink';
 import { openCookieSettings } from '@/lib/cookieConsent';
-import { DEFAULT_LEGAL_ENTITY, safeHref } from '@clowe/shared';
+import { DEFAULT_LEGAL_ENTITY, safeHref, type LegalEntity } from '@clowe/shared';
 
 const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -116,22 +116,27 @@ function XIcon() {
 
 type SocialLinks = { facebook: string; twitter: string; instagram: string; linkedin: string };
 
-export default function Footer() {
+/**
+ * `legal` is what the server read with the page, so the registered name and
+ * address are in the first HTML — what a payment gateway's reviewer, a crawler
+ * or a visitor without JS sees. Settings read in the browser keep it current.
+ */
+export default function Footer({ legal: initialLegal = null }: { legal?: LegalEntity | null }) {
   const [social, setSocial] = useState<SocialLinks>({
     facebook: '',
     twitter: '',
     instagram: '',
     linkedin: '',
   });
-  // The registered name until settings arrive, so the line never flashes empty.
-  const [legalName, setLegalName] = useState(DEFAULT_LEGAL_ENTITY.name);
+  // The registered name (at least) from the first paint, so the line never flashes empty.
+  const [legal, setLegal] = useState<LegalEntity>({ ...DEFAULT_LEGAL_ENTITY, ...(initialLegal ?? {}) });
 
   useEffect(() => {
     const load = () =>
       getPublicSettings()
         .then((s) => {
           setSocial(s.socialLinks);
-          setLegalName(s.legalEntity.name);
+          setLegal({ ...DEFAULT_LEGAL_ENTITY, ...s.legalEntity });
         })
         .catch(() => {});
     load();
@@ -226,10 +231,17 @@ export default function Footer() {
             ))}
             <span className="ml-1 text-xs text-gray-500">🛡 Secure payments</span>
           </div>
-          {/* The registered name, linking to Contact Us, where the address, GSTIN, emails and phones are. */}
-          <Link href="/contact" className="t-copyright text-gray-400 hover:text-brand-600 hover:underline" data-legal-line>
-            © {new Date().getFullYear()} {legalName}
-          </Link>
+          {/* Who runs the site, as text on every page: the registered name, the
+              brand line and the registered office (Contact Us has the rest). */}
+          <div className="text-center text-xs leading-relaxed text-gray-600 sm:text-right" data-legal-line>
+            <p>
+              © {new Date().getFullYear()} {legal.name}. Clowe is a brand owned and operated by {legal.name}.
+            </p>
+            {legal.registeredAddress.trim() && <p>Registered office: {legal.registeredAddress}</p>}
+            <Link href="/contact" className="font-semibold text-gray-700 hover:text-brand-600 hover:underline">
+              Business details &amp; contact
+            </Link>
+          </div>
         </div>
       </div>
     </footer>

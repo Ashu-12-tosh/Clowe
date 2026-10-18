@@ -280,9 +280,9 @@ export default function AdminSettingsPage() {
           </div>
         )}
         <p className="mt-1 text-xs text-gray-400">
-          Leave off until payments and shipping are live. While off, browsing, search, wishlist and
-          cart work; &ldquo;Buy now&rdquo;, checkout and &ldquo;Place order&rdquo; say &ldquo;We&apos;re
-          launching soon &mdash; orders open shortly&rdquo;, and every order is refused, Cash on
+          Leave off until payments and shipping are live. While off, every product and price stays
+          visible, and browsing, search, wishlist and cart work; &ldquo;Buy now&rdquo;, checkout and
+          &ldquo;Place order&rdquo; say &ldquo;Orders open soon&rdquo;, and every order is refused, Cash on
           Delivery too &mdash; except from admins and accounts marked as test accounts (Admin &rarr;
           Users). On production, the mock payment gateway also refuses to mark anything paid for
           anyone else.
