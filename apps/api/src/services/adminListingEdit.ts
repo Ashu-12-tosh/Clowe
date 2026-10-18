@@ -9,7 +9,7 @@ import { invalidateSearchCatalog } from './productSearch';
 
 /**
  * An admin fixes a listing on the seller's behalf (with their agreement):
- * title, brand, descriptions, attributes, sizes and visibility. Applied at once
+ * category, title, brand, descriptions, attributes, sizes and visibility. Applied at once
  * — an admin's edit needs no review — and kept on the record as "Listing
  * edited by Clowe admin" with every value before and after.
  *
@@ -24,6 +24,8 @@ import { invalidateSearchCatalog } from './productSearch';
  */
 
 interface Snapshot {
+  /** The category, and the HSN code it gives the listing (its own or inherited). */
+  category: { id: string; name: string; hsnCode: string | null };
   title: string;
   brand: string | null;
   shortDescription: string | null;
@@ -35,9 +37,10 @@ interface Snapshot {
 }
 
 async function snapshot(productId: string): Promise<Snapshot> {
-  const p = await prisma.product.findUniqueOrThrow({
+  const { category, ...p } = await prisma.product.findUniqueOrThrow({
     where: { id: productId },
     select: {
+      category: { select: { id: true, name: true } },
       title: true,
       brand: true,
       shortDescription: true,
@@ -48,7 +51,7 @@ async function snapshot(productId: string): Promise<Snapshot> {
       images: { orderBy: { sortOrder: 'asc' }, select: { url: true, qualityNote: true } },
     },
   });
-  return p;
+  return { category: { ...category, hsnCode: (await categoryRulesFor(category.id)).hsnCode }, ...p };
 }
 
 /** Each size's share of `total`: as even as it goes, the remainder to the first ones, never below 1. */
@@ -134,10 +137,15 @@ export async function adminEditListing(productId: string, input: AdminListingEdi
   const product = await prisma.product.findUnique({ where: { id: productId }, select: { id: true, categoryId: true, seller: { select: { shopName: true } } } });
   if (!product) throw ApiError.notFound('Product not found');
   const before = await snapshot(productId);
-  const rules = await categoryRulesFor(product.categoryId);
+  if (input.categoryId !== undefined && input.categoryId !== product.categoryId) {
+    const target = await prisma.category.findUnique({ where: { id: input.categoryId }, select: { isActive: true } });
+    if (!target?.isActive) throw ApiError.badRequest('Pick an active category', 'CATEGORY_NOT_FOUND');
+  }
+  const rules = await categoryRulesFor(input.categoryId ?? product.categoryId);
   const brand = input.brand !== undefined ? await linkBrand<{ brand?: string; brandId?: string }>({ brand: input.brand }) : null;
 
   const data: Prisma.ProductUpdateInput = {
+    ...(input.categoryId !== undefined ? { category: { connect: { id: input.categoryId } } } : {}),
     ...(input.title !== undefined ? { title: input.title } : {}),
     ...(brand ? { brand: brand.brand?.trim() || null, brandRef: brand.brandId ? { connect: { id: brand.brandId } } : { disconnect: true } } : {}),
     ...(input.shortDescription !== undefined ? { shortDescription: input.shortDescription || null } : {}),

@@ -284,6 +284,9 @@ function RulesEditor({
             className={`mt-1 w-full ${field}`}
           />
           <FieldError message={fieldErrors.hsnCode} />
+          <p className="mt-1 text-[11px] text-amber-700" data-hsn-note>
+            HSN to be confirmed by CA.
+          </p>
         </div>
         <div>
           <label className="text-xs font-semibold text-gray-700">Return window (days)</label>

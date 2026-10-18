@@ -25,6 +25,11 @@ import { syncWarehouse } from './warehouses';
 const IST_OFFSET_MS = 330 * 60_000;
 /** Asked before 14:00 IST, a pickup can still be today; after it, the next working day. */
 export const PICKUP_CUTOFF_HOUR_IST = 14;
+/**
+ * Delhivery only promises tomorrow's pickup for requests made by 22:00 IST:
+ * asked later, it is the pickup day after the next one.
+ */
+export const NEXT_DAY_CUTOFF_HOUR_IST = 22;
 /** Delhivery needs time to send someone: a pickup today is never sooner than this. */
 const SAME_DAY_LEAD_MINUTES = 120;
 
@@ -50,7 +55,9 @@ function scheduleOrDefault(schedule: PickupSchedule): { minutes: number; days: n
  * - before 14:00 IST on one of the seller's pickup days — today, at their slot,
  *   or two hours from now (on the half hour) if the slot is sooner than that;
  * - otherwise — after 14:00, on a day off, or when Delhivery already failed to
- *   come today (`notToday`) — the next pickup day at their slot. Never a Sunday.
+ *   come today (`notToday`) — the next pickup day at their slot;
+ * - from 22:00, the pickup day after that (Monday 23:00 → Wednesday).
+ * Never a Sunday.
  */
 export function nextPickupSlot(now: Date = new Date(), schedule: PickupSchedule = DEFAULT_PICKUP_SCHEDULE, opts: { notToday?: boolean } = {}): Date {
   const { minutes: slot, days } = scheduleOrDefault(schedule);
@@ -63,8 +70,10 @@ export function nextPickupSlot(now: Date = new Date(), schedule: PickupSchedule 
     const earliest = Math.ceil((nowMinutes + SAME_DAY_LEAD_MINUTES) / 30) * 30;
     return at(0, Math.max(slot, earliest));
   }
-  for (let offset = 1; offset <= 7; offset += 1) {
-    if (days.includes((ist.getUTCDay() + offset) % 7)) return at(offset, slot);
+  // Pickup days to pass over: the next one, or from 22:00 the one after it.
+  let skip = nowMinutes >= NEXT_DAY_CUTOFF_HOUR_IST * 60 ? 2 : 1;
+  for (let offset = 1; offset <= 14; offset += 1) {
+    if (days.includes((ist.getUTCDay() + offset) % 7) && --skip === 0) return at(offset, slot);
   }
   return at(1, slot);
 }

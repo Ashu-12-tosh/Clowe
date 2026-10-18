@@ -236,6 +236,8 @@ export type AdminReturnOverrideInput = z.infer<typeof adminReturnOverrideSchema>
  * one per size at today's price, the stock split evenly (at least 1 each).
  */
 export const adminListingEditSchema = z.object({
+  /** Move the listing to another (active) category — e.g. for the right HSN code. */
+  categoryId: z.string().trim().min(1).optional(),
   title: z.string().trim().min(3).max(150).optional(),
   brand: z.string().trim().min(1).max(40).optional(),
   shortDescription: z.string().trim().max(200).optional(),

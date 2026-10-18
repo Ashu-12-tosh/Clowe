@@ -5,6 +5,7 @@ import type { SellerPayoutOverview, StoreOpenChecklistRow } from '@clowe/shared'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { splitStock } from '../services/adminListingEdit';
+import { invalidateCategoryRules } from '../services/categoryRules';
 import { endExceptionsOnStoreOpen } from '../services/onboardingException';
 import { getSettings, setSetting } from '../services/settingsService';
 import { signAccessToken } from '../utils/jwt';
@@ -203,6 +204,27 @@ describe('an admin’s listing edit', () => {
     // Shoppers see the pictures, never the note.
     const pub = await call<Record<string, unknown>>('GET', `/api/products/${slug}`, null);
     expect(JSON.stringify(pub.json)).not.toContain('replace later');
+  });
+
+  it('moves the listing to another category, for the right HSN code, and keeps both on the record', async () => {
+    const shirts = await prisma.category.create({ data: { name: 'Exception Shirts', slug: `ex-shirts-${Date.now()}`, isActive: true, parentId: categoryId, hsnCode: '6205' } });
+    const closed = await prisma.category.create({ data: { name: 'Closed', slug: `ex-closed-${Date.now()}`, isActive: false } });
+    invalidateCategoryRules();
+    const refused = await call('PATCH', `/api/admin/products/${productId}/listing`, adminToken, { categoryId: closed.id, reason: 'Right category for its HSN' });
+    expect(refused.status).toBe(400);
+    const r = await call<{ before: { category: { id: string; hsnCode: string | null } }; after: { category: { id: string; name: string; hsnCode: string | null } } }>(
+      'PATCH',
+      `/api/admin/products/${productId}/listing`,
+      adminToken,
+      { categoryId: shirts.id, reason: 'Right category for its HSN' },
+    );
+    expect(r.status, JSON.stringify(r.json)).toBe(200);
+    expect(r.json.data.before.category).toMatchObject({ id: categoryId, hsnCode: null });
+    expect(r.json.data.after.category).toEqual({ id: shirts.id, name: 'Exception Shirts', hsnCode: '6205' });
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: productId } })).categoryId).toBe(shirts.id);
+    const [row] = await audited('Listing edited by Clowe admin', productId).then((rows) => rows.filter((x) => x.summary.includes('Right category')));
+    expect((row!.metadata as { after: { category: { hsnCode: string } } }).after.category.hsnCode).toBe('6205');
+    await prisma.product.update({ where: { id: productId }, data: { categoryId } });
   });
 
   it('keeps a variant already in one of the sizes, with its order history', async () => {

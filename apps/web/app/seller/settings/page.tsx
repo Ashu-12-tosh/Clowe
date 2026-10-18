@@ -844,9 +844,9 @@ export default function SellerStoreSettingsPage() {
                 <div className="mt-4 rounded-xl border border-gray-200 p-3" data-pickup-schedule>
                   <p className="text-sm font-semibold text-ink-900">When Delhivery collects</p>
                   <p className="mt-1 text-xs text-gray-600">
-                    Press &ldquo;Ready for pickup&rdquo; before 2 PM and Delhivery comes the same day — at this time, or
-                    two hours later if that&apos;s sooner than two hours away. After 2 PM, or on a day you don&apos;t pick
-                    below, it comes on your next pickup day. Never on Sundays.
+                    Press &ldquo;Ready for pickup&rdquo; before 2 PM and Delhivery comes the same day at this time (or two
+                    hours after you press it, if that&apos;s later). From 2 PM, or on a day you don&apos;t pick below, it
+                    comes on your next pickup day; from 10 PM, the pickup day after that. Never on Sundays.
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
                     <label className="flex items-center gap-1.5">
