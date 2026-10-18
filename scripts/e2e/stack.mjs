@@ -41,6 +41,7 @@ export const MOCK_ENV = {
   DELHIVERY_PRODUCTION_WRITES: 'false',
   // Blank keys: no real provider can be reached even by mistake.
   DELHIVERY_API_TOKEN: '',
+  DELHIVERY_BASE_URL: '',
   FASHN_API_KEY: '',
   GEMINI_API_KEY: '',
   ANTHROPIC_API_KEY: '',
@@ -66,9 +67,10 @@ export function assertMockOnly(env) {
     TRYON_PROVIDER: 'mock',
     AI_PROVIDER: 'mock',
     SHIPPING_PROVIDER: 'mock',
+    DELHIVERY_ENV: 'staging',
     EMAIL_PROVIDER: 'mock',
   }).filter(([k, v]) => env[k] !== v);
-  if (wrong.length || env.DELHIVERY_API_TOKEN || env.FASHN_API_KEY || env.GEMINI_API_KEY || env.SMTP_PASSWORD) {
+  if (wrong.length || env.DELHIVERY_API_TOKEN || env.DELHIVERY_BASE_URL || env.FASHN_API_KEY || env.GEMINI_API_KEY || env.SMTP_PASSWORD) {
     throw new Error(`refusing to run: not mock-only (${wrong.map(([k]) => k).join(', ') || 'a provider key is set'})`);
   }
 }

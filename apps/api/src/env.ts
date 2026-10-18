@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
+import { DELHIVERY_HOSTS, isLiveDelhiveryUrl } from './services/shipping/delhiveryHosts';
 
 // `.env` holds the shared, checked-in-by-example config; `.env.local` holds
 // whatever one machine needs differently (a free port, a local service) and
@@ -119,6 +120,9 @@ const envSchema = z.object({
   // (track.delhivery.com). Staging and production have different tokens.
   DELHIVERY_ENV: blankAsUnset(z.enum(['staging', 'production']).default('staging')),
   DELHIVERY_API_TOKEN: optionalSecret,
+  // Optional: another host for the chosen environment (e.g. a local stub).
+  // Staging refuses to start if it is live Delhivery (track.delhivery.com).
+  DELHIVERY_BASE_URL: blankAsUnset(z.string().url().optional()),
   // Production only, and off unless exactly 'true': booking, pickup requests,
   // cancellations and warehouse registration — anything that moves a real
   // parcel or spends wallet money. Without it live Delhivery is read-only.
@@ -179,8 +183,28 @@ const envSchema = z.object({
   WEB_PUBLIC_URL: z.string().optional(),
 });
 
-export const env = envSchema
+/** The schema with the rules between variables, exported for tests. */
+export const envRules = envSchema
   .superRefine((e, ctx) => {
+    // Live Delhivery only from the production server: never from staging, a
+    // developer machine or a test run.
+    if (e.DELHIVERY_ENV === 'staging' && isLiveDelhiveryUrl(e.DELHIVERY_BASE_URL ?? DELHIVERY_HOSTS.staging)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DELHIVERY_BASE_URL'],
+        message: 'DELHIVERY_ENV=staging must not point at live Delhivery (track.delhivery.com) — refusing to start',
+      });
+    }
+    if (e.DELHIVERY_ENV === 'production' && e.NODE_ENV !== 'production') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DELHIVERY_ENV'],
+        message: 'DELHIVERY_ENV=production is only allowed on the production server (NODE_ENV=production)',
+      });
+    }
+    if (e.NODE_ENV === 'test' && e.SHIPPING_PROVIDER !== 'mock') {
+      ctx.addIssue({ code: 'custom', path: ['SHIPPING_PROVIDER'], message: 'Tests run on the mock courier only' });
+    }
     if (e.SHIPPING_PROVIDER === 'delhivery' && !e.DELHIVERY_API_TOKEN) {
       ctx.addIssue({
         code: 'custom',
@@ -195,8 +219,9 @@ export const env = envSchema
         message: 'KYC_FINGERPRINT_SECRET (32+ characters) is required in production',
       });
     }
-  })
-  .parse(process.env);
+  });
+
+export const env = envRules.parse(process.env);
 
 /** The fingerprint key actually in use: the configured one, or the dev default. */
 export const kycFingerprintSecret = env.KYC_FINGERPRINT_SECRET ?? DEV_KYC_FINGERPRINT_SECRET;

@@ -3,8 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 /**
  * Which courier connection the settings give. The mock unless told
  * otherwise; Delhivery staging unless told production; and live Delhivery
- * stays read-only unless production writes are switched on as well.
+ * stays read-only unless production writes are switched on as well. Live
+ * Delhivery is only ever reachable from the production server: staging pointed
+ * at it, a developer machine or a test run refuses to start.
  */
+
+const PROD = { NODE_ENV: 'production', KYC_FINGERPRINT_SECRET: 'production-fingerprint-secret-0123456789' };
 
 const BASE = { DATABASE_URL: 'postgres://x', JWT_ACCESS_SECRET: 'test-secret-0123456789' };
 
@@ -16,6 +20,7 @@ async function load(vars: Record<string, string | undefined>) {
     DELHIVERY_ENV: undefined,
     DELHIVERY_API_TOKEN: undefined,
     DELHIVERY_PRODUCTION_WRITES: undefined,
+    DELHIVERY_BASE_URL: undefined,
     ...vars,
   })) {
     vi.stubEnv(k, v);
@@ -43,8 +48,32 @@ describe('the shipping settings', { timeout: 60_000 }, () => {
   });
 
   it('use Delhivery staging when switched on with a token', async () => {
-    const { shippingProvider } = await load({ SHIPPING_PROVIDER: 'delhivery', DELHIVERY_API_TOKEN: 'tok' });
+    const { shippingProvider } = await load({ NODE_ENV: 'development', SHIPPING_PROVIDER: 'delhivery', DELHIVERY_API_TOKEN: 'tok' });
     expect(shippingProvider).toMatchObject({ name: 'delhivery', environment: 'staging' });
+  });
+
+  it('refuse to start staging pointed at live Delhivery — mock or not', async () => {
+    for (const url of ['https://track.delhivery.com', 'https://track.delhivery.com/api', 'https://api.delhivery.com']) {
+      await expect(load({ DELHIVERY_BASE_URL: url })).rejects.toThrow(/refusing to start/);
+      await expect(load({ NODE_ENV: 'development', SHIPPING_PROVIDER: 'delhivery', DELHIVERY_API_TOKEN: 'tok', DELHIVERY_BASE_URL: url })).rejects.toThrow(
+        /refusing to start/,
+      );
+    }
+    // Staging's own host, or a local stub, is fine.
+    const { shippingProvider } = await load({
+      NODE_ENV: 'development',
+      SHIPPING_PROVIDER: 'delhivery',
+      DELHIVERY_API_TOKEN: 'tok',
+      DELHIVERY_BASE_URL: 'http://localhost:9911',
+    });
+    expect(shippingProvider.environment).toBe('staging');
+    await expect(load({ DELHIVERY_BASE_URL: 'https://staging-express.delhivery.com' })).resolves.toBeTruthy();
+  });
+
+  it('refuse live Delhivery anywhere but the production server, and anything but the mock in tests', async () => {
+    await expect(load({ DELHIVERY_ENV: 'production' })).rejects.toThrow(/only allowed on the production server/);
+    await expect(load({ NODE_ENV: 'development', DELHIVERY_ENV: 'production' })).rejects.toThrow(/only allowed on the production server/);
+    await expect(load({ NODE_ENV: 'test', SHIPPING_PROVIDER: 'delhivery', DELHIVERY_API_TOKEN: 'tok' })).rejects.toThrow(/mock courier only/);
   });
 
   it('refuse to start Delhivery without a token', async () => {
@@ -52,12 +81,12 @@ describe('the shipping settings', { timeout: 60_000 }, () => {
   });
 
   it('keep live Delhivery read-only unless production writes are switched on', async () => {
-    const { shippingProvider } = await load({ SHIPPING_PROVIDER: 'delhivery', DELHIVERY_API_TOKEN: 'tok', DELHIVERY_ENV: 'production' });
+    const { shippingProvider } = await load({ ...PROD, SHIPPING_PROVIDER: 'delhivery', DELHIVERY_API_TOKEN: 'tok', DELHIVERY_ENV: 'production' });
     expect(shippingProvider.environment).toBe('production');
     await expect(shippingProvider.cancelShipment('1490810000001')).rejects.toMatchObject({ code: 'PRODUCTION_WRITES_DISABLED' });
     // Anything but exactly 'true' is refused at boot rather than read as "on".
     await expect(
-      load({ SHIPPING_PROVIDER: 'delhivery', DELHIVERY_API_TOKEN: 'tok', DELHIVERY_ENV: 'production', DELHIVERY_PRODUCTION_WRITES: 'yes' }),
+      load({ ...PROD, SHIPPING_PROVIDER: 'delhivery', DELHIVERY_API_TOKEN: 'tok', DELHIVERY_ENV: 'production', DELHIVERY_PRODUCTION_WRITES: 'yes' }),
     ).rejects.toThrow();
   });
 });

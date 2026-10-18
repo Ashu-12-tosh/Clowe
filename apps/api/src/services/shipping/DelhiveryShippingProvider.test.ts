@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DelhiveryShippingProvider, delhiveryTime, type DelhiveryConfig } from './DelhiveryShippingProvider';
+import { DelhiveryShippingProvider, delhiveryTime, isLiveDelhiveryUrl, type DelhiveryConfig } from './DelhiveryShippingProvider';
 import { ShippingProviderError, type CreateShipmentRequest } from './ShippingProvider';
 
 /**
@@ -363,5 +363,28 @@ describe('tracking', () => {
   it('keeps an explicit offset as given', () => {
     expect(delhiveryTime('2026-10-20T10:00:00+05:30').toISOString()).toBe('2026-10-20T04:30:00.000Z');
     expect(delhiveryTime('2026-10-20T04:30:00Z').toISOString()).toBe('2026-10-20T04:30:00.000Z');
+  });
+});
+
+describe('never live Delhivery by mistake', () => {
+  it('knows live Delhivery from staging', () => {
+    expect(isLiveDelhiveryUrl('https://track.delhivery.com/api/cmu/create.json')).toBe(true);
+    expect(isLiveDelhiveryUrl('https://TRACK.Delhivery.com')).toBe(true);
+    expect(isLiveDelhiveryUrl('https://api.delhivery.com')).toBe(true);
+    expect(isLiveDelhiveryUrl('https://staging-express.delhivery.com/api/cmu/create.json')).toBe(false);
+    expect(isLiveDelhiveryUrl('http://localhost:9911')).toBe(false);
+    expect(isLiveDelhiveryUrl('https://track.delhivery.com.evil.example')).toBe(false);
+  });
+
+  it('a staging connection pointed at the live URL refuses to start', () => {
+    const { fetchImpl } = stub({ body: {} });
+    expect(
+      () => new DelhiveryShippingProvider({ token: 'tok', environment: 'staging', baseUrl: 'https://track.delhivery.com', allowProductionWrites: false, fetchImpl }),
+    ).toThrow(/refusing to start/);
+  });
+
+  it('a test never builds a live connection that could really call out', () => {
+    // NODE_ENV is "test" here: only a stubbed fetch may stand behind a production client.
+    expect(() => new DelhiveryShippingProvider({ token: 'tok', environment: 'production', allowProductionWrites: false })).toThrow(/Tests must not/);
   });
 });

@@ -13,6 +13,7 @@ function createShippingProvider(): ShippingProvider {
       return new DelhiveryShippingProvider({
         token: env.DELHIVERY_API_TOKEN!,
         environment: env.DELHIVERY_ENV,
+        baseUrl: env.DELHIVERY_BASE_URL,
         allowProductionWrites: env.DELHIVERY_PRODUCTION_WRITES === 'true',
       });
     case 'mock':

@@ -27,6 +27,12 @@ process.env.TRYON_PROVIDER = 'mock';
 process.env.AI_PROVIDER = 'mock';
 process.env.OTP_PROVIDER = 'mock';
 process.env.KYC_PROVIDER = 'mock';
+// No courier connection at all: the mock, on staging, without any token or
+// URL a developer's .env might carry (env.ts refuses live Delhivery in tests).
+process.env.SHIPPING_PROVIDER = 'mock';
+process.env.DELHIVERY_ENV = 'staging';
+process.env.DELHIVERY_API_TOKEN = '';
+process.env.DELHIVERY_BASE_URL = '';
 // Files the tests write go to scratch folders, never into the repo.
 process.env.UPLOAD_DIR = path.join(os.tmpdir(), 'clowe-test-uploads');
 process.env.PRIVATE_UPLOAD_DIR = path.join(os.tmpdir(), 'clowe-test-private-uploads');

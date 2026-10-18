@@ -1,4 +1,7 @@
 import { shipmentStatusFromScan } from './scanStatus';
+import { assertStagingIsStaging, DELHIVERY_HOSTS, isLiveDelhiveryUrl, type DelhiveryEnvironment } from './delhiveryHosts';
+
+export { assertStagingIsStaging, DELHIVERY_HOSTS, isLiveDelhiveryUrl, type DelhiveryEnvironment } from './delhiveryHosts';
 import {
   ShippingProviderError,
   TRACK_BATCH,
@@ -48,16 +51,11 @@ import {
 // and is to be confirmed against staging responses.
 // ---------------------------------------------------------------------------
 
-export type DelhiveryEnvironment = 'staging' | 'production';
-
-export const DELHIVERY_HOSTS: Record<DelhiveryEnvironment, string> = {
-  staging: 'https://staging-express.delhivery.com',
-  production: 'https://track.delhivery.com',
-};
-
 export interface DelhiveryConfig {
   token: string;
   environment: DelhiveryEnvironment;
+  /** Overrides the environment's host (DELHIVERY_BASE_URL); staging refuses a live one. */
+  baseUrl?: string;
   /** Production only: allow calls that book, pick up, cancel or register. */
   allowProductionWrites: boolean;
   timeoutMs?: number;
@@ -157,7 +155,12 @@ export class DelhiveryShippingProvider implements ShippingProvider {
   constructor(private readonly config: DelhiveryConfig) {
     if (!config.token.trim()) throw new Error('Delhivery needs an API token');
     this.environment = config.environment;
-    this.host = DELHIVERY_HOSTS[config.environment];
+    this.host = (config.baseUrl?.trim() || DELHIVERY_HOSTS[config.environment]).replace(/\/+$/, '');
+    assertStagingIsStaging(this.environment, this.host);
+    // A test run never talks to live Delhivery: only with a stubbed fetch.
+    if (this.environment === 'production' && !config.fetchImpl && process.env.NODE_ENV === 'test') {
+      throw new Error('Tests must not connect to live Delhivery');
+    }
     this.fetchImpl = config.fetchImpl ?? fetch;
     this.log = config.log ?? ((line) => console.log(line));
   }
@@ -445,6 +448,10 @@ export class DelhiveryShippingProvider implements ShippingProvider {
       );
     }
     if (opts.write) this.log(`[clowe-api] delhivery ${this.environment}: ${method} ${pathAndQuery.split('?')[0]} — ${opts.write}`);
+    // Belt and braces: whatever built this URL, staging never reaches live Delhivery.
+    if (this.environment !== 'production' && isLiveDelhiveryUrl(`${this.host}${pathAndQuery}`)) {
+      throw new ShippingProviderError('Delhivery staging must not call the live URL', 'LIVE_URL_REFUSED');
+    }
 
     let res: Response;
     try {
