@@ -1,29 +1,50 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import LoginBackdrop from '@/components/LoginBackdrop';
 import LegalCopyright from '@/components/LegalCopyright';
 import ResendOtp from '@/components/auth/ResendOtp';
-import LoginMethodChoice from '@/components/auth/LoginMethodChoice';
-import { lastLoginMethod, rememberLoginMethod as rememberMethod, type LoginMethod } from '@/lib/loginMethod';
+import DigitBoxes from '@/components/auth/DigitBoxes';
 import { closeLogin } from '@/lib/returnTo';
-import { TERMS_VERSION, customerEmailSchema, phoneSubmitAction, preselectedLoginMethod, type AuthTokensResponse, type AuthUser, type OtpRequestResult, type UserRole } from '@clowe/shared';
 import {
-  api,
-  ApiRequestError,
-  getStoredUser,
-  saveSession,
-  setStoredUser,
-  uploadPrivateImages,
-} from '@/lib/api';
-import { TryOnConsentBox, useTryOnConsent } from '@/components/TryOnConsent';
+  TERMS_VERSION,
+  customerEmailSchema,
+  maskPhone,
+  parseLoginIdentifier,
+  phoneSchema,
+  type AccountLookupResult,
+  type AuthTokensResponse,
+  type OtpRequestResult,
+  type PinResetRequestResult,
+  type SignupPhoneVerified,
+  type UserRole,
+} from '@clowe/shared';
+import { api, ApiRequestError, getStoredUser, saveSession } from '@/lib/api';
 
-type Step = 'phone' | 'pin' | 'otp' | 'profile' | 'photo' | 'setpin' | 'newpin';
+// ---------------------------------------------------------------------------
+// Login and sign-up (owner's redesign, pre-launch audit 2026-10-20 D1).
+//
+//   identify  one box, "Phone number or email" → Continue
+//   pin       an account with a PIN: the PIN, "Forgot PIN?"
+//   reset     a code to the account's phone + the new PIN, sent together
+//             (also how an account without a PIN sets its first one)
+//   signup    no account: name, phone ("Verify" → code below → verified),
+//             email, PIN, confirm PIN; "Create account" only when the phone
+//             is verified and the PINs match
+//
+// The number and email are normalised exactly as the API stores them
+// (+91 / 0 / spaces, case), and nothing is cut while typing.
+// ---------------------------------------------------------------------------
+
+type Step = 'identify' | 'pin' | 'reset' | 'signup';
 
 const field =
-  'w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-brand-600';
+  'h-12 w-full rounded-xl border border-gray-300 bg-white px-3.5 text-base outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100 sm:text-sm';
+const primary =
+  'h-12 w-full rounded-xl bg-brand-600 text-sm font-bold uppercase tracking-wide text-white shadow transition hover:bg-brand-700 disabled:opacity-50';
+const link = 'font-semibold text-brand-600 hover:underline';
 
 /** Admin/seller land on their dashboard; customers go straight to the home page. */
 function dashboardFor(role: UserRole): string {
@@ -32,17 +53,14 @@ function dashboardFor(role: UserRole): string {
   return '/';
 }
 
-
-function maskedPhone(phone: string): string {
-  return `+91 ${phone.slice(0, 2)}XXX XX${phone.slice(7)}`;
-}
+const message = (err: unknown, fallback: string) => (err instanceof ApiRequestError ? err.message : fallback);
 
 /** Small gold hanger ornament (reference design divider). */
 function HangerDivider() {
   return (
     <div className="flex items-center justify-center gap-3">
       <span className="h-px w-16 bg-brand-400/60" />
-      <svg width="22" height="16" viewBox="0 0 24 18" fill="none" className="text-brand-600">
+      <svg width="22" height="16" viewBox="0 0 24 18" fill="none" className="text-brand-600" aria-hidden="true">
         <path
           d="M12 1.5a2.5 2.5 0 0 1 2.5 2.5c0 1.2-.8 1.9-1.5 2.4-.5.4-.8.7-.8 1.1l9.3 6.1c1 .7.5 2.3-.7 2.3H3.2c-1.2 0-1.7-1.6-.7-2.3l9.3-6.1"
           stroke="currentColor"
@@ -56,78 +74,101 @@ function HangerDivider() {
   );
 }
 
-/**
- * Individual digit boxes (PIN/OTP): numeric keyboard, auto-advance,
- * backspace navigation, paste support.
- */
-function DigitBoxes({
-  length,
-  value,
-  onChange,
-  masked = false,
-  autoFocus = false,
-  onComplete,
-}: {
-  length: number;
-  value: string;
-  onChange: (v: string) => void;
-  masked?: boolean;
-  autoFocus?: boolean;
-  onComplete?: (v: string) => void;
-}) {
-  const refs = useRef<(HTMLInputElement | null)[]>([]);
-
-  function commit(next: string) {
-    const clean = next.replace(/\D/g, '').slice(0, length);
-    onChange(clean);
-    if (clean.length === length) onComplete?.(clean);
-  }
-
+/** Dev mode only (mock SMS): the code the API returned, shown as the old page did. */
+function DevCode({ code }: { code: string }) {
+  if (!code) return null;
   return (
-    <div className="flex justify-center gap-2">
-      {Array.from({ length }).map((_, i) => (
-        <input
-          key={i}
-          ref={(el) => {
-            refs.current[i] = el;
+    <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-center text-xs text-blue-800" data-dev-otp>
+      <span className="font-semibold">Dev mode:</span> code <span className="font-mono text-sm font-bold tracking-widest">{code}</span>
+    </p>
+  );
+}
+
+/** "Resend code" for a reset, whose phone the page may know only masked. */
+function ResendReset({ first, onResend }: { first: OtpRequestResult; onResend: () => Promise<void> }) {
+  const [left, setLeft] = useState(first.resendAfterSec);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (left <= 0) return;
+    const t = setTimeout(() => setLeft((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [left]);
+  return (
+    <p className="text-center text-sm text-gray-500">
+      Didn&apos;t get it?{' '}
+      {left > 0 ? (
+        <span>Resend in {left}s</span>
+      ) : (
+        <button
+          type="button"
+          disabled={busy}
+          className={link}
+          onClick={async () => {
+            setBusy(true);
+            await onResend();
+            setBusy(false);
           }}
-          type={masked ? 'password' : 'tel'}
-          inputMode="numeric"
-          pattern="[0-9]*"
-          maxLength={1}
-          autoFocus={autoFocus && i === 0}
-          value={value[i] ?? ''}
-          onChange={(e) => {
-            const digit = e.target.value.replace(/\D/g, '').slice(-1);
-            const next = value.slice(0, i) + digit + value.slice(i + 1);
-            commit(next);
-            if (digit && i < length - 1) refs.current[i + 1]?.focus();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Backspace' && !value[i] && i > 0) refs.current[i - 1]?.focus();
-          }}
-          onPaste={(e) => {
-            e.preventDefault();
-            const pasted = e.clipboardData.getData('text');
-            commit(pasted);
-            refs.current[Math.min(pasted.replace(/\D/g, '').length, length - 1)]?.focus();
-          }}
-          className="h-12 w-11 rounded-xl border border-gray-300 bg-white text-center text-lg font-bold text-ink-900 outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
-        />
-      ))}
-    </div>
+        >
+          Resend code
+        </button>
+      )}
+    </p>
+  );
+}
+
+function Consent() {
+  return (
+    <p className="text-center text-[11px] leading-relaxed text-gray-500" data-login-consent>
+      By continuing you confirm you are 18+ and agree to the{' '}
+      <Link href="/pages/terms-conditions" className={link}>
+        Terms
+      </Link>{' '}
+      and{' '}
+      <Link href="/pages/privacy-policy" className={link}>
+        Privacy Policy
+      </Link>
+      .
+    </p>
   );
 }
 
 export default function LoginPage() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>('phone');
-  const [phone, setPhone] = useState('');
+  const [step, setStep] = useState<Step>('identify');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  // identify / pin
+  const [identifier, setIdentifier] = useState('');
+  const [account, setAccount] = useState<AccountLookupResult | null>(null);
   const [pin, setPin] = useState('');
-  /** "Forgot PIN?": the OTP about to be checked resets the PIN. */
-  const [pinReset, setPinReset] = useState(false);
-  /** The new PIN, typed a second time. */
-  const [pinConfirm, setPinConfirm] = useState('');
+  const [locked, setLocked] = useState(false);
+
+  // reset ("Forgot PIN?", or a first PIN)
+  const [reset, setReset] = useState<{ sent: PinResetRequestResult; n: number; firstPin: boolean } | null>(null);
+  const [resetCode, setResetCode] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [newPinAgain, setNewPinAgain] = useState('');
+
+  // signup
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [phoneSent, setPhoneSent] = useState<{ result: OtpRequestResult; n: number } | null>(null);
+  const [phoneCode, setPhoneCode] = useState('');
+  const [phoneToken, setPhoneToken] = useState('');
+  const [verifiedPhone, setVerifiedPhone] = useState('');
+  const [signupPin, setSignupPin] = useState('');
+  const [signupPinAgain, setSignupPinAgain] = useState('');
+  const [referralCode, setReferralCode] = useState('');
+  const [devOtp, setDevOtp] = useState('');
+
+  // Already signed in: this page is for signing in only.
+  useEffect(() => {
+    if (getStoredUser()) router.replace('/account');
+  }, [router]);
+
   // Esc leaves the login page (nothing typed is sent), like the X and the back arrow.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -139,254 +180,222 @@ export default function LoginPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [router]);
-  /** "Login with PIN" is preselected on a device last signed in with a PIN; nothing else is. */
-  const [preselected, setPreselected] = useState<LoginMethod | null>(null);
-  useEffect(() => setPreselected(preselectedLoginMethod(lastLoginMethod())), []);
-  /** A PIN login failed: offer OTP right there. */
-  const [pinFailed, setPinFailed] = useState(false);
-  /** Which choice is working on the phone step. */
-  const [choosing, setChoosing] = useState<LoginMethod | null>(null);
-  const [code, setCode] = useState('');
-  const [referralCode, setReferralCode] = useState('');
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [devOtp, setDevOtp] = useState('');
-  const [signupMode, setSignupMode] = useState(false);
-  // The request that sent the code on screen; a new one restarts the resend countdown.
-  const [otpSent, setOtpSent] = useState<{ result: OtpRequestResult; n: number } | null>(null);
 
-  // Onboarding (new users only)
-  const [name, setName] = useState('');
-  const [signupEmail, setSignupEmail] = useState('');
-  const [line1, setLine1] = useState('');
-  const [city, setCity] = useState('');
-  const [stateName, setStateName] = useState('');
-  const [pincode, setPincode] = useState('');
-  const [altPhone, setAltPhone] = useState('');
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const consent = useTryOnConsent();
-  const [photoPreview, setPhotoPreview] = useState('');
+  function go(next: Step) {
+    setError('');
+    setNotice('');
+    setStep(next);
+  }
 
-  // Already logged in? This page is auth-only — send them to their account.
-  useEffect(() => {
-    if (getStoredUser()) router.replace('/account');
-  }, [router]);
-
-
-  useEffect(() => {
-    if (!photoFile) return;
-    const url = URL.createObjectURL(photoFile);
-    setPhotoPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [photoFile]);
-
-  /** After any successful auth: new user → onboarding; no PIN → offer one; else dashboard. */
-  function finishAuth(data: AuthTokensResponse, method: LoginMethod) {
+  function finish(data: AuthTokensResponse) {
     saveSession(data);
-    if (!data.pinResetRequired) rememberMethod(method);
-    setUser(data.user);
-    setError('');
-    setNotice('');
-    if (data.pinResetRequired) {
-      // The old PIN is already gone; a new one is set before going in.
-      setPin('');
-      setPinConfirm('');
-      setStep('newpin');
-    } else if (data.isNewUser) setStep('profile');
-    else if (!data.user.hasPin) setStep('setpin');
-    else router.push(dashboardFor(data.user.role));
+    router.push(dashboardFor(data.user.role));
   }
 
-  async function sendOtp(message?: string) {
+  // ---------------- identify ----------------
+  async function continueWithIdentifier(e?: React.FormEvent) {
+    e?.preventDefault();
     setError('');
+    setNotice('');
+    const parsed = parseLoginIdentifier(identifier);
+    if (!parsed) {
+      setError('Enter your 10-digit mobile number or your email address');
+      return;
+    }
     setBusy(true);
     try {
-      const data = await api<OtpRequestResult>('/api/auth/request-otp', {
-        body: { phone },
-      });
-      if (data.devOtp) {
-        setDevOtp(data.devOtp);
-        setCode(data.devOtp);
+      const found = await api<AccountLookupResult>('/api/auth/lookup', { body: { identifier } });
+      setAccount(found);
+      setPin('');
+      setLocked(false);
+      if (!found.exists) {
+        openSignup(parsed.kind === 'phone' ? { phone: parsed.value } : { email: parsed.value });
+        setNotice(`No account found with this ${parsed.kind === 'phone' ? 'number' : 'email'} — create one`);
+      } else if (found.hasPin) {
+        go('pin');
       } else {
-        setCode('');
+        await startReset(found, true);
       }
-      if (message) setNotice(message);
-      setOtpSent((prev) => ({ result: data, n: (prev?.n ?? 0) + 1 }));
-      setStep('otp');
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
+      setError(message(err, 'Could not reach Clowe. Check your connection and try again.'));
     } finally {
       setBusy(false);
     }
   }
 
-  /**
-   * Enter in the number field: on a device last signed in with a PIN, that is
-   * the PIN step; otherwise nothing — no OTP goes out until it is chosen. A new
-   * account (sign-up) always starts with an OTP.
-   */
-  async function submitPhone() {
-    setNotice('');
-    const action = phoneSubmitAction({ signup: signupMode, phoneComplete: phone.length === 10, preselected });
-    if (action === 'otp') await chooseOtp();
-    else if (action === 'pin') choosePin();
-  }
-
-  function choosePin() {
-    setError('');
-    setNotice('');
-    setPinFailed(false);
-    setPin('');
-    setStep('pin');
-  }
-
-  async function chooseOtp() {
-    setPinReset(false);
-    setPinFailed(false);
-    setChoosing('otp');
-    await sendOtp();
-    setChoosing(null);
-  }
-
-  /** "Forgot PIN?": an OTP, then a new PIN — the old one stops working once the code is verified. */
-  async function forgotPin() {
-    setPinReset(true);
-    await sendOtp('Enter the code we sent. Then you’ll choose a new PIN — your old PIN stops working.');
-  }
-
-  async function loginWithPin(pinValue: string) {
+  // ---------------- pin ----------------
+  async function loginWithPin(value: string) {
+    if (!account || busy) return;
     setError('');
     setBusy(true);
     try {
-      setPinFailed(false);
       const data = await api<AuthTokensResponse>('/api/auth/pin-login', {
-        body: { phone, pin: pinValue, termsVersion: TERMS_VERSION },
+        body: { identifier: account.identifier, pin: value, termsVersion: TERMS_VERSION },
       });
-      finishAuth(data, 'pin');
+      finish(data);
     } catch (err) {
       setPin('');
-      setPinFailed(true);
-      setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
+      setLocked(err instanceof ApiRequestError && err.code === 'PIN_LOCKED');
+      setError(message(err, 'Could not reach Clowe. Check your connection and try again.'));
+      setBusy(false);
+    }
+  }
+
+  // ---------------- reset ----------------
+  async function startReset(target: AccountLookupResult, firstPin = false) {
+    setError('');
+    setBusy(true);
+    try {
+      const sent = await api<PinResetRequestResult>('/api/auth/pin-reset/request', { body: { identifier: target.identifier } });
+      setReset((prev) => ({ sent, n: (prev?.n ?? 0) + 1, firstPin }));
+      setResetCode(sent.devOtp ?? '');
+      setDevOtp(sent.devOtp ?? '');
+      setNewPin('');
+      setNewPinAgain('');
+      go('reset');
+    } catch (err) {
+      setError(message(err, 'Could not send the code. Please try again.'));
     } finally {
       setBusy(false);
     }
   }
 
-  async function verifyOtp(codeValue?: string) {
+  const newPinsDiffer = newPin.length === 4 && newPinAgain.length === 4 && newPin !== newPinAgain;
+  const canReset = resetCode.length === 6 && newPin.length === 4 && newPin === newPinAgain;
+
+  async function confirmReset(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (!account || !canReset || busy) return;
     setError('');
     setBusy(true);
     try {
-      const data = await api<AuthTokensResponse>('/api/auth/verify-otp', {
+      const data = await api<AuthTokensResponse>('/api/auth/pin-reset/confirm', {
+        body: { identifier: account.identifier, code: resetCode, pin: newPin, confirmPin: newPinAgain, termsVersion: TERMS_VERSION },
+      });
+      finish(data);
+    } catch (err) {
+      setError(message(err, 'Could not save your PIN. Please try again.'));
+      setBusy(false);
+    }
+  }
+
+  // ---------------- signup ----------------
+  function openSignup(prefill: { phone?: string; email?: string } = {}) {
+    setName('');
+    setPhone(prefill.phone ?? '');
+    setEmail(prefill.email ?? '');
+    setPhoneSent(null);
+    setPhoneCode('');
+    setPhoneToken('');
+    setVerifiedPhone('');
+    setSignupPin('');
+    setSignupPinAgain('');
+    setDevOtp('');
+    go('signup');
+  }
+
+  const typedPhone = phoneSchema.safeParse(phone);
+  const phoneVerified = !!phoneToken && typedPhone.success && typedPhone.data === verifiedPhone;
+  const emailCheck = email.trim() ? customerEmailSchema.safeParse(email) : null;
+  const signupPinsDiffer = signupPin.length === 4 && signupPinAgain.length === 4 && signupPin !== signupPinAgain;
+  const canCreate =
+    phoneVerified && name.trim().length >= 2 && signupPin.length === 4 && signupPin === signupPinAgain && (!emailCheck || emailCheck.success);
+
+  async function sendPhoneCode() {
+    setError('');
+    if (!typedPhone.success) {
+      setError('Enter a valid 10-digit mobile number');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api<OtpRequestResult>('/api/auth/request-otp', { body: { phone: typedPhone.data } });
+      setPhoneSent((prev) => ({ result, n: (prev?.n ?? 0) + 1 }));
+      setPhoneCode(result.devOtp ?? '');
+      setDevOtp(result.devOtp ?? '');
+    } catch (err) {
+      setError(message(err, 'Could not send the code. Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyPhone(code: string) {
+    if (!typedPhone.success || busy) return;
+    setError('');
+    setBusy(true);
+    try {
+      const { phoneToken: token } = await api<SignupPhoneVerified>('/api/auth/signup/verify-phone', { body: { phone: typedPhone.data, code } });
+      setPhoneToken(token);
+      setVerifiedPhone(typedPhone.data);
+      setPhoneSent(null);
+      setDevOtp('');
+    } catch (err) {
+      setPhoneCode('');
+      setError(message(err, 'Could not verify the code. Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function changePhone(value: string) {
+    setPhone(value);
+    if (phoneToken || phoneSent) {
+      // A different number needs its own code.
+      setPhoneToken('');
+      setVerifiedPhone('');
+      setPhoneSent(null);
+      setPhoneCode('');
+    }
+  }
+
+  async function createAccount(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canCreate || busy || !typedPhone.success) return;
+    setError('');
+    setBusy(true);
+    try {
+      const data = await api<AuthTokensResponse>('/api/auth/signup', {
         body: {
-          phone,
-          code: codeValue ?? code,
+          name: name.trim(),
+          phone: typedPhone.data,
+          phoneToken,
+          email: email.trim(),
+          pin: signupPin,
+          confirmPin: signupPinAgain,
           referralCode: referralCode.trim() || undefined,
-          ...(pinReset ? { purpose: 'PIN_RESET' } : {}),
           termsVersion: TERMS_VERSION,
         },
       });
-      finishAuth(data, 'otp');
+      finish(data);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveProfile(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    // Optional: when given, it must look like an address; a one-time link confirms it.
-    const typed = signupEmail.trim();
-    const emailCheck = typed ? customerEmailSchema.safeParse(typed) : null;
-    if (emailCheck && !emailCheck.success) {
-      setError(emailCheck.error.issues[0]?.message ?? 'Enter a valid email address');
-      return;
-    }
-    setBusy(true);
-    try {
-      const me = await api<AuthUser>('/api/auth/me', {
-        method: 'PATCH',
-        body: { name: name.trim(), ...(emailCheck?.success ? { email: emailCheck.data } : {}) },
-        auth: true,
-      });
-      setStoredUser(me);
-      setUser(me);
-      await api('/api/addresses', {
-        body: {
-          name: name.trim(),
-          phone: altPhone.trim() || phone,
-          line1: line1.trim(),
-          city: city.trim(),
-          state: stateName.trim(),
-          pincode: pincode.trim(),
-          isDefault: true,
-        },
-        auth: true,
-      });
-      setStep('photo');
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not save profile');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function savePhotoAndContinue() {
-    setError('');
-    setBusy(true);
-    try {
-      if (photoFile) {
-        await consent.ensure();
-        const [photo] = await uploadPrivateImages([photoFile], 'TRYON_PHOTO');
-        await api('/api/tryon/photo', { body: { photoRef: photo.ref }, auth: true });
+      if (err instanceof ApiRequestError && err.code === 'PHONE_NOT_VERIFIED') {
+        setPhoneToken('');
+        setVerifiedPhone('');
       }
-      setBusy(false);
-      setStep('setpin');
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Photo upload failed');
+      setError(message(err, 'Could not create your account. Please try again.'));
       setBusy(false);
     }
   }
 
-  async function savePinAndFinish(pinValue: string, confirmValue?: string) {
-    setError('');
-    if (confirmValue !== undefined && confirmValue !== pinValue) {
-      setError('The two PINs don’t match — enter them again.');
-      setPin('');
-      setPinConfirm('');
-      return;
-    }
-    setBusy(true);
-    try {
-      const me = await api<AuthUser>('/api/auth/me/set-pin', {
-        body: { pin: pinValue, ...(confirmValue !== undefined ? { confirmPin: confirmValue } : {}) },
-        auth: true,
-      });
-      setPinReset(false);
-      setStoredUser(me);
-      rememberMethod('pin');
-      router.push(dashboardFor(me.role));
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not save PIN');
-      setBusy(false);
-    }
-  }
+  // ---------------- view ----------------
+  const who = account ? (account.kind === 'phone' ? maskPhone(account.identifier) : account.identifier) : '';
+  const title = step === 'signup' ? 'Create Account' : step === 'reset' ? (reset?.firstPin ? 'Set Your PIN' : 'Reset Your PIN') : 'Welcome Back';
+  const subtitle =
+    step === 'signup'
+      ? 'Verify your phone and choose a 4-digit PIN'
+      : step === 'reset'
+        ? `Enter the code we sent to ${reset?.sent.phoneMasked ?? 'your phone'} and choose a new PIN`
+        : step === 'pin'
+          ? 'Enter your 4-digit PIN'
+          : 'Log in or create an account';
 
-  // ------------------- Split-screen auth experience -------------------
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
-      {/* ============ LEFT: brand panel — the exact reference artwork ============ */}
+      {/* ============ LEFT: brand panel ============ */}
       <aside className="sticky top-0 hidden h-screen shrink-0 bg-black lg:block">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/login-panel.jpg"
-          alt="Clowe — Your Style, Our Intelligence"
-          className="h-full w-auto select-none"
-          draggable={false}
-        />
+        <img src="/login-panel.jpg" alt="Clowe — Your Style, Our Intelligence" className="h-full w-auto select-none" draggable={false} />
       </aside>
 
       {/* ============ RIGHT: auth card over the blurred storefront ============ */}
@@ -404,33 +413,25 @@ export default function LoginPage() {
           >
             ←
           </button>
-          <span className="font-display text-xl font-bold uppercase tracking-[0.25em] text-brand-400">
-            Clowe
-          </span>
+          <span className="font-display text-xl font-bold uppercase tracking-[0.25em] text-brand-400">Clowe</span>
           <p className="mt-0.5 text-[11px] text-brand-400/80">Your Style, Our Intelligence.</p>
         </div>
 
-        {/* Top-right signup switch */}
-        <div className="relative z-10 flex items-center justify-end gap-3 px-6 pt-5">
-          <span className="hidden text-sm text-gray-500 sm:inline">
-            {signupMode ? 'Already have an account?' : 'New to Clowe?'}
-          </span>
+        {/* Top-right switch */}
+        <div className="relative z-10 flex items-center justify-end gap-3 px-4 pt-4 sm:px-6 sm:pt-5">
+          <span className="hidden text-sm text-gray-500 sm:inline">{step === 'signup' ? 'Already have an account?' : 'New to Clowe?'}</span>
           <button
-            onClick={() => {
-              setSignupMode((v) => !v);
-              setPinReset(false);
-              setStep('phone');
-              setError('');
-              setNotice('');
-            }}
+            type="button"
+            onClick={() => (step === 'signup' ? go('identify') : openSignup(parseLoginIdentifier(identifier)?.kind === 'email' ? { email: identifier.trim() } : { phone: identifier.trim() }))}
             className="rounded-lg border-2 border-brand-600 px-4 py-1.5 text-sm font-bold text-brand-600 hover:bg-brand-50"
+            data-login-switch
           >
-            {signupMode ? 'Login' : 'Create Account'}
+            {step === 'signup' ? 'Log in' : 'Create Account'}
           </button>
         </div>
 
-        <div className="relative z-10 flex flex-1 items-start justify-center px-4 py-6 sm:items-center sm:py-10">
-          <div className="relative w-full max-w-md rounded-3xl border border-gray-100 bg-white p-6 shadow-xl sm:p-9">
+        <div className="relative z-10 flex flex-1 items-start justify-center px-4 py-5 sm:items-center sm:py-10">
+          <div className="relative w-full max-w-md rounded-3xl border border-gray-100 bg-white p-5 shadow-xl sm:p-9" data-login-step={step}>
             <button
               type="button"
               onClick={() => closeLogin(router)}
@@ -441,357 +442,220 @@ export default function LoginPage() {
             >
               ✕
             </button>
-            {/* Card header */}
-            <h2 className="text-center font-display text-3xl font-bold text-ink-900">
-              {step === 'newpin'
-                ? 'Choose a New PIN'
-                : step === 'profile'
-                ? 'Almost there!'
-                : step === 'photo'
-                  ? 'Your Try-On Photo'
-                  : step === 'setpin'
-                    ? 'Set a Quick PIN'
-                    : signupMode
-                      ? 'Create Account'
-                      : 'Welcome Back'}
-            </h2>
-            <p className="mt-1.5 text-center text-sm text-gray-500">
-              {step === 'newpin'
-                ? 'Your old PIN no longer works. Set a new one to continue.'
-                : step === 'profile'
-                ? 'Tell us a little about yourself — you only do this once'
-                : step === 'photo'
-                  ? 'Upload once — every ✨ Try On Me uses it automatically'
-                  : step === 'setpin'
-                    ? '4-digit PIN for faster login — no OTP next time'
-                    : signupMode
-                      ? 'Join Clowe with just your phone number'
-                      : 'Login to continue to your account'}
-            </p>
+            <h1 className="text-center font-display text-3xl font-bold text-ink-900">{title}</h1>
+            <p className="mt-1.5 text-center text-sm text-gray-500">{subtitle}</p>
             <div className="mt-4">
               <HangerDivider />
             </div>
 
             {notice && (
-              <div className="mt-5 rounded-lg border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-700">
+              <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900" role="status" data-login-notice>
                 {notice}
               </div>
             )}
             {error && (
-              <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert" data-login-error>
                 {error}
-                {pinFailed && step === 'pin' && (
-                  <button type="button" onClick={() => void chooseOtp()} className="ml-1 font-semibold underline">
-                    Get OTP instead
-                  </button>
-                )}
               </div>
             )}
 
-            {/* ---------------- Step: phone ---------------- */}
-            {step === 'phone' && (
+            {/* ---------------- identify ---------------- */}
+            {step === 'identify' && (
+              <form className="mt-6 space-y-4" onSubmit={(e) => void continueWithIdentifier(e)} noValidate>
+                <div>
+                  <label htmlFor="login-identifier" className="text-sm font-semibold text-ink-900">
+                    Phone number or email
+                  </label>
+                  <input
+                    id="login-identifier"
+                    name="identifier"
+                    type="text"
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="98765 43210 or you@example.com"
+                    className={`mt-1.5 ${field}`}
+                    autoFocus
+                  />
+                </div>
+                <button type="submit" disabled={busy || !identifier.trim()} className={primary} data-action="continue">
+                  {busy ? 'Please wait…' : 'Continue'}
+                </button>
+                <Consent />
+              </form>
+            )}
+
+            {/* ---------------- pin ---------------- */}
+            {step === 'pin' && account && (
               <form
-                className="mt-6 space-y-4"
+                className="mt-6 space-y-5"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  void submitPhone();
+                  void loginWithPin(pin);
                 }}
               >
-                <div>
-                  <label className="text-sm font-semibold text-ink-900">Phone Number</label>
-                  <div className="mt-1.5 flex overflow-hidden rounded-xl border border-gray-300 bg-white focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-100">
-                    <span className="flex items-center border-r border-gray-200 bg-cream-50 px-3.5 text-sm font-semibold text-gray-600">
-                      +91
-                    </span>
-                    <input
-                      type="tel"
-                      inputMode="numeric"
-                      maxLength={10}
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                      placeholder="10-digit mobile number"
-                      className="w-full px-3.5 py-3 text-sm outline-none"
-                      autoFocus
-                    />
-                  </div>
-                </div>
-                {signupMode ? (
-                  // A new account starts with an OTP: there is no PIN yet.
-                  <button
-                    type="submit"
-                    disabled={busy || phone.length !== 10}
-                    className="w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:bg-brand-700 disabled:opacity-50"
-                  >
-                    {busy ? 'Please wait…' : 'Get OTP'}
-                  </button>
-                ) : (
-                  <LoginMethodChoice
-                    disabled={busy || phone.length !== 10}
-                    preselected={preselected}
-                    busy={choosing}
-                    onPin={choosePin}
-                    onOtp={() => void chooseOtp()}
-                  />
-                )}
-                <p className="text-center text-[11px] leading-relaxed text-gray-500" data-login-consent>
-                  By continuing you confirm you are 18+ and agree to the{' '}
-                  <Link href="/pages/terms-conditions" className="font-semibold text-brand-600 hover:underline">
-                    Terms
-                  </Link>{' '}
-                  and{' '}
-                  <Link href="/pages/privacy-policy" className="font-semibold text-brand-600 hover:underline">
-                    Privacy Policy
-                  </Link>
-                  .
-                </p>
-              </form>
-            )}
-
-            {/* ---------------- Step: PIN login ---------------- */}
-            {step === 'pin' && (
-              <div className="mt-6 space-y-5">
                 <p className="text-center text-sm text-gray-600">
-                  PIN login for <span className="font-semibold">{maskedPhone(phone)}</span>{' '}
-                  <button onClick={() => { setPinReset(false); setStep('phone'); }} className="text-brand-600 hover:underline">
-                    Change number
-                  </button>
-                </p>
-                <div>
-                  <p className="mb-2 text-center text-sm font-semibold text-ink-900">
-                    Enter your 4-digit PIN
-                  </p>
-                  <DigitBoxes
-                    length={4}
-                    value={pin}
-                    onChange={setPin}
-                    masked
-                    autoFocus
-                    onComplete={(v) => void loginWithPin(v)}
-                  />
-                </div>
-                <button
-                  onClick={() => void loginWithPin(pin)}
-                  disabled={busy || pin.length !== 4}
-                  className="w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:bg-brand-700 disabled:opacity-50"
-                >
-                  {busy ? 'Logging in…' : 'Login'}
-                </button>
-                <div className="flex items-center justify-between text-sm">
-                  <button onClick={() => void chooseOtp()} className="text-brand-600 hover:underline">
-                    Get OTP instead
-                  </button>
-                  <button
-                    onClick={() => void forgotPin()}
-                    className="text-gray-500 hover:text-brand-600 hover:underline"
-                  >
-                    Forgot PIN?
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ---------------- Step: OTP ---------------- */}
-            {step === 'otp' && (
-              <div className="mt-6 space-y-5">
-                <p className="text-center text-sm text-gray-600">
-                  OTP sent to <span className="font-semibold">{maskedPhone(phone)}</span>{' '}
-                  <button onClick={() => { setPinReset(false); setStep('phone'); }} className="text-brand-600 hover:underline">
+                  <span className="font-semibold">{who}</span>{' '}
+                  <button type="button" onClick={() => go('identify')} className={link}>
                     Change
                   </button>
-                  {!signupMode && (
-                    <>
-                      {' · '}
-                      {/* Straight to the PIN for this number; nothing is sent, and a
-                          pending "Forgot PIN?" is dropped (its PIN is untouched until a
-                          code is verified). */}
-                      <button
-                        onClick={() => {
-                          setPinReset(false);
-                          choosePin();
-                        }}
-                        className="text-brand-600 hover:underline"
-                      >
-                        Use PIN instead
-                      </button>
-                    </>
-                  )}
                 </p>
-                {devOtp && (
-                  <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-center text-sm text-blue-800">
-                    <span className="font-semibold">Dev mode:</span> OTP is{' '}
-                    <span className="font-mono text-base font-bold tracking-widest">{devOtp}</span>
-                  </div>
-                )}
-                <DigitBoxes
-                  length={6}
-                  value={code}
-                  onChange={setCode}
-                  autoFocus
-                  onComplete={(v) => void verifyOtp(v)}
-                />
-                <details className="text-center text-sm text-gray-500">
-                  <summary className="cursor-pointer select-none">Have a referral code?</summary>
-                  <input
-                    type="text"
-                    value={referralCode}
-                    onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                    placeholder="Referral code (optional)"
-                    className={`mt-3 ${field}`}
-                  />
-                </details>
-                <button
-                  onClick={() => void verifyOtp()}
-                  disabled={busy || code.length !== 6}
-                  className="w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:bg-brand-700 disabled:opacity-50"
-                >
-                  {busy ? 'Verifying…' : 'Verify & Login'}
+                <DigitBoxes length={4} value={pin} onChange={setPin} masked autoFocus label="PIN" name="pin" onComplete={(v) => void loginWithPin(v)} disabled={busy} />
+                <button type="submit" disabled={busy || pin.length !== 4} className={primary} data-action="login">
+                  {busy ? 'Logging in…' : 'Log in'}
                 </button>
-                <ResendOtp
-                  key={otpSent?.n ?? 0}
-                  phone={phone}
-                  firstSent={otpSent?.result ?? null}
-                  onSent={(r) => {
-                    setDevOtp(r.devOtp ?? '');
-                    setCode(r.devOtp ?? '');
-                  }}
-                />
-              </div>
-            )}
-
-            {/* ---------------- Step: profile (new users) ---------------- */}
-            {step === 'profile' && (
-              <form className="mt-6 space-y-3" onSubmit={(e) => void saveProfile(e)}>
-                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name *" required minLength={2} className={field} autoFocus />
-                <div>
-                  <input
-                    type="email"
-                    name="email"
-                    autoComplete="email"
-                    value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
-                    placeholder="Email (optional)"
-                    className={field}
-                  />
-                  <p className="mt-1 text-left text-[11px] text-gray-500">For order updates and invoices. You&apos;ll still sign in with your phone.</p>
-                </div>
-                <input value={line1} onChange={(e) => setLine1(e.target.value)} placeholder="Address (house no, street) *" required minLength={3} className={field} />
-                <div className="grid grid-cols-2 gap-3">
-                  <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City *" required minLength={2} className={field} />
-                  <input value={stateName} onChange={(e) => setStateName(e.target.value)} placeholder="State *" required minLength={2} className={field} />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <input value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))} maxLength={6} placeholder="Pincode *" required className={field} />
-                  <input value={altPhone} onChange={(e) => setAltPhone(e.target.value.replace(/\D/g, ''))} maxLength={10} placeholder="Alternate phone" className={field} />
-                </div>
-                <button
-                  type="submit"
-                  disabled={busy || !name.trim() || !line1.trim() || !city.trim() || !stateName.trim() || pincode.length !== 6}
-                  className="w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:bg-brand-700 disabled:opacity-50"
-                >
-                  {busy ? 'Saving…' : 'Continue →'}
-                </button>
+                <p className="text-center">
+                  <button type="button" onClick={() => void startReset(account)} disabled={busy} className={`text-sm ${locked ? 'font-bold' : ''} ${link}`} data-action="forgot-pin">
+                    Forgot PIN?
+                  </button>
+                </p>
               </form>
             )}
 
-            {/* ---------------- Step: try-on photo (new users) ---------------- */}
-            {step === 'photo' && (
-              <div className="mt-6 space-y-4">
-                {photoPreview ? (
-                  <div className="relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={photoPreview} alt="Your photo" className="max-h-72 w-full rounded-xl bg-cream-100 object-contain" />
-                    <label className="absolute right-2 top-2 cursor-pointer rounded-full bg-white/90 px-3 py-1 text-xs font-semibold shadow">
-                      Change
-                      <input type="file" accept="image/jpeg,image/png,image/webp" capture="user" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)} />
-                    </label>
-                  </div>
-                ) : (
-                  <label className="flex h-48 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 bg-cream-50 text-gray-500 hover:border-brand-600 hover:text-brand-600">
-                    <span className="text-3xl">📷</span>
-                    <span className="mt-2 text-sm font-medium">Upload your photo</span>
-                    <span className="mt-1 text-xs text-gray-400">Full-body, front-facing works best</span>
-                    <input type="file" accept="image/jpeg,image/png,image/webp" capture="user" className="hidden" onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)} />
-                  </label>
-                )}
-                {photoFile && consent.consented === false && (
-                  <TryOnConsentBox ticked={consent.ticked} onChange={consent.setTicked} />
-                )}
-                <button
-                  onClick={() => void savePhotoAndContinue()}
-                  disabled={busy || (!!photoFile && !consent.ready)}
-                  className="w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:bg-brand-700 disabled:opacity-50"
-                >
-                  {busy ? 'Saving…' : photoFile ? 'Save & Continue →' : 'Skip for now →'}
-                </button>
-              </div>
-            )}
-
-            {/* ---------------- Step: set PIN (skippable) ---------------- */}
-            {step === 'setpin' && user && (
-              <div className="mt-6 space-y-5">
-                <DigitBoxes length={4} value={pin} onChange={setPin} masked autoFocus />
-                <button
-                  onClick={() => void savePinAndFinish(pin)}
-                  disabled={busy || pin.length !== 4}
-                  className="w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:bg-brand-700 disabled:opacity-50"
-                >
-                  {busy ? 'Saving…' : 'Save PIN & Continue'}
-                </button>
-                <button
-                  onClick={() => router.push(dashboardFor(user.role))}
-                  className="w-full text-center text-sm text-gray-500 hover:text-brand-600 hover:underline"
-                >
-                  Skip for now
-                </button>
-              </div>
-            )}
-
-            {/* ---------------- Step: new PIN after "Forgot PIN?" (required) ---------------- */}
-            {step === 'newpin' && user && (
-              <div className="mt-6 space-y-5" data-new-pin>
+            {/* ---------------- reset ---------------- */}
+            {step === 'reset' && account && reset && (
+              <form className="mt-6 space-y-5" onSubmit={(e) => void confirmReset(e)}>
+                <p className="text-center text-sm text-gray-600">
+                  For <span className="font-semibold">{who}</span>{' '}
+                  <button type="button" onClick={() => go('identify')} className={link}>
+                    Change
+                  </button>
+                </p>
+                <DevCode code={devOtp} />
+                <div>
+                  <p className="mb-2 text-center text-sm font-semibold text-ink-900">Code from SMS</p>
+                  <DigitBoxes length={6} value={resetCode} onChange={setResetCode} autoFocus label="Code" name="reset-code" oneTimeCode />
+                </div>
+                <ResendReset key={reset.n} first={reset.sent} onResend={() => startReset(account, reset.firstPin)} />
                 <div>
                   <p className="mb-2 text-center text-sm font-semibold text-ink-900">New 4-digit PIN</p>
-                  <DigitBoxes length={4} value={pin} onChange={setPin} masked autoFocus />
+                  <DigitBoxes length={4} value={newPin} onChange={setNewPin} masked label="New PIN" name="new-pin" />
                 </div>
                 <div>
                   <p className="mb-2 text-center text-sm font-semibold text-ink-900">Enter it again</p>
-                  <DigitBoxes
-                    length={4}
-                    value={pinConfirm}
-                    onChange={setPinConfirm}
-                    masked
-                    onComplete={(v) => {
-                      if (pin.length === 4) void savePinAndFinish(pin, v);
-                    }}
-                  />
+                  <DigitBoxes length={4} value={newPinAgain} onChange={setNewPinAgain} masked label="Confirm PIN" name="new-pin-again" />
+                  {newPinsDiffer && <p className="mt-2 text-center text-xs font-medium text-red-600">The two PINs don&apos;t match</p>}
                 </div>
-                <button
-                  onClick={() => void savePinAndFinish(pin, pinConfirm)}
-                  disabled={busy || pin.length !== 4 || pinConfirm.length !== 4}
-                  className="w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:bg-brand-700 disabled:opacity-50"
-                >
-                  {busy ? 'Saving…' : 'Save new PIN & Continue'}
+                <button type="submit" disabled={busy || !canReset} className={primary} data-action="save-pin">
+                  {busy ? 'Saving…' : 'Save PIN & log in'}
                 </button>
-                <p className="text-center text-xs text-gray-500">
-                  You&apos;ve been signed out on your other devices. If you leave now, sign in with an OTP next
-                  time.
-                </p>
-              </div>
+                {!reset.firstPin && (
+                  <p className="text-center text-xs text-gray-500">Your old PIN keeps working until you save the new one. Saving signs you out on other devices.</p>
+                )}
+              </form>
             )}
 
-            {/* Card footer */}
-            {(step === 'phone' || step === 'pin' || step === 'otp') && (
-              <p className="mt-7 text-center text-xs text-gray-400">
-                By continuing, you agree to our{' '}
-                <Link href="/" className="text-brand-600 hover:underline">
-                  Terms of Use
-                </Link>{' '}
-                and{' '}
-                <Link href="/" className="text-brand-600 hover:underline">
-                  Privacy Policy
-                </Link>
-                .
-              </p>
+            {/* ---------------- signup ---------------- */}
+            {step === 'signup' && (
+              <form className="mt-6 space-y-4" onSubmit={(e) => void createAccount(e)} noValidate>
+                <div>
+                  <label htmlFor="signup-name" className="text-sm font-semibold text-ink-900">
+                    Name
+                  </label>
+                  <input id="signup-name" name="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} className={`mt-1.5 ${field}`} placeholder="Your full name" />
+                </div>
+
+                <div>
+                  <label htmlFor="signup-phone" className="text-sm font-semibold text-ink-900">
+                    Phone
+                  </label>
+                  <div className="mt-1.5 flex gap-2">
+                    <input
+                      id="signup-phone"
+                      name="phone"
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel-national"
+                      value={phone}
+                      onChange={(e) => changePhone(e.target.value)}
+                      className={`${field} min-w-0 flex-1`}
+                      placeholder="10-digit mobile number"
+                    />
+                    {phoneVerified ? (
+                      <span className="flex h-12 shrink-0 items-center rounded-xl bg-green-50 px-3 text-sm font-bold text-green-700" data-phone-verified>
+                        ✓ Verified
+                      </span>
+                    ) : phoneSent ? (
+                      // Sent: the code box and its own "Resend" (with the wait) are just below.
+                      <span className="flex h-12 shrink-0 items-center px-2 text-xs font-semibold text-gray-500">Code sent</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void sendPhoneCode()}
+                        disabled={busy || !typedPhone.success}
+                        className="h-12 shrink-0 rounded-xl border-2 border-brand-600 px-4 text-sm font-bold text-brand-600 hover:bg-brand-50 disabled:opacity-50"
+                        data-action="verify-phone"
+                      >
+                        Verify
+                      </button>
+                    )}
+                  </div>
+                  {phoneSent && !phoneVerified && (
+                    <div className="mt-3 space-y-3 rounded-xl border border-gray-100 bg-cream-50 p-3" data-phone-otp>
+                      <p className="text-center text-xs text-gray-600">
+                        Enter the code sent to <span className="font-semibold">{typedPhone.success ? maskPhone(typedPhone.data) : phone}</span>
+                      </p>
+                      <DevCode code={devOtp} />
+                      <DigitBoxes length={6} value={phoneCode} onChange={setPhoneCode} autoFocus label="Phone code" name="phone-code" oneTimeCode onComplete={(v) => void verifyPhone(v)} disabled={busy} />
+                      <button type="button" onClick={() => void verifyPhone(phoneCode)} disabled={busy || phoneCode.length !== 6} className={primary} data-action="confirm-phone">
+                        {busy ? 'Checking…' : 'Verify code'}
+                      </button>
+                      {typedPhone.success && (
+                        <ResendOtp
+                          key={phoneSent.n}
+                          phone={typedPhone.data}
+                          firstSent={phoneSent.result}
+                          onSent={(r) => {
+                            setDevOtp(r.devOtp ?? '');
+                            setPhoneCode(r.devOtp ?? '');
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="signup-email" className="text-sm font-semibold text-ink-900">
+                    Email <span className="font-normal text-gray-400">(optional)</span>
+                  </label>
+                  <input
+                    id="signup-email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={`mt-1.5 ${field}`}
+                    placeholder="you@example.com"
+                  />
+                  {emailCheck && !emailCheck.success && <p className="mt-1 text-xs text-red-600">{emailCheck.error.issues[0]?.message}</p>}
+                </div>
+
+                <div>
+                  <p className="mb-2 text-sm font-semibold text-ink-900">PIN</p>
+                  <DigitBoxes length={4} value={signupPin} onChange={setSignupPin} masked label="PIN" name="signup-pin" />
+                </div>
+                <div>
+                  <p className="mb-2 text-sm font-semibold text-ink-900">Confirm PIN</p>
+                  <DigitBoxes length={4} value={signupPinAgain} onChange={setSignupPinAgain} masked label="Confirm PIN" name="signup-pin-again" />
+                  {signupPinsDiffer && <p className="mt-2 text-center text-xs font-medium text-red-600">The two PINs don&apos;t match</p>}
+                </div>
+
+                <details className="text-sm text-gray-500">
+                  <summary className="cursor-pointer select-none">Have a referral code?</summary>
+                  <input value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} placeholder="Referral code (optional)" className={`mt-2 ${field}`} />
+                </details>
+
+                <button type="submit" disabled={busy || !canCreate} className={primary} data-action="create-account">
+                  {busy ? 'Creating…' : 'Create account'}
+                </button>
+                {!phoneVerified && <p className="text-center text-xs text-gray-500">Verify your phone number to create your account.</p>}
+                <Consent />
+              </form>
             )}
           </div>
         </div>
