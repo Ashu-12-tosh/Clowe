@@ -133,6 +133,8 @@ export default function SellerCustomersPage() {
   const [summary, setSummary] = useState<SellerCustomerSummary | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  // The seller's plan does not include this page: say so, instead of loading forever.
+  const [locked, setLocked] = useState('');
 
   const query = useMemo(() => {
     const p = new URLSearchParams({ sort });
@@ -153,16 +155,18 @@ export default function SellerCustomersPage() {
       );
       setError('');
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not load customers');
       setData(null);
+      if (err instanceof ApiRequestError && err.code === 'PLAN_REQUIRED') setLocked(err.message);
+      else setError(err instanceof ApiRequestError ? err.message : 'Could not load customers');
     }
   }, [query, page, pageSize]);
 
   const loadSummary = useCallback(async () => {
     try {
       setSummary(await api<SellerCustomerSummary>('/api/seller/customers/summary', { auth: true }));
-    } catch {
+    } catch (err) {
       setSummary(null);
+      if (err instanceof ApiRequestError && err.code === 'PLAN_REQUIRED') setLocked(err.message);
     }
   }, []);
 
@@ -178,6 +182,23 @@ export default function SellerCustomersPage() {
   const k = summary?.kpis;
   // The same days of last month (or, for a finished month, all of the one before).
   const against = summary ? istRange(summary.period.previousFrom, summary.period.previousTo) : 'last month';
+
+  if (locked) {
+    return (
+      <div className="pb-10">
+        <h1 className="font-display text-2xl font-bold text-ink-900">Customer Management</h1>
+        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900" data-plan-locked>
+          <p className="font-semibold">{locked}</p>
+          <Link
+            href="/seller/plans"
+            className="mt-3 inline-block rounded-lg bg-brand-600 px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-700"
+          >
+            See plans
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-10">

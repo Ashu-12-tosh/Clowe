@@ -1,6 +1,11 @@
-/** Format paise as Indian rupees, e.g. 149900 → "₹1,499". */
+/**
+ * Format paise as Indian rupees: 149900 → "₹1,499", 117882 → "₹1,178.82".
+ * Whole rupees read without decimals; paise are never rounded away — the
+ * amount shown is the amount charged.
+ */
 export function formatPaise(paise: number): string {
-  return `₹${(paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+  const digits = paise % 100 === 0 ? 0 : 2;
+  return `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 }
 
 /** "4 Oct", by the Indian calendar the app's periods are counted in. */

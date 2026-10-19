@@ -59,11 +59,18 @@ export default function InvoicePage({ params: paramsPromise }: { params: Promise
 
   useEffect(() => {
     api<OrderDetailView>(`/api/orders/${params.id}`, { auth: true })
-      .then(setOrder)
+      .then((o) => {
+        setOrder(o);
+        // Not paid yet: there is no invoice to ask for (the API would refuse).
+        if (o.status === 'PLACED') {
+          setNotIssued(true);
+          return;
+        }
+        return api<TaxInvoice[]>(`/api/orders/${params.id}/invoices`, { auth: true })
+          .then(setInvoices)
+          .catch(() => setNotIssued(true));
+      })
       .catch(() => setNotFound(true));
-    api<TaxInvoice[]>(`/api/orders/${params.id}/invoices`, { auth: true })
-      .then(setInvoices)
-      .catch(() => setNotIssued(true));
   }, [params.id]);
 
   if (notFound) {
