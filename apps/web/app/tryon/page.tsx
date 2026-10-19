@@ -1,5 +1,6 @@
 'use client';
 
+import ProtectedTryOnImage from '@/components/tryon/ProtectedTryOnImage';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { ProductListResponse, TryOnHistoryRow } from '@clowe/shared';
@@ -93,8 +94,7 @@ export default function TryOnHistoryPage() {
             <div key={row.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
               <div className="relative aspect-[3/4] bg-gray-100">
                 {row.resultImageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={row.resultImageUrl} alt={row.productTitle} className="h-full w-full object-cover" />
+                  <ProtectedTryOnImage src={row.resultImageUrl} alt={row.productTitle} fit="cover" className="h-full w-full" />
                 ) : (
                   <div className="flex h-full items-center justify-center text-xs text-gray-400">
                     {row.status === 'FAILED' ? 'Failed' : 'Processing…'}

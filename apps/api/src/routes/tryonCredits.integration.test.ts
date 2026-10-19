@@ -87,6 +87,40 @@ afterAll(async () => {
 });
 
 describe('a run', () => {
+  // Pre-launch audit (2026-10-20), D3: every result carries a visible
+  // watermark (the account and the time), burned into the stored image, and
+  // is shown only through a link that dies in two minutes.
+  it('stores only a watermarked copy of the result, behind a two-minute link', async () => {
+    const s = await seller(2);
+    const u = await shopper();
+    const r = await call<{ status: string; id: string; resultImageUrl: string }>('POST', '/api/tryon', u.token, { productId: s.productId, photoRef: u.photoRef });
+    expect(r.json.data.status, JSON.stringify(r.json)).toBe('SUCCESS');
+
+    const row = await prisma.tryOnHistory.findUniqueOrThrow({ where: { id: r.json.data.id } });
+    const asset = await prisma.asset.findUniqueOrThrow({ where: { id: row.resultImageUrl!.replace(/^asset:/, '') } });
+    expect(asset).toMatchObject({ purpose: 'TRYON_RESULT', contentType: 'image/jpeg', ownerId: u.id });
+
+    const link = new URL(r.json.data.resultImageUrl);
+    const expires = Number(link.searchParams.get('e'));
+    expect(expires - Math.floor(Date.now() / 1000)).toBeLessThanOrEqual(120);
+    // The link names the public API host; this test's server answers the same path.
+    const img = await fetch(`${base}${link.pathname}${link.search}`);
+    expect(img.headers.get('content-type')).toBe('image/jpeg');
+    const bytes = Buffer.from(await img.arrayBuffer());
+
+    // The watermark is in the pixels: the mock's own picture, re-rendered
+    // the same way without it, differs from what was stored.
+    const sharp = (await import('sharp')).default;
+    const { MockTryOnProvider } = await import('../services/tryon/MockTryOnProvider');
+    const raw = await new MockTryOnProvider().generate({ personImageUrl: u.photoRef, garmentImageUrl: '/uploads/none.jpg', productTitle: `Tryon Kurta ${seq}` });
+    const plain = await sharp(raw.body).flatten({ background: '#ffffff' }).raw().toBuffer({ resolveWithObject: true });
+    const stored = await sharp(bytes).raw().toBuffer({ resolveWithObject: true });
+    expect([stored.info.width, stored.info.height]).toEqual([plain.info.width, plain.info.height]);
+    let differing = 0;
+    for (let i = 0; i < plain.data.length; i += 4 * 37) if (Math.abs(plain.data[i]! - stored.data[i]!) > 24) differing += 1;
+    expect(differing).toBeGreaterThan(50);
+  });
+
   it('costs one credit; a repeat of the same photo and product within 24 hours is free', async () => {
     const s = await seller(5);
     const u = await shopper();

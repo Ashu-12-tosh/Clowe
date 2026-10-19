@@ -1,5 +1,6 @@
 'use client';
 
+import ProtectedTryOnImage from '@/components/tryon/ProtectedTryOnImage';
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -23,7 +24,6 @@ import RelatedProducts from '@/components/RelatedProducts';
 import SizeGuideModal from '@/components/product/SizeGuideModal';
 import { fetchWishlistIds } from '@/lib/wishlist';
 import { LockIcon, ShieldCheckIcon } from '@/components/cart/CartIcons';
-import { ExternalLink } from '@/components/ExternalLink';
 
 const PHOTO_TIPS = ['Good lighting', 'Facing forward', 'Arms visible', 'Plain background'];
 
@@ -536,12 +536,7 @@ export default function TryOnPage({ params: paramsPromise }: { params: Promise<{
               </div>
             ) : current?.resultImageUrl ? (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={current.resultImageUrl}
-                  alt="Your try-on result"
-                  className="max-h-[28rem] w-full object-contain"
-                />
+                <ProtectedTryOnImage src={current.resultImageUrl} alt="Your try-on result" className="h-[22rem] w-full sm:h-[28rem]" />
                 {runs.length > 1 && (
                   <>
                     <button
@@ -587,13 +582,11 @@ export default function TryOnPage({ params: paramsPromise }: { params: Promise<{
                     i === activeRun ? 'border-brand-600' : 'border-gray-200 hover:border-gray-300'
                   }`}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={run.resultImageUrl ?? ''}
-                    alt=""
-                    loading="lazy"
-                    className="h-20 w-full rounded object-cover"
-                  />
+                  {run.resultImageUrl ? (
+                    <ProtectedTryOnImage src={run.resultImageUrl} alt={`Try-on ${i + 1}`} fit="cover" className="h-20 w-full rounded" />
+                  ) : (
+                    <div className="h-20 w-full rounded bg-cream-100" />
+                  )}
                   <span className="mt-1 block truncate text-[10px] text-gray-500">
                     {[run.variantColor, run.variantSize].filter(Boolean).join(' / ') ||
                       `Run ${i + 1}`}
@@ -738,15 +731,6 @@ export default function TryOnPage({ params: paramsPromise }: { params: Promise<{
             >
               ⟳ Try Another Photo
             </button>
-            {current?.resultImageUrl && (
-              <ExternalLink
-                href={current.resultImageUrl}
-                download="clowe-tryon"
-                className="block rounded-lg border border-gray-300 py-3 text-center text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
-              >
-                ⬇ Download result
-              </ExternalLink>
-            )}
             <p className="flex items-center justify-center gap-1.5 text-center text-[11px] text-gray-400">
               <ShieldCheckIcon className="h-3.5 w-3.5" />
               Your photo stays private to your account

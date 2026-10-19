@@ -22,6 +22,16 @@ import { privateStorage, storageFor } from './storage';
 export const IMAGE_URL_TTL_SECONDS = 5 * 60;
 /** Longer for video: playback keeps requesting ranges of the same URL. */
 export const VIDEO_URL_TTL_SECONDS = 15 * 60;
+/**
+ * Shorter for a try-on result (a shopper's likeness): the page fetches it once
+ * and draws it, so a link copied out of the network panel dies in minutes.
+ */
+export const TRYON_RESULT_URL_TTL_SECONDS = 2 * 60;
+
+function ttlFor(asset: { purpose: string; contentType: string }): number {
+  if (asset.purpose === 'TRYON_RESULT') return TRYON_RESULT_URL_TTL_SECONDS;
+  return asset.contentType.startsWith('video/') ? VIDEO_URL_TTL_SECONDS : IMAGE_URL_TTL_SECONDS;
+}
 
 const EXTENSION: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -82,7 +92,7 @@ export async function storePrivateFile(input: {
 export async function resolveFileUrls(values: (string | null | undefined)[]): Promise<(string | null)[]> {
   const ids = values.map(assetIdOf).filter((id): id is string => id !== null);
   const assets = ids.length
-    ? await prisma.asset.findMany({ where: { id: { in: ids } }, select: { id: true, provider: true, key: true, contentType: true, deletedAt: true } })
+    ? await prisma.asset.findMany({ where: { id: { in: ids } }, select: { id: true, provider: true, key: true, contentType: true, purpose: true, deletedAt: true } })
     : [];
   const byId = new Map(assets.map((a) => [a.id, a]));
   return Promise.all(
@@ -91,7 +101,7 @@ export async function resolveFileUrls(values: (string | null | undefined)[]): Pr
       if (id === null) return value ?? null;
       const asset = byId.get(id);
       if (!asset || asset.deletedAt) return null;
-      const ttl = asset.contentType.startsWith('video/') ? VIDEO_URL_TTL_SECONDS : IMAGE_URL_TTL_SECONDS;
+      const ttl = ttlFor(asset);
       try {
         return await storageFor(asset.provider).signedUrl(asset.key, ttl);
       } catch (err) {

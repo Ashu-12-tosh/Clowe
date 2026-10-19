@@ -1,5 +1,6 @@
 'use client';
 
+import ProtectedTryOnImage from '@/components/tryon/ProtectedTryOnImage';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -557,12 +558,7 @@ export default function AdminTryOnMonitorPage() {
                       </td>
                       <td className="px-3 py-2">
                         {r.resultImageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={r.resultImageUrl}
-                            alt=""
-                            className="h-11 w-9 rounded border border-gray-200 object-cover"
-                          />
+                          <ProtectedTryOnImage src={r.resultImageUrl} alt="Try-on result" fit="cover" className="h-11 w-9 rounded border border-gray-200" />
                         ) : (
                           <div className="flex h-11 w-9 items-center justify-center rounded border border-dashed border-gray-300 text-[10px] text-gray-400">
                             —

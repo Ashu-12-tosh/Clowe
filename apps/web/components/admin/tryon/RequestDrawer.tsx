@@ -1,5 +1,6 @@
 'use client';
 
+import ProtectedTryOnImage from '@/components/tryon/ProtectedTryOnImage';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { AdminTryOnRequestDetail, AdminTryOnRequestRow } from '@clowe/shared';
@@ -118,12 +119,7 @@ export default function RequestDrawer({
                   Generated result
                 </figcaption>
                 {detail.resultImageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={detail.resultImageUrl}
-                    alt="Try-on result"
-                    className="aspect-[3/4] w-full rounded-xl border border-gray-200 object-cover"
-                  />
+                  <ProtectedTryOnImage src={detail.resultImageUrl} alt="Try-on result" fit="cover" className="aspect-[3/4] w-full rounded-xl border border-gray-200" />
                 ) : (
                   <div className="flex aspect-[3/4] w-full items-center justify-center rounded-xl border border-dashed border-gray-300 bg-cream-50 px-3 text-center text-xs text-gray-400">
                     {detail.status === 'FAILED' ? 'Generation failed' : 'No result image'}

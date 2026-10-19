@@ -12,6 +12,7 @@
  * — so the normal path is: open, press Generate. Changing it is a deliberate
  * action, not a step in the way.
  */
+import ProtectedTryOnImage from '@/components/tryon/ProtectedTryOnImage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
@@ -207,12 +208,7 @@ export default function TryOnPanel({
               {/* Result, or the photo waiting to be used */}
               <div className="relative overflow-hidden rounded-2xl bg-cream-100">
                 {current?.resultImageUrl && !pendingPreview ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={current.resultImageUrl}
-                    alt={`${product.title} tried on`}
-                    className="max-h-[52vh] w-full object-contain"
-                  />
+                  <ProtectedTryOnImage src={current.resultImageUrl} alt={`${product.title} tried on`} className="h-[52vh] max-h-[34rem] w-full" />
                 ) : showPhoto ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -251,8 +247,7 @@ export default function TryOnPanel({
                         run.id === current?.id ? 'border-brand-600' : 'border-transparent opacity-70'
                       }`}
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={run.resultImageUrl!} alt="" className="h-16 w-12 object-cover" />
+                      <ProtectedTryOnImage src={run.resultImageUrl!} alt="Earlier try-on" fit="cover" className="h-16 w-12" />
                     </button>
                   ))}
                 </div>

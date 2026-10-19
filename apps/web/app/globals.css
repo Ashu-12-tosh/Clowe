@@ -191,6 +191,12 @@ body {
   [data-print-hide] {
     display: none !important;
   }
+  /* A try-on result (a shopper's likeness) never reaches paper or a PDF, on
+     any device: blank, not hidden-but-sized, so nothing is left to recover. */
+  [data-protected-media] {
+    display: none !important;
+    visibility: hidden !important;
+  }
   body {
     background: #fff;
   }

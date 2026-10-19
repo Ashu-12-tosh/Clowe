@@ -28,6 +28,7 @@ import { getSettings } from '../services/settingsService';
 import { assertTryOnConsent } from '../services/tryonConsent';
 import { deleteTryOnPhotosOf } from '../services/tryonPhotoRetention';
 import { assertOwnAssets, resolveFileUrl, resolveFileUrls, storePrivateFile } from '../services/assets';
+import { istStamp, tryOnUserRef, watermarkTryOn } from '../services/tryon/watermark';
 import { categoryRulesFor } from '../services/categoryRules';
 import { consumeCredit, noticeIfOut } from '../services/tryonCredits';
 
@@ -308,12 +309,14 @@ tryonRouter.post('/', async (req, res, next) => {
         // guessing from "Zephyr Slim Fit Stretch" as a title.
         garmentCategory: garmentCategoryFor(product.category.name, product.title),
       });
-      // The result is the shopper's likeness: stored privately, as theirs.
+      // The result is the shopper's likeness: watermarked with whose and when,
+      // and stored privately, as theirs. Only the watermarked copy is kept.
+      const marked = await watermarkTryOn(image, `Clowe · ${tryOnUserRef(userId)} · ${istStamp(new Date())}`);
       const result = await storePrivateFile({
         purpose: 'TRYON_RESULT',
         ownerId: userId,
-        body: image.body,
-        contentType: image.contentType,
+        body: marked.body,
+        contentType: marked.contentType,
       });
       // Cost + latency are logged per run — the admin accounting/monitor trail.
       // A successful run that is not a free repeat also consumes one of the
