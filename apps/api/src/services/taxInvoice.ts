@@ -23,7 +23,7 @@ export async function buildTaxInvoice(orderId: string, sellerId: string): Promis
       where: { id: orderId },
       include: {
         user: { select: { name: true } },
-        payment: { select: { status: true } },
+        payment: { select: { status: true, paidAt: true } },
         // Cancelled lines were never supplied, so they are not invoiced.
         items: { where: { sellerId, status: { not: 'CANCELLED' } }, include: { product: { select: { categoryId: true } } } },
       },
@@ -71,9 +71,13 @@ export async function buildTaxInvoice(orderId: string, sellerId: string): Promis
     lines.reduce((s, l) => s + l[key], 0);
 
   const legal = { ...DEFAULT_LEGAL_ENTITY, ...settings.legalEntity };
+  // The invoice is dated when the order was confirmed — paid, or for Cash on
+  // Delivery placed — and reads the same on every view. (It was "now", so
+  // every download carried a different date.)
+  const confirmedAt = order.paymentMethod !== 'COD' && order.payment?.paidAt ? order.payment.paidAt : order.createdAt;
   return {
     invoiceNumber: `INV-${order.orderNumber}-${seller.id.slice(-4).toUpperCase()}`,
-    issuedAt: new Date().toISOString(),
+    issuedAt: confirmedAt.toISOString(),
     orderNumber: order.orderNumber,
     placedAt: order.createdAt.toISOString(),
     paymentMethod: order.paymentMethod,

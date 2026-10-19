@@ -108,6 +108,19 @@ describe("the buyer's tax invoice", () => {
     expect(inv).toMatchObject({ cgstPaise: 6_000, sgstPaise: 6_000, igstPaise: 0, totalPaise: 112_000 });
   });
 
+  // Pre-launch audit (2026-10-20), M1: issuedAt was "now", so two downloads
+  // of one invoice two seconds apart carried different dates.
+  it('is dated when the order was confirmed (placed, for COD), the same on every view', async () => {
+    const b = await buyer('Maharashtra');
+    const orderId = await orderOf(b, [variantA]);
+    const first = (await call<TaxInvoice[]>('GET', `/api/orders/${orderId}/invoices`, b.token)).json.data[0]!;
+    await new Promise((r) => setTimeout(r, 1_100));
+    const again = (await call<TaxInvoice[]>('GET', `/api/orders/${orderId}/invoices`, b.token)).json.data[0]!;
+    expect(again.issuedAt).toBe(first.issuedAt);
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    expect(first.issuedAt).toBe(order.createdAt.toISOString());
+  });
+
   it('charges IGST across states', async () => {
     const b = await buyer('Karnataka');
     const orderId = await orderOf(b, [variantA]);
