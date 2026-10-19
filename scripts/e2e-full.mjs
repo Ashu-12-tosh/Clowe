@@ -332,13 +332,22 @@ async function renewAll() {
   if (S.adminPage) S.adminToken = (await renew(S.adminPage)) ?? S.adminToken;
 }
 
-/** Sign in at /login (or /seller/login) with a phone and PIN. */
+/**
+ * Sign in with a phone (or email) and PIN: at /login, one "Phone number or
+ * email" box → Continue → the PIN; at /seller/login, its own phone + PIN.
+ */
 async function pinLogin(page, phone, pin, at = '/login') {
   await goto(page, at);
-  await page.getByPlaceholder('10-digit mobile number').fill(phone);
-  await page.getByRole('button', { name: /Login with PIN/ }).click();
-  await page.getByText(/Enter your 4-digit PIN/i).waitFor({ timeout: 30_000 });
-  await page.locator('input[type=password]').first().click();
+  if (at === '/login') {
+    await page.locator('#login-identifier').fill(phone, { timeout: 120_000 });
+    await page.locator('[data-action=continue]').click();
+    await page.locator('[data-digits=pin] input').first().click({ timeout: 30_000 });
+  } else {
+    await page.getByPlaceholder('10-digit mobile number').fill(phone);
+    await page.getByRole('button', { name: /Login with PIN/ }).click();
+    await page.getByText(/Enter your 4-digit PIN/i).waitFor({ timeout: 30_000 });
+    await page.locator('input[type=password]').first().click();
+  }
   await typeDigits(page, pin);
   await page.waitForFunction(() => !!localStorage.getItem('clowe.accessToken'), null, { timeout: 30_000 });
 }
@@ -1003,8 +1012,31 @@ async function flow6TryOn() {
     const file = page.locator('input[type=file]').first();
     await file.setInputFiles(photo, { timeout: 120_000 });
     await page.getByRole('button', { name: /Generate my try-on/ }).click({ timeout: 30_000 });
-    await page.getByAltText('Your try-on result').waitFor({ timeout: 120_000 });
+    const result = page.getByRole('img', { name: 'Your try-on result' });
+    await result.waitFor({ timeout: 120_000 });
     await page.getByText(/left today/).waitFor({ timeout: 10_000 });
+
+    // D3 (pre-launch audit 2026-10-20): drawn on a canvas, no <img> of it to
+    // save; no context menu; nothing printed; blurred when the window loses focus.
+    check((await result.locator('canvas').count()) === 1, 'the result is not drawn on a canvas');
+    const imgs = await page.evaluate(() => [...document.images].map((i) => i.src).filter((s) => /\/api\/files\//.test(s)));
+    check(imgs.length === 0, `try-on images as <img>: ${imgs.join(', ')}`);
+    const menuBlocked = await result.evaluate((el) => {
+      const e = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+      el.dispatchEvent(e);
+      return e.defaultPrevented;
+    });
+    check(menuBlocked, 'right-click is not blocked on the result');
+    await page.emulateMedia({ media: 'print' });
+    check(!(await result.isVisible()), 'the result is visible when printing');
+    await page.emulateMedia({ media: 'screen' });
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    await page.locator('[data-protected-hidden]').first().waitFor({ timeout: 5_000 });
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    const run = await prisma.tryOnHistory.findFirst({ where: { userId: S.tryShopper.id, status: 'SUCCESS' }, orderBy: { createdAt: 'desc' } });
+    const asset = await prisma.asset.findUnique({ where: { id: run.resultImageUrl.replace(/^asset:/, '') } });
+    check(asset?.contentType === 'image/jpeg' && asset.purpose === 'TRYON_RESULT', `stored result ${asset?.contentType} ${asset?.purpose}`);
+    check(!(await page.getByText(/Download result/).count()), 'a Download result button is offered');
     const after = await prisma.sellerProfile.findUnique({ where: { id: S.sellerId } });
     check(after.tryOnCredits === before.tryOnCredits - 1, `seller credits ${before.tryOnCredits} → ${after.tryOnCredits}`);
     const shopper = await prisma.user.findUnique({ where: { id: S.tryShopper.id } });
@@ -1227,6 +1259,19 @@ async function flow7Ads() {
     check(w0 - w1 === 177000, `wallet ${w0} → ${w1}`);
   }, { page, needs: ['credits'] });
 
+  // B9 (pre-launch audit 2026-10-20): on a plan without it, Customers said
+  // "needs the PRO plan" and then showed "Loading…" for ever.
+  await step(F, 'Customers: loads, or says the plan does not include it — never loading for ever', async () => {
+    await goto(page, '/seller/customers');
+    const locked = page.locator('[data-plan-locked]');
+    const loaded = page.getByText(/Total customers|No customers match/).first();
+    await Promise.race([locked.waitFor({ timeout: 120_000 }), loaded.waitFor({ timeout: 120_000 })]);
+    if (await locked.count()) {
+      check(/plan/i.test(await locked.innerText()), 'the plan notice does not name the plan');
+      check(!(await page.getByText('Loading…').count()), '"Loading…" shown under the plan notice');
+    }
+  }, { page, needs: ['approved'] });
+
   await step(F, "Billing: this month's invoice from Clowe lists the charges", async () => {
     await goto(page, '/seller/billing');
     const list = page.locator('[data-seller-invoices]');
@@ -1278,40 +1323,84 @@ async function flow8Shopper() {
     await page.waitForTimeout(1500);
     check(!(await page.locator('[data-cookie-consent]').count()), 'the banner came back after a choice');
   }, { page });
-  await step(F, 'signup with OTP, profile and a PIN', async () => {
+  // Login redesign (pre-launch audit 2026-10-20, D1): one "Phone number or
+  // email" box; no account → "No account found … — create one" and the Create
+  // account form, whose button waits for a verified phone and matching PINs.
+  await step(F, 'sign up: no account found → create one (phone verified by OTP, email, PIN twice)', async () => {
     await goto(page, '/login');
-    await page.getByRole('button', { name: 'Create Account' }).click({ timeout: 120_000 });
-    await page.getByPlaceholder('10-digit mobile number').fill(S.shopperPhone);
-    await page.getByRole('button', { name: 'Get OTP' }).click();
-    await page.getByRole('button', { name: /Verify & Login/ }).click({ timeout: 30_000 });
-    await page.getByPlaceholder('Full name *').fill('E2E Shopper', { timeout: 30_000 });
-    await page.getByPlaceholder('Address (house no, street) *').fill('22 Linking Road');
-    await page.getByPlaceholder('City *').fill('Mumbai');
-    await page.getByPlaceholder('State *').fill('Maharashtra');
-    await page.getByPlaceholder('Pincode *').fill('400050');
-    await page.getByRole('button', { name: /Continue/ }).click();
-    await page.getByRole('button', { name: /Skip for now|Save & Continue/ }).first().click({ timeout: 30_000 });
-    await page.locator('input[type=password]').first().click({ timeout: 30_000 });
+    // Typed with +91 and a space: normalised exactly as login looks it up.
+    await page.locator('#login-identifier').fill(`+91 ${S.shopperPhone.slice(0, 5)} ${S.shopperPhone.slice(5)}`, { timeout: 120_000 });
+    await page.locator('[data-action=continue]').click();
+    const notice = page.locator('[data-login-notice]');
+    await notice.waitFor({ timeout: 30_000 });
+    check(/No account found with this number — create one/.test(await notice.innerText()), `notice: ${await notice.innerText()}`);
+    check((await page.locator('#signup-phone').inputValue()) === S.shopperPhone, 'the number was not carried to the form');
+    const create = page.locator('[data-action=create-account]');
+    await page.locator('#signup-name').fill('E2E Shopper');
+    await page.locator('#signup-email').fill(`E2E.Shopper.${RUN}@Example.com`);
+    await page.locator('[data-digits=signup-pin] input').first().click();
     await typeDigits(page, '1357');
-    await page.getByRole('button', { name: /Save PIN & Continue/ }).click();
+    await page.locator('[data-digits=signup-pin-again] input').first().click();
+    await typeDigits(page, '1358');
+    await page.getByText(/The two PINs don.t match/).waitFor({ timeout: 10_000 });
+    check(await create.isDisabled(), 'Create account was enabled before the phone was verified');
+    await page.locator('[data-digits=signup-pin-again] input').nth(3).click();
+    await page.keyboard.press('Backspace');
+    await typeDigits(page, '7');
+    check(await create.isDisabled(), 'Create account was enabled with the phone unverified');
+    await withOtpCooldown(page, () => page.locator('[data-action=verify-phone]').click());
+    await page.locator('[data-phone-otp]').waitFor({ timeout: 30_000 });
+    await page.locator('[data-action=confirm-phone]').click();
+    await page.locator('[data-phone-verified]').waitFor({ timeout: 30_000 });
+    check(await create.isEnabled(), 'Create account stayed disabled with a verified phone and matching PINs');
+    await create.click();
     await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
-    const u = await prisma.user.findUnique({ where: { phone: S.shopperPhone }, include: { addresses: true } });
-    check(u?.pinHash, 'no PIN stored');
-    check(u.addresses.length === 1, `${u.addresses.length} addresses`);
+    const u = await prisma.user.findUnique({ where: { phone: S.shopperPhone } });
+    check(u?.pinHash?.startsWith('scrypt1$'), `PIN stored as ${u?.pinHash?.slice(0, 8)}`);
+    check(u.email === `e2e.shopper.${RUN}@example.com`.toLowerCase(), `email stored as ${u.email}`);
     S.shopperId = u.id;
     S.shopperToken = await tokenOf(page);
-    S.addressId = u.addresses[0].id;
+    S.shopperEmail = u.email;
+    // Sign-up asks for no address now; checkout needs one.
+    const addr = await apiOk('POST', '/api/addresses', S.shopperToken, { name: 'E2E Shopper', phone: S.shopperPhone, line1: '22 Linking Road', city: 'Mumbai', state: 'Maharashtra', pincode: '400050', isDefault: true });
+    S.addressId = addr.id;
   }, { page, key: 'shopper' });
 
+  await step(F, 'log in by email in another case, with the PIN', async () => {
+    await page.evaluate(() => localStorage.clear());
+    await pinLogin(page, ` ${S.shopperEmail.toUpperCase()} `, '1357');
+    S.shopperToken = await tokenOf(page);
+  }, { page, needs: ['shopper'] });
+
   await step(F, 'store closed for orders: the shopper is told "Orders open soon" and refused; a test account is not', async () => {
-    await apiOk('PUT', '/api/admin/settings', S.adminToken, { storeOpenForOrders: false });
+    // With sellers on the checklist, closing asks to be confirmed (it could not be undone from the admin).
+    const blockersBefore = await apiOk('GET', '/api/admin/store-open-checklist', S.adminToken);
+    if (blockersBefore.length) {
+      const unconfirmed = await api('PUT', '/api/admin/settings', S.adminToken, { storeOpenForOrders: false });
+      check(unconfirmed.json?.error?.code === 'STORE_CLOSE_BLOCKS_REOPEN', `closing with ${blockersBefore.length} blockers, unconfirmed: ${unconfirmed.status} ${unconfirmed.json?.error?.code}`);
+    }
+    await apiOk('PUT', '/api/admin/settings', S.adminToken, { storeOpenForOrders: false, confirmCloseWithBlockers: true });
     try {
       const token = await tokenOf(page);
       const refused = await api('POST', '/api/orders/checkout', token, { addressId: 'none', paymentMethod: 'COD' });
       check(refused.json?.error?.code === 'STORE_NOT_OPEN', `checkout while closed: ${refused.status} ${refused.json?.error?.code}`);
+      // No money taken anywhere while closed: a shopping-credit top-up is refused too.
+      const topUp = await api('POST', '/api/credits/purchase', token, { packageId: 'starter' });
+      check(topUp.json?.error?.code === 'STORE_NOT_OPEN', `credits top-up while closed: ${topUp.status} ${topUp.json?.error?.code}`);
       await goto(page, '/checkout');
       await page.locator('[data-store-closed]').first().waitFor({ timeout: 120_000 });
       check(/orders open soon/i.test(await page.locator('[data-store-closed]').first().innerText()), 'no "Orders open soon" notice');
+      // And the cart says so where "Proceed to Checkout" was (one item in it, removed after).
+      if (S.simpleVariantId) await api('POST', '/api/cart/items', token, { variantId: S.simpleVariantId, quantity: 1 });
+      try {
+        await goto(page, '/cart');
+        if (S.simpleVariantId) {
+          await page.locator('[data-store-closed]').first().waitFor({ timeout: 60_000 });
+          check(!(await page.getByRole('link', { name: 'Proceed to Checkout' }).count()), 'Proceed to Checkout offered while closed');
+        }
+      } finally {
+        await prisma.cartItem.deleteMany({ where: { cart: { userId: S.shopperId } } });
+      }
       const me = await prisma.user.findFirst({ where: { phone: S.shopperPhone } });
       await apiOk('PATCH', `/api/admin/users/${me.id}/test-account`, S.adminToken, { isTestAccount: true });
       const open = await apiOk('GET', '/api/orders/availability', token);
@@ -1327,26 +1416,58 @@ async function flow8Shopper() {
     }
   }, { page, needs: ['admin'] });
 
-  await step(F, 'forgot PIN: OTP, a new PIN, signed in', async () => {
+  await step(F, 'forgot PIN (from the email): the code and a new PIN on one screen, signed in; only the new PIN works', async () => {
     await page.evaluate(() => localStorage.clear());
     await goto(page, '/login');
-    await page.getByPlaceholder('10-digit mobile number').fill(S.shopperPhone, { timeout: 120_000 });
-    await page.getByRole('button', { name: /Login with PIN/ }).click();
-    await withOtpCooldown(page, () => page.getByRole('button', { name: 'Forgot PIN?' }).click());
-    await page.getByRole('button', { name: /Verify & Login/ }).click({ timeout: 60_000 });
-    await page.locator('[data-new-pin] input[type=password]').first().click({ timeout: 30_000 });
+    await page.locator('#login-identifier').fill(S.shopperEmail, { timeout: 120_000 });
+    await page.locator('[data-action=continue]').click();
+    await page.locator('[data-digits=pin]').waitFor({ timeout: 30_000 });
+    await withOtpCooldown(page, () => page.locator('[data-action=forgot-pin]').click());
+    await page.locator('[data-digits=reset-code]').waitFor({ timeout: 60_000 });
+    // The old PIN still works until the new one is saved (a page closed here breaks nothing).
+    check((await api('POST', '/api/auth/pin-login', null, { identifier: S.shopperPhone, pin: '1357' })).status === 200, 'the old PIN stopped working before a new one was saved');
+    await page.locator('[data-digits=new-pin] input').first().click();
     await typeDigits(page, '2468');
-    await page.locator('[data-new-pin] input[type=password]').nth(4).click();
+    await page.locator('[data-digits=new-pin-again] input').first().click();
     await typeDigits(page, '2468');
-    await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 }).catch(async () => {
-      await page.getByRole('button', { name: /Save new PIN/ }).click();
-      await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
-    });
-    const u = await prisma.user.findUnique({ where: { id: S.shopperId } });
-    check(u.pinHash === pinHash(u.id, '2468'), 'the new PIN was not stored');
+    await page.locator('[data-action=save-pin]').click();
+    await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
+    check((await api('POST', '/api/auth/pin-login', null, { identifier: S.shopperPhone, pin: '2468' })).status === 200, 'the new PIN does not sign in');
+    check((await api('POST', '/api/auth/pin-login', null, { identifier: S.shopperPhone, pin: '1357' })).json?.error?.code === 'PIN_INVALID', 'the old PIN still signs in');
     S.shopperToken = await tokenOf(page);
     S.shopperPin = '2468';
   }, { page, needs: ['shopper'] });
+
+  // D2: a correct PIN was sometimes shown as wrong — among the causes, a
+  // silent lockout after five wrong tries that never ended.
+  await step(F, 'wrong PINs: tries left, then a pause that says so — and the right PIN during it is told the pause, not "wrong"', async () => {
+    const pinPage = await newPage('pin-lockout');
+    try {
+      const person = await seedUser('CUSTOMER', `E2E Lockout ${RUN}`, '0425');
+      await goto(pinPage, '/login');
+      await pinPage.locator('#login-identifier').fill(person.phone, { timeout: 120_000 });
+      await pinPage.locator('[data-action=continue]').click();
+      for (let i = 1; i <= 5; i++) {
+        await pinPage.locator('[data-digits=pin] input').first().click({ timeout: 30_000 });
+        await typeDigits(pinPage, '9999');
+        const err = pinPage.locator('[data-login-error]');
+        await err.waitFor({ timeout: 30_000 });
+        const text = await err.innerText();
+        if (i < 5) check(new RegExp(`${5 - i} tr(y|ies) left`).test(text), `try ${i}: "${text}"`);
+        else check(/Try again in 15 minutes/.test(text), `5th wrong PIN: "${text}"`);
+      }
+      await pinPage.locator('[data-digits=pin] input').first().click();
+      await typeDigits(pinPage, '0425'); // the right PIN, with a leading zero
+      await pinPage.waitForTimeout(1500);
+      check(/Try again in/.test(await pinPage.locator('[data-login-error]').innerText()), 'the right PIN during the pause was not told about the pause');
+      await prisma.user.update({ where: { id: person.id }, data: { pinLockedUntil: new Date(Date.now() - 1000) } });
+      await pinPage.locator('[data-digits=pin] input').first().click();
+      await typeDigits(pinPage, '0425');
+      await pinPage.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 60_000 });
+    } finally {
+      await pinPage.close().catch(() => {});
+    }
+  }, { page });
 
   // Whatever happened above, carry on signed in.
   if (S.shopperId && !(await tokenOf(page).catch(() => null))) {
@@ -1760,12 +1881,24 @@ async function flow10CancelReturnRto() {
     await toast(page, /Return approved/);
     const reverse = await prisma.shipment.findFirst({ where: { orderId: o.id, kind: 'REVERSE' } });
     check(reverse?.awbNumber, 'no reverse pickup booked');
+    // H3: no check — and no refund or send-back — before the item is back with the seller.
+    const early = await api('PATCH', `/api/seller/returns/${ret.id}`, S.sellerToken, { action: 'received', condition: 'OK' });
+    check(early.json?.error?.code === 'RETURN_NOT_RECEIVED', `checked before the item came back: ${early.status} ${early.json?.error?.code}`);
+    await goto(page, `/seller/returns/${ret.id}`);
+    await page.locator('[data-return-not-back]').waitFor({ timeout: 120_000 });
+    check(!(await page.getByRole('button', { name: /Item received back/ }).count()), '"Item received back" offered before the courier brought it');
     await courier(reverse.awbNumber, 'PICKED_UP');
     await courier(reverse.awbNumber, 'DELIVERED');
     await goto(page, `/seller/returns/${ret.id}`);
     await page.getByRole('button', { name: /Item received back/ }).click({ timeout: 120_000 }).catch(() => {});
     await page.getByRole('button', { name: /Passed — refund|Condition OK/ }).click({ timeout: 30_000 });
     await toast(page, /refund is on its way/);
+    // M5: the buyer's Returns page shows the refund, not "refund starts once checks pass".
+    await goto(S.shopPage, '/account/returns');
+    const card = S.shopPage.locator('li', { hasText: o.orderNumber }).first();
+    await card.waitFor({ timeout: 120_000 });
+    const cardText = await card.innerText();
+    check(/Refund in progress|Refunded|Refund initiated/.test(cardText) && !/Refund starts once checks pass/.test(cardText), `buyer's return card: ${cardText.replace(/\s+/g, ' ').slice(0, 200)}`);
     const rows = await ledger(S.sellerId, o.id);
     check(rows.some((r) => r.type === 'RETURN_FREIGHT'), `no RETURN_FREIGHT (have ${rows.map((r) => r.type).join(', ')})`);
     const refunds = await prisma.refund.findMany({ where: { orderId: o.id } });
