@@ -86,9 +86,30 @@ export class CashfreePayoutProvider implements PayoutProvider {
       },
       `beneficiary:${b.id}`,
     );
-    // Already saved (a retry, or an earlier payout to this account): fine.
-    if (reply.ok || reply.status === 409) return b.id;
+    if (reply.ok) return b.id;
+    // 409 means one of two things, and only the first is "done": this id is
+    // already saved (a retry) — or this bank account is saved under another id
+    // (the seller re-added it, or two of our payout methods share it), and
+    // Cashfree refuses a second one. Transferring to our id then fails with
+    // "Beneficiary id does not exist", so read back which one it is.
+    if (reply.status === 409) {
+      if (await this.findBeneficiary({ beneficiary_id: b.id })) return b.id;
+      if (!b.vpa && b.accountNumber && b.ifsc) {
+        const existing = await this.findBeneficiary({ bank_account_number: b.accountNumber, bank_ifsc: b.ifsc.toUpperCase() });
+        if (existing) return existing;
+      }
+    }
     throw this.error('save beneficiary', reply);
+  }
+
+  /** The id of a saved beneficiary matching the query, or null when there is none. */
+  private async findBeneficiary(query: Record<string, string>): Promise<string | null> {
+    const reply = await this.call('GET', `/beneficiary?${new URLSearchParams(query).toString()}`);
+    if (reply.status === 404) return null;
+    if (!reply.ok) throw this.error('read beneficiary', reply);
+    const body = Array.isArray(reply.body) ? reply.body[0] : reply.body;
+    const id = body && typeof body === 'object' ? (body as { beneficiary_id?: unknown }).beneficiary_id : null;
+    return typeof id === 'string' && id ? id : null;
   }
 
   async transfer(request: PayoutTransferRequest): Promise<PayoutTransfer> {

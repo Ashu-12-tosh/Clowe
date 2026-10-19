@@ -32,10 +32,11 @@ const request = {
 };
 
 describe('CashfreePayoutProvider', () => {
-  it('saves a beneficiary once; an existing one (409) is fine', async () => {
+  it('saves a beneficiary once; its own id already saved (409, read back) is fine', async () => {
     const { sent, impl } = fakeFetch([
       { status: 200, body: { beneficiary_id: 'CLWB_m1' } },
       { status: 409, body: { code: 'beneficiary_id_already_exists' } },
+      { status: 200, body: { beneficiary_id: 'CLWB_m1' } },
     ]);
     const p = make(impl);
     const b = { id: 'CLWB_m1', name: "Ravi D'Souza", accountNumber: '00011122233', ifsc: 'hdfc0001234', phone: '+919876543210' };
@@ -49,6 +50,31 @@ describe('CashfreePayoutProvider', () => {
       beneficiary_instrument_details: { bank_account_number: '00011122233', bank_ifsc: 'HDFC0001234' },
       beneficiary_contact_details: { beneficiary_phone: '9876543210' },
     });
+  });
+
+  // Pre-launch audit (2026-10-20), H2: every 409 was taken as "saved", so an
+  // account already saved under another id was transferred to an id Cashfree
+  // never created — "Beneficiary id does not exist", every payout failed.
+  it('an account already saved under another id: transfers to that one', async () => {
+    const { sent, impl } = fakeFetch([
+      { status: 409, body: { code: 'conflict_with_existing_beneficiary', message: 'Beneficiary with the given bank_account_number and bank_ifsc already exists' } },
+      { status: 404, body: { code: 'beneficiary_not_found' } },
+      { status: 200, body: { beneficiary_id: 'CLWB_old', beneficiary_instrument_details: { bank_account_number: '00011122233', bank_ifsc: 'HDFC0001234' } } },
+    ]);
+    const b = { id: 'CLWB_m2', name: 'Ravi', accountNumber: '00011122233', ifsc: 'hdfc0001234' };
+    expect(await make(impl).ensureBeneficiary(b)).toBe('CLWB_old');
+    expect(sent[1]!.url).toBe('https://sandbox.cashfree.com/payout/beneficiary?beneficiary_id=CLWB_m2');
+    expect(sent[2]!.method).toBe('GET');
+    expect(sent[2]!.url).toBe('https://sandbox.cashfree.com/payout/beneficiary?bank_account_number=00011122233&bank_ifsc=HDFC0001234');
+  });
+
+  it('a 409 that matches nothing saved is an error, not a beneficiary', async () => {
+    const { impl } = fakeFetch([
+      { status: 409, body: { code: 'conflict_with_existing_beneficiary' } },
+      { status: 404, body: {} },
+      { status: 404, body: {} },
+    ]);
+    await expect(make(impl).ensureBeneficiary({ id: 'CLWB_m3', name: 'Ravi', accountNumber: '1', ifsc: 'HDFC0001234' })).rejects.toBeInstanceOf(GatewayError);
   });
 
   it('sends the transfer under our transfer id, in rupees, to the saved beneficiary', async () => {
