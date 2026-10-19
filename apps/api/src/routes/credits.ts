@@ -12,7 +12,7 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { assertMockPaymentAllowed } from '../services/storeOpen';
+import { assertCanPlaceOrders, assertMockPaymentAllowed } from '../services/storeOpen';
 import { paymentProvider } from '../services/payments';
 import { startTopUpPayment } from '../services/payments/gatewaySync';
 import { settleCreditTopUp } from '../services/creditTopUps';
@@ -148,6 +148,8 @@ const purchaseSchema = z.object({ packageId: z.string().min(1) });
 creditsRouter.post('/purchase', async (req, res, next) => {
   try {
     const userId = req.auth!.userId;
+    // No money is taken while the store is closed (admins and test accounts excepted).
+    await assertCanPlaceOrders(userId);
     const { packageId } = purchaseSchema.parse(req.body);
     const pack = CREDIT_PACKAGES.find((p) => p.id === packageId);
     if (!pack) throw ApiError.badRequest('Unknown credit package');

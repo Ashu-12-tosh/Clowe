@@ -23,7 +23,8 @@ import {
   TruckIcon,
 } from '@/components/cart/CartIcons';
 import PolicyText from '@/components/PolicyText';
-import { imageAt } from '@clowe/shared';
+import { imageAt, STORE_CLOSED_MESSAGE } from '@clowe/shared';
+import { LaunchingSoon, useOrdersOpen } from '@/lib/ordersOpen';
 
 const MAX_QTY = 10;
 
@@ -50,6 +51,8 @@ export default function CartPage() {
   const [busyLines, setBusyLines] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [showDiscountBreakup, setShowDiscountBreakup] = useState(false);
+  // Before launch: the cart works, checkout says "Orders open soon" (as /checkout does).
+  const ordersOpen = useOrdersOpen();
 
   /** Cart writes all return the whole cart — swap it in and refresh the badge. */
   const applyCart = useCallback((next: CartView) => {
@@ -585,13 +588,17 @@ export default function CartPage() {
               </p>
             ) : (
               <div className="mt-3 space-y-2.5">
-                <Link
-                  href="/checkout"
-                  className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 py-3 text-sm font-bold text-white transition hover:bg-brand-700"
-                >
-                  <LockIcon className="h-4 w-4" />
-                  Proceed to Checkout
-                </Link>
+                {ordersOpen === false ? (
+                  <LaunchingSoon />
+                ) : (
+                  <Link
+                    href="/checkout"
+                    className="flex items-center justify-center gap-2 rounded-lg bg-brand-600 py-3 text-sm font-bold text-white transition hover:bg-brand-700"
+                  >
+                    <LockIcon className="h-4 w-4" />
+                    Proceed to Checkout
+                  </Link>
+                )}
               </div>
             )}
           </div>
@@ -647,12 +654,23 @@ export default function CartPage() {
               {itemCount(selectedLines)} item{itemCount(selectedLines) === 1 ? '' : 's'} selected
             </p>
           </div>
-          <Link
-            href="/checkout"
-            className="rounded-lg bg-brand-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-brand-700"
-          >
-            Proceed to Checkout
-          </Link>
+          {ordersOpen === false ? (
+            <span
+              aria-disabled="true"
+              title={STORE_CLOSED_MESSAGE}
+              className="rounded-lg bg-gray-200 px-4 py-3 text-center text-xs font-bold text-gray-600"
+              data-store-closed
+            >
+              {STORE_CLOSED_MESSAGE}
+            </span>
+          ) : (
+            <Link
+              href="/checkout"
+              className="rounded-lg bg-brand-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-brand-700"
+            >
+              Proceed to Checkout
+            </Link>
+          )}
         </div>
       )}
     </main>

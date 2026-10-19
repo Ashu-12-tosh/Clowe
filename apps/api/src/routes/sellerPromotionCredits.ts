@@ -9,7 +9,7 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { assertMockPaymentAllowed } from '../services/storeOpen';
+import { assertCanPlaceOrders, assertMockPaymentAllowed } from '../services/storeOpen';
 import { paymentProvider } from '../services/payments';
 import { startTopUpPayment } from '../services/payments/gatewaySync';
 import { balance, settlePromotionPurchase } from '../services/sellerLedgerService';
@@ -37,6 +37,8 @@ sellerPromotionCreditsRouter.get('/', async (req, res, next) => {
 
 sellerPromotionCreditsRouter.post('/purchase', async (req, res, next) => {
   try {
+    // No money is taken while the store is closed (admins and test accounts excepted).
+    await assertCanPlaceOrders(req.auth!.userId);
     const { amountPaise } = promotionCreditPurchaseSchema.parse(req.body);
     const purchase = await prisma.promotionCreditPurchase.create({
       data: { sellerId: req.seller!.id, amountPaise, provider: paymentProvider.name },

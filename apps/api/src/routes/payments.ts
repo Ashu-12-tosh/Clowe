@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Router } from 'express';
-import { mockPaySchema, paymentConfirmSchema, paymentVerifySchema, type PaymentConfirmResult } from '@clowe/shared';
+import { mockPaySchema, paymentConfirmSchema, paymentVerifySchema, STORE_CLOSED_MESSAGE, type PaymentConfirmResult } from '@clowe/shared';
 import { prisma } from '../db';
 import { env } from '../env';
 import { requireAuth } from '../middleware/auth';
@@ -21,7 +21,7 @@ import {
 import { refundByGatewayId, syncGatewayRefund } from '../services/refundService';
 import { markVendorSettled } from '../services/easySplit';
 import { settlePaymentFailure, settlePaymentSuccess } from '../services/orderService';
-import { assertMockPaymentAllowed } from '../services/storeOpen';
+import { assertMockPaymentAllowed, canPlaceOrders } from '../services/storeOpen';
 
 export const paymentsRouter = Router();
 
@@ -79,11 +79,13 @@ paymentsRouter.post('/confirm', requireAuth, paymentConfirmLimiter, async (req, 
     const target = await ownTarget(req.auth!.userId, kind, id);
     const result = await syncGatewayPayment(target);
     // After a failed attempt the same gateway order can be paid again, with
-    // the same session, until it expires.
-    const reopen = result.outcome === 'RETRY' || (result.outcome === 'PENDING' && target.status === 'CREATED');
+    // the same session, until it expires — but not while the store is closed
+    // to this shopper: an order placed before it closed is not paid now.
+    const retryable = result.outcome === 'RETRY' || (result.outcome === 'PENDING' && target.status === 'CREATED');
+    const reopen = retryable && (await canPlaceOrders(req.auth!.userId));
     const body: PaymentConfirmResult = {
       outcome: result.outcome,
-      message: result.message ?? null,
+      message: retryable && !reopen ? STORE_CLOSED_MESSAGE : (result.message ?? null),
       checkout: reopen ? checkoutPayload(target) : null,
     };
     res.json({ success: true, data: body });

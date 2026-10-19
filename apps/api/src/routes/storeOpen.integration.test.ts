@@ -82,7 +82,8 @@ describe('store closed for orders', () => {
   it('the admin closes it from Settings; opening waits for every live seller to be complete', async () => {
     const admin = await user(Role.ADMIN);
     const shopper = await user();
-    expect((await call('PUT', '/api/admin/settings', admin.token, { storeOpenForOrders: false })).status).toBe(200);
+    // Confirmed: other files' sellers in the test database may already be on the checklist.
+    expect((await call('PUT', '/api/admin/settings', admin.token, { storeOpenForOrders: false, confirmCloseWithBlockers: true })).status).toBe(200);
     expect((await call<{ open: boolean }>('GET', '/api/orders/availability', shopper.token)).json.data.open).toBe(false);
     // A seller with a live listing and no address or verified KYC blocks opening.
     const sellerUser = await user(Role.SELLER);
@@ -96,6 +97,56 @@ describe('store closed for orders', () => {
     expect((await call<{ open: boolean }>('GET', '/api/orders/availability', shopper.token)).json.data.open).toBe(false);
     await setSetting('storeOpenForOrders', true);
     expect((await call<{ open: boolean }>('GET', '/api/orders/availability', shopper.token)).json.data.open).toBe(true);
+  });
+
+  // Pre-launch audit (2026-10-20): with the store closed, shopping-credit and
+  // seller wallet top-ups still opened a gateway payment, and an order placed
+  // before closing was handed a fresh checkout to pay.
+  it('takes no money at all while closed: top-ups refused, an earlier order not reopened for payment', async () => {
+    await setSetting('storeOpenForOrders', false);
+    try {
+      const shopper = await user();
+      const credits = await call('POST', '/api/credits/purchase', shopper.token, { packageId: 'starter' });
+      expect(credits.status).toBe(403);
+      expect(credits.json.error?.code).toBe('STORE_NOT_OPEN');
+      expect(await prisma.creditPurchase.count({ where: { userId: shopper.id } })).toBe(0);
+
+      const sellerUser = await user(Role.SELLER);
+      const shop = await prisma.sellerProfile.create({ data: { userId: sellerUser.id, shopName: `Top-up Shop ${seq}`, status: 'APPROVED', approvedAt: new Date() } });
+      const topUp = await call('POST', '/api/seller/promotion-credits/purchase', sellerUser.token, { amountPaise: 50_000 });
+      expect(topUp.json.error?.code).toBe('STORE_NOT_OPEN');
+      expect(await prisma.promotionCreditPurchase.count({ where: { sellerId: shop.id } })).toBe(0);
+
+      // A test account still can.
+      const tester = await user(Role.CUSTOMER, true);
+      expect((await call('POST', '/api/credits/purchase', tester.token, { packageId: 'starter' })).status).toBe(200);
+
+      const order = await prisma.order.create({
+        data: {
+          userId: shopper.id,
+          orderNumber: `CLW-2026-${String(880000 + seq)}`,
+          status: 'PLACED',
+          subtotalPaise: 10_000,
+          shippingPaise: 0,
+          totalPaise: 10_000,
+          shipName: 'Launch Buyer',
+          shipPhone: '9500000002',
+          shipLine1: '1 Test Street',
+          shipCity: 'Mumbai',
+          shipState: 'Maharashtra',
+          shipPincode: '400001',
+          payment: { create: { provider: 'mock', providerOrderId: `mock_order_closed_${seq}`, amountPaise: 10_000 } },
+        },
+      });
+      const closed = await call<{ outcome: string; message: string | null; checkout: unknown }>('POST', '/api/payments/confirm', shopper.token, { kind: 'ORDER', id: order.id });
+      expect(closed.json.data).toMatchObject({ checkout: null, message: 'Orders open soon' });
+      await setSetting('storeOpenForOrders', true);
+      const open = await call<{ checkout: unknown }>('POST', '/api/payments/confirm', shopper.token, { kind: 'ORDER', id: order.id });
+      expect(open.json.data.checkout).not.toBeNull();
+      await prisma.order.delete({ where: { id: order.id } });
+    } finally {
+      await setSetting('storeOpenForOrders', true);
+    }
   });
 });
 
