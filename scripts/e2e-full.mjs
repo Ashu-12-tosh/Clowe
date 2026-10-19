@@ -2000,8 +2000,14 @@ async function flow13Admin() {
     const cat = await prisma.category.findFirst({ where: { name } });
     check(cat, 'category not stored');
     S.e2eCategoryId = cat.id;
-    await page.locator('div').filter({ hasText: name }).getByRole('button', { name: 'Deactivate' }).last().click();
+    // Its own button, by slug: matching rows by text (".last()") hit whichever
+    // category was listed last and switched a real one off on every run.
+    const activeBefore = await prisma.category.count({ where: { isActive: true, id: { not: cat.id } } });
+    await page.locator(`[data-category-toggle="${cat.slug}"]`).click();
     await toast(page, /deactivated/);
+    check((await prisma.category.findUnique({ where: { id: cat.id } }))?.isActive === false, 'the new category is still active');
+    const activeAfter = await prisma.category.count({ where: { isActive: true, id: { not: cat.id } } });
+    check(activeAfter === activeBefore, `another category changed too (${activeBefore} → ${activeAfter} active)`);
   }, { page, needs: ['admin'] });
 
   await step(F, 'hero banner: create with an uploaded image, then delete', async () => {
@@ -2015,8 +2021,14 @@ async function flow13Admin() {
     await toast(page, /Banner created/);
     const b = await prisma.homeBanner.findFirst({ where: { headline: `E2E banner ${RUN}` } });
     check(b?.imageUrl?.includes('-w2000.webp'), `banner image ${b?.imageUrl}`);
-    await page.locator('div').filter({ hasText: `E2E banner ${RUN}` }).getByRole('button', { name: 'Delete' }).last().click();
+    // The innermost box holding both this headline and a Delete button is this
+    // banner's card; ".last()" over every button could pick another banner.
+    const bannersBefore = await prisma.homeBanner.count({ where: { id: { not: b.id } } });
+    const deleteButton = page.getByRole('button', { name: 'Delete' });
+    await page.locator('div').filter({ hasText: `E2E banner ${RUN}` }).filter({ has: deleteButton }).last().getByRole('button', { name: 'Delete' }).click();
     await toast(page, /Banner deleted/);
+    check(!(await prisma.homeBanner.findUnique({ where: { id: b.id } })), 'the E2E banner was not deleted');
+    check((await prisma.homeBanner.count({ where: { id: { not: b.id } } })) === bannersBefore, 'another banner was deleted');
   }, { page, needs: ['admin'] });
 
   await step(F, 'users: block and unblock', async () => {

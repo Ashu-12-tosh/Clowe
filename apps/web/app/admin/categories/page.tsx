@@ -573,6 +573,7 @@ export default function AdminCategoriesPage() {
             </button>
             <button
               onClick={() => void toggleActive(row)}
+              data-category-toggle={row.slug}
               disabled={isPending(row.id)}
               aria-busy={isPending(row.id)}
               className={`rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-50 ${
