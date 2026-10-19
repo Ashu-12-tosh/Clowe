@@ -75,6 +75,8 @@ export default function AdminSettingsPage() {
       .catch(() => setOpenBlockers(null));
   }, []);
   const openBlocked = !settings?.storeOpenForOrders && (openBlockers?.length ?? 0) > 0;
+  // Unticked while open, with blockers on the list: closing cannot be undone until they are settled.
+  const closeBlocksReopen = !!settings?.storeOpenForOrders && !storeOpen && (openBlockers?.length ?? 0) > 0;
 
   useEffect(() => {
     api<PlatformSettings>('/api/admin/settings', { auth: true })
@@ -130,6 +132,14 @@ export default function AdminSettingsPage() {
 
   async function save() {
     if (busy) return;
+    if (
+      closeBlocksReopen &&
+      !window.confirm(
+        `Close the store? It cannot reopen until ${openBlockers!.length === 1 ? 'the seller' : `all ${openBlockers!.length} sellers`} listed under the switch ${openBlockers!.length === 1 ? 'has' : 'have'} a business address and verified KYC.`,
+      )
+    ) {
+      return;
+    }
     setError('');
     showFieldErrors({});
     setBusy(true);
@@ -161,6 +171,7 @@ export default function AdminSettingsPage() {
           kycNameMatchMinScore: Math.min(100, Math.max(0, Math.round(Number(kycMinScore) || 0))),
           couponsEnabled,
           storeOpenForOrders: storeOpen,
+          ...(closeBlocksReopen ? { confirmCloseWithBlockers: true } : {}),
           foodCategoriesEnabled,
           demoCatalogEnabled,
           dispatchSlaHours: Math.max(1, Math.round(Number(dispatch.slaHours) || 0)),
@@ -270,9 +281,13 @@ export default function AdminSettingsPage() {
           />
           <span>Shoppers can place orders</span>
         </label>
-        {openBlocked && (
+        {(openBlocked || closeBlocksReopen) && (
           <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800" data-store-open-checklist>
-            <p className="font-semibold">The store cannot open until every seller with live listings has a business address and verified KYC:</p>
+            <p className="font-semibold">
+              {closeBlocksReopen
+                ? 'If you close the store now, it cannot reopen until every seller with live listings has a business address and verified KYC:'
+                : 'The store cannot open until every seller with live listings has a business address and verified KYC:'}
+            </p>
             <ul className="mt-1 list-disc space-y-0.5 pl-5">
               {openBlockers!.map((b) => (
                 <li key={b.sellerId}>

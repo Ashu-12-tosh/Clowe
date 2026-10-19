@@ -291,6 +291,11 @@ export const updateSettingsSchema = z.object({
   kycNameMatchMinScore: z.number().int().min(0).max(100).optional(),
   couponsEnabled: z.boolean().optional(),
   storeOpenForOrders: z.boolean().optional(),
+  /**
+   * Closing the store while the store-open checklist has blockers means it
+   * cannot reopen until they are settled: the admin confirms they know.
+   */
+  confirmCloseWithBlockers: z.boolean().optional(),
   foodCategoriesEnabled: z.boolean().optional(),
   demoCatalogEnabled: z.boolean().optional(),
   // Each field optional: the admin form sends all six, but a partial update

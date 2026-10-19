@@ -986,6 +986,26 @@ adminRouter.get('/settings', async (_req, res, next) => {
 adminRouter.put('/settings', async (req, res, next) => {
   try {
     const input = updateSettingsSchema.parse(req.body);
+    // The store switch is checked before anything is saved, so a refusal
+    // leaves every other setting as it was.
+    const wasOpen = (await getSettings()).storeOpenForOrders;
+    if (input.storeOpenForOrders !== undefined && input.storeOpenForOrders !== wasOpen) {
+      const blockers = await storeOpenChecklist();
+      const listed = blockers.map((b) => `${b.shopName}: ${b.missing.join(', ')}`).join('; ');
+      // Opening is refused while any seller with live listings lacks a
+      // business address or verified KYC — onboarding exceptions included.
+      if (input.storeOpenForOrders && blockers.length) {
+        throw ApiError.badRequest(`The store cannot open yet — ${listed}`, 'STORE_OPEN_CHECKLIST');
+      }
+      // Closing is always allowed, but with blockers on the list it cannot be
+      // undone until they are settled: refused unless the admin confirms.
+      if (!input.storeOpenForOrders && blockers.length && !input.confirmCloseWithBlockers) {
+        throw ApiError.badRequest(
+          `Closing now means the store cannot reopen until ${blockers.length === 1 ? 'this seller is' : `these ${blockers.length} sellers are`} settled — ${listed}`,
+          'STORE_CLOSE_BLOCKS_REOPEN',
+        );
+      }
+    }
     // The penalty is for missing the promise by a margin, never before it.
     if (input.dispatchSlaHours !== undefined || input.lateDispatchPenaltyAfterHours !== undefined) {
       const current = await getSettings();
@@ -1018,18 +1038,7 @@ adminRouter.put('/settings', async (req, res, next) => {
     // line without a recorded rate gets one (past sales are never re-taxed)
     // and any variant without a seller price gets one.
     const before = await getSettings();
-    // Opening the store is refused while any seller with live listings lacks a
-    // business address or verified KYC — onboarding exceptions included.
     const opening = input.storeOpenForOrders === true && !before.storeOpenForOrders;
-    if (opening) {
-      const blockers = await storeOpenChecklist();
-      if (blockers.length) {
-        throw ApiError.badRequest(
-          `The store cannot open yet — ${blockers.map((b) => `${b.shopName}: ${b.missing.join(', ')}`).join('; ')}`,
-          'STORE_OPEN_CHECKLIST',
-        );
-      }
-    }
     const gstChanging = (
       ['gstMeritPercent', 'gstStandardPercent', 'gstValueSlabThresholdPaise', 'gstUniformPercent'] as const
     ).some((key) => input[key] !== undefined && input[key] !== before[key]);

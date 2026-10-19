@@ -130,6 +130,31 @@ describe('opening the store', () => {
     expect((await getSettings()).storeOpenForOrders).toBe(false);
   });
 
+  // Pre-launch audit (2026-10-20): closing was allowed silently, and then
+  // reopening was refused — a one-way switch only a database edit could undo.
+  // And a refused switch still saved the other settings sent with it.
+  it('asks before closing when blockers would stop it reopening, and saves nothing on a refusal', async () => {
+    const coupons = (await getSettings()).couponsEnabled;
+    await setSetting('storeOpenForOrders', true);
+    try {
+      const close = await call('PUT', '/api/admin/settings', adminToken, { storeOpenForOrders: false, couponsEnabled: !coupons });
+      expect(close.json.error?.code).toBe('STORE_CLOSE_BLOCKS_REOPEN');
+      expect(close.json.error?.message).toContain('Known Shop: business address');
+      expect(await getSettings()).toMatchObject({ storeOpenForOrders: true, couponsEnabled: coupons });
+
+      const confirmed = await call('PUT', '/api/admin/settings', adminToken, { storeOpenForOrders: false, confirmCloseWithBlockers: true });
+      expect(confirmed.status, JSON.stringify(confirmed.json)).toBe(200);
+      expect((await getSettings()).storeOpenForOrders).toBe(false);
+
+      const reopen = await call('PUT', '/api/admin/settings', adminToken, { storeOpenForOrders: true, couponsEnabled: !coupons });
+      expect(reopen.json.error?.code).toBe('STORE_OPEN_CHECKLIST');
+      expect((await getSettings()).couponsEnabled).toBe(coupons);
+    } finally {
+      await setSetting('storeOpenForOrders', false);
+      await setSetting('couponsEnabled', coupons);
+    }
+  });
+
   it('ends every exception when it opens', async () => {
     expect(await endExceptionsOnStoreOpen(adminId)).toBeGreaterThanOrEqual(1);
     expect((await prisma.sellerProfile.findUniqueOrThrow({ where: { id: sellerId } })).onboardingException).toBe(false);
