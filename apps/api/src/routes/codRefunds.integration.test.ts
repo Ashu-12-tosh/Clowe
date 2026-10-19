@@ -96,6 +96,13 @@ async function auditRows(entityId: string, action: string) {
   return [];
 }
 
+/** The courier brings the item back to the seller (its delivery scan on the reverse parcel). */
+async function backWithSeller(returnId: string) {
+  const ship = await prisma.shipment.findUnique({ where: { returnId } });
+  if (ship) await prisma.shipment.update({ where: { id: ship.id }, data: { status: 'DELIVERED' } });
+  else await prisma.return.update({ where: { id: returnId }, data: { pickedUpAt: new Date() } });
+}
+
 describe('starting a return on a Cash on Delivery order', () => {
   it('asks for the bank account, under its field', async () => {
     const line = await deliveredLine('COD');
@@ -133,6 +140,7 @@ describe('the refund, end to end', () => {
 
     // The seller approves and receives it — and never sees the account.
     expect((await call('PATCH', `/api/seller/returns/${ret.id}`, sellerToken, { action: 'approve' })).status).toBe(200);
+    await backWithSeller(ret.id);
     const received = await call('PATCH', `/api/seller/returns/${ret.id}`, sellerToken, { action: 'received', condition: 'OK' });
     expect(received.status).toBe(200);
     for (const view of [received, await call('GET', '/api/seller/returns', sellerToken), await call('GET', `/api/seller/returns/${ret.id}`, sellerToken)]) {
@@ -189,6 +197,7 @@ describe('the refund, end to end', () => {
     await askReturn(line);
     const ret = await prisma.return.findUniqueOrThrow({ where: { orderItemId: line.itemId } });
     await call('PATCH', `/api/seller/returns/${ret.id}`, sellerToken, { action: 'approve' });
+    await backWithSeller(ret.id);
     await call('PATCH', `/api/seller/returns/${ret.id}`, sellerToken, { action: 'received', condition: 'OK' });
     const refund = await prisma.refund.findFirstOrThrow({ where: { returnId: ret.id } });
     expect(refund.provider).not.toBe('manual-cod');

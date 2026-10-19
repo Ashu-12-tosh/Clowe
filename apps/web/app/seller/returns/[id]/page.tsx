@@ -298,7 +298,13 @@ export default function SellerReturnDetailPage({ params: paramsPromise }: { para
         </div>
       )}
 
-      {row.status === 'APPROVED' && !receiving && (
+      {row.status === 'APPROVED' && !row.itemBack && (
+        <p className="mt-5 rounded-xl border border-gray-200 bg-cream-50 px-4 py-3 text-xs text-gray-600" data-return-not-back>
+          You can check the item and settle the claim once it is back with you.
+        </p>
+      )}
+
+      {row.status === 'APPROVED' && row.itemBack && !receiving && (
         <button
           onClick={() => setReceiving(true)}
           className="mt-5 w-full rounded-xl bg-brand-600 py-3 text-sm font-bold uppercase tracking-wide text-white shadow hover:bg-brand-700 sm:w-auto sm:px-8"

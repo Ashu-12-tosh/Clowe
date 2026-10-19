@@ -26,6 +26,7 @@ import {
   istMonthOf,
   type BrandAuthView,
   adminListingEditSchema,
+  returnItemBack,
 } from '@clowe/shared';
 import { getCommercial, updateCommercial } from '../services/commercial';
 import { cancelFeeChange, listFeeChanges, scheduleFeeChange } from '../services/feeChanges';
@@ -739,6 +740,7 @@ adminRouter.get('/returns', async (req, res, next) => {
     const rows: AdminReturnRow[] = returns.map((r) => ({
       id: r.id,
       pickup: r.reverseShipment ? { awbNumber: r.reverseShipment.awbNumber, status: r.reverseShipment.status } : null,
+      itemBack: returnItemBack({ pickupStatus: r.reverseShipment?.status ?? null, selfShip: r.selfShip, selfShipReceipt: !!r.selfShipReceipt, pickedUp: !!r.pickedUpAt }),
       orderItemId: r.orderItemId,
       orderNumber: r.orderItem.order.orderNumber,
       title: r.orderItem.title,

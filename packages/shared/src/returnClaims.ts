@@ -154,3 +154,23 @@ export interface ClaimEvidenceView {
   /** Admins only: why the buyer's account is under review, if it is. */
   buyerUnderReview?: string | null;
 }
+
+/**
+ * Is a returned item back with the seller, so it can be checked? The courier
+ * delivered the reverse pickup to them; or the buyer shipped it themselves
+ * (pickup not serviceable, Return Policy 7.2) with the receipt uploaded, and
+ * the seller confirms arrival by checking it; or, for a return from before
+ * reverse pickups were booked, the courier has at least collected it.
+ *
+ * Before (pre-launch audit 2026-10-20, H3) "Item received back" was offered
+ * for any approved return: a seller could pass or fail the check — refund,
+ * or send back and put the buyer under review — while the item was still
+ * with the buyer.
+ */
+export function returnItemBack(r: { pickupStatus: string | null; selfShip: boolean; selfShipReceipt: boolean; pickedUp: boolean }): boolean {
+  if (r.pickupStatus) return r.pickupStatus === 'DELIVERED';
+  if (r.selfShip) return r.selfShipReceipt;
+  return r.pickedUp;
+}
+
+export const RETURN_NOT_BACK_MESSAGE = 'The item is not back with you yet — check it once the courier has delivered it to you.';

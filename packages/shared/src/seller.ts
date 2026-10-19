@@ -355,6 +355,8 @@ export interface SellerReturnRow {
   refund: { status: string; amountPaise: number; providerRefundId: string | null } | null;
   /** Delhivery's collection from the buyer, once booked. */
   pickup: { awbNumber: string | null; status: string } | null;
+  /** The item is back with the seller, so it can be checked (returnItemBack). */
+  itemBack: boolean;
   requestedAt: string;
   /** On the return's own page: the seller's packing clip for the order (never sent to the buyer). */
   packingVideo?: PackingVideoView | null;

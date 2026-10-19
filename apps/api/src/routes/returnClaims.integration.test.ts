@@ -93,10 +93,18 @@ async function claim(b: { userId: string; token: string; itemId: string }, body:
   return call<{ rmaNumber: string }>('POST', `/api/orders/items/${b.itemId}/return`, b.token, { ...(await evidence(b.userId)), ...body });
 }
 
-/** Approve, then check it at the seller's: passed or failed. */
+/** The courier brings the item back to the seller (its delivery scan on the reverse parcel). */
+async function backWithSeller(returnId: string) {
+  const ship = await prisma.shipment.findUnique({ where: { returnId } });
+  if (ship) await prisma.shipment.update({ where: { id: ship.id }, data: { status: 'DELIVERED' } });
+  else await prisma.return.update({ where: { id: returnId }, data: { pickedUpAt: new Date() } });
+}
+
+/** Approve, the item comes back, then check it at the seller's: passed or failed. */
 async function approveAndCheck(itemId: string, passed: boolean, note?: string) {
   const r = await prisma.return.findUniqueOrThrow({ where: { orderItemId: itemId } });
   expect((await call('PATCH', `/api/seller/returns/${r.id}`, sellerToken, { action: 'approve' })).status).toBe(200);
+  await backWithSeller(r.id);
   const checked = await call('PATCH', `/api/seller/returns/${r.id}`, sellerToken, { action: 'received', condition: passed ? 'OK' : 'DAMAGED', ...(note ? { note } : {}) });
   return { returnId: r.id, checked };
 }
@@ -196,6 +204,31 @@ describe('time limit and evidence (3)', () => {
 });
 
 describe('after the quality check (2.2–2.4, 4.3, 6)', () => {
+  // Pre-launch audit (2026-10-20), H3: "Item received back" was offered, and
+  // a pass or fail accepted, while the courier had not yet collected the item —
+  // a refund, or a send-back and an account review, for an item never returned.
+  it('is not taken until the item is back with the seller', async () => {
+    const b = await delivered();
+    expect((await claim(b, { reason: 'DEFECTIVE', remedy: 'REFUND' })).status).toBe(200);
+    const r = await prisma.return.findUniqueOrThrow({ where: { orderItemId: b.itemId } });
+    expect((await call('PATCH', `/api/seller/returns/${r.id}`, sellerToken, { action: 'approve' })).status).toBe(200);
+    const view = await call<{ itemBack: boolean; pickup: { status: string } | null }>('GET', `/api/seller/returns/${r.id}`, sellerToken);
+    expect(view.json.data.itemBack).toBe(false);
+
+    for (const body of [{ action: 'received', condition: 'OK' }, { action: 'received', condition: 'DAMAGED', note: 'Never came back yet' }]) {
+      const early = await call('PATCH', `/api/seller/returns/${r.id}`, sellerToken, body);
+      expect(early.json.error?.code).toBe('RETURN_NOT_RECEIVED');
+    }
+    const after = await prisma.return.findUniqueOrThrow({ where: { id: r.id }, include: { refund: true } });
+    expect(after).toMatchObject({ status: 'APPROVED', qcPassed: null, sentBackOrderId: null });
+    expect(after.refund).toBeNull();
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: b.userId } })).claimsReviewAt).toBeNull();
+
+    await backWithSeller(r.id);
+    expect((await call<{ itemBack: boolean }>('GET', `/api/seller/returns/${r.id}`, sellerToken)).json.data.itemBack).toBe(true);
+    expect((await call('PATCH', `/api/seller/returns/${r.id}`, sellerToken, { action: 'received', condition: 'OK' })).status).toBe(200);
+  });
+
   it('refunds the net amount paid at once when the refund passes the check', async () => {
     const b = await delivered();
     expect((await claim(b, { reason: 'WRONG_ITEM', remedy: 'REFUND' })).status).toBe(200);

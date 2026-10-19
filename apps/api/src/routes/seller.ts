@@ -31,6 +31,7 @@ import {
   type SellerStats,
   NOT_A_SALE_STATUSES,
   brandProofSubmitSchema,
+  returnItemBack,
 } from '@clowe/shared';
 import { bookReversePickup } from '../services/shipping/reversePickup';
 import { prisma } from '../db';
@@ -49,7 +50,7 @@ import { assertOwnAssets } from '../services/assets';
 import { sendToUserSafe } from '../services/messaging';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { applyReturnDecision, findSellerReturn } from '../services/returnService';
+import { applyReturnDecision, findSellerReturn, itemBackFacts } from '../services/returnService';
 import { getSettings } from '../services/settingsService';
 import { isSensitiveForTryOn } from '../services/tryon/sensitiveGarment';
 import { isListingBelowTryOnAge } from '../services/tryon/ageGate';
@@ -1190,6 +1191,7 @@ function toReturnRow(r: NonNullable<ReturnWithRelations>): SellerReturnRow {
         }
       : null,
     pickup: r.reverseShipment ? { awbNumber: r.reverseShipment.awbNumber, status: r.reverseShipment.status } : null,
+    itemBack: returnItemBack(itemBackFacts(r)),
     requestedAt: r.createdAt.toISOString(),
   };
 }

@@ -63,12 +63,20 @@ const balance = async (userId: string) => (await prisma.user.findUniqueOrThrow({
 const earnedOn = async (orderId: string) =>
   (await prisma.creditLedger.aggregate({ where: { orderId, reason: 'EARN_PURCHASE' }, _sum: { delta: true } }))._sum.delta ?? 0;
 
+/** The courier brings the item back to the seller (its delivery scan on the reverse parcel). */
+async function backWithSeller(returnId: string) {
+  const ship = await prisma.shipment.findUnique({ where: { returnId } });
+  if (ship) await prisma.shipment.update({ where: { id: ship.id }, data: { status: 'DELIVERED' } });
+  else await prisma.return.update({ where: { id: returnId }, data: { pickedUpAt: new Date() } });
+}
+
 /** Deliver the order's lines (test shortcut), then return one through the real seller flow. */
 async function returnLine(b: { token: string }, orderId: string, itemId: string) {
   await prisma.orderItem.updateMany({ where: { orderId }, data: { status: 'DELIVERED', deliveredAt: new Date() } });
   expect((await call('POST', `/api/orders/items/${itemId}/return`, b.token, { reason: 'SIZE_FIT' })).status).toBe(200);
   const ret = await prisma.return.findFirstOrThrow({ where: { orderItemId: itemId } });
   expect((await call('PATCH', `/api/seller/returns/${ret.id}`, sellerToken, { action: 'approve' })).status).toBe(200);
+  await backWithSeller(ret.id);
   expect((await call('PATCH', `/api/seller/returns/${ret.id}`, sellerToken, { action: 'received', condition: 'OK' })).status).toBe(200);
 }
 

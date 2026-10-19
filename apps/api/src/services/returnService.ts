@@ -7,7 +7,7 @@ import { MANUAL_COD_PROVIDER, processRefund } from './refundService';
 import { postReturnReversal } from './sellerLedgerService';
 import { settleEarnedCredits } from './purchaseCredits';
 import { settleClaimAfterQc } from './returnClaims';
-import { istDate, istDayStart, type SellerReturnActionInput } from '@clowe/shared';
+import { istDate, istDayStart, RETURN_NOT_BACK_MESSAGE, returnItemBack, type SellerReturnActionInput } from '@clowe/shared';
 
 /**
  * Next return-authorisation number, e.g. RMA-2026-000042. Numbering restarts
@@ -44,6 +44,16 @@ export function findSellerReturn(sellerId: string, id: string) {
 
 export type SellerReturnRecord = NonNullable<Awaited<ReturnType<typeof findSellerReturn>>>;
 
+/** What returnItemBack needs, from a seller's return. */
+export function itemBackFacts(r: SellerReturnRecord) {
+  return {
+    pickupStatus: r.reverseShipment?.status ?? null,
+    selfShip: r.selfShip,
+    selfShipReceipt: !!r.selfShipReceipt,
+    pickedUp: !!r.pickedUpAt,
+  };
+}
+
 /**
  * Approve / reject / mark-received on one return. Shared by the single-row
  * action and the bulk bar, so both walk the identical state machine.
@@ -63,6 +73,11 @@ export async function applyReturnDecision(
   if (!item) throw ApiError.notFound('Order item not found');
   const customer = item.order.user;
   const label = `"${item.title}" (${item.order.orderNumber})`;
+
+  // The check is of an item in the seller's hands, never one still with the buyer.
+  if (input.action === 'received' && r.status === 'APPROVED' && !returnItemBack(itemBackFacts(r))) {
+    throw ApiError.badRequest(RETURN_NOT_BACK_MESSAGE, 'RETURN_NOT_RECEIVED');
+  }
 
   if (input.action === 'approve') {
     if (r.status !== 'REQUESTED') {
