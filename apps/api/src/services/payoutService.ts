@@ -14,7 +14,7 @@ import {
 import { prisma } from '../db';
 import type { Prisma } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
-import { auditSafe } from './auditService';
+import { recordAudit } from './auditService';
 import { bankAccountNumberOf } from './bankAccountCrypto';
 import { GatewayError } from './payments/PaymentProvider';
 import type { PayoutTransfer } from './payouts/PayoutProvider';
@@ -676,7 +676,7 @@ async function failPayout(payoutId: string, reason: string, providerStatus?: str
       linkHref: '/seller/payouts',
     },
   });
-  auditSafe({
+  await recordAudit({
     actorRole: 'SYSTEM',
     module: 'PAYOUTS',
     action: 'Payout failed',
@@ -711,7 +711,7 @@ async function reversePayout(payoutId: string, reason: string, providerStatus?: 
       linkHref: '/seller/payouts',
     },
   });
-  auditSafe({
+  await recordAudit({
     actorRole: 'SYSTEM',
     module: 'PAYOUTS',
     action: 'Payout reversed',

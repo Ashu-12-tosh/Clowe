@@ -2,7 +2,7 @@ import { prisma } from '../db';
 import { GatewayError, providerFor } from './payments';
 import type { GatewayRefund } from './payments/PaymentProvider';
 import { sendToUserSafe } from './messaging';
-import { auditSafe } from './auditService';
+import { recordAudit } from './auditService';
 import { noteSplitRefund, refundSplitsFor } from './easySplit';
 
 /**
@@ -196,7 +196,7 @@ async function failRefund(refundId: string, reason: string, providerStatus?: str
     data: { status: 'FAILED', failureReason: reason.slice(0, 500), ...(providerStatus ? { providerStatus } : {}) },
   });
   if (failed.count === 0) return;
-  auditSafe({
+  await recordAudit({
     actorRole: 'SYSTEM',
     module: 'PAYMENTS',
     action: 'Refund failed',

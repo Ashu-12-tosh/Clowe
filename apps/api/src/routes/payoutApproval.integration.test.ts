@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { AdminPayoutRow } from '@clowe/shared';
 import { createApp } from '../app';
 import { env } from '../env';
@@ -166,7 +166,8 @@ describe('payout approval', () => {
     expect(await balanceOf(s.sellerId)).toBe(before);
     expect(await prisma.orderItem.findUniqueOrThrow({ where: { id: s.itemId } })).toMatchObject({ payoutId: null });
     expect(await prisma.notification.count({ where: { userId: s.userId, title: 'Payout not approved' } })).toBe(1);
-    await vi.waitFor(async () => expect(await prisma.auditLog.count({ where: { action: 'Payout rejected', entityId: payout.id } })).toBe(1));
+    // Written before the response, not in the background.
+    expect(await prisma.auditLog.count({ where: { action: 'Payout rejected', entityId: payout.id } })).toBe(1);
     // And it can be requested again.
     expect((await request(s.token)).json.data.status).toBe('PENDING');
   });
@@ -177,7 +178,7 @@ describe('payout approval', () => {
     const res = await call<AdminPayoutRow>('POST', `/api/admin/payouts/${payout.id}/approve`, adminToken);
     expect(res.status).toBe(200);
     expect(res.json.data).toMatchObject({ status: 'PAID', reviewedBy: 'Payout Admin', utr: expect.stringMatching(/^UTR/) });
-    await vi.waitFor(async () => expect(await prisma.auditLog.count({ where: { action: 'Payout approved', entityId: payout.id } })).toBe(1));
+    expect(await prisma.auditLog.count({ where: { action: 'Payout approved', entityId: payout.id } })).toBe(1);
     // Not twice.
     expect((await call('POST', `/api/admin/payouts/${payout.id}/approve`, adminToken)).json.error?.code).toBe('PAYOUT_NOT_PENDING');
   });
@@ -261,6 +262,30 @@ describe('Cashfree payouts', () => {
     expect(await balanceOf(sellerId)).toBe(reserved + payout.netPaise);
     expect((await prisma.orderItem.findUniqueOrThrow({ where: { id: itemId } })).payoutId).toBeNull();
     expect((await eligibleItems(sellerId, 0)).map((i) => i.id)).toContain(itemId);
+    // In the audit log by the time the webhook is answered — at the highest severity.
+    expect(await prisma.auditLog.findFirst({ where: { action: 'Payout reversed', entityId: payout.id } })).toMatchObject({ severity: 'CRITICAL', actorRole: 'SYSTEM' });
+  });
+
+  it('a reversal the poller finds (no webhook) is in the audit log the moment the poll returns', async () => {
+    const { payout, sellerId } = await approved();
+    fake.settle(payout.transferId!, 'PAID');
+    await pollProcessingPayouts();
+    expect((await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } })).status).toBe('PAID');
+    fake.settle(payout.transferId!, 'REVERSED');
+    // A PAID payout is asked about again only on a webhook or an admin's check; the check is the poller-less path.
+    const res = await call<AdminPayoutRow>('POST', `/api/admin/payouts/${payout.id}/check`, adminToken);
+    expect(res.json.data.status).toBe('REVERSED');
+    expect(await prisma.auditLog.count({ where: { action: 'Payout reversed', entityId: payout.id } })).toBe(1);
+    expect(await prisma.sellerLedgerEntry.count({ where: { sellerId, idempotencyKey: `payout-release:${payout.id}` } })).toBe(1);
+  });
+
+  it('a transfer still in flight that comes back reversed, found by the poller, is audited at once', async () => {
+    const { payout } = await approved();
+    fake.settle(payout.transferId!, 'REVERSED');
+    await prisma.payout.update({ where: { id: payout.id }, data: { lastCheckedAt: null } });
+    await pollProcessingPayouts();
+    expect((await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } })).status).toBe('REVERSED');
+    expect(await prisma.auditLog.count({ where: { action: 'Payout reversed', entityId: payout.id } })).toBe(1);
   });
 
   it('a transfer Cashfree refuses is FAILED and gives the money back', async () => {
@@ -268,6 +293,7 @@ describe('Cashfree payouts', () => {
     const { payout, sellerId } = await approved();
     expect(payout).toMatchObject({ status: 'FAILED', failureReason: 'Insufficient balance' });
     expect(await prisma.sellerLedgerEntry.count({ where: { sellerId, idempotencyKey: `payout-release:${payout.id}` } })).toBe(1);
+    expect(await prisma.auditLog.count({ where: { action: 'Payout failed', entityId: payout.id } })).toBe(1);
   });
 
   it('no answer at all leaves it PROCESSING; the poller resends the same transfer only if Cashfree never got it', async () => {

@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus } from '@prisma/client';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { CheckoutResult, CreditPurchaseResult, PaymentConfirmResult, PromotionCreditPurchaseResult } from '@clowe/shared';
 import { createApp } from '../app';
 import { env } from '../env';
@@ -219,11 +219,9 @@ describe('a Cashfree checkout', () => {
     const r = await confirm(token, 'ORDER', checkout.orderId);
     expect(r.json.data.outcome).toBe('PENDING');
     expect((await prisma.payment.findUniqueOrThrow({ where: { orderId: checkout.orderId } })).status).toBe('CREATED');
-    // The audit entry is written in the background.
-    await vi.waitFor(async () => {
-      const flagged = await prisma.auditLog.findFirst({ where: { action: 'Payment amount mismatch', entityId: checkout.orderId } });
-      expect(flagged).toMatchObject({ severity: 'CRITICAL' });
-    });
+    // Written before the answer, not in the background.
+    const flagged = await prisma.auditLog.findFirst({ where: { action: 'Payment amount mismatch', entityId: checkout.orderId } });
+    expect(flagged).toMatchObject({ severity: 'CRITICAL' });
   });
 
   it('only shows a buyer their own payment', async () => {

@@ -1,7 +1,7 @@
 import { computeListingEconomics, normalizeTaxId, type SellerFeesV2 } from '@clowe/shared';
 import { prisma } from '../db';
 import { env } from '../env';
-import { auditSafe } from './auditService';
+import { recordAudit } from './auditService';
 import { bankAccountNumberOf } from './bankAccountCrypto';
 import { CashfreeEasySplitClient } from './cashfree/easySplitClient';
 import { categoryRulesMap } from './categoryRules';
@@ -129,7 +129,7 @@ export async function ensureVendor(sellerId: string): Promise<string | null> {
     where: { id: sellerId },
     data: { cashfreeVendorId: vendorId, cashfreeVendorStatus: status, cashfreeVendorSyncedAt: new Date() },
   });
-  auditSafe({
+  await recordAudit({
     actorRole: 'SYSTEM',
     module: 'PAYOUTS',
     action: 'Easy Split vendor created',
@@ -322,7 +322,7 @@ async function lapseSplit(splitId: string, sellerId: string, orderNumber: string
       });
     }
   });
-  auditSafe({
+  await recordAudit({
     actorRole: 'SYSTEM',
     module: 'PAYOUTS',
     action: 'Easy Split share lapsed',

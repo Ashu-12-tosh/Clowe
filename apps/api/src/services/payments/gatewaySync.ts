@@ -1,7 +1,7 @@
 import { prisma } from '../../db';
 import { ApiError } from '../../utils/ApiError';
 import { env, webPublicUrl } from '../../env';
-import { auditSafe } from '../auditService';
+import { recordAudit } from '../auditService';
 import { settleCreditTopUp } from '../creditTopUps';
 import { settlePaymentFailure, settlePaymentSuccess } from '../orderService';
 import { refundCancelledOrder } from '../refundService';
@@ -342,7 +342,7 @@ async function applySuccess(
     console.error(
       `[clowe-api] payment amount mismatch on ${target.kind} ${target.id}: expected ${target.amountPaise} INR, gateway order ${state.amountPaise} ${state.currency}, payment ${paidPaise} ${currency}`,
     );
-    auditSafe({
+    await recordAudit({
       actorRole: 'SYSTEM',
       module: 'PAYMENTS',
       action: 'Payment amount mismatch',
@@ -394,7 +394,7 @@ export async function refundLatePayment(target: GatewayTarget, providerPaymentId
     select: { orderNumber: true, userId: true, user: { select: { phone: true } } },
   });
   const refund = await refundCancelledOrder(target.id, 'Payment arrived after the order was cancelled');
-  auditSafe({
+  await recordAudit({
     actorRole: 'SYSTEM',
     module: 'PAYMENTS',
     action: 'Late payment refunded',

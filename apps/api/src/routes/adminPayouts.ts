@@ -3,7 +3,7 @@ import { payoutRejectSchema, type AdminPayoutRow, type PayoutStatusValue } from 
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
-import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
+import { deviceFromUserAgent, ipFrom, recordAudit } from '../services/auditService';
 import { approvePayout, rejectPayout, syncPayout } from '../services/payoutService';
 import { ApiError } from '../utils/ApiError';
 
@@ -50,8 +50,9 @@ function toRow(p: Row): AdminPayoutRow {
   };
 }
 
+/** Written before the response: a payout decision is never left unrecorded. */
 function audit(req: Request, action: string, p: { id: string; reference: string; netPaise: number; seller: { shopName: string } }, extra: Record<string, unknown> = {}, severity: 'HIGH' | 'CRITICAL' = 'HIGH') {
-  auditSafe({
+  return recordAudit({
     actorId: req.auth!.userId,
     actorRole: 'ADMIN',
     module: 'PAYOUTS',
@@ -104,7 +105,7 @@ adminPayoutsRouter.post('/:id/approve', async (req, res, next) => {
     const before = await load(req.params.id);
     await approvePayout(before.id, req.auth!.userId);
     const after = await load(before.id);
-    audit(req, 'Payout approved', after, { status: after.status, utr: after.utr, failureReason: after.failureReason }, 'CRITICAL');
+    await audit(req, 'Payout approved', after, { status: after.status, utr: after.utr, failureReason: after.failureReason }, 'CRITICAL');
     res.json({ success: true, data: toRow(after) });
   } catch (err) {
     next(err);
@@ -118,7 +119,7 @@ adminPayoutsRouter.post('/:id/reject', async (req, res, next) => {
     const before = await load(req.params.id);
     await rejectPayout(before.id, req.auth!.userId, reason);
     const after = await load(before.id);
-    audit(req, 'Payout rejected', after, { reason });
+    await audit(req, 'Payout rejected', after, { reason });
     res.json({ success: true, data: toRow(after) });
   } catch (err) {
     next(err);
@@ -131,7 +132,7 @@ adminPayoutsRouter.post('/:id/check', async (req, res, next) => {
     const before = await load(req.params.id);
     await syncPayout(before.id);
     const after = await load(before.id);
-    if (after.status !== before.status) audit(req, 'Payout status checked', after, { from: before.status, to: after.status });
+    if (after.status !== before.status) await audit(req, 'Payout status checked', after, { from: before.status, to: after.status });
     res.json({ success: true, data: toRow(after) });
   } catch (err) {
     next(err);
