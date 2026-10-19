@@ -47,11 +47,13 @@ import { encryptCodRefundAccount } from '../services/codRefundCrypto';
 import { saleGstRates } from '../services/sellerPricing';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { paymentProvider } from '../services/payments';
+import { GatewayError, paymentProvider } from '../services/payments';
+import { checkoutPayload, createGatewayOrder } from '../services/payments/gatewaySync';
+import { planSplits } from '../services/easySplit';
 import { buildCartView } from './cart';
 import { deliveryPriceFor, etaWindowFor, isDeliveryMethodAvailable } from '../services/deliveryService';
 import { codRefusal, deliveryRefusal, pincodeServiceability } from '../services/shipping/serviceability';
-import { confirmCodOrder, generateOrderNumber } from '../services/orderService';
+import { confirmCodOrder, generateOrderNumber, settlePaymentFailure } from '../services/orderService';
 import { nextRmaNumber } from '../services/returnService';
 import { allocateForDispatch } from '../services/stockService';
 import { assertOwnAssets, withPhotoUrls } from '../services/assets';
@@ -406,17 +408,58 @@ ordersRouter.post('/checkout', async (req, res, next) => {
       return;
     }
 
-    // Gateway order (outside the DB transaction; on failure the order stays
-    // PLACED/unpaid and can be cancelled or retried).
-    const providerOrderId = await paymentProvider.createOrder(totalPaise, orderNumber);
-    await prisma.payment.create({
-      data: {
-        orderId: order.id,
-        provider: paymentProvider.name,
-        providerOrderId,
+    // Gateway order, outside the DB transaction. The payment row comes first,
+    // so that if the gateway cannot be reached the order is cancelled and its
+    // stock returned at once, rather than held by an order nobody can pay.
+    const payment = await prisma.payment.create({
+      data: { orderId: order.id, provider: paymentProvider.name, amountPaise: totalPaise, status: 'CREATED' },
+    });
+    const buyer = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true, name: true, email: true } });
+    const plan = await planSplits(order.id);
+    let gateway: Awaited<ReturnType<typeof createGatewayOrder>>;
+    let splitUsed = false;
+    try {
+      const request = {
+        kind: 'ORDER' as const,
+        id: order.id,
+        receipt: orderNumber,
         amountPaise: totalPaise,
-        status: 'CREATED',
-      },
+        customer: { id: userId, phone: buyer.phone, name: buyer.name, email: buyer.email },
+        note: `Clowe order ${orderNumber}`,
+      };
+      try {
+        gateway = await createGatewayOrder({ ...request, splits: plan?.splits.map((x) => ({ vendorId: x.vendorId, amountPaise: x.amountPaise })) });
+        splitUsed = !!plan;
+      } catch (err) {
+        // Easy Split refused (not enabled yet, a vendor not ready): the order is
+        // still taken, collected into Clowe's account and paid out by payout.
+        if (!plan || !(err instanceof GatewayError) || err.uncertain) throw err;
+        console.warn(`[clowe-api] ${orderNumber}: Easy Split refused (${err.code || err.status}); collecting without splits`);
+        gateway = await createGatewayOrder(request);
+      }
+    } catch (err) {
+      await settlePaymentFailure(order.id, 'The payment gateway could not be reached');
+      console.error(`[clowe-api] ${orderNumber}: gateway order failed:`, err instanceof Error ? err.message : err);
+      throw new ApiError(502, 'GATEWAY_UNAVAILABLE', 'We could not start the payment just now. Nothing was charged — please try again.');
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          providerOrderId: gateway.providerOrderId,
+          paymentSessionId: gateway.paymentSessionId,
+          expiresAt: gateway.expiresAt,
+          settlementMode: splitUsed ? 'easy_split' : 'payouts',
+        },
+      });
+      if (splitUsed && plan) {
+        await tx.paymentSplit.createMany({
+          data: plan.splits.map((s) => ({ paymentId: payment.id, sellerId: s.sellerId, vendorId: s.vendorId, amountPaise: s.amountPaise })),
+        });
+        for (const [itemId, share] of plan.lines) {
+          await tx.orderItem.update({ where: { id: itemId }, data: { easySplitPaise: share } });
+        }
+      }
     });
 
     const body: CheckoutResult = {
@@ -425,11 +468,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
       amountPaise: totalPaise,
       method: paymentMethod,
       requiresPayment: true,
-      payment: {
-        provider: paymentProvider.name,
-        providerOrderId,
-        keyId: paymentProvider.publicKeyId,
-      },
+      payment: checkoutPayload({ provider: paymentProvider.name, providerOrderId: gateway.providerOrderId, paymentSessionId: gateway.paymentSessionId }),
     };
     res.json({ success: true, data: body });
   } catch (err) {
@@ -800,6 +839,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
                     status: i.return.refund.status,
                     amountPaise: i.return.refund.amountPaise,
                     processedAt: i.return.refund.processedAt?.toISOString() ?? null,
+                    arn: i.return.refund.arn,
                   }
                 : null,
             }

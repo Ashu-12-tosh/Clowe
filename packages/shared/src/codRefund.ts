@@ -51,7 +51,7 @@ export interface CodRefundRow {
   buyerPhone: string;
   itemTitle: string | null;
   amountPaise: number;
-  status: 'PENDING' | 'PROCESSED' | 'FAILED';
+  status: 'PENDING' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
   /** "••••••••1234" — the account number, masked. Null when the buyer gave none. */
   accountMasked: string | null;
   createdAt: string;

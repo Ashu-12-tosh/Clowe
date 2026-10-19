@@ -850,12 +850,14 @@ async function applyAdminAction(
         await postReturnReversal(r.orderItemId);
         await settleEarnedCredits(r.orderItem.orderId);
       } else {
+        // Back through the gateway the order was paid with.
+        const paidWith = await prisma.payment.findUnique({ where: { orderId: r.orderItem.orderId }, select: { provider: true } });
         const refund = await prisma.refund.create({
           data: {
             returnId: r.id,
             orderId: r.orderItem.orderId,
             amountPaise,
-            provider: 'razorpay',
+            provider: paidWith?.provider ?? 'unknown',
             status: 'PENDING',
             issuedByAdminId: adminId,
           },

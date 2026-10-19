@@ -11,6 +11,7 @@ import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { assertMockPaymentAllowed } from '../services/storeOpen';
 import { paymentProvider } from '../services/payments';
+import { startTopUpPayment } from '../services/payments/gatewaySync';
 import { balance, settlePromotionPurchase } from '../services/sellerLedgerService';
 import { blockSuspendedWrites, requireSeller } from './seller';
 
@@ -20,7 +21,8 @@ sellerPromotionCreditsRouter.use(requireAuth, requireSeller, blockSuspendedWrite
 // ---------------------------------------------------------------------------
 // Top-ups go through the same gateway orders use: a pending purchase row, a
 // provider order, then a settle step. In dev the mock provider settles via
-// /mock-pay; with Razorpay the checkout widget calls back into /verify.
+// /mock-pay; with Razorpay the checkout widget calls back into /verify; with
+// Cashfree the page asks /api/payments/confirm and the webhook does the same.
 // Both end in settlePromotionPurchase, which is the only thing that credits
 // the ledger — and does so once per purchase, by the (purchaseId, type) pair.
 // ---------------------------------------------------------------------------
@@ -39,14 +41,9 @@ sellerPromotionCreditsRouter.post('/purchase', async (req, res, next) => {
     const purchase = await prisma.promotionCreditPurchase.create({
       data: { sellerId: req.seller!.id, amountPaise, provider: paymentProvider.name },
     });
-    const providerOrderId = await paymentProvider.createOrder(amountPaise, `PROMO-${purchase.id}`);
-    await prisma.promotionCreditPurchase.update({ where: { id: purchase.id }, data: { providerOrderId } });
+    const payment = await startTopUpPayment({ kind: 'PROMOTION', purchaseId: purchase.id, amountPaise, userId: req.auth!.userId });
 
-    const body: PromotionCreditPurchaseResult = {
-      purchaseId: purchase.id,
-      amountPaise,
-      payment: { provider: paymentProvider.name, providerOrderId, keyId: paymentProvider.publicKeyId },
-    };
+    const body: PromotionCreditPurchaseResult = { purchaseId: purchase.id, amountPaise, payment };
     res.json({ success: true, data: body });
   } catch (err) {
     next(err);

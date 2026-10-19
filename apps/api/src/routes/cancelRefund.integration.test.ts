@@ -96,7 +96,9 @@ describe('a customer cancelling a paid order', () => {
 
     // The gateway was asked for exactly what was paid, against that payment.
     expect(refundSpy).toHaveBeenCalledTimes(1);
-    expect(refundSpy).toHaveBeenCalledWith(paid.providerPaymentId, paid.amountPaise);
+    expect(refundSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ providerPaymentId: paid.providerPaymentId, amountPaise: paid.amountPaise, refundId: expect.any(String) }),
+    );
 
     const refund = await prisma.refund.findFirstOrThrow({ where: { orderId } });
     expect(refund).toMatchObject({ status: 'PROCESSED', amountPaise: paid.amountPaise, returnId: null, reason: 'Order cancelled by customer' });

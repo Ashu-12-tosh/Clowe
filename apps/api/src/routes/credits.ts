@@ -14,6 +14,8 @@ import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { assertMockPaymentAllowed } from '../services/storeOpen';
 import { paymentProvider } from '../services/payments';
+import { startTopUpPayment } from '../services/payments/gatewaySync';
+import { settleCreditTopUp } from '../services/creditTopUps';
 
 export const creditsRouter = Router();
 creditsRouter.use(requireAuth);
@@ -160,22 +162,14 @@ creditsRouter.post('/purchase', async (req, res, next) => {
         provider: paymentProvider.name,
       },
     });
-    const providerOrderId = await paymentProvider.createOrder(
-      pack.pricePaise,
-      `CREDITS-${purchase.id}`,
-    );
-    await prisma.creditPurchase.update({ where: { id: purchase.id }, data: { providerOrderId } });
+    const payment = await startTopUpPayment({ kind: 'CREDITS', purchaseId: purchase.id, amountPaise: pack.pricePaise, userId });
 
     const body: CreditPurchaseResult = {
       purchaseId: purchase.id,
       credits: pack.credits,
       bonusCredits: pack.bonusCredits,
       amountPaise: pack.pricePaise,
-      payment: {
-        provider: paymentProvider.name,
-        providerOrderId,
-        keyId: paymentProvider.publicKeyId,
-      },
+      payment,
     };
     res.json({ success: true, data: body });
   } catch (err) {
@@ -202,41 +196,12 @@ creditsRouter.post('/purchase/:id/mock-pay', async (req, res, next) => {
       throw ApiError.badRequest('This purchase is already settled');
     }
 
-    if (outcome === 'failure') {
-      await prisma.creditPurchase.update({
-        where: { id: purchase.id },
-        data: { status: 'FAILED' },
-      });
+    const result = await settleCreditTopUp(purchase.id, outcome === 'success' ? `mock_pay_${Date.now()}` : null);
+    if (result === 'FAILED') {
       res.json({ success: true, data: { status: 'FAILED', credits: 0 } });
       return;
     }
-
     const granted = purchase.credits + purchase.bonusCredits;
-    await prisma.$transaction([
-      prisma.creditPurchase.update({
-        where: { id: purchase.id },
-        data: { status: 'PAID', providerPaymentId: `mock_pay_${Date.now()}` },
-      }),
-      prisma.user.update({
-        where: { id: userId },
-        data: { creditsBalance: { increment: granted } },
-      }),
-      prisma.creditLedger.create({
-        data: { userId, delta: granted, reason: 'EARN_TOPUP', expiresAt: creditExpiryFrom() },
-      }),
-      prisma.notification.create({
-        data: {
-          userId,
-          type: 'CREDITS_EARNED',
-          title: `${granted} Clowe Credits added 🪙`,
-          linkHref: '/account/credits',
-          body: `Your top-up of ₹${(purchase.amountPaise / 100).toFixed(2)} is complete.${
-            purchase.bonusCredits > 0 ? ` That includes ${purchase.bonusCredits} bonus credits.` : ''
-          }`,
-        },
-      }),
-    ]);
-
     res.json({ success: true, data: { status: 'PAID', credits: granted } });
   } catch (err) {
     next(err);

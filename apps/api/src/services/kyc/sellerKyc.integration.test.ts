@@ -7,6 +7,8 @@ import { createApp } from '../../app';
 import { seedFixture } from '../../test/fixture';
 import { signAccessToken } from '../../utils/jwt';
 import { kycProvider } from './index';
+import { AUTO_KYC_DAILY_CHECKS, autoVerifySellerKyc } from './sellerKyc';
+import { sellerDocument } from '../../test/sellerApplication';
 
 /**
  * Seller KYC end to end, with the mock standing in for a real provider (under
@@ -405,5 +407,54 @@ describe('admin re-run', () => {
     expect(calls.bank).toHaveBeenCalledTimes(1);
     expect(calls.pan).not.toHaveBeenCalled();
     expect(res.json.data.kyc.bank.state).toBe('ERROR');
+  });
+});
+
+describe('automatic verification', () => {
+  it('checks a newly entered bank account by itself — no button, and nothing else re-billed', async () => {
+    const s = await makeSeller();
+    await verify(s.token);
+    const calls = spies();
+    const owner = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: s.id }, select: { userId: true } });
+    const res = await http('PUT', '/api/seller/store/bank', s.token, {
+      accountName: 'Rahul Sharma',
+      accountNumber: '9988776655',
+      confirmAccountNumber: '9988776655',
+      ifsc: 'ICIC0000123',
+      accountType: 'SAVINGS',
+      chequeDoc: await sellerDocument(prisma, owner.userId),
+    });
+    expect(res.status).toBe(200);
+    // The request does not wait for the check: it lands shortly after.
+    await vi.waitFor(async () => expect(await prisma.sellerKycCheck.count({ where: { sellerId: s.id, kind: 'BANK' } })).toBe(2), { timeout: 5000 });
+    expect(calls.bank).toHaveBeenCalledTimes(1);
+    expect(calls.pan).not.toHaveBeenCalled();
+    expect(calls.gstin).not.toHaveBeenCalled();
+  });
+
+  it('stops for the day after a handful of paid checks from the seller’s own edits', async () => {
+    const s = await makeSeller();
+    const since = new Date();
+    await prisma.sellerKycCheck.createMany({
+      data: Array.from({ length: AUTO_KYC_DAILY_CHECKS }, (_, i) => ({ sellerId: s.id, kind: 'BANK' as const, outcome: 'ERROR' as const, provider: 'standin', subject: `old-${i}`, createdAt: since })),
+    });
+    const calls = spies();
+    autoVerifySellerKyc(s.id, ['BANK']);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(calls.bank).not.toHaveBeenCalled();
+  });
+
+  it('does nothing with the mock provider: an admin decides every check', async () => {
+    const s = await makeSeller();
+    Object.defineProperty(kycProvider, 'name', { value: 'mock', configurable: true, writable: true });
+    try {
+      const calls = spies();
+      autoVerifySellerKyc(s.id);
+      await new Promise((r) => setTimeout(r, 300));
+      expect(calls.pan).not.toHaveBeenCalled();
+      expect(await prisma.sellerKycCheck.count({ where: { sellerId: s.id } })).toBe(0);
+    } finally {
+      Object.defineProperty(kycProvider, 'name', { value: 'standin', configurable: true, writable: true });
+    }
   });
 });

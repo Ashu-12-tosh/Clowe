@@ -122,7 +122,8 @@ export interface MyReturnRow {
   /** Courier AWB for the pickup leg, once the item shipped back. */
   awbNumber: string | null;
   courierName: string | null;
-  refund: { status: string; amountPaise: number; processedAt: string | null } | null;
+  /** arn: the bank's reference for the credit, once the gateway has one. */
+  refund: { status: string; amountPaise: number; processedAt: string | null; arn?: string | null } | null;
   rmaNumber: string;
   /** CLAIM: under the Return Policy's claims; LEGACY: delivered before them. */
   rules: 'LEGACY' | 'CLAIM';

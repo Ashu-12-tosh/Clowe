@@ -85,6 +85,7 @@ function toPayoutRow(p: PayoutRecord): SellerPayoutRow {
     methodLabel: p.methodLabel,
     utr: p.utr,
     failureReason: p.failureReason,
+    rejectionReason: p.rejectionReason,
     requestedAt: p.requestedAt.toISOString(),
     processedAt: p.processedAt?.toISOString() ?? null,
     itemCount: p._count.items,

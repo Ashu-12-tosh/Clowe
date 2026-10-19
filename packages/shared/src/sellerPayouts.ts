@@ -9,15 +9,46 @@ import type { PeriodWindow } from './istPeriods';
 // payout transfers it net of commission, gateway charges and 194-O TDS.
 // ---------------------------------------------------------------------------
 
-export const PAYOUT_STATUSES = ['PENDING', 'PROCESSING', 'PAID', 'FAILED'] as const;
+export const PAYOUT_STATUSES = ['PENDING', 'PROCESSING', 'PAID', 'FAILED', 'REJECTED', 'REVERSED'] as const;
 export type PayoutStatusValue = (typeof PAYOUT_STATUSES)[number];
 
 export const PAYOUT_STATUS_LABELS: Record<PayoutStatusValue, string> = {
-  PENDING: 'Requested',
+  PENDING: 'Awaiting approval',
   PROCESSING: 'Processing',
   PAID: 'Paid',
   FAILED: 'Failed',
+  REJECTED: 'Not approved',
+  REVERSED: 'Returned by bank',
 };
+
+/** A payout waiting for (or past) an admin's decision, as the approvals screen lists it. */
+export interface AdminPayoutRow {
+  id: string;
+  reference: string;
+  sellerId: string;
+  shopName: string;
+  netPaise: number;
+  grossPaise: number;
+  feesPaise: number;
+  tdsPaise: number;
+  tcsPaise: number;
+  adjustmentPaise: number;
+  itemCount: number;
+  methodLabel: string | null;
+  status: PayoutStatusValue;
+  requestedAt: string;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  rejectionReason: string | null;
+  failureReason: string | null;
+  utr: string | null;
+  providerStatus: string | null;
+  processedAt: string | null;
+}
+
+export const payoutRejectSchema = z.object({
+  reason: z.string().trim().min(3, 'Say why, in a few words').max(300),
+});
 
 export const PAYOUT_METHOD_TYPES = ['BANK', 'UPI'] as const;
 export type PayoutMethodTypeValue = (typeof PAYOUT_METHOD_TYPES)[number];
@@ -53,6 +84,8 @@ export interface SellerPayoutRow {
   methodLabel: string | null;
   utr: string | null;
   failureReason: string | null;
+  /** Why an admin did not approve it (REJECTED). */
+  rejectionReason: string | null;
   requestedAt: string;
   processedAt: string | null;
   itemCount: number;

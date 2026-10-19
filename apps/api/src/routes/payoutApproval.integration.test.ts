@@ -1,0 +1,306 @@
+import { createHmac } from 'node:crypto';
+import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AdminPayoutRow } from '@clowe/shared';
+import { createApp } from '../app';
+import { env } from '../env';
+import { seedFixture } from '../test/fixture';
+import { verifiedPan } from '../test/kyc';
+import { signAccessToken } from '../utils/jwt';
+import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
+import { postDeliveryEntries, settlementPosition } from '../services/sellerLedgerService';
+import { eligibleItems, pollProcessingPayouts } from '../services/payoutService';
+import { setPayoutProviderForTests } from '../services/payouts';
+import { GatewayError } from '../services/payments/PaymentProvider';
+import type { PayoutBeneficiary, PayoutProvider, PayoutTransfer, PayoutTransferRequest } from '../services/payouts/PayoutProvider';
+
+/**
+ * Payouts move real money, so at first every one waits for an admin: approve
+ * and it is sent, reject and the amount is back in the seller's balance, and
+ * either way the audit log has it. With Cashfree Payouts a transfer finishes
+ * later — by webhook or poll — and can even come back from the bank; each of
+ * those leaves the seller's balance exactly right.
+ */
+
+class FakePayouts implements PayoutProvider {
+  readonly name = 'cashfree';
+  beneficiaries: PayoutBeneficiary[] = [];
+  transfers: PayoutTransferRequest[] = [];
+  /** Answers to transfer() in order (default PROCESSING); getTransfer reads `state`. */
+  nextTransfer: Array<PayoutTransfer['status'] | 'THROW_UNCERTAIN'> = [];
+  state = new Map<string, PayoutTransfer>();
+  async ensureBeneficiary(b: PayoutBeneficiary): Promise<string> {
+    this.beneficiaries.push(b);
+    return b.id;
+  }
+  async transfer(r: PayoutTransferRequest): Promise<PayoutTransfer> {
+    this.transfers.push(r);
+    const next = this.nextTransfer.shift() ?? 'PROCESSING';
+    if (next === 'THROW_UNCERTAIN') throw new GatewayError('timed out', 0, 'network');
+    const t: PayoutTransfer = { status: next, providerTransferId: `cf_${r.transferId}`, providerStatus: next, utr: next === 'PAID' ? `UTR${r.transferId}` : null, failureReason: next === 'FAILED' ? 'Insufficient balance' : undefined };
+    this.state.set(r.transferId, t);
+    return t;
+  }
+  async getTransfer(id: string): Promise<PayoutTransfer | null> {
+    return this.state.get(id) ?? null;
+  }
+  async verifyMethod() {
+    return { verified: false };
+  }
+  settle(id: string, status: PayoutTransfer['status']) {
+    this.state.set(id, { ...this.state.get(id)!, status, utr: status === 'PAID' ? `UTR_${id}` : null, failureReason: status === 'REVERSED' ? 'Account closed' : undefined });
+  }
+}
+
+const prisma = new PrismaClient();
+const PAYOUT_SECRET = 'cf-payout-test-secret';
+let server: Server;
+let base: string;
+let adminToken: string;
+let categoryId: string;
+let seq = 0;
+const PRICE = 300_000;
+
+async function call<T = unknown>(method: string, path: string, token: string | null, body?: unknown, headers: Record<string, string> = {}) {
+  const res = await fetch(`${base}${path}`, {
+    method,
+    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), 'content-type': 'application/json', ...headers },
+    body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
+  });
+  return { status: res.status, json: (await res.json()) as { data: T; error?: { code: string; message: string } } };
+}
+
+/** An approved, KYC-verified seller with one delivered line and a payout method (UPI, or the verified bank account). */
+async function payableSeller(opts: { method?: 'UPI' | 'BANK'; deliveredDaysAgo?: number; returnWindowDays?: number | null } = {}) {
+  seq += 1;
+  const user = await prisma.user.create({ data: { phone: `93100${String(seq).padStart(5, '0')}`, name: `Payout Seller ${seq}`, role: Role.SELLER, referralCode: `PO-S-${seq}` } });
+  const seller = await prisma.sellerProfile.create({ data: { userId: user.id, shopName: `Payout Shop ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date() } });
+  await verifiedPan(seller.id, 'ABCDE1234F', `Payout Seller ${seq}`);
+  const product = await prisma.product.create({
+    data: { sellerId: seller.id, categoryId, title: `Payout ${seq}`, slug: `payout-approval-${seq}`, description: 'Payout test listing.', basePricePaise: PRICE, status: ProductStatus.APPROVED, approvedAt: new Date() },
+  });
+  const variant = await prisma.productVariant.create({
+    data: { productId: product.id, optionValues: {}, optionsKey: '', label: '', size: '', color: '', sku: `PO-SKU-${seq}`, pricePaise: PRICE, stock: 5 },
+  });
+  const shopper = await prisma.user.create({ data: { phone: `93200${String(seq).padStart(5, '0')}`, name: 'Payout Shopper', referralCode: `PO-U-${seq}` } });
+  const order = await prisma.order.create({
+    data: { orderNumber: `CLW-PO-${seq}`, userId: shopper.id, shipName: 'S', shipPhone: '9170000000', shipLine1: '1 Lane', shipCity: 'City', shipState: 'Maharashtra', shipPincode: '400001', status: 'DELIVERED', subtotalPaise: PRICE, totalPaise: PRICE, paymentMethod: 'UPI' },
+  });
+  const deliveredAt = new Date(Date.now() - (opts.deliveredDaysAgo ?? 0) * 86_400_000 - 60_000);
+  const item = await prisma.orderItem.create({
+    data: {
+      orderId: order.id,
+      productId: product.id,
+      variantId: variant.id,
+      sellerId: seller.id,
+      title: 'payout line',
+      size: '',
+      color: '',
+      pricePaise: PRICE,
+      quantity: 1,
+      status: 'DELIVERED',
+      shippedAt: deliveredAt,
+      deliveredAt,
+      returnWindowDays: opts.returnWindowDays === undefined ? 0 : opts.returnWindowDays,
+    },
+  });
+  await postDeliveryEntries(item.id);
+  const method =
+    opts.method === 'BANK'
+      ? await prisma.sellerPayoutMethod.findFirstOrThrow({ where: { sellerId: seller.id, type: 'BANK' } })
+      : await prisma.sellerPayoutMethod.create({
+          data: { sellerId: seller.id, type: 'UPI', label: 'UPI', accountName: `Payout Seller ${seq}`, upiId: `po${seq}@upi`, isDefault: true, verified: true },
+        });
+  return { sellerId: seller.id, userId: user.id, itemId: item.id, methodId: method.id, token: signAccessToken({ sub: user.id, role: 'SELLER' }) };
+}
+
+const request = (token: string, methodId?: string) => call<{ id: string; status: string; reference: string; netPaise: number }>('POST', '/api/seller/payouts/request', token, methodId ? { methodId } : {});
+const balanceOf = async (sellerId: string) => (await settlementPosition(sellerId, 0)).balancePaise;
+
+beforeAll(async () => {
+  await seedFixture(prisma);
+  categoryId = (await prisma.category.findFirstOrThrow({ where: { isActive: true } })).id;
+  const admin = await prisma.user.create({ data: { phone: '9310099999', name: 'Payout Admin', role: Role.ADMIN, referralCode: 'PO-A' } });
+  adminToken = signAccessToken({ sub: admin.id, role: 'ADMIN' });
+  await setSetting('payoutHoldDays', 0);
+  await setSetting('payoutMinPaise', 0);
+  server = createApp().listen(0);
+  base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+});
+
+beforeEach(async () => {
+  await setSetting('payoutAutoApprove', false);
+});
+
+afterAll(async () => {
+  for (const key of ['payoutHoldDays', 'payoutMinPaise', 'payoutAutoApprove', 'returnWindowDays'] as const) await setSetting(key, DEFAULT_SETTINGS[key]);
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await prisma.$disconnect();
+});
+
+describe('payout approval', () => {
+  it('a requested payout waits for an admin, with its amount set aside from the balance', async () => {
+    const s = await payableSeller();
+    const before = await balanceOf(s.sellerId);
+    const res = await request(s.token);
+    expect(res.status).toBe(200);
+    expect(res.json.data.status).toBe('PENDING');
+    expect(await balanceOf(s.sellerId)).toBe(before - res.json.data.netPaise);
+    expect(await prisma.payout.findUniqueOrThrow({ where: { id: res.json.data.id } })).toMatchObject({ transferId: res.json.data.reference.replace('-', '_') });
+    // One at a time.
+    expect((await request(s.token)).json.error?.code).toBe('PAYOUT_IN_PROGRESS');
+    const list = await call<{ rows: AdminPayoutRow[] }>('GET', '/api/admin/payouts?status=PENDING', adminToken);
+    expect(list.json.data.rows.map((r) => r.id)).toContain(res.json.data.id);
+  });
+
+  it('rejected: nothing is sent, the amount is back in the balance, its lines payable again, and it is in the audit log', async () => {
+    const s = await payableSeller();
+    const before = await balanceOf(s.sellerId);
+    const payout = (await request(s.token)).json.data;
+    expect((await call('POST', `/api/admin/payouts/${payout.id}/reject`, adminToken, { reason: 'x' })).status).toBe(400);
+    const res = await call<AdminPayoutRow>('POST', `/api/admin/payouts/${payout.id}/reject`, adminToken, { reason: 'Bank name does not match the shop' });
+    expect(res.status).toBe(200);
+    expect(res.json.data).toMatchObject({ status: 'REJECTED', rejectionReason: 'Bank name does not match the shop', reviewedBy: 'Payout Admin' });
+    expect(await balanceOf(s.sellerId)).toBe(before);
+    expect(await prisma.orderItem.findUniqueOrThrow({ where: { id: s.itemId } })).toMatchObject({ payoutId: null });
+    expect(await prisma.notification.count({ where: { userId: s.userId, title: 'Payout not approved' } })).toBe(1);
+    await vi.waitFor(async () => expect(await prisma.auditLog.count({ where: { action: 'Payout rejected', entityId: payout.id } })).toBe(1));
+    // And it can be requested again.
+    expect((await request(s.token)).json.data.status).toBe('PENDING');
+  });
+
+  it('approved: sent at once (mock payouts: paid), recorded with who approved it', async () => {
+    const s = await payableSeller();
+    const payout = (await request(s.token)).json.data;
+    const res = await call<AdminPayoutRow>('POST', `/api/admin/payouts/${payout.id}/approve`, adminToken);
+    expect(res.status).toBe(200);
+    expect(res.json.data).toMatchObject({ status: 'PAID', reviewedBy: 'Payout Admin', utr: expect.stringMatching(/^UTR/) });
+    await vi.waitFor(async () => expect(await prisma.auditLog.count({ where: { action: 'Payout approved', entityId: payout.id } })).toBe(1));
+    // Not twice.
+    expect((await call('POST', `/api/admin/payouts/${payout.id}/approve`, adminToken)).json.error?.code).toBe('PAYOUT_NOT_PENDING');
+  });
+
+  it('is not approved for a seller suspended since the request', async () => {
+    const s = await payableSeller();
+    const payout = (await request(s.token)).json.data;
+    await prisma.sellerProfile.update({ where: { id: s.sellerId }, data: { status: SellerStatus.SUSPENDED } });
+    expect((await call('POST', `/api/admin/payouts/${payout.id}/approve`, adminToken)).json.error?.code).toBe('SELLER_NOT_PAYABLE');
+    expect((await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } })).status).toBe('PENDING');
+  });
+
+  it('is skipped when auto-approve is on', async () => {
+    await setSetting('payoutAutoApprove', true);
+    const s = await payableSeller();
+    expect((await request(s.token)).json.data.status).toBe('PAID');
+  });
+
+  it('is for admins only', async () => {
+    const s = await payableSeller();
+    expect((await call('GET', '/api/admin/payouts', s.token)).status).toBe(403);
+  });
+});
+
+describe('Cashfree payouts', () => {
+  const fake = new FakePayouts();
+  let restore: () => void;
+  beforeAll(() => {
+    restore = setPayoutProviderForTests(fake);
+    (env as { CASHFREE_PAYOUT_CLIENT_SECRET?: string }).CASHFREE_PAYOUT_CLIENT_SECRET = PAYOUT_SECRET;
+  });
+  afterAll(() => {
+    restore();
+    (env as { CASHFREE_PAYOUT_CLIENT_SECRET?: string }).CASHFREE_PAYOUT_CLIENT_SECRET = undefined;
+  });
+  beforeEach(() => {
+    fake.nextTransfer = [];
+  });
+
+  const webhook = (transferId: string, type = 'TRANSFER_SUCCESS') => {
+    const raw = JSON.stringify({ type, data: { transfer: { transfer_id: transferId } } });
+    const ts = String(Math.floor(Date.now() / 1000));
+    const sig = createHmac('sha256', PAYOUT_SECRET).update(ts).update(raw).digest('base64');
+    return call('POST', '/api/payouts/cashfree/webhook', null, raw, { 'x-webhook-timestamp': ts, 'x-webhook-signature': sig });
+  };
+
+  async function approved(opts: Parameters<typeof payableSeller>[0] = {}) {
+    const s = await payableSeller(opts);
+    const payout = (await request(s.token, s.methodId)).json.data;
+    const res = await call<AdminPayoutRow>('POST', `/api/admin/payouts/${payout.id}/approve`, adminToken);
+    const row = await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } });
+    return { ...s, payout: row, approvedRow: res.json.data };
+  }
+
+  it('saves the verified bank account as a beneficiary once, and sends under the fixed transfer id', async () => {
+    const { payout, methodId } = await approved({ method: 'BANK' });
+    expect(payout.status).toBe('PROCESSING');
+    const b = fake.beneficiaries.at(-1)!;
+    expect(b).toMatchObject({ id: `CLWB_${methodId}`, accountNumber: '1234567890', ifsc: 'HDFC0001234' });
+    expect(fake.transfers.at(-1)).toMatchObject({ transferId: payout.transferId, beneficiaryId: `CLWB_${methodId}`, mode: 'banktransfer', amountPaise: payout.netPaise });
+    expect((await prisma.sellerPayoutMethod.findUniqueOrThrow({ where: { id: methodId } })).beneficiaryId).toBe(`CLWB_${methodId}`);
+  });
+
+  it('is PAID when the signed webhook arrives and Cashfree confirms it; an unsigned one is refused', async () => {
+    const { payout, userId } = await approved();
+    fake.settle(payout.transferId!, 'PAID');
+    expect((await call('POST', '/api/payouts/cashfree/webhook', null, '{"type":"TRANSFER_SUCCESS"}', {})).status).toBe(401);
+    expect((await webhook(payout.transferId!)).status).toBe(200);
+    expect(await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } })).toMatchObject({ status: 'PAID', utr: `UTR_${payout.transferId}` });
+    expect(await prisma.notification.count({ where: { userId, type: 'PAYOUT_SENT' } })).toBe(1);
+  });
+
+  it('a transfer the bank sends back is REVERSED: its lines payable again and the balance restored', async () => {
+    const { payout, sellerId, itemId } = await approved();
+    const reserved = await balanceOf(sellerId);
+    fake.settle(payout.transferId!, 'PAID');
+    await webhook(payout.transferId!);
+    fake.settle(payout.transferId!, 'REVERSED');
+    await webhook(payout.transferId!, 'TRANSFER_REVERSED');
+    expect(await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } })).toMatchObject({ status: 'REVERSED', failureReason: 'Account closed' });
+    expect(await balanceOf(sellerId)).toBe(reserved + payout.netPaise);
+    expect((await prisma.orderItem.findUniqueOrThrow({ where: { id: itemId } })).payoutId).toBeNull();
+    expect((await eligibleItems(sellerId, 0)).map((i) => i.id)).toContain(itemId);
+  });
+
+  it('a transfer Cashfree refuses is FAILED and gives the money back', async () => {
+    fake.nextTransfer = ['FAILED'];
+    const { payout, sellerId } = await approved();
+    expect(payout).toMatchObject({ status: 'FAILED', failureReason: 'Insufficient balance' });
+    expect(await prisma.sellerLedgerEntry.count({ where: { sellerId, idempotencyKey: `payout-release:${payout.id}` } })).toBe(1);
+  });
+
+  it('no answer at all leaves it PROCESSING; the poller resends the same transfer only if Cashfree never got it', async () => {
+    fake.nextTransfer = ['THROW_UNCERTAIN', 'PAID'];
+    const { payout } = await approved();
+    expect(payout).toMatchObject({ status: 'PROCESSING', providerStatus: 'UNCONFIRMED' });
+    await pollProcessingPayouts();
+    const after = await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } });
+    expect(after.status).toBe('PAID');
+    const sent = fake.transfers.filter((t) => t.transferId === payout.transferId);
+    expect(sent).toHaveLength(2);
+  });
+});
+
+describe('the hold', () => {
+  it('covers the line’s own return window when it is longer than the payout hold', async () => {
+    await setSetting('payoutHoldDays', 7);
+    try {
+      const inside = await payableSeller({ deliveredDaysAgo: 8, returnWindowDays: 10 });
+      expect(await eligibleItems(inside.sellerId, { holdDays: 7, defaultWindowDays: 5 })).toHaveLength(0);
+      expect((await settlementPosition(inside.sellerId, { holdDays: 7, defaultWindowDays: 5 })).availablePaise).toBe(0);
+      expect((await request(inside.token)).json.error?.code).toBe('NOTHING_PAYABLE');
+
+      const past = await payableSeller({ deliveredDaysAgo: 11, returnWindowDays: 10 });
+      expect(await eligibleItems(past.sellerId, { holdDays: 7, defaultWindowDays: 5 })).toHaveLength(1);
+      expect((await settlementPosition(past.sellerId, { holdDays: 7, defaultWindowDays: 5 })).availablePaise).toBeGreaterThan(0);
+
+      // A line with no window of its own follows the platform's.
+      const unset = await payableSeller({ deliveredDaysAgo: 8, returnWindowDays: null });
+      expect(await eligibleItems(unset.sellerId, { holdDays: 7, defaultWindowDays: 10 })).toHaveLength(0);
+      expect(await eligibleItems(unset.sellerId, { holdDays: 7, defaultWindowDays: 5 })).toHaveLength(1);
+    } finally {
+      await setSetting('payoutHoldDays', 0);
+    }
+  });
+});

@@ -30,6 +30,8 @@ export const MOCK_ENV = {
   CORS_ORIGINS: WEB,
   OTP_PROVIDER: 'mock',
   PAYMENT_PROVIDER: 'mock',
+  PAYOUT_PROVIDER: 'mock',
+  SETTLEMENT_MODE: 'payouts',
   KYC_PROVIDER: 'mock',
   TRYON_PROVIDER: 'mock',
   AI_PROVIDER: 'mock',
@@ -49,6 +51,10 @@ export const MOCK_ENV = {
   SMTP_PASSWORD: '',
   CASHFREE_VERIFICATION_CLIENT_ID: '',
   CASHFREE_VERIFICATION_CLIENT_SECRET: '',
+  CASHFREE_PG_CLIENT_ID: '',
+  CASHFREE_PG_CLIENT_SECRET: '',
+  CASHFREE_PAYOUT_CLIENT_ID: '',
+  CASHFREE_PAYOUT_CLIENT_SECRET: '',
   RAZORPAY_KEY_ID: '',
   RAZORPAY_KEY_SECRET: '',
   NEXT_PUBLIC_API_URL: API,
@@ -63,6 +69,7 @@ export function assertMockOnly(env) {
   const wrong = Object.entries({
     OTP_PROVIDER: 'mock',
     PAYMENT_PROVIDER: 'mock',
+    PAYOUT_PROVIDER: 'mock',
     KYC_PROVIDER: 'mock',
     TRYON_PROVIDER: 'mock',
     AI_PROVIDER: 'mock',
@@ -70,7 +77,7 @@ export function assertMockOnly(env) {
     DELHIVERY_ENV: 'staging',
     EMAIL_PROVIDER: 'mock',
   }).filter(([k, v]) => env[k] !== v);
-  if (wrong.length || env.DELHIVERY_API_TOKEN || env.DELHIVERY_BASE_URL || env.FASHN_API_KEY || env.GEMINI_API_KEY || env.SMTP_PASSWORD) {
+  if (wrong.length || env.DELHIVERY_API_TOKEN || env.DELHIVERY_BASE_URL || env.FASHN_API_KEY || env.GEMINI_API_KEY || env.SMTP_PASSWORD || env.CASHFREE_PG_CLIENT_SECRET || env.CASHFREE_PAYOUT_CLIENT_SECRET) {
     throw new Error(`refusing to run: not mock-only (${wrong.map(([k]) => k).join(', ') || 'a provider key is set'})`);
   }
 }

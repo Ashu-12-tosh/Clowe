@@ -315,6 +315,7 @@ meRouter.get('/returns', async (req, res, next) => {
             status: r.refund.status,
             amountPaise: r.refund.amountPaise,
             processedAt: r.refund.processedAt?.toISOString() ?? null,
+            arn: r.refund.arn,
           }
         : null,
       rmaNumber: r.rmaNumber,

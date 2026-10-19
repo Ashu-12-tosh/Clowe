@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import type { PaymentProvider } from './PaymentProvider';
+import type { CreateGatewayOrderInput, GatewayOrder, GatewayRefund, GatewayRefundInput, PaymentProvider } from './PaymentProvider';
 
 /**
  * Razorpay via its REST API (no SDK needed). Test mode works with
@@ -17,39 +17,39 @@ export class RazorpayProvider implements PaymentProvider {
     return this.keyId;
   }
 
-  async createOrder(amountPaise: number, receipt: string): Promise<string> {
+  async createOrder(input: CreateGatewayOrderInput): Promise<GatewayOrder> {
     const res = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Basic ${Buffer.from(`${this.keyId}:${this.keySecret}`).toString('base64')}`,
       },
-      body: JSON.stringify({ amount: amountPaise, currency: 'INR', receipt }),
+      body: JSON.stringify({ amount: input.amountPaise, currency: 'INR', receipt: input.receipt }),
     });
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`Razorpay order creation failed (${res.status}): ${text}`);
     }
     const data = (await res.json()) as { id: string };
-    return data.id;
+    return { providerOrderId: data.id };
   }
 
   /** Refund a captured payment (full or partial). https://razorpay.com/docs/api/refunds/ */
-  async refund(providerPaymentId: string, amountPaise: number): Promise<string> {
-    const res = await fetch(`https://api.razorpay.com/v1/payments/${providerPaymentId}/refund`, {
+  async refund(input: GatewayRefundInput): Promise<GatewayRefund> {
+    const res = await fetch(`https://api.razorpay.com/v1/payments/${input.providerPaymentId}/refund`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Basic ${Buffer.from(`${this.keyId}:${this.keySecret}`).toString('base64')}`,
       },
-      body: JSON.stringify({ amount: amountPaise }),
+      body: JSON.stringify({ amount: input.amountPaise, receipt: input.refundId }),
     });
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`Razorpay refund failed (${res.status}): ${text}`);
     }
     const data = (await res.json()) as { id: string };
-    return data.id;
+    return { providerRefundId: data.id, status: 'SUCCESS', providerStatus: 'processed' };
   }
 
   /** Standard Razorpay checkout signature: HMAC-SHA256(orderId|paymentId, keySecret). */

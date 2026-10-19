@@ -19,6 +19,12 @@ import { logOtpProviderStatus } from './services/otp';
 import { startSearchLogCleanup } from './services/searchAnalytics';
 import { startQuerySuggestionRefresh } from './services/querySuggestions';
 import { logEmailProviderStatus, startEmailJobs } from './services/email';
+import { logPaymentProviderStatus } from './services/payments';
+import { startPaymentSweeper } from './services/payments/gatewaySync';
+import { startRefundPoller } from './services/refundService';
+import { logPayoutProviderStatus } from './services/payouts';
+import { startPayoutPoller } from './services/payoutService';
+import { startEasySplitJobs } from './services/easySplit';
 
 const app = createApp();
 
@@ -28,6 +34,8 @@ app.listen(env.PORT, () => {
   // Reports the live try-on provider, and warns at boot if the key is bad.
   void logTryOnProviderStatus();
   logOtpProviderStatus();
+  logPaymentProviderStatus();
+  logPayoutProviderStatus();
   logKycProviderStatus();
   logShippingProviderStatus();
   logEmailProviderStatus();
@@ -65,3 +73,14 @@ startQuerySuggestionRefresh();
 
 // Email: notifications into the queue, and the queue out within the daily cap - every 30 seconds.
 startEmailJobs();
+
+// Unpaid gateway orders whose time is up: asked about (they may have been paid
+// after all), else cancelled and their stock returned - every 5 minutes.
+startPaymentSweeper();
+// Gateway refunds and payout transfers still on their way: asked about every
+// 15 minutes, beside the webhooks that normally bring the answer first.
+startRefundPoller();
+startPayoutPoller();
+// Easy Split (SETTLEMENT_MODE=easy_split only): vendors for verified sellers,
+// and shares released after the hold - hourly.
+startEasySplitJobs();

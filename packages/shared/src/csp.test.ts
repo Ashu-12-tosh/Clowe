@@ -26,7 +26,8 @@ describe('buildContentSecurityPolicy', () => {
     expect(directive(prod, 'frame-ancestors')).toEqual(["'none'"]);
     expect(directive(prod, 'object-src')).toEqual(["'none'"]);
     expect(directive(prod, 'base-uri')).toEqual(["'self'"]);
-    expect(directive(prod, 'form-action')).toEqual(["'self'"]);
+    // Forms post only to the site itself and to the payment gateway's bank pages.
+    expect(directive(prod, 'form-action')).toEqual(["'self'", 'https://*.cashfree.com']);
   });
 
   it('lets media play from data: URLs (the seller’s video preview) and blob:', () => {
@@ -43,8 +44,16 @@ describe('buildContentSecurityPolicy', () => {
 
   it('adds the API origin and the dev-only allowances only when asked', () => {
     const dev = buildContentSecurityPolicy({ nonce: 'n', apiOrigin: 'http://localhost:4400', dev: true });
-    expect(directive(dev, 'connect-src')).toEqual(["'self'", 'http://localhost:4400', 'ws:', 'wss:']);
+    expect(directive(dev, 'connect-src')).toEqual(["'self'", 'http://localhost:4400', 'https://*.cashfree.com', 'ws:', 'wss:']);
     expect(directive(dev, 'script-src')).toContain("'unsafe-eval'");
-    expect(directive(prod, 'connect-src')).toEqual(["'self'"]);
+    expect(directive(prod, 'connect-src')).toEqual(["'self'", 'https://*.cashfree.com']);
+  });
+
+  it('lets the Cashfree checkout load, frame and call its own hosts — and nothing wider', () => {
+    expect(directive(prod, 'script-src')).toContain('https://sdk.cashfree.com');
+    expect(directive(prod, 'frame-src')).toContain('https://*.cashfree.com');
+    for (const name of ['script-src', 'frame-src', 'connect-src', 'form-action']) {
+      for (const value of directive(prod, name)!) expect(value).not.toMatch(/^(https?:)?\*|^https:\/\/\*\.com$/);
+    }
   });
 });

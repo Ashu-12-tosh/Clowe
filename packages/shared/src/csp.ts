@@ -3,7 +3,7 @@
 //
 // Built per request with a fresh nonce: Next stamps the nonce on its own
 // inline scripts, and 'strict-dynamic' lets those scripts load the rest
-// (route chunks, the Razorpay checkout script). There is deliberately no
+// (route chunks, the Razorpay checkout script, Cashfree's SDK). There is deliberately no
 // 'unsafe-inline' in script-src: that would also re-allow javascript: URLs,
 // which is the main thing this policy exists to stop.
 //
@@ -20,9 +20,16 @@ export const DEMO_IMAGE_ORIGINS = ['https://loremflickr.com', 'https://picsum.ph
 /** Private files are served through short-lived R2 signed URLs, which only work on the S3 endpoint host. */
 export const PRIVATE_FILE_ORIGINS = ['https://*.r2.cloudflarestorage.com'];
 
-/** Razorpay Checkout: its script (inserted by our code) and the iframe it opens. */
-export const PAYMENT_SCRIPT_ORIGINS = ['https://checkout.razorpay.com'];
-export const PAYMENT_FRAME_ORIGINS = ['https://api.razorpay.com', 'https://checkout.razorpay.com'];
+/**
+ * The payment gateways' checkouts. Razorpay: its script (inserted by our
+ * code) and the iframe it opens. Cashfree: its JS SDK, the checkout it opens
+ * (frames on its own hosts, which also call its API from the page), and the
+ * bank and card pages some payments post on to.
+ */
+export const PAYMENT_SCRIPT_ORIGINS = ['https://checkout.razorpay.com', 'https://sdk.cashfree.com'];
+export const PAYMENT_FRAME_ORIGINS = ['https://api.razorpay.com', 'https://checkout.razorpay.com', 'https://*.cashfree.com'];
+export const PAYMENT_CONNECT_ORIGINS = ['https://*.cashfree.com'];
+export const PAYMENT_FORM_ORIGINS = ['https://*.cashfree.com'];
 
 export interface CspOptions {
   /** A fresh base64 value per response. */
@@ -52,12 +59,12 @@ export function buildContentSecurityPolicy(o: CspOptions): string {
     // data: for the video preview while a seller adds a product (/seller/products/new).
     ['media-src', ["'self'", 'blob:', 'data:', ...api, ...PRIVATE_FILE_ORIGINS]],
     ['font-src', ["'self'"]],
-    ['connect-src', ["'self'", ...api, ...(o.dev ? ['ws:', 'wss:'] : [])]],
+    ['connect-src', ["'self'", ...api, ...PAYMENT_CONNECT_ORIGINS, ...(o.dev ? ['ws:', 'wss:'] : [])]],
     ['frame-src', PAYMENT_FRAME_ORIGINS],
     ['worker-src', ["'self'"]],
     ['object-src', ["'none'"]],
     ['base-uri', ["'self'"]],
-    ['form-action', ["'self'"]],
+    ['form-action', ["'self'", ...PAYMENT_FORM_ORIGINS]],
     ['frame-ancestors', ["'none'"]],
   ];
   if (o.reportUri) directives.push(['report-uri', [o.reportUri]]);

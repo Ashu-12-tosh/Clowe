@@ -44,6 +44,8 @@ export default function AdminSettingsPage() {
     minRupees: '',
     holdDays: '',
   });
+  // Off: every payout waits for an admin's approval (Payout approvals).
+  const [payoutAutoApprove, setPayoutAutoApprove] = useState(false);
   const [couponsEnabled, setCouponsEnabled] = useState(false);
   const [storeOpen, setStoreOpen] = useState(false);
   const [foodCategoriesEnabled, setFoodCategoriesEnabled] = useState(false);
@@ -121,6 +123,7 @@ export default function AdminSettingsPage() {
           minRupees: toRupees(s.payoutMinPaise),
           holdDays: String(s.payoutHoldDays),
         });
+        setPayoutAutoApprove(s.payoutAutoApprove);
       })
       .catch(() => setError('Could not load settings'));
   }, []);
@@ -154,6 +157,7 @@ export default function AdminSettingsPage() {
           gstTcsPercent: Number(payout.tcs) || 0,
           payoutMinPaise: toPaise(payout.minRupees),
           payoutHoldDays: Math.max(0, Math.round(Number(payout.holdDays) || 0)),
+          payoutAutoApprove,
           kycNameMatchMinScore: Math.min(100, Math.max(0, Math.round(Number(kycMinScore) || 0))),
           couponsEnabled,
           storeOpenForOrders: storeOpen,
@@ -663,9 +667,25 @@ export default function AdminSettingsPage() {
           </div>
         </div>
         <p className="mt-2 text-xs text-gray-400">
-          Earnings are released this many days after delivery — keep it at or above the return
-          window so refunds never chase money that has already left.
+          Earnings are released this many days after delivery, or after the line&apos;s own return
+          window when that is longer — so refunds never chase money that has already left.
         </p>
+        <label className="mt-3 flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="payoutAutoApprove"
+            checked={payoutAutoApprove}
+            onChange={(e) => setPayoutAutoApprove(e.target.checked)}
+            className="mt-1"
+          />
+          <span>
+            Send payouts without an admin&apos;s approval
+            <span className="block text-xs text-gray-500">
+              Off: every payout a seller requests waits in Payout approvals until an admin approves or rejects it. Turn on
+              only once payouts have run without surprises for a while.
+            </span>
+          </span>
+        </label>
       </div>
 
       {/* Listing economics */}

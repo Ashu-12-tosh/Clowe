@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { GatewayCheckout } from './checkout';
 
 // ---------------------------------------------------------------------------
 // Promotion credits
@@ -25,11 +26,7 @@ export type PromotionCreditPurchaseInput = z.infer<typeof promotionCreditPurchas
 export interface PromotionCreditPurchaseResult {
   purchaseId: string;
   amountPaise: number;
-  payment: {
-    provider: 'mock' | 'razorpay';
-    providerOrderId: string;
-    keyId?: string;
-  };
+  payment: GatewayCheckout;
 }
 
 export interface PromotionCreditSettleResult {

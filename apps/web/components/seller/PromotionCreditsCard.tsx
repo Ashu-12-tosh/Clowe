@@ -11,6 +11,7 @@ import { api, ApiRequestError } from '@/lib/api';
 import { toast } from '@/lib/toast';
 import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
+import { payWithCashfree } from '@/lib/cashfree';
 import { LedgerPanel } from '@/components/seller/payouts/LedgerPanel';
 
 const QUICK_RUPEES = [500, 1000, 2500, 5000];
@@ -18,8 +19,8 @@ const QUICK_RUPEES = [500, 1000, 2500, 5000];
 /**
  * The promotion balance: what a seller has prepaid for placements, with a
  * top-up box and the PROMOTION side of their ledger underneath. The dev
- * gateway settles via mock-pay; with Razorpay the same purchase would open
- * the checkout widget and finish through /verify.
+ * gateway settles via mock-pay; with Cashfree the purchase opens its checkout
+ * and the server confirms the payment with Cashfree.
  */
 export default function PromotionCreditsCard() {
   const [balance, setBalance] = useState<number | null>(null);
@@ -55,14 +56,26 @@ export default function PromotionCreditsCard() {
     if (busy) return;
     setBusy(true);
     try {
-      setPending(
-        await api<PromotionCreditPurchaseResult>('/api/seller/promotion-credits/purchase', {
-          body: { amountPaise },
-          auth: true,
-        }),
-      );
+      const purchase = await api<PromotionCreditPurchaseResult>('/api/seller/promotion-credits/purchase', {
+        body: { amountPaise },
+        auth: true,
+      });
+      if (purchase.payment.provider !== 'cashfree') {
+        setPending(purchase);
+        return;
+      }
+      const r = await payWithCashfree('PROMOTION', purchase.purchaseId, purchase.payment);
+      if (r.outcome === 'PAID') {
+        setNotice(`${formatPaise(purchase.amountPaise)} added to your Seller Wallet`);
+        toast.success(`Paid — ${formatPaise(purchase.amountPaise)} added to your Seller Wallet`);
+        setRefresh((n) => n + 1);
+      } else if (r.outcome === 'PENDING') {
+        window.location.assign(`/checkout/return?kind=PROMOTION&id=${encodeURIComponent(purchase.purchaseId)}`);
+      } else {
+        setError(`${r.message ?? 'The payment did not go through.'} Nothing was added and nothing was charged.`);
+      }
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not start the top-up');
+      setError(err instanceof ApiRequestError || err instanceof Error ? err.message : 'Could not start the top-up');
     } finally {
       setBusy(false);
     }

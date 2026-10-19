@@ -20,6 +20,8 @@ export class MockPayoutProvider implements PayoutProvider {
     return {
       utr: `UTR${Date.now().toString().slice(-9)}${randomInt(1000, 9999)}`,
       status: 'PAID',
+      providerTransferId: `mock_${request.transferId}`,
+      providerStatus: 'SUCCESS',
     };
   }
 

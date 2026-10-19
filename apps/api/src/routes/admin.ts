@@ -1053,6 +1053,7 @@ adminRouter.put('/settings', async (req, res, next) => {
       'gstTcsPercent',
       'payoutMinPaise',
       'payoutHoldDays',
+      'payoutAutoApprove',
       // Dispatch discipline — the promise, when the penalty falls due, and what it costs.
       'dispatchSlaHours',
       'lateDispatchPenaltyAfterHours',

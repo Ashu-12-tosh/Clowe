@@ -27,6 +27,18 @@ process.env.TRYON_PROVIDER = 'mock';
 process.env.AI_PROVIDER = 'mock';
 process.env.OTP_PROVIDER = 'mock';
 process.env.KYC_PROVIDER = 'mock';
+// No gateway or payout connection: the mocks, on sandbox, with no Cashfree
+// keys a developer's .env might carry (env.ts refuses live Cashfree in tests).
+process.env.PAYMENT_PROVIDER = 'mock';
+process.env.PAYOUT_PROVIDER = 'mock';
+process.env.SETTLEMENT_MODE = 'payouts';
+process.env.CASHFREE_PG_ENV = 'sandbox';
+process.env.CASHFREE_PG_CLIENT_ID = '';
+process.env.CASHFREE_PG_CLIENT_SECRET = '';
+process.env.CASHFREE_PAYOUT_ENV = 'sandbox';
+process.env.CASHFREE_PAYOUT_CLIENT_ID = '';
+process.env.CASHFREE_PAYOUT_CLIENT_SECRET = '';
+process.env.CASHFREE_VERIFICATION_ENV = 'sandbox';
 // No courier connection at all: the mock, on staging, without any token or
 // URL a developer's .env might carry (env.ts refuses live Delhivery in tests).
 process.env.SHIPPING_PROVIDER = 'mock';

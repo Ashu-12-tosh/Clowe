@@ -12,10 +12,15 @@ import {
   type PlatformSettings,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import type { Prisma } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
+import { auditSafe } from './auditService';
+import { bankAccountNumberOf } from './bankAccountCrypto';
+import { GatewayError } from './payments/PaymentProvider';
+import type { PayoutTransfer } from './payouts/PayoutProvider';
 import { getSettings } from './settingsService';
 import { payoutProvider } from './payouts';
-import { ensureLedgerCoversDeliveries, settlementPosition } from './sellerLedgerService';
+import { ensureLedgerCoversDeliveries, holdRuleOf, lineClearsAt, settlementPosition, type HoldRule } from './sellerLedgerService';
 import { ensureFreightPosted } from './shipping/freight';
 import { economicsRates } from './economicsRates';
 import { categoryRulesMap } from './categoryRules';
@@ -136,13 +141,21 @@ const remittedOrPrepaid = {
   OR: [{ shipmentId: null }, { shipment: { OR: [{ paymentType: { not: 'COD' } }, { codRemittedAt: { not: null } }] } }],
 };
 
-export async function eligibleItems(sellerId: string, holdDays: number) {
-  return prisma.orderItem.findMany({
+/** The hold the platform settings describe: payoutHoldDays, or a line's return window if longer. */
+export function holdRule(settings: PlatformSettings): HoldRule {
+  return { holdDays: settings.payoutHoldDays, defaultWindowDays: settings.returnWindowDays };
+}
+
+export async function eligibleItems(sellerId: string, hold: number | HoldRule) {
+  const rule = holdRuleOf(hold);
+  const now = Date.now();
+  // Past the hold is necessary; past the line's own return window too.
+  const items = await prisma.orderItem.findMany({
     where: {
       sellerId,
       status: 'DELIVERED',
       payoutId: null,
-      deliveredAt: { lte: clearedBefore(holdDays) },
+      deliveredAt: { lte: clearedBefore(rule.holdDays) },
       ...remittedOrPrepaid,
     },
     orderBy: { deliveredAt: 'asc' },
@@ -152,25 +165,28 @@ export async function eligibleItems(sellerId: string, holdDays: number) {
       gstRatePercent: true,
       quantity: true,
       deliveredAt: true,
+      returnWindowDays: true,
       title: true,
       product: { select: { categoryId: true } },
       order: { select: { orderNumber: true, paymentMethod: true } },
     },
   });
+  return items.filter((i) => i.deliveredAt && lineClearsAt(i.deliveredAt, i.returnWindowDays, rule).getTime() <= now);
 }
 
-/** Delivered but still inside the return window — earned, not yet payable. */
-export async function clearingItems(sellerId: string, holdDays: number) {
-  return prisma.orderItem.findMany({
-    where: {
-      sellerId,
-      status: 'DELIVERED',
-      payoutId: null,
-      deliveredAt: { gt: clearedBefore(holdDays) },
-    },
+/** Delivered but still inside the hold or its return window — earned, not yet payable. */
+export async function clearingItems(sellerId: string, hold: number | HoldRule) {
+  const rule = holdRuleOf(hold);
+  const now = Date.now();
+  const items = await prisma.orderItem.findMany({
+    where: { sellerId, status: 'DELIVERED', payoutId: null, deliveredAt: { not: null } },
     orderBy: { deliveredAt: 'asc' },
-    select: { id: true, pricePaise: true, quantity: true, deliveredAt: true },
+    select: { id: true, pricePaise: true, quantity: true, deliveredAt: true, returnWindowDays: true },
   });
+  return items
+    .map((i) => ({ ...i, clearsAt: lineClearsAt(i.deliveredAt!, i.returnWindowDays, rule) }))
+    .filter((i) => i.clearsAt.getTime() > now)
+    .sort((a, b) => a.clearsAt.getTime() - b.clearsAt.getTime());
 }
 
 /**
@@ -216,10 +232,11 @@ export async function availableBalance(sellerId: string): Promise<AvailableBalan
   // and delivered parcels their freight, before anything is worked out.
   await ensureLedgerCoversDeliveries(sellerId);
   await ensureFreightPosted(sellerId);
+  const rule = holdRule(settings);
   const [position, eligible, clearing, ads] = await Promise.all([
-    settlementPosition(sellerId, settings.payoutHoldDays),
-    eligibleItems(sellerId, settings.payoutHoldDays),
-    clearingItems(sellerId, settings.payoutHoldDays),
+    settlementPosition(sellerId, rule),
+    eligibleItems(sellerId, rule),
+    clearingItems(sellerId, rule),
     outstandingAdSpend(sellerId),
   ]);
 
@@ -228,10 +245,8 @@ export async function availableBalance(sellerId: string): Promise<AvailableBalan
   // waits for the next one rather than pushing the transfer negative.
   const adjustmentsPaise = affordableAdjustments(ads, position.availablePaise).total;
 
-  const oldestClearing = clearing[0]?.deliveredAt ?? null;
-  const releaseAt = oldestClearing
-    ? new Date(oldestClearing.getTime() + settings.payoutHoldDays * 86400000)
-    : null;
+  // The soonest a clearing line becomes payable (they are sorted by it).
+  const releaseAt = clearing[0]?.clearsAt ?? null;
 
   return {
     fees,
@@ -353,7 +368,8 @@ export async function requestPayout(sellerId: string, methodId?: string) {
     throw ApiError.badRequest('A payout is already in progress', 'PAYOUT_IN_PROGRESS');
   }
 
-  const eligible = await eligibleItems(sellerId, settings.payoutHoldDays);
+  const rule = holdRule(settings);
+  const eligible = await eligibleItems(sellerId, rule);
   if (eligible.length === 0) {
     throw ApiError.badRequest('No cleared earnings to pay out yet', 'NOTHING_PAYABLE');
   }
@@ -363,7 +379,7 @@ export async function requestPayout(sellerId: string, methodId?: string) {
   // waivers, reversals). Lines from before the ledger are posted first so
   // nothing eligible is claimed without being paid.
   await ensureLedgerCoversDeliveries(sellerId);
-  const position = await settlementPosition(sellerId, settings.payoutHoldDays);
+  const position = await settlementPosition(sellerId, rule);
   const ads = await outstandingAdSpend(sellerId);
   const adjustments = affordableAdjustments(ads, position.availablePaise);
   const netPaise = position.availablePaise - adjustments.total;
@@ -396,9 +412,11 @@ export async function requestPayout(sellerId: string, methodId?: string) {
     const tdsPaise = -sumOf('TDS');
     const tcsPaise = -sumOf('GST_TCS');
 
+    const reference = await nextReference();
     const created = await tx.payout.create({
       data: {
-        reference: await nextReference(),
+        reference,
+        transferId: transferIdFor(reference),
         sellerId,
         periodFrom: new Date(Math.min(...stamps)),
         periodTo: new Date(Math.max(...stamps)),
@@ -414,7 +432,7 @@ export async function requestPayout(sellerId: string, methodId?: string) {
         tdsPaise,
         tcsPaise,
         netPaise,
-        status: 'PROCESSING',
+        status: 'PENDING',
         methodId: method.id,
         methodLabel: describeMethod(method),
       },
@@ -434,52 +452,20 @@ export async function requestPayout(sellerId: string, methodId?: string) {
         data: { payoutId: created.id },
       });
     }
-    return created;
-  });
-
-  const transfer = await payoutProvider.transfer({
-    reference: payout.reference,
-    amountPaise: payout.netPaise,
-    destination: payout.methodLabel ?? method.label,
-    ifsc: method.ifsc,
-    upiId: method.upiId,
-  });
-
-  if (transfer.status === 'FAILED') {
-    // Release the lines so the seller can retry once the issue is fixed.
-    await prisma.$transaction([
-      prisma.orderItem.updateMany({ where: { payoutId: payout.id }, data: { payoutId: null } }),
-      prisma.ad.updateMany({ where: { payoutId: payout.id }, data: { payoutId: null } }),
-      prisma.payout.update({
-        where: { id: payout.id },
-        data: { status: 'FAILED', failureReason: transfer.failureReason ?? 'Transfer failed' },
-      }),
-    ]);
-    throw ApiError.badRequest(transfer.failureReason ?? 'Payout failed', 'PAYOUT_FAILED');
-  }
-
-  // The money has left (or is on its way), so the ledger records it now — a
-  // FAILED transfer above never reaches here and never touches the ledger.
-  // The (payoutId, type) unique pair means a replay cannot post it twice.
-  const placements = adjustments.ids.length;
-  const [settled] = await prisma.$transaction([
-    prisma.payout.update({
-      where: { id: payout.id },
-      data: {
-        status: transfer.status,
-        utr: transfer.utr,
-        processedAt: transfer.status === 'PAID' ? new Date() : null,
-      },
-    }),
-    prisma.sellerLedgerEntry.createMany({
+    // The money is set aside now, at request: nothing else (a plan renewal, a
+    // charge) can spend what is waiting for approval or on its way. A
+    // rejected, failed or reversed payout gives it back with one entry.
+    // The (payoutId, type) unique pair means a replay cannot post it twice.
+    const placements = adjustments.ids.length;
+    await tx.sellerLedgerEntry.createMany({
       data: [
         {
           sellerId,
           type: 'PAYOUT',
           bucket: 'SETTLEMENT',
-          amountPaise: -payout.netPaise,
-          payoutId: payout.id,
-          note: `${payout.reference} to ${payout.methodLabel ?? method.label}`,
+          amountPaise: -netPaise,
+          payoutId: created.id,
+          note: `${reference} to ${created.methodLabel ?? method.label}`,
         },
         ...(adjustments.total > 0
           ? [
@@ -488,27 +474,360 @@ export async function requestPayout(sellerId: string, methodId?: string) {
                 type: 'ADJUSTMENT' as const,
                 bucket: 'SETTLEMENT' as const,
                 amountPaise: -adjustments.total,
-                payoutId: payout.id,
-                note: `Ad spend recovered with ${payout.reference} (${placements} placement${placements === 1 ? '' : 's'})`,
+                payoutId: created.id,
+                note: `Ad spend recovered with ${reference} (${placements} placement${placements === 1 ? '' : 's'})`,
               },
             ]
           : []),
       ],
       skipDuplicates: true,
-    }),
-  ]);
+    });
+    return created;
+  });
 
+  const userId = (await prisma.sellerProfile.findUniqueOrThrow({ where: { id: sellerId } })).userId;
+  if (!settings.payoutAutoApprove) {
+    await prisma.notification.create({
+      data: {
+        userId,
+        type: 'PAYOUT_REQUESTED',
+        title: 'Payout requested',
+        body: `${payout.reference}: ₹${(payout.netPaise / 100).toLocaleString('en-IN')} to ${payout.methodLabel}. Clowe reviews every payout before it is sent — usually within one working day.`,
+        linkHref: '/seller/payouts',
+      },
+    });
+    return payout;
+  }
+  return sendPayout(payout.id);
+}
+
+/** Cashfree's transfer_id: our reference with only letters, digits and underscore. */
+export function transferIdFor(reference: string): string {
+  return reference.replace(/[^A-Za-z0-9_]/g, '_');
+}
+
+const PAYOUT_INCLUDE = {
+  method: true,
+  seller: { select: { id: true, userId: true, shopName: true, bankAccountNo: true, bankAccountEnc: true, bankIfsc: true, bankAccountName: true, user: { select: { phone: true, email: true } } } },
+} as const;
+
+/** The beneficiary id at the provider for a payout method: one per method. */
+function beneficiaryIdFor(methodId: string): string {
+  return `CLWB_${methodId}`.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 40);
+}
+
+/**
+ * Hand an approved (or auto-approved) PENDING payout to the payout provider.
+ * Claimed first (PENDING → PROCESSING) so a double click sends it once; the
+ * transfer id is fixed per payout, so even a resend after a timeout is the
+ * same transfer at the provider, never a second one.
+ */
+export async function sendPayout(payoutId: string) {
+  const claim = await prisma.payout.updateMany({ where: { id: payoutId, status: 'PENDING' }, data: { status: 'PROCESSING' } });
+  if (claim.count === 0) return prisma.payout.findUniqueOrThrow({ where: { id: payoutId } });
+  return transferPayout(payoutId);
+}
+
+/** Send a PROCESSING payout's transfer (again, with the same id) and apply the answer. */
+async function transferPayout(payoutId: string) {
+  const payout = await prisma.payout.findUniqueOrThrow({ where: { id: payoutId }, include: PAYOUT_INCLUDE });
+  const method = payout.method;
+  const transferId = payout.transferId ?? transferIdFor(payout.reference);
+  if (!method) {
+    await failPayout(payout.id, 'The payout method was removed before the transfer was sent');
+    return prisma.payout.findUniqueOrThrow({ where: { id: payoutId } });
+  }
+
+  let beneficiaryId = method.beneficiaryId;
+  try {
+    if (payoutProvider.ensureBeneficiary && !beneficiaryId) {
+      // The full account number lives (encrypted) on the seller's KYC record;
+      // a payout method is that account once verified. Never anything else.
+      const accountNumber = method.type === 'BANK' ? bankAccountNumberOf(payout.seller) : null;
+      if (method.type === 'BANK' && (!accountNumber || accountNumber.slice(-4) !== method.accountLast4 || (payout.seller.bankIfsc ?? '').toUpperCase() !== (method.ifsc ?? '').toUpperCase())) {
+        await failPayout(payout.id, 'The verified bank account on file no longer matches this payout method — verify it again');
+        return prisma.payout.findUniqueOrThrow({ where: { id: payoutId } });
+      }
+      beneficiaryId = await payoutProvider.ensureBeneficiary({
+        id: beneficiaryIdFor(method.id),
+        name: method.accountName || payout.seller.bankAccountName || payout.seller.shopName,
+        accountNumber,
+        ifsc: method.ifsc,
+        vpa: method.type === 'UPI' ? method.upiId : null,
+        phone: payout.seller.user.phone,
+        email: payout.seller.user.email,
+      });
+      await prisma.sellerPayoutMethod.update({ where: { id: method.id }, data: { beneficiaryId } });
+    }
+    const transfer = await payoutProvider.transfer({
+      transferId,
+      reference: payout.reference,
+      amountPaise: payout.netPaise,
+      destination: payout.methodLabel ?? method.label,
+      beneficiaryId,
+      mode: method.type === 'UPI' ? 'upi' : 'banktransfer',
+      ifsc: method.ifsc,
+      upiId: method.upiId,
+    });
+    await applyTransfer(payout.id, transfer);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Transfer failed';
+    console.error(`[clowe-api] payout ${payout.reference}:`, message);
+    if (err instanceof GatewayError && err.uncertain) {
+      // It may have been received: leave it PROCESSING; the poller asks the
+      // provider by transfer id and resends only if it never arrived.
+      await prisma.payout.update({ where: { id: payout.id }, data: { providerStatus: 'UNCONFIRMED' } });
+    } else {
+      await failPayout(payout.id, message);
+    }
+  }
+  return prisma.payout.findUniqueOrThrow({ where: { id: payoutId } });
+}
+
+/** Apply what the provider says about a payout's transfer. Idempotent. */
+async function applyTransfer(payoutId: string, transfer: PayoutTransfer): Promise<void> {
+  const known = {
+    providerTransferId: transfer.providerTransferId ?? undefined,
+    providerStatus: transfer.providerStatus ?? undefined,
+  };
+  if (transfer.status === 'PAID') {
+    const paid = await prisma.payout.updateMany({
+      where: { id: payoutId, status: 'PROCESSING' },
+      data: { ...known, status: 'PAID', utr: transfer.utr ?? null, processedAt: new Date(), failureReason: null },
+    });
+    if (paid.count === 1) {
+      const settled = await prisma.payout.findUniqueOrThrow({ where: { id: payoutId }, include: { seller: { select: { userId: true } } } });
+      await prisma.notification.create({
+        data: {
+          userId: settled.seller.userId,
+          type: 'PAYOUT_SENT',
+          title: 'Payout on its way 💸',
+          body: `${settled.reference}: ₹${(settled.netPaise / 100).toLocaleString('en-IN')} sent to ${settled.methodLabel}.${settled.utr ? ` UTR ${settled.utr}.` : ''}`,
+          linkHref: '/seller/payouts',
+        },
+      });
+    }
+    return;
+  }
+  if (transfer.status === 'FAILED') {
+    await failPayout(payoutId, transfer.failureReason ?? 'Transfer failed', known.providerStatus);
+    return;
+  }
+  if (transfer.status === 'REVERSED') {
+    await reversePayout(payoutId, transfer.failureReason ?? 'Reversed by the bank', known.providerStatus);
+    return;
+  }
+  await prisma.payout.updateMany({ where: { id: payoutId, status: 'PROCESSING' }, data: known });
+}
+
+/**
+ * Give a payout's money back to the seller's balance and free its lines and
+ * ad recoveries to be paid again: for a rejected, failed or reversed payout.
+ * One ledger entry undoes the PAYOUT and ADJUSTMENT entries posted at request.
+ */
+async function releasePayout(
+  tx: Prisma.TransactionClient,
+  payout: { id: string; sellerId: string; reference: string; netPaise: number; adjustmentPaise: number },
+  why: string,
+): Promise<void> {
+  await tx.orderItem.updateMany({ where: { payoutId: payout.id }, data: { payoutId: null } });
+  await tx.ad.updateMany({ where: { payoutId: payout.id }, data: { payoutId: null } });
+  const posted = await tx.sellerLedgerEntry.aggregate({
+    where: { payoutId: payout.id, type: { in: ['PAYOUT', 'ADJUSTMENT'] } },
+    _sum: { amountPaise: true },
+  });
+  const back = -(posted._sum.amountPaise ?? 0);
+  if (back !== 0) {
+    await tx.sellerLedgerEntry.createMany({
+      data: [
+        {
+          sellerId: payout.sellerId,
+          type: 'ADJUSTMENT',
+          bucket: 'SETTLEMENT',
+          amountPaise: back,
+          idempotencyKey: `payout-release:${payout.id}`,
+          note: `${payout.reference} ${why} — the amount is back in your balance`,
+        },
+      ],
+      skipDuplicates: true,
+    });
+  }
+}
+
+async function failPayout(payoutId: string, reason: string, providerStatus?: string): Promise<void> {
+  const payout = await prisma.payout.findUnique({ where: { id: payoutId }, include: { seller: { select: { userId: true } } } });
+  if (!payout) return;
+  const done = await prisma.$transaction(async (tx) => {
+    const claim = await tx.payout.updateMany({
+      where: { id: payoutId, status: { in: ['PENDING', 'PROCESSING'] } },
+      data: { status: 'FAILED', failureReason: reason.slice(0, 500), ...(providerStatus ? { providerStatus } : {}) },
+    });
+    if (claim.count === 0) return false;
+    await releasePayout(tx, payout, 'failed');
+    return true;
+  });
+  if (!done) return;
   await prisma.notification.create({
     data: {
-      userId: (await prisma.sellerProfile.findUniqueOrThrow({ where: { id: sellerId } })).userId,
-      type: 'PAYOUT_SENT',
-      title: 'Payout on its way 💸',
-      body: `${settled.reference}: ₹${(settled.netPaise / 100).toLocaleString('en-IN')} sent to ${settled.methodLabel}. UTR ${settled.utr}.`,
+      userId: payout.seller.userId,
+      type: 'PAYOUT_FAILED',
+      title: 'Payout could not be sent',
+      body: `${payout.reference} failed: ${reason.slice(0, 160)}. The amount is back in your balance — check your bank details and request it again.`,
       linkHref: '/seller/payouts',
     },
   });
+  auditSafe({
+    actorRole: 'SYSTEM',
+    module: 'PAYOUTS',
+    action: 'Payout failed',
+    entityType: 'Payout',
+    entityId: payoutId,
+    summary: `${payout.reference} (₹${(payout.netPaise / 100).toFixed(2)}) failed: ${reason.slice(0, 200)}`,
+    severity: 'HIGH',
+    status: 'FAILED',
+  });
+}
 
-  return settled;
+/** The bank sent a paid (or in-flight) transfer back. */
+async function reversePayout(payoutId: string, reason: string, providerStatus?: string): Promise<void> {
+  const payout = await prisma.payout.findUnique({ where: { id: payoutId }, include: { seller: { select: { userId: true } } } });
+  if (!payout) return;
+  const done = await prisma.$transaction(async (tx) => {
+    const claim = await tx.payout.updateMany({
+      where: { id: payoutId, status: { in: ['PROCESSING', 'PAID'] } },
+      data: { status: 'REVERSED', reversedAt: new Date(), failureReason: reason.slice(0, 500), ...(providerStatus ? { providerStatus } : {}) },
+    });
+    if (claim.count === 0) return false;
+    await releasePayout(tx, payout, 'was returned by the bank');
+    return true;
+  });
+  if (!done) return;
+  await prisma.notification.create({
+    data: {
+      userId: payout.seller.userId,
+      type: 'PAYOUT_FAILED',
+      title: 'Payout returned by the bank',
+      body: `${payout.reference} (₹${(payout.netPaise / 100).toLocaleString('en-IN')}) was returned by your bank: ${reason.slice(0, 160)}. The amount is back in your balance.`,
+      linkHref: '/seller/payouts',
+    },
+  });
+  auditSafe({
+    actorRole: 'SYSTEM',
+    module: 'PAYOUTS',
+    action: 'Payout reversed',
+    entityType: 'Payout',
+    entityId: payoutId,
+    summary: `${payout.reference} (₹${(payout.netPaise / 100).toFixed(2)}) reversed by the bank: ${reason.slice(0, 200)}`,
+    severity: 'CRITICAL',
+  });
+}
+
+/** An admin approves a PENDING payout: it is sent now. */
+export async function approvePayout(payoutId: string, adminId: string) {
+  const payout = await prisma.payout.findUnique({ where: { id: payoutId }, select: { status: true, sellerId: true } });
+  if (!payout) throw ApiError.notFound('Payout not found');
+  if (payout.status !== 'PENDING') throw ApiError.badRequest(`This payout is ${payout.status.toLowerCase()}, not waiting for approval`, 'PAYOUT_NOT_PENDING');
+  // The checks that applied at request still apply at approval: a seller
+  // suspended, or whose bank account changed, in between is not paid.
+  const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: payout.sellerId }, select: { status: true } });
+  if (seller.status !== 'APPROVED') throw ApiError.badRequest('The seller is not active — reject this payout instead', 'SELLER_NOT_PAYABLE');
+  const block = (await panBlockFor(payout.sellerId)) ?? (await bankBlockFor(payout.sellerId)) ?? (await gstinBlockFor(payout.sellerId));
+  if (block) throw ApiError.badRequest(`Not payable now: ${block.reason}`, block.code);
+  const marked = await prisma.payout.updateMany({
+    where: { id: payoutId, status: 'PENDING' },
+    data: { reviewedById: adminId, reviewedAt: new Date() },
+  });
+  if (marked.count === 0) throw ApiError.badRequest('This payout was just handled by someone else', 'PAYOUT_NOT_PENDING');
+  return sendPayout(payoutId);
+}
+
+/** An admin rejects a PENDING payout: nothing is sent and the money is back in the seller's balance. */
+export async function rejectPayout(payoutId: string, adminId: string, reason: string) {
+  const payout = await prisma.payout.findUnique({ where: { id: payoutId }, include: { seller: { select: { userId: true } } } });
+  if (!payout) throw ApiError.notFound('Payout not found');
+  const done = await prisma.$transaction(async (tx) => {
+    const claim = await tx.payout.updateMany({
+      where: { id: payoutId, status: 'PENDING' },
+      data: { status: 'REJECTED', reviewedById: adminId, reviewedAt: new Date(), rejectionReason: reason },
+    });
+    if (claim.count === 0) return false;
+    await releasePayout(tx, payout, 'was not approved');
+    return true;
+  });
+  if (!done) throw ApiError.badRequest('This payout is no longer waiting for approval', 'PAYOUT_NOT_PENDING');
+  await prisma.notification.create({
+    data: {
+      userId: payout.seller.userId,
+      type: 'PAYOUT_FAILED',
+      title: 'Payout not approved',
+      body: `${payout.reference} (₹${(payout.netPaise / 100).toLocaleString('en-IN')}) was not approved: ${reason}. The amount is back in your balance.`,
+      linkHref: '/seller/payouts',
+    },
+  });
+  return prisma.payout.findUniqueOrThrow({ where: { id: payoutId } });
+}
+
+/**
+ * Ask the provider about a PROCESSING payout and apply the answer: the payout
+ * webhook and the poller both end here. A transfer the provider never
+ * received is sent again under the same transfer id.
+ */
+export async function syncPayout(payoutId: string): Promise<void> {
+  const payout = await prisma.payout.findUnique({ where: { id: payoutId } });
+  if (!payout || !payoutProvider.getTransfer) return;
+  // A PAID one is asked about too when a webhook says so: it may be a reversal.
+  if (payout.status !== 'PROCESSING' && payout.status !== 'PAID') return;
+  await prisma.payout.update({ where: { id: payoutId }, data: { lastCheckedAt: new Date() } });
+  const transfer = await payoutProvider.getTransfer(payout.transferId ?? transferIdFor(payout.reference));
+  if (transfer) {
+    await applyTransfer(payoutId, transfer);
+    return;
+  }
+  if (payout.status === 'PROCESSING') await transferPayout(payoutId);
+}
+
+/** The payout behind a provider transfer id. */
+export async function payoutByTransferId(transferId: string): Promise<string | null> {
+  const payout = await prisma.payout.findUnique({ where: { transferId }, select: { id: true } });
+  return payout?.id ?? null;
+}
+
+const PAYOUT_POLL_MS = 15 * 60 * 1000;
+const PAYOUT_RECHECK_MS = 10 * 60 * 1000;
+
+export async function pollProcessingPayouts(now: Date = new Date()): Promise<number> {
+  if (!payoutProvider.getTransfer) return 0;
+  const stale = new Date(now.getTime() - PAYOUT_RECHECK_MS);
+  const due = await prisma.payout.findMany({
+    where: { status: 'PROCESSING', OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lt: stale } }] },
+    select: { id: true },
+    orderBy: { requestedAt: 'asc' },
+    take: 100,
+  });
+  for (const p of due) {
+    try {
+      await syncPayout(p.id);
+    } catch (err) {
+      console.error(`[clowe-api] payout poll ${p.id}:`, err instanceof Error ? err.message : err);
+    }
+  }
+  return due.length;
+}
+
+export function startPayoutPoller(): () => void {
+  let running = false;
+  const run = () => {
+    if (running) return;
+    running = true;
+    pollProcessingPayouts()
+      .catch((err) => console.error('[clowe-api] payout poll failed:', err))
+      .finally(() => {
+        running = false;
+      });
+  };
+  const timer = setInterval(run, PAYOUT_POLL_MS);
+  timer.unref();
+  return () => clearInterval(timer);
 }
 
 export function describeMethod(method: {

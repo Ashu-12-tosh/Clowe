@@ -60,11 +60,33 @@ const envSchema = z.object({
   ADMIN_PHONE: blankAsUnset(z.string().regex(/^[6-9]\d{9}$/).optional()),
 
   // --- Payments ---
-  // 'mock' settles payments via a fake pay button (dev). 'razorpay' uses test/live keys.
-  PAYMENT_PROVIDER: z.enum(['mock', 'razorpay']).default('mock'),
+  // 'mock' settles payments via a fake pay button (dev). 'razorpay' and
+  // 'cashfree' use test/live keys.
+  PAYMENT_PROVIDER: z.enum(['mock', 'razorpay', 'cashfree']).default('mock'),
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
+  // Cashfree Payment Gateway. Sandbox never moves money; production only with
+  // NODE_ENV=production. The secret also signs the gateway's webhooks.
+  CASHFREE_PG_ENV: blankAsUnset(z.enum(['sandbox', 'production']).default('sandbox')),
+  CASHFREE_PG_CLIENT_ID: optionalSecret,
+  CASHFREE_PG_CLIENT_SECRET: optionalSecret,
+  // How seller money reaches sellers: 'payouts' — collected into Clowe's
+  // settlement and paid by Cashfree Payouts after the hold; 'easy_split' —
+  // each seller's share split to their Cashfree vendor account at payment and
+  // released after the hold (needs Easy Split active on the account).
+  SETTLEMENT_MODE: blankAsUnset(z.enum(['payouts', 'easy_split']).default('payouts')),
+
+  // --- Seller payouts ---
+  // 'mock' settles instantly with a fake UTR; 'cashfree' sends real transfers
+  // through Cashfree Payouts (its own keys, its own environment).
+  PAYOUT_PROVIDER: blankAsUnset(z.enum(['mock', 'cashfree']).default('mock')),
+  CASHFREE_PAYOUT_ENV: blankAsUnset(z.enum(['sandbox', 'production']).default('sandbox')),
+  CASHFREE_PAYOUT_CLIENT_ID: optionalSecret,
+  CASHFREE_PAYOUT_CLIENT_SECRET: optionalSecret,
+  // Only when the server's IP is not allowlisted: the PEM public key Cashfree
+  // issues for signature 2FA, on one line with literal \n for line breaks.
+  CASHFREE_PAYOUT_PUBLIC_KEY: optionalSecret,
 
   // --- Returns ---
   // Customers can request a return up to this many days after delivery.
@@ -210,6 +232,48 @@ export const envRules = envSchema
         code: 'custom',
         path: ['DELHIVERY_API_TOKEN'],
         message: 'SHIPPING_PROVIDER=delhivery requires DELHIVERY_API_TOKEN',
+      });
+    }
+    // Live Cashfree (money that is real) only from the production server, and
+    // never from a test run, whatever keys happen to be in the environment.
+    for (const [key, value] of [
+      ['CASHFREE_PG_ENV', e.CASHFREE_PG_ENV],
+      ['CASHFREE_PAYOUT_ENV', e.CASHFREE_PAYOUT_ENV],
+      ['CASHFREE_VERIFICATION_ENV', e.CASHFREE_VERIFICATION_ENV],
+    ] as const) {
+      if (value === 'production' && e.NODE_ENV !== 'production') {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: `${key}=production is only allowed on the production server (NODE_ENV=production)`,
+        });
+      }
+    }
+    if (e.NODE_ENV === 'test' && e.PAYMENT_PROVIDER !== 'mock') {
+      ctx.addIssue({ code: 'custom', path: ['PAYMENT_PROVIDER'], message: 'Tests run on the mock gateway only' });
+    }
+    if (e.NODE_ENV === 'test' && e.PAYOUT_PROVIDER !== 'mock') {
+      ctx.addIssue({ code: 'custom', path: ['PAYOUT_PROVIDER'], message: 'Tests run on the mock payouts only' });
+    }
+    if (e.PAYMENT_PROVIDER === 'cashfree' && (!e.CASHFREE_PG_CLIENT_ID || !e.CASHFREE_PG_CLIENT_SECRET)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['CASHFREE_PG_CLIENT_ID'],
+        message: 'PAYMENT_PROVIDER=cashfree requires CASHFREE_PG_CLIENT_ID and CASHFREE_PG_CLIENT_SECRET',
+      });
+    }
+    if (e.PAYOUT_PROVIDER === 'cashfree' && (!e.CASHFREE_PAYOUT_CLIENT_ID || !e.CASHFREE_PAYOUT_CLIENT_SECRET)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['CASHFREE_PAYOUT_CLIENT_ID'],
+        message: 'PAYOUT_PROVIDER=cashfree requires CASHFREE_PAYOUT_CLIENT_ID and CASHFREE_PAYOUT_CLIENT_SECRET',
+      });
+    }
+    if (e.SETTLEMENT_MODE === 'easy_split' && e.PAYMENT_PROVIDER !== 'cashfree') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SETTLEMENT_MODE'],
+        message: 'SETTLEMENT_MODE=easy_split needs PAYMENT_PROVIDER=cashfree',
       });
     }
     if (e.NODE_ENV === 'production' && (!e.KYC_FINGERPRINT_SECRET || e.KYC_FINGERPRINT_SECRET.length < 32)) {

@@ -21,38 +21,55 @@ export async function generateOrderNumber(): Promise<string> {
   throw new Error('Could not generate a unique order number');
 }
 
+/** What settling a successful payment did. */
+export type SettleSuccessResult =
+  /** This call marked it PAID and confirmed the order. */
+  | 'SETTLED'
+  /** It was already PAID (the webhook and the browser raced; one of them won). */
+  | 'ALREADY_PAID'
+  /** The order had already been cancelled for want of payment: the money arrived late. */
+  | 'LATE'
+  /** No such order or payment. */
+  | 'MISSING';
+
 /**
  * Settle a successful payment: mark PAID, confirm the order + items,
- * clear the buyer's cart, notify buyer and sellers. Idempotent.
+ * clear the buyer's cart, notify buyer and sellers. Idempotent and safe to
+ * race: the payment row is claimed with a conditional update (CREATED → PAID)
+ * inside the transaction, so of two callers arriving together exactly one
+ * goes on to grant credits, rewards and notifications.
  */
-export async function settlePaymentSuccess(orderId: string, providerPaymentId?: string) {
+export async function settlePaymentSuccess(orderId: string, providerPaymentId?: string): Promise<SettleSuccessResult> {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: { payment: true, items: true },
   });
-  if (!order || !order.payment) return;
-  if (order.payment.status === 'PAID') return; // already settled (webhook + verify race)
+  if (!order || !order.payment) return 'MISSING';
+  if (order.payment.status === 'PAID' || order.payment.status === 'REFUNDED') return 'ALREADY_PAID';
+  if (order.payment.status === 'FAILED') return 'LATE';
+  const paymentId = order.payment.id;
 
-  await prisma.$transaction([
-    prisma.payment.update({
-      where: { id: order.payment.id },
+  const claimed = await prisma.$transaction(async (tx) => {
+    const claim = await tx.payment.updateMany({
+      where: { id: paymentId, status: 'CREATED' },
       data: { status: 'PAID', providerPaymentId: providerPaymentId ?? null, paidAt: new Date() },
-    }),
-    prisma.order.update({ where: { id: order.id }, data: { status: 'CONFIRMED' } }),
-    prisma.orderItem.updateMany({
+    });
+    if (claim.count === 0) return false;
+    await tx.order.update({ where: { id: order.id }, data: { status: 'CONFIRMED' } });
+    await tx.orderItem.updateMany({
       where: { orderId: order.id },
       data: { status: 'CONFIRMED' },
-    }),
+    });
     // Clear only what was actually bought — lines the shopper left unticked
     // stay in the cart. The coupon is spent, so it comes off too.
-    prisma.cartItem.deleteMany({
+    await tx.cartItem.deleteMany({
       where: {
         cart: { userId: order.userId },
         variantId: { in: order.items.map((i) => i.variantId) },
       },
-    }),
-    prisma.cart.updateMany({ where: { userId: order.userId }, data: { couponCode: null } }),
-    prisma.notification.create({
+    });
+    await tx.cart.updateMany({ where: { userId: order.userId }, data: { couponCode: null } });
+    await tx.notification.create({
       data: {
         userId: order.userId,
         type: 'ORDER_CONFIRMED',
@@ -60,8 +77,14 @@ export async function settlePaymentSuccess(orderId: string, providerPaymentId?: 
         body: `Payment received for ${order.orderNumber}. We'll update you when it ships.`,
         linkHref: `/orders/${order.id}/confirmation`,
       },
-    }),
-  ]);
+    });
+    return true;
+  });
+  if (!claimed) {
+    // Someone else moved it first: report what it is now.
+    const now = await prisma.payment.findUnique({ where: { id: paymentId }, select: { status: true } });
+    return now?.status === 'FAILED' ? 'LATE' : 'ALREADY_PAID';
+  }
 
   attributeAdsSafe(order.id);
 
@@ -124,6 +147,7 @@ export async function settlePaymentSuccess(orderId: string, providerPaymentId?: 
   }
 
   await creditReferralIfFirstPaidOrder(order.userId);
+  return 'SETTLED';
 }
 
 /**
@@ -184,56 +208,58 @@ async function creditReferralIfFirstPaidOrder(userId: string) {
 /**
  * Fail/cancel an unpaid order and put reserved stock back. Idempotent.
  */
-export async function settlePaymentFailure(orderId: string, reason: string) {
+export async function settlePaymentFailure(orderId: string, reason: string): Promise<boolean> {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: { payment: true, items: true },
   });
-  if (!order || !order.payment) return;
-  if (order.payment.status !== 'CREATED') return; // only unpaid orders can fail
+  if (!order || !order.payment) return false;
+  if (order.payment.status !== 'CREATED') return false; // only unpaid orders can fail
+  const paymentId = order.payment.id;
 
-  await prisma.$transaction([
-    prisma.payment.update({
-      where: { id: order.payment.id },
+  // Claimed with a conditional update, like a success: a payment that turned
+  // PAID a moment ago is never cancelled, and stock is never returned twice.
+  const claimed = await prisma.$transaction(async (tx) => {
+    const claim = await tx.payment.updateMany({
+      where: { id: paymentId, status: 'CREATED' },
       data: { status: 'FAILED', failureReason: reason },
-    }),
-    prisma.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } }),
-    prisma.orderItem.updateMany({ where: { orderId: order.id }, data: { status: 'CANCELLED' } }),
+    });
+    if (claim.count === 0) return false;
+    await tx.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
+    await tx.orderItem.updateMany({ where: { orderId: order.id }, data: { status: 'CANCELLED' } });
     // Restore reserved stock.
-    ...order.items.map((item) =>
-      prisma.productVariant.update({
+    for (const item of order.items) {
+      await tx.productVariant.update({
         where: { id: item.variantId },
         data: { stock: { increment: item.quantity } },
-      }),
-    ),
+      });
+    }
     // Release the coupon redemption reserved at checkout.
-    ...(order.couponCode && order.couponDiscountPaise > 0
-      ? [
-          prisma.coupon.updateMany({
-            where: { code: order.couponCode, usedCount: { gt: 0 } },
-            data: { usedCount: { decrement: 1 } },
-          }),
-        ]
-      : []),
+    if (order.couponCode && order.couponDiscountPaise > 0) {
+      await tx.coupon.updateMany({
+        where: { code: order.couponCode, usedCount: { gt: 0 } },
+        data: { usedCount: { decrement: 1 } },
+      });
+    }
     // Give back any credits that were reserved for the discount.
-    ...(order.creditsUsed > 0
-      ? [
-          prisma.user.update({
-            where: { id: order.userId },
-            data: { creditsBalance: { increment: order.creditsUsed } },
-          }),
-          prisma.creditLedger.create({
-            data: {
-              userId: order.userId,
-              delta: order.creditsUsed,
-              reason: 'REFUND_CREDITS',
-              orderId: order.id,
-              expiresAt: creditExpiryFrom(),
-            },
-          }),
-        ]
-      : []),
-  ]);
+    if (order.creditsUsed > 0) {
+      await tx.user.update({
+        where: { id: order.userId },
+        data: { creditsBalance: { increment: order.creditsUsed } },
+      });
+      await tx.creditLedger.create({
+        data: {
+          userId: order.userId,
+          delta: order.creditsUsed,
+          reason: 'REFUND_CREDITS',
+          orderId: order.id,
+          expiresAt: creditExpiryFrom(),
+        },
+      });
+    }
+    return true;
+  });
+  if (!claimed) return false;
 
   // Reserved units are back on the variant; return them to the warehouse they
   // were allocated from so the location rows stay in step.
@@ -247,6 +273,7 @@ export async function settlePaymentFailure(orderId: string, reason: string) {
       });
     }
   });
+  return true;
 }
 
 /**

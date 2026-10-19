@@ -26,7 +26,7 @@ const BENEFITS = [
   {
     icon: '💰',
     title: 'Secure & fast payments',
-    text: 'Payments are collected securely via Razorpay (UPI, cards, netbanking) and tracked transparently in your dashboard.',
+    text: 'Payments are collected securely via Cashfree (UPI, cards, netbanking) and tracked transparently in your dashboard.',
   },
   {
     icon: '🚚',

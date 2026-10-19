@@ -29,6 +29,9 @@ import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { getSettings } from '../services/settingsService';
 import { gstr8Rows } from '../services/gstr8';
+import { ApiError } from '../utils/ApiError';
+import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
+import { retryRefund } from '../services/refundService';
 
 export const adminPaymentsRouter = Router();
 adminPaymentsRouter.use(requireAuth, requireRole('ADMIN'));
@@ -56,7 +59,8 @@ function refundStatusOf(status: string): TransactionStatus {
 
 function payoutStatusOf(status: string): TransactionStatus {
   if (status === 'PAID') return 'SUCCESS';
-  if (status === 'FAILED') return 'FAILED';
+  // Rejected by an admin, or returned by the bank: no money with the seller.
+  if (status === 'FAILED' || status === 'REJECTED' || status === 'REVERSED') return 'FAILED';
   return 'PENDING';
 }
 
@@ -1110,6 +1114,47 @@ adminPaymentsRouter.get('/settlement/export', async (req, res, next) => {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="settlement-report.csv"');
     res.send(`${header}\n${body}`);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Retry a failed gateway refund
+// ---------------------------------------------------------------------------
+
+// POST /api/admin/payments/refunds/:id/retry — send a FAILED refund to the gateway again (as a new gateway refund).
+adminPaymentsRouter.post('/refunds/:id/retry', async (req, res, next) => {
+  try {
+    const before = await prisma.refund.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, amountPaise: true, failureReason: true, order: { select: { orderNumber: true } } },
+    });
+    if (!before) throw ApiError.notFound('Refund not found');
+    let after: { id: string; status: string };
+    try {
+      after = await retryRefund(before.id);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : '';
+      if (reason === 'NOT_FAILED') throw ApiError.badRequest('Only a failed refund can be retried', 'REFUND_NOT_FAILED');
+      if (reason === 'NOT_A_GATEWAY_REFUND') throw ApiError.badRequest('A COD refund is paid by bank transfer — use COD refunds', 'NOT_A_GATEWAY_REFUND');
+      throw err;
+    }
+    auditSafe({
+      actorId: req.auth!.userId,
+      actorRole: 'ADMIN',
+      module: 'PAYMENTS',
+      action: 'Refund retried',
+      entityType: 'Refund',
+      entityId: before.id,
+      summary: `Retried the refund of ₹${(before.amountPaise / 100).toFixed(2)} on ${before.order.orderNumber} (was: ${before.failureReason ?? 'failed'}) — now ${after.status}`,
+      metadata: { previousFailure: before.failureReason, status: after.status },
+      severity: 'HIGH',
+      ipAddress: ipFrom(req),
+      userAgent: req.get('user-agent') ?? null,
+      deviceType: deviceFromUserAgent(req.get('user-agent')),
+    });
+    res.json({ success: true, data: after });
   } catch (err) {
     next(err);
   }

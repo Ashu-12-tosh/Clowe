@@ -106,6 +106,9 @@ describe('the TCS ledger entry', () => {
 describe('payouts', () => {
   it('carry TCS in its own column, and still add up', async () => {
     await prisma.platformSetting.upsert({ where: { key: 'payoutHoldDays' }, update: { value: 0 }, create: { key: 'payoutHoldDays', value: 0 } });
+    // No window of its own on this line, so the platform's applies: none here.
+    await prisma.platformSetting.upsert({ where: { key: 'returnWindowDays' }, update: { value: 0 }, create: { key: 'returnWindowDays', value: 0 } });
+    await prisma.platformSetting.upsert({ where: { key: 'payoutAutoApprove' }, update: { value: true }, create: { key: 'payoutAutoApprove', value: true } });
     const s = await seller();
     await delivered(s, 'Maharashtra', new Date(Date.now() - 60_000));
     await prisma.sellerPayoutMethod.create({
@@ -118,7 +121,7 @@ describe('payouts', () => {
     expect(row.grossPaise - row.commissionPaise - row.gatewayPaise - row.otherFeesPaise - row.tdsPaise - row.tcsPaise - row.adjustmentPaise).toBe(
       row.netPaise,
     );
-    await prisma.platformSetting.deleteMany({ where: { key: 'payoutHoldDays' } });
+    await prisma.platformSetting.deleteMany({ where: { key: { in: ['payoutHoldDays', 'returnWindowDays', 'payoutAutoApprove'] } } });
   });
 
   it('reconcile, including one that recovered ad spend; a wrong one is still flagged', async () => {

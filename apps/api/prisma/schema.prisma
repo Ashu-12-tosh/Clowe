@@ -144,6 +144,9 @@ enum RefundStatus {
   PENDING
   PROCESSED
   FAILED
+  // Accepted by the gateway, not final yet (Cashfree refunds settle later):
+  // the webhook or the refund poller moves it to PROCESSED or FAILED.
+  PROCESSING
 }
 
 enum ReferralStatus {
@@ -158,10 +161,14 @@ enum TryOnStatus {
 }
 
 enum PayoutStatus {
-  PENDING // requested by the seller, not yet sent to the bank
+  PENDING // requested by the seller, waiting for an admin's approval (or about to be sent)
   PROCESSING // handed to the payout provider
   PAID // money credited (UTR recorded)
   FAILED
+  // Appended: an admin turned the request down; its lines are payable again.
+  REJECTED
+  // The bank sent a paid transfer back; its lines are payable again.
+  REVERSED
 }
 
 enum PayoutMethodType {
@@ -328,6 +335,7 @@ model User {
   stockTransfers       StockTransfer[]    @relation("StockTransferAuthor")
   ordersPlacedForOthers Order[]           @relation("OrderPlacedByAdmin")
   refundsIssued         Refund[]          @relation("RefundIssuedByAdmin")
+  payoutsReviewed       Payout[]          @relation("PayoutReviewedBy")
 
   @@map("users")
   assets      Asset[]
@@ -370,6 +378,9 @@ model CreditPurchase {
   providerOrderId   String?
   providerPaymentId String?
   status            CreditPurchaseStatus @default(CREATED)
+  // Cashfree: what the browser checkout opens, and when the gateway order expires.
+  paymentSessionId  String?
+  expiresAt         DateTime?
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 
@@ -456,6 +467,13 @@ model SellerProfile {
   // the account type and a cancelled cheque (private asset ref) to verify it.
   // bankAccountNo is the old plain column and stays empty for new entries.
   bankAccountEnc   String?
+  // Cashfree Easy Split vendor (SETTLEMENT_MODE=easy_split): its id at
+  // Cashfree, its last known status (ACTIVE, IN_BENE_CREATION, …) and when
+  // that was read.
+  cashfreeVendorId       String?   @unique
+  cashfreeVendorStatus   String?
+  cashfreeVendorSyncedAt DateTime?
+  paymentSplits          PaymentSplit[]
   bankAccountLast4 String?
   bankAccountType  String?
   bankChequeDoc    String?
@@ -783,6 +801,9 @@ model SellerPayoutMethod {
   // Penny-drop verification (mock in dev).
   verified     Boolean         @default(false)
   verifiedAt   DateTime?
+  // The beneficiary registered with the payout provider for this account
+  // (Cashfree Payouts), created on the first transfer to it.
+  beneficiaryId String?
   createdAt    DateTime        @default(now())
 
   payouts Payout[]
@@ -820,12 +841,28 @@ model Payout {
   failureReason String?
   requestedAt   DateTime            @default(now())
   processedAt   DateTime?
+  // The id the transfer is sent under (letters, digits, underscore — what
+  // Cashfree accepts). Fixed at creation, so a resend after a timeout can
+  // never become a second transfer.
+  transferId         String?   @unique
+  // The provider's own id and raw status, for support and reconciliation.
+  providerTransferId String?
+  providerStatus     String?
+  // Who approved or rejected it, when, and why it was rejected.
+  reviewedById    String?
+  reviewedBy      User?     @relation("PayoutReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt      DateTime?
+  rejectionReason String?
+  // Last time the poller asked the provider about a PROCESSING transfer.
+  lastCheckedAt   DateTime?
+  reversedAt      DateTime?
 
   items OrderItem[]
   ads   Ad[]
   ledgerEntries SellerLedgerEntry[]
 
   @@index([sellerId, requestedAt])
+  @@index([status, requestedAt])
   @@map("payouts")
 }
 
@@ -1490,6 +1527,10 @@ model OrderItem {
   // change to the platform, category or seller window never moves it. Null
   // only on rows written without checkout (tests): those use today's rule.
   returnWindowDays Int?
+  // Easy Split: this line's share sent to the seller's Cashfree vendor with
+  // the gateway order (what the seller receives for it, as at checkout).
+  // Null when the order was collected into Clowe's account.
+  easySplitPaise   Int?
   // Whether this line could be returned when it was sold, fixed at checkout
   // like the window. Null: rows written without checkout use today's rule.
   returnable Boolean?
@@ -1673,10 +1714,51 @@ model Payment {
   // When the money was taken: the gateway confirmed it, or a COD order was
   // delivered and paid. Kept when the payment is later refunded.
   paidAt            DateTime?
+  // Cashfree: what the browser checkout opens, and when the gateway order
+  // stops accepting payment. Null for other providers.
+  paymentSessionId  String?
+  expiresAt         DateTime?
+  // Last time the sweeper asked the gateway about this unpaid order.
+  lastCheckedAt     DateTime?
+  // How the sellers' shares are settled: 'payouts', or 'easy_split' when the
+  // gateway order carried vendor splits.
+  settlementMode    String        @default("payouts")
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
+  splits PaymentSplit[]
+
+  @@index([providerOrderId])
+  @@index([status, createdAt])
   @@map("payments")
+}
+
+/// One seller's share of a payment under Easy Split: the amount sent to the
+/// seller's Cashfree vendor with the gateway order, and when it is released
+/// (after delivery plus the hold) or taken back (a refund's vendor portion).
+model PaymentSplit {
+  id            String        @id @default(cuid())
+  paymentId     String
+  payment       Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  sellerId      String
+  seller        SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  vendorId      String
+  amountPaise   Int
+  // Taken back from the vendor by refunds so far.
+  refundedPaise Int           @default(0)
+  // HELD (deferred at Cashfree), RELEASED (eligibility moved to now),
+  // SETTLED (Cashfree paid the vendor), CLAWED_BACK (refunded in full first).
+  status        String        @default("HELD")
+  releasedAt    DateTime?
+  settledAt     DateTime?
+  // Vendor settlement reference (UTR) once Cashfree pays the vendor.
+  utr           String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([paymentId, sellerId])
+  @@index([status])
+  @@map("payment_splits")
 }
 
 // ---------------------------------------------------------------------------
@@ -1807,10 +1889,24 @@ model Refund {
   order            Order        @relation(fields: [orderId], references: [id])
   amountPaise      Int
   provider         String
-  providerRefundId String? // razorpay refund id (rfnd_…) / mock id
+  providerRefundId String? // razorpay refund id (rfnd_…) / Cashfree cf_refund_id / mock id
   status           RefundStatus @default(PENDING)
   failureReason    String?
   processedAt      DateTime?
+  // The gateway's raw status (Cashfree: PENDING, SUCCESS, ONHOLD, …) and the
+  // bank's reference for the credit (ARN), shown to the buyer once known.
+  providerStatus   String?
+  arn              String?
+  // Sent to the gateway (PROCESSING since), and last asked about by the poller.
+  submittedAt      DateTime?
+  lastCheckedAt    DateTime?
+  // Times it was sent again after failing; the gateway refund id gets this
+  // suffix (R1, R2, …) so a retry is a new refund to the gateway, never a
+  // replay of the one it refused.
+  attempts         Int          @default(0)
+  // Easy Split: what this refund takes back from each seller's vendor share,
+  // [{ sellerId, vendorId, amountPaise }], fixed when it is sent.
+  vendorSplits     Json?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
@@ -2669,6 +2765,10 @@ enum SellerLedgerType {
   SPONSORSHIP_FEE // - sponsorship placements
   TRYON_CREDITS // - AI Try-On credit packs
   AD_CREDIT_GRANT // + advertising credit given (welcome, plan) — usable only on ads
+  // - the seller's share of a delivered line that Cashfree Easy Split holds
+  // for (and pays to) the seller's vendor account, not Clowe: it never
+  // passes through a Clowe payout, so it comes off what Clowe owes.
+  EASY_SPLIT_SHARE
 }
 
 /// Settlement money can be paid out; promotion credits never can. Keeping them
@@ -2739,6 +2839,9 @@ model PromotionCreditPurchase {
   providerOrderId   String?
   providerPaymentId String?
   status            CreditPurchaseStatus @default(CREATED)
+  // Cashfree: what the browser checkout opens, and when the gateway order expires.
+  paymentSessionId  String?
+  expiresAt         DateTime?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
@@ -2995,4 +3098,23 @@ model ProductSlugRedirect {
 
   @@index([productId])
   @@map("product_slug_redirects")
+}
+
+/// Every gateway or payout webhook that passed its signature check, once.
+/// The key is Cashfree's x-idempotency-key (or a hash of the raw body), so a
+/// redelivery is recognised and acknowledged without being handled twice.
+/// What a webhook says is never trusted on its own: handling it means asking
+/// the provider's API for the current state.
+model GatewayWebhookEvent {
+  id         String   @id @default(cuid())
+  provider   String // 'cashfree-pg' | 'cashfree-payouts'
+  eventKey   String
+  type       String
+  // The order, refund or transfer id the event is about.
+  reference  String?
+  receivedAt DateTime @default(now())
+
+  @@unique([provider, eventKey])
+  @@index([receivedAt])
+  @@map("gateway_webhook_events")
 }

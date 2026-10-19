@@ -45,6 +45,7 @@ export const DELIVERY_ENTRY_TYPES: readonly SellerLedgerTypeValue[] = [
   'GST_TCS',
   'HANDLING_FEE',
   'CLOWE_FEE_GST',
+  'EASY_SPLIT_SHARE',
 ];
 
 export interface PostEntryInput {
@@ -138,8 +139,11 @@ export async function postDeliveryEntries(orderItemId: string, db: Db = prisma):
       status: true,
       feeModel: true,
       feeRates: true,
+      easySplitPaise: true,
+      title: true,
       product: { select: { categoryId: true } },
       replacementOf: { select: { deliveredAt: true } },
+      order: { select: { payment: { select: { splits: { select: { sellerId: true, status: true } } } } } },
     },
   });
   if (!item || item.status !== 'DELIVERED') return 0;
@@ -181,6 +185,23 @@ export async function postDeliveryEntries(orderItemId: string, db: Db = prisma):
         chargeType: l.ledgerType === 'CLOWE_FEE_GST' ? 'ORDER_FEES' : null,
       }),
     );
+  // Easy Split: the seller's share of this line is held for them at Cashfree,
+  // not by Clowe, so it comes off what Clowe owes — unless the hold lapsed and
+  // Cashfree settled it to Clowe after all, when Clowe pays it out as usual.
+  const split = item.order.payment?.splits.find((s) => s.sellerId === item.sellerId);
+  if (item.easySplitPaise && item.easySplitPaise > 0 && split && split.status !== 'LAPSED') {
+    rows.push(
+      toRow({
+        sellerId: item.sellerId,
+        type: 'EASY_SPLIT_SHARE',
+        bucket: 'SETTLEMENT',
+        amountPaise: -item.easySplitPaise,
+        orderId: item.orderId,
+        orderItemId: item.id,
+        note: `"${item.title}": your share, paid to your bank by Cashfree after the return window`,
+      }),
+    );
+  }
   if (rows.length === 0) return 0;
   const { count } = await db.sellerLedgerEntry.createMany({ data: rows, skipDuplicates: true });
   return count;
@@ -459,27 +480,40 @@ export async function penaltiesView(
 // ---------------------------------------------------------------------------
 
 /**
- * Settle a top-up once the gateway says it is paid (providerPaymentId) or
- * failed (null). The status flip and the ledger credit happen together, and
- * the (purchaseId, type) pair means a replayed callback credits nothing.
+ * Settle a seller's wallet top-up: credit the promotion bucket once. The
+ * purchase is claimed with a conditional update, so a webhook and the
+ * seller's browser arriving together credit it once; the (purchaseId, type)
+ * pair on the ledger backs that up.
+ *
+ * `allowLate` (the gateway sync): a success that arrives after the purchase
+ * was marked FAILED is honoured — the money was taken, and a wallet top-up
+ * has nothing to give back — and an already-settled purchase is not an error.
  */
 export async function settlePromotionPurchase(
   purchaseId: string,
   providerPaymentId: string | null,
+  opts: { allowLate?: boolean } = {},
 ): Promise<'PAID' | 'FAILED'> {
+  const settled = () => ApiError.badRequest('This purchase is already settled', 'PURCHASE_SETTLED');
   return prisma.$transaction(async (tx) => {
     const purchase = await tx.promotionCreditPurchase.findUniqueOrThrow({ where: { id: purchaseId } });
-    if (purchase.status !== 'CREATED') {
-      throw ApiError.badRequest('This purchase is already settled', 'PURCHASE_SETTLED');
-    }
     if (!providerPaymentId) {
-      await tx.promotionCreditPurchase.update({ where: { id: purchaseId }, data: { status: 'FAILED' } });
-      return 'FAILED';
+      const failed = await tx.promotionCreditPurchase.updateMany({
+        where: { id: purchaseId, status: 'CREATED' },
+        data: { status: 'FAILED' },
+      });
+      if (failed.count === 1) return 'FAILED';
+      if (opts.allowLate) return purchase.status === 'PAID' ? 'PAID' : 'FAILED';
+      throw settled();
     }
-    await tx.promotionCreditPurchase.update({
-      where: { id: purchaseId },
+    const claim = await tx.promotionCreditPurchase.updateMany({
+      where: { id: purchaseId, status: { in: opts.allowLate ? ['CREATED', 'FAILED'] : ['CREATED'] } },
       data: { status: 'PAID', providerPaymentId },
     });
+    if (claim.count === 0) {
+      if (opts.allowLate) return 'PAID';
+      throw settled();
+    }
     await postEntry(
       {
         sellerId: purchase.sellerId,
@@ -561,6 +595,29 @@ export interface SettlementPosition {
 }
 
 /**
+ * How long a delivered line's money waits: the payout hold, or the line's own
+ * return window when that is longer. `defaultWindowDays` stands in for lines
+ * written without a window of their own (outside checkout).
+ */
+export interface HoldRule {
+  holdDays: number;
+  defaultWindowDays: number;
+}
+
+export function holdRuleOf(hold: number | HoldRule): HoldRule {
+  return typeof hold === 'number' ? { holdDays: hold, defaultWindowDays: 0 } : hold;
+}
+
+/** When a delivered line's money clears. */
+export function lineClearsAt(deliveredAt: Date, returnWindowDays: number | null | undefined, hold: number | HoldRule): Date {
+  const { holdDays, defaultWindowDays } = holdRuleOf(hold);
+  const days = Math.max(holdDays, returnWindowDays ?? defaultWindowDays);
+  const at = new Date(deliveredAt);
+  at.setDate(at.getDate() + days);
+  return at;
+}
+
+/**
  * The settlement bucket split into cleared and clearing. A delivery's entries
  * clear when the line's deliveredAt is older than the hold — and so does a
  * return's reversal of them, so a sale returned within the hold nets to
@@ -572,20 +629,25 @@ export interface SettlementPosition {
  */
 export async function settlementPosition(
   sellerId: string,
-  holdDays: number,
+  hold: number | HoldRule,
   db: Db = prisma,
 ): Promise<SettlementPosition> {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - holdDays);
+  const { holdDays, defaultWindowDays } = holdRuleOf(hold);
+  const now = new Date();
   // A COD line's money is Delhivery's until it remits it: held until the
   // parcel's remittance is matched, as well as through the return window.
+  // Each line is held for the hold or its own return window, whichever is
+  // longer, so nothing is paid out while it can still come back.
   const rows = await db.$queryRaw<{ balance: number; available: number; codAwaiting: number }[]>(Prisma.sql`
     SELECT
       COALESCE(SUM(e."amountPaise"), 0)::int AS balance,
       COALESCE(SUM(
         CASE
           WHEN e.type::text IN (${Prisma.join([...DELIVERY_ENTRY_TYPES, 'RETURN_REVERSAL'])})
-           AND (i."deliveredAt" > ${cutoff} OR (s."paymentType" = 'COD' AND s."codRemittedAt" IS NULL))
+           AND (
+             i."deliveredAt" + make_interval(days => GREATEST(${holdDays}::int, COALESCE(i."returnWindowDays", ${defaultWindowDays}::int))) > ${now}
+             OR (s."paymentType" = 'COD' AND s."codRemittedAt" IS NULL)
+           )
           THEN 0
           ELSE e."amountPaise"
         END

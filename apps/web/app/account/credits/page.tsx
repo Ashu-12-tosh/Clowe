@@ -11,6 +11,7 @@ import {
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
+import { payWithCashfree } from '@/lib/cashfree';
 import {
   BoxIcon,
   CheckIcon,
@@ -104,14 +105,27 @@ export default function CreditsPage() {
     setError('');
     setBusy(true);
     try {
-      setBuying(
-        await api<CreditPurchaseResult>('/api/credits/purchase', {
-          body: { packageId: pack.id },
-          auth: true,
-        }),
-      );
+      const purchase = await api<CreditPurchaseResult>('/api/credits/purchase', {
+        body: { packageId: pack.id },
+        auth: true,
+      });
+      if (purchase.payment.provider !== 'cashfree') {
+        setBuying(purchase);
+        return;
+      }
+      // Cashfree: its window, then the server's word on whether it was paid.
+      const r = await payWithCashfree('CREDITS', purchase.purchaseId, purchase.payment);
+      if (r.outcome === 'PAID') {
+        flash(`${purchase.credits + purchase.bonusCredits} credits added to your wallet`);
+        setPage(1);
+        load();
+      } else if (r.outcome === 'PENDING') {
+        window.location.assign(`/checkout/return?kind=CREDITS&id=${encodeURIComponent(purchase.purchaseId)}`);
+      } else {
+        setError(`${r.message ?? 'The payment did not go through.'} No credits were added and nothing was charged.`);
+      }
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not start the purchase');
+      setError(err instanceof ApiRequestError || err instanceof Error ? err.message : 'Could not start the purchase');
     } finally {
       setBusy(false);
     }
@@ -551,7 +565,7 @@ export default function CreditsPage() {
               {buying.bonusCredits > 0 && ` + ${buying.bonusCredits} bonus`}
             </p>
             <p className="t-caption mt-2 text-gray-400">
-              In production this is the Razorpay window.
+              In production this is the payment gateway&apos;s window.
             </p>
             <div className="mt-5 space-y-2">
               <button

@@ -19,6 +19,7 @@ import {
   type CreditsInfo,
   type DeliveryMethod,
   type DeliveryOption,
+  type GatewayCheckout,
   type PaymentMethod,
   type SavedPaymentMethodInfo,
 } from '@clowe/shared';
@@ -26,6 +27,7 @@ import { api, ApiRequestError, getStoredUser } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { LaunchingSoon, useOrdersOpen } from '@/lib/ordersOpen';
 import { getPublicSettings } from '@/lib/settings';
+import { payWithCashfree } from '@/lib/cashfree';
 import CheckoutStepper from '@/components/checkout/CheckoutStepper';
 import {
   BoxIcon,
@@ -128,6 +130,9 @@ function PaymentPageInner() {
 
   const [placing, setPlacing] = useState(false);
   const [mockOrder, setMockOrder] = useState<CheckoutResult | null>(null);
+  // A Cashfree order whose attempt failed: paying again reopens it — the same
+  // order and the same payment — rather than placing a second order.
+  const [gatewayOrder, setGatewayOrder] = useState<{ orderId: string; checkout: GatewayCheckout } | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -187,9 +192,42 @@ function PaymentPageInner() {
     return null;
   }
 
+  /** Cashfree's window, then the server's answer about the payment. */
+  async function runCashfree(orderId: string, checkout: GatewayCheckout) {
+    const r = await payWithCashfree('ORDER', orderId, checkout);
+    if (r.outcome === 'PAID') {
+      router.push(`/orders/${orderId}/confirmation`);
+      return;
+    }
+    if (r.outcome === 'PENDING') {
+      // The bank is still deciding (or the browser went to a UPI app): the
+      // return page keeps asking.
+      router.push(`/checkout/return?kind=ORDER&id=${encodeURIComponent(orderId)}`);
+      return;
+    }
+    if (r.outcome === 'RETRY') {
+      setGatewayOrder({ orderId, checkout: r.checkout ?? checkout });
+      setError(`${r.message ?? 'The payment did not go through.'} Nothing was charged — you can try again.`);
+      return;
+    }
+    setGatewayOrder(null);
+    setError(r.message ?? 'This payment could not be completed. Nothing was charged.');
+  }
+
   async function pay() {
     setError('');
     if (ordersOpen === false) return;
+    if (gatewayOrder) {
+      setPlacing(true);
+      try {
+        await runCashfree(gatewayOrder.orderId, gatewayOrder.checkout);
+      } catch (err) {
+        setError(err instanceof ApiRequestError || err instanceof Error ? err.message : 'Payment failed');
+      } finally {
+        setPlacing(false);
+      }
+      return;
+    }
     if (method === 'UPI' && upiId.trim() && upiState !== 'ok') {
       setError('Check your UPI ID before continuing');
       return;
@@ -223,6 +261,10 @@ function PaymentPageInner() {
         setMockOrder(result);
         return;
       }
+      if (result.payment.provider === 'cashfree') {
+        await runCashfree(result.orderId, { ...result.payment, provider: 'cashfree' });
+        return;
+      }
 
       await loadRazorpayScript();
       if (!window.Razorpay) throw new Error('Could not load Razorpay');
@@ -254,7 +296,7 @@ function PaymentPageInner() {
       });
       rzp.open();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Checkout failed');
+      setError(err instanceof ApiRequestError || err instanceof Error ? err.message : 'Checkout failed');
     } finally {
       setPlacing(false);
     }
@@ -290,7 +332,7 @@ function PaymentPageInner() {
           <p className="t-pdp-price mt-1 text-ink-900">{formatPaise(mockOrder.amountPaise)}</p>
           <p className="t-caption mt-2 text-gray-500">
             Paying by {PAYMENT_METHOD_META[mockOrder.method].label}. In production this is the
-            Razorpay window.
+            payment gateway&apos;s window.
           </p>
           {error && <p className="t-caption mt-3 text-red-600">{error}</p>}
           <div className="mt-6 space-y-2">
@@ -849,9 +891,11 @@ function PaymentPageInner() {
               <LockIcon className="h-4 w-4" />
               {placing
                 ? 'Please wait…'
-                : method === 'COD'
-                  ? `Place Order · ${formatPaise(totalPaise)}`
-                  : `Pay ${formatPaise(totalPaise)} Securely`}
+                : gatewayOrder
+                  ? 'Try the payment again'
+                  : method === 'COD'
+                    ? `Place Order · ${formatPaise(totalPaise)}`
+                    : `Pay ${formatPaise(totalPaise)} Securely`}
             </button>
             <p className="t-caption mt-2 flex items-center justify-center gap-1.5 text-center text-gray-400">
               <ShieldCheckIcon className="h-3.5 w-3.5" />

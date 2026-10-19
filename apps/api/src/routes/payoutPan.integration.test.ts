@@ -32,12 +32,18 @@ beforeAll(async () => {
   });
   adminToken = signAccessToken({ sub: admin.id, role: 'ADMIN' });
   await setSetting('payoutHoldDays', 0);
+  // Lines written here carry no window of their own, so the platform's applies:
+  // cleared at once, and sent without waiting for an admin (approval has its own tests).
+  await setSetting('returnWindowDays', 0);
+  await setSetting('payoutAutoApprove', true);
   server = createApp().listen(0);
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 
 afterAll(async () => {
   await setSetting('payoutHoldDays', DEFAULT_SETTINGS.payoutHoldDays);
+  await setSetting('returnWindowDays', DEFAULT_SETTINGS.returnWindowDays);
+  await setSetting('payoutAutoApprove', DEFAULT_SETTINGS.payoutAutoApprove);
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await prisma.$disconnect();
 });

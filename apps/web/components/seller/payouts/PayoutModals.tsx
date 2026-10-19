@@ -22,6 +22,8 @@ export const PAYOUT_STATUS_STYLES: Record<PayoutStatusValue, string> = {
   PROCESSING: 'bg-blue-100 text-blue-700',
   PAID: 'bg-green-100 text-green-700',
   FAILED: 'bg-red-100 text-red-700',
+  REJECTED: 'bg-gray-100 text-gray-700',
+  REVERSED: 'bg-orange-100 text-orange-700',
 };
 
 export function PayoutStatusPill({ status }: { status: PayoutStatusValue }) {
@@ -306,7 +308,17 @@ export function PayoutDetailDrawer({
               )}
               {payout.processedAt && <> · {new Date(payout.processedAt).toLocaleString('en-IN')}</>}
             </p>
-            {payout.failureReason && (
+            {payout.status === 'PENDING' && (
+              <p className="mt-2 rounded-lg bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+                Clowe reviews every payout before it is sent — usually within one working day.
+              </p>
+            )}
+            {payout.rejectionReason && (
+              <p className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                Not approved: {payout.rejectionReason}. The amount is back in your balance.
+              </p>
+            )}
+            {payout.failureReason && !payout.rejectionReason && (
               <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
                 {payout.failureReason}
               </p>

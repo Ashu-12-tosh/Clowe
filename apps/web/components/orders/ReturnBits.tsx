@@ -59,6 +59,17 @@ export function ReturnTimeline({ info }: { info: ReturnInfo }) {
             <>
               💸 <span className="font-semibold">{formatPaise(info.refund.amountPaise)} refunded</span> — it
               should reflect in your account within 5–7 business days.
+              {info.refund.arn && (
+                <>
+                  {' '}
+                  Bank reference: <span className="font-mono">{info.refund.arn}</span>.
+                </>
+              )}
+            </>
+          ) : info.refund.status === 'PROCESSING' ? (
+            <>
+              💰 Refund of <span className="font-semibold">{formatPaise(info.refund.amountPaise)}</span> is with the
+              bank — expect it within 5–7 business days.
             </>
           ) : (
             <>

@@ -370,16 +370,49 @@ export interface CreditsInfo {
 }
 
 /** Result of starting a top-up — mirrors the order checkout shape. */
+/**
+ * What the browser needs to open a gateway's checkout: Razorpay's public key,
+ * or Cashfree's payment session and which of its environments to open.
+ */
+export interface GatewayCheckout {
+  provider: 'mock' | 'razorpay' | 'cashfree';
+  providerOrderId: string;
+  /** Razorpay public key id — needed by checkout.js on the frontend. */
+  keyId?: string;
+  /** Cashfree: the session the checkout opens. */
+  paymentSessionId?: string;
+  /** Cashfree: sandbox or production checkout. */
+  mode?: 'sandbox' | 'production';
+}
+
+/** The three things paid through the gateway. */
+export const GATEWAY_PAYMENT_KINDS = ['ORDER', 'CREDITS', 'PROMOTION'] as const;
+export type GatewayPaymentKind = (typeof GATEWAY_PAYMENT_KINDS)[number];
+
+/** POST /api/payments/confirm — ask whether a gateway payment went through. */
+export const paymentConfirmSchema = z.object({
+  kind: z.enum(GATEWAY_PAYMENT_KINDS),
+  id: z.string().min(1).max(64),
+});
+
+/**
+ * PAID: done. PENDING: the bank has not answered yet — ask again shortly.
+ * RETRY: that attempt failed, but the same payment can be tried again.
+ * FAILED: it cannot be paid any more (expired, or cancelled).
+ */
+export interface PaymentConfirmResult {
+  outcome: 'PAID' | 'PENDING' | 'RETRY' | 'FAILED';
+  message: string | null;
+  /** To reopen the checkout after RETRY. */
+  checkout: GatewayCheckout | null;
+}
+
 export interface CreditPurchaseResult {
   purchaseId: string;
   credits: number;
   bonusCredits: number;
   amountPaise: number;
-  payment: {
-    provider: 'mock' | 'razorpay';
-    providerOrderId: string;
-    keyId?: string;
-  };
+  payment: GatewayCheckout;
 }
 
 export interface CheckoutResult {
@@ -389,12 +422,7 @@ export interface CheckoutResult {
   /** COD orders are confirmed straight away — there is nothing to pay now. */
   method: PaymentMethod;
   requiresPayment: boolean;
-  payment: {
-    provider: 'mock' | 'razorpay' | 'cod';
-    providerOrderId: string;
-    /** Razorpay public key id — needed by checkout.js on the frontend. */
-    keyId?: string;
-  };
+  payment: Omit<GatewayCheckout, 'provider'> & { provider: GatewayCheckout['provider'] | 'cod' };
 }
 
 export const paymentVerifySchema = z.object({
@@ -524,7 +552,8 @@ export interface ReturnInfo {
   approvedAt: string | null;
   rejectedAt: string | null;
   receivedAt: string | null;
-  refund: { status: string; amountPaise: number; processedAt: string | null } | null;
+  /** arn: the bank's reference for the credit, once the gateway has one. */
+  refund: { status: string; amountPaise: number; processedAt: string | null; arn?: string | null } | null;
 }
 
 export interface OrderDetailItem {

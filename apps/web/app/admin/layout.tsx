@@ -27,6 +27,7 @@ const NAV: DashNavItem[] = [
   { href: '/admin/cod-remittance', label: 'COD remittance', icon: '₹' },
   { href: '/admin/returns', label: 'Returns', icon: '↩' },
   { href: '/admin/cod-refunds', label: 'COD refunds to pay', icon: '🏦' },
+  { href: '/admin/payouts', label: 'Payout approvals', icon: '💸' },
   { href: '/admin/support', label: 'Support inbox', icon: '📮' },
   { href: '/admin/inventory', label: 'Inventory & Warehouse', icon: '🏭' },
   { href: '/admin/ads', label: 'Ads & sponsorship', icon: '📣' },

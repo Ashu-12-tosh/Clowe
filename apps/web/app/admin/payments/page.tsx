@@ -1042,6 +1042,30 @@ export default function AdminPaymentsPage() {
                 Open return
               </Link>
             )}
+            {open.type === 'REFUND' && open.sourceStatus === 'FAILED' && open.gateway !== 'manual-cod' && (
+              <button
+                onClick={() => {
+                  const row = open;
+                  if (!window.confirm(`Send this refund of ${formatPaise(row.amountPaise)} to the gateway again?`)) return;
+                  void api<{ id: string; status: string }>(`/api/admin/payments/refunds/${row.id}/retry`, {
+                    method: 'POST',
+                    auth: true,
+                    success: 'Refund sent again',
+                  })
+                    .then(() => {
+                      setOpen(null);
+                      void loadList();
+                      void loadSummary();
+                    })
+                    .catch(() => {
+                      // Reported by the API client.
+                    });
+                }}
+                className="rounded-lg bg-ink-900 px-4 py-2 text-sm font-semibold text-white hover:bg-ink-800"
+              >
+                Retry refund
+              </button>
+            )}
             {open.type === 'PAYOUT' && (
               <Link
                 href="/admin/sellers"

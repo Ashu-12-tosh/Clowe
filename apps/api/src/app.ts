@@ -1,4 +1,6 @@
 import { courierWebhookRouter } from './routes/courierWebhook';
+import { payoutWebhookRouter } from './routes/payoutWebhook';
+import { adminPayoutsRouter } from './routes/adminPayouts';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -91,7 +93,8 @@ export function createApp() {
   app.use(cors({ origin: corsOrigins, credentials: true }));
   app.use('/api', catalogReadLimiter, globalLimiter);
   app.use(cookieParser());
-  // Keep the raw body around for webhook signature verification (Razorpay).
+  // Keep the raw body around for webhook signature verification (Razorpay,
+  // Cashfree): a signature is over the exact bytes received.
   app.use(
     express.json({
       limit: '1mb',
@@ -177,6 +180,7 @@ export function createApp() {
   app.use('/api/admin/inventory', adminInventoryRouter);
   app.use('/api/admin/orders', adminOrdersRouter);
   app.use('/api/admin/payments', adminPaymentsRouter);
+  app.use('/api/admin/payouts', adminPayoutsRouter);
   app.use('/api/admin/cod-remittances', adminCodRemittanceRouter);
   app.use('/api/admin/shipments', adminShipmentsRouter);
   app.use('/api/admin/returns', adminReturnsRouter);
@@ -189,6 +193,7 @@ export function createApp() {
   app.use('/api/addresses', addressesRouter);
   app.use('/api/orders', ordersRouter);
   app.use('/api/payments', paymentsRouter);
+  app.use('/api/payouts', payoutWebhookRouter);
   app.use('/api/tryon', tryonRouter);
   app.use('/api/products/:productId/reviews', reviewsRouter);
   app.use('/api/ai', aiShoppingRouter);

@@ -57,6 +57,11 @@ export interface PlatformSettings {
   /** Days after delivery before earnings clear (covers the return window). */
   payoutHoldDays: number;
   /**
+   * Off (the default): every payout a seller requests waits for an admin to
+   * approve or reject it before any money moves. On: sent at once.
+   */
+  payoutAutoApprove: boolean;
+  /**
    * The dispatch promise: hours from placement a seller is asked to ship
    * within. Shown on every unshipped order and in seller policies and help.
    */
@@ -269,6 +274,7 @@ export const updateSettingsSchema = z.object({
   gstTcsPercent: z.number().min(0).max(5).optional(),
   payoutMinPaise: z.number().int().min(0).optional(),
   payoutHoldDays: z.number().int().min(0).max(90).optional(),
+  payoutAutoApprove: z.boolean().optional(),
   dispatchSlaHours: z.number().int().min(1).max(336).optional(),
   lateDispatchPenaltyAfterHours: z.number().int().min(1).max(336).optional(),
   gstMeritPercent: z.number().min(0).max(40).optional(),

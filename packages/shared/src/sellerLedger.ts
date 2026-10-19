@@ -39,6 +39,7 @@ export const SELLER_LEDGER_TYPES = [
   'SPONSORSHIP_FEE',
   'TRYON_CREDITS',
   'AD_CREDIT_GRANT',
+  'EASY_SPLIT_SHARE',
 ] as const;
 export type SellerLedgerTypeValue = (typeof SELLER_LEDGER_TYPES)[number];
 
@@ -76,6 +77,7 @@ export const SELLER_LEDGER_TYPE_LABELS: Record<SellerLedgerTypeValue, string> = 
   SPONSORSHIP_FEE: 'Sponsorship',
   TRYON_CREDITS: 'AI Try-On credits',
   AD_CREDIT_GRANT: 'Advertising credit',
+  EASY_SPLIT_SHARE: 'Paid to you via Cashfree',
 };
 
 /**

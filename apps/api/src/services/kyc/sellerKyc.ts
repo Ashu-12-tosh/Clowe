@@ -295,6 +295,36 @@ export async function runSellerKyc(sellerId: string, only?: KycCheckType[]): Pro
   return getSellerKycSummary(sellerId);
 }
 
+/** Provider checks a seller's own edits may start in a day; past it, the Verify button and admins still can. */
+export const AUTO_KYC_DAILY_CHECKS = 6;
+
+/**
+ * Verify a seller's details on their own, without anyone pressing a button:
+ * when they apply, and when they change their PAN, GSTIN or bank account.
+ * Only with a real provider (with the mock an admin decides every check), in
+ * the background (the seller's request never waits on Cashfree), and within
+ * a daily allowance — each changed detail is a new paid check, so a seller
+ * re-typing an account number over and over must not run up the bill. What
+ * was verified before is never paid for again (the fingerprint cache), and
+ * whatever cannot be verified stays with the admin review as before.
+ */
+export function autoVerifySellerKyc(sellerId: string, only?: KycCheckType[]): void {
+  if (reviewMode() !== 'PROVIDER') return;
+  void (async () => {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const today = await prisma.sellerKycCheck.count({ where: { sellerId, provider: kycProvider.name, createdAt: { gte: since } } });
+    if (today >= AUTO_KYC_DAILY_CHECKS) {
+      console.warn(`[clowe-api] KYC: automatic checks for seller ${sellerId} paused for today (${today} already)`);
+      return;
+    }
+    await runSellerKyc(sellerId, only);
+    await refreshOverallKycStatus(sellerId);
+  })().catch((err) => {
+    if (err instanceof KycCheckRunningError) return; // another run has it
+    console.error(`[clowe-api] KYC: automatic verification for seller ${sellerId} failed:`, err instanceof Error ? err.message : err);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // What the admin sees
 // ---------------------------------------------------------------------------

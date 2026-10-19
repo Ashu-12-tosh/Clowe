@@ -28,6 +28,8 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   // requested leaves DELIVERED and is never paid anyway), and 7 also covers
   // lines sold under the earlier 7-day window.
   payoutHoldDays: 7,
+  // Real money: every payout is approved by an admin until this is turned on.
+  payoutAutoApprove: false,
   // The dispatch promise sellers are asked to meet, and the later point at
   // which an order not yet dispatched is charged the penalty, once.
   dispatchSlaHours: 18,
@@ -122,6 +124,8 @@ export async function getSettings(): Promise<PlatformSettings> {
       (byKey.get('payoutMinPaise') as number | undefined) ?? DEFAULT_SETTINGS.payoutMinPaise,
     payoutHoldDays:
       (byKey.get('payoutHoldDays') as number | undefined) ?? DEFAULT_SETTINGS.payoutHoldDays,
+    payoutAutoApprove:
+      (byKey.get('payoutAutoApprove') as boolean | undefined) ?? DEFAULT_SETTINGS.payoutAutoApprove,
     dispatchSlaHours:
       (byKey.get('dispatchSlaHours') as number | undefined) ?? DEFAULT_SETTINGS.dispatchSlaHours,
     lateDispatchPenaltyAfterHours:

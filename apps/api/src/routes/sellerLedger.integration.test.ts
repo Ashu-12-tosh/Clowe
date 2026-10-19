@@ -60,6 +60,8 @@ beforeAll(async () => {
 
 afterEach(async () => {
   await setSetting('payoutHoldDays', DEFAULT_SETTINGS.payoutHoldDays);
+  await setSetting('returnWindowDays', DEFAULT_SETTINGS.returnWindowDays);
+  await setSetting('payoutAutoApprove', DEFAULT_SETTINGS.payoutAutoApprove);
   await setSetting('payoutCommissionPercent', DEFAULT_SETTINGS.payoutCommissionPercent);
   await setSetting('platformFeePaise', DEFAULT_SETTINGS.platformFeePaise);
   await setSetting('closingFeePaise', DEFAULT_SETTINGS.closingFeePaise);
@@ -317,6 +319,8 @@ describe('returns', () => {
 describe('payouts', () => {
   it('shows the ledger as what is available, and pays exactly that', async () => {
     await setSetting('payoutHoldDays', 0);
+    await setSetting('returnWindowDays', 0);
+    await setSetting('payoutAutoApprove', true);
     const s = await makeSeller();
     const line = await makeLine(s, 'SHIPPED');
     await call('PATCH', `/api/seller/orders/${line.id}/status`, s.token, { action: 'deliver' });
@@ -352,6 +356,8 @@ describe('payouts', () => {
     // A ₹2,625 shirt is ₹2,500 ex-GST at 5%; read at the standard 18% it would
     // be ₹2,224.58, and TDS/TCS on that would not match what was posted.
     await setSetting('payoutHoldDays', 0);
+    await setSetting('returnWindowDays', 0);
+    await setSetting('payoutAutoApprove', true);
     const slab = await prisma.category.create({
       data: { name: 'Ledger Apparel', slug: `ledger-apparel-${seq}`, taxRule: 'VALUE_SLAB' },
     });
@@ -383,6 +389,8 @@ describe('payouts', () => {
 
   it('picks up lines delivered before the ledger existed, at today\'s rates', async () => {
     await setSetting('payoutHoldDays', 0);
+    await setSetting('returnWindowDays', 0);
+    await setSetting('payoutAutoApprove', true);
     const s = await makeSeller();
     const line = await makeLine(s, 'DELIVERED', { deliveredAt: new Date(Date.now() - 86_400_000) });
     expect(await entriesFor(line.id)).toHaveLength(0);

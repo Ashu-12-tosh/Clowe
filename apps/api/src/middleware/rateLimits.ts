@@ -126,3 +126,16 @@ export const suggestLimiter = rateLimit({
   limit: 120,
   message: limitError('Too many search requests — please slow down.'),
 });
+
+/**
+ * The checkout asking whether a payment went through. Each ask is two reads
+ * at the gateway; a page polling a pending UPI payment every few seconds fits
+ * well inside this, a loop does not.
+ */
+export const paymentConfirmLimiter = rateLimit({
+  ...common,
+  windowMs: 60 * 1000,
+  limit: 40,
+  keyGenerator: (req) => `pay-confirm:${req.auth?.userId ?? 'anonymous'}`,
+  message: limitError('Too many payment checks. Please wait a moment.'),
+});
