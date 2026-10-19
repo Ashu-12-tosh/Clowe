@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { ClaimStatus } from '@/components/orders/ClaimStatus';
 import Link from 'next/link';
 import {
+  CLAIM_REASON_LABELS,
   RETURN_FILTERS,
   RETURN_FILTER_LABELS,
   RETURN_REASON_LABELS,
+  type ClaimReason,
   type MyReturnRow,
   type MyReturnsResponse,
   type ReturnFilter,
@@ -49,9 +51,37 @@ function fmtDate(iso: string): string {
   });
 }
 
+/**
+ * A refund under way: a claim that passed its check is refunded at once while
+ * the return itself still reads "received", so the refund decides what is
+ * shown — not "refund starts once checks pass" when it already has.
+ */
+function refundUnderway(row: MyReturnRow): boolean {
+  return !!row.refund && row.status !== 'REFUNDED' && row.refund.status !== 'PROCESSED';
+}
+
+function badgeLabel(row: MyReturnRow): string {
+  if (refundUnderway(row)) return 'Refund in progress';
+  return RETURN_FILTER_LABELS[row.status as ReturnFilter] ?? row.status;
+}
+
 /** The status detail block under each badge — real dates, real reasons. */
 function StatusDetail({ row }: { row: MyReturnRow }) {
-  if (row.status === 'REFUNDED' && row.refund) {
+  if (refundUnderway(row) && row.refund) {
+    return (
+      <>
+        <p className="t-caption text-gray-500" data-refund-status={row.refund.status}>
+          {row.refund.status === 'FAILED' ? 'Refund delayed — our team is on it' : 'Refund initiated'}
+        </p>
+        <p className="t-caption mt-0.5 text-gray-500">
+          Refund Amount
+          <span className="ml-1 font-bold text-ink-900">{formatPaise(row.refund.amountPaise)}</span>
+        </p>
+        {row.refund.arn && <p className="t-caption mt-0.5 break-all text-gray-500">Bank reference (ARN): {row.refund.arn}</p>}
+      </>
+    );
+  }
+  if ((row.status === 'REFUNDED' || row.refund?.status === 'PROCESSED') && row.refund) {
     return (
       <>
         <p className="t-caption text-gray-500">
@@ -282,19 +312,22 @@ export default function ReturnsPage() {
                     <p className="t-caption mt-1 text-gray-500">
                       Reason:{' '}
                       <span className="font-medium text-ink-900">
-                        {RETURN_REASON_LABELS[row.reason as ReturnReasonValue] ?? row.reason}
+                        {(row.rules === 'CLAIM' ? CLAIM_REASON_LABELS[row.reason as ClaimReason] : undefined) ??
+                          RETURN_REASON_LABELS[row.reason as ReturnReasonValue] ??
+                          row.reason}
                       </span>
                     </p>
                     <ClaimStatus row={row} onChanged={load} />
                   </div>
 
-                  <div className="min-w-44 shrink-0">
+                  {/* Full width under the item on a phone, so the details keep their room. */}
+                  <div className="w-full sm:w-auto sm:min-w-44 sm:shrink-0" data-return-status>
                     <span
                       className={`t-badge inline-block rounded px-2.5 py-1 ${
-                        STATUS_PILL[row.status] ?? 'bg-gray-100 text-gray-600'
+                        refundUnderway(row) ? STATUS_PILL.REFUNDED : (STATUS_PILL[row.status] ?? 'bg-gray-100 text-gray-600')
                       }`}
                     >
-                      {RETURN_FILTER_LABELS[row.status as ReturnFilter] ?? row.status}
+                      {badgeLabel(row)}
                     </span>
                     <div className="mt-2">
                       <StatusDetail row={row} />
@@ -303,7 +336,7 @@ export default function ReturnsPage() {
 
                   <Link
                     href={`/account/orders/${row.orderId}`}
-                    className="t-caption shrink-0 rounded-lg border border-gray-300 px-4 py-2 font-bold text-ink-900 transition hover:border-brand-600"
+                    className="t-caption w-full shrink-0 rounded-lg border border-gray-300 px-4 py-2 text-center font-bold text-ink-900 transition hover:border-brand-600 sm:w-auto"
                   >
                     View Details ›
                   </Link>
