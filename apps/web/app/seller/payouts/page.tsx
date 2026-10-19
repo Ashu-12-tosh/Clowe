@@ -660,23 +660,21 @@ export default function SellerPayoutsPage() {
               <Panel title="Fees breakdown" subtitle={monthLabel(month)}>
                 <dl className="space-y-2 text-xs">
                   <div className="flex justify-between">
-                    <dt className="text-gray-500">
-                      Commission ({overview.rates.commissionPercent}% of your price, before GST)
-                    </dt>
-                    <dd className="font-semibold">{money(overview.fees.commissionPaise)}</dd>
+                    <dt className="text-gray-500">Referral fee (% of the selling price, set by category)</dt>
+                    <dd className="font-semibold" data-fee="referral">{money(overview.fees.commissionPaise)}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-gray-500">
-                      Gateway / collection ({overview.rates.gatewayPercent}% of what buyers paid)
+                      Payment collection fee ({overview.rates.fees.collectionPercent}% of the selling price)
                     </dt>
-                    <dd className="font-semibold">{money(overview.fees.gatewayPaise)}</dd>
+                    <dd className="font-semibold" data-fee="collection">{money(overview.fees.gatewayPaise)}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-gray-500">
-                      Fixed fees (platform {money(overview.rates.platformFeePaise)} · closing{' '}
-                      {money(overview.rates.closingFeePaise)}/unit · GT {money(overview.rates.gtChargePaise)}/unit)
+                      GT charge ({overview.rates.fees.gtPercent}%), handling fee and {overview.rates.fees.gstPercent}% GST on
+                      Clowe&apos;s fees
                     </dt>
-                    <dd className="font-semibold">{money(overview.fees.fixedFeesPaise)}</dd>
+                    <dd className="font-semibold" data-fee="other">{money(overview.fees.fixedFeesPaise)}</dd>
                   </div>
                   <div className="flex justify-between" data-fee="forward-freight">
                     <dt className="text-gray-500">Delhivery freight (per parcel, at the charged weight)</dt>

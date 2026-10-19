@@ -10,6 +10,7 @@ import {
   type PayoutGstinBlock,
   type PayoutPanBlock,
   type PlatformSettings,
+  type SellerFeesV2,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import type { Prisma } from '@prisma/client';
@@ -45,9 +46,11 @@ export { economicsRates };
 
 export interface FeeBreakdown {
   grossPaise: number;
+  /** The commission, or under the Batch 2 fees the referral fee. */
   commissionPaise: number;
+  /** The gateway fee, or under the Batch 2 fees the payment collection fee. */
   gatewayPaise: number;
-  /** Platform + delivery + closing — the fixed fees. */
+  /** Everything else Clowe charges: platform, closing and GT fees, the handling fee, and the GST on Clowe's fees. */
   fixedFeesPaise: number;
   feesPaise: number; // commission + gateway + fixed fees
   tdsPaise: number;
@@ -56,14 +59,23 @@ export interface FeeBreakdown {
   netPaise: number;
 }
 
-/** A sold line, with the category its GST rate (and so its TDS/TCS base) comes from. */
+/**
+ * A sold line, with the category its GST rate (and so its TDS/TCS base) comes
+ * from, and the fees it was sold under. The fee fields are required on
+ * purpose: a query that leaves them out would show a Batch 2 line with the
+ * old commission (pre-launch audit 2026-10-20, H1), so it does not compile.
+ */
 export interface FeeLine {
   pricePaise: number;
   quantity: number;
   /** The GST rate the line was sold at; null only on lines written outside checkout. */
   gstRatePercent?: number | null;
+  /** 2 = the owner's Batch 2 fees, recorded on the line (feeRates); otherwise the earlier model. */
+  feeModel: number | null;
+  feeRates: Prisma.JsonValue | null;
   product: { categoryId: string };
 }
+
 
 export type TaxRulesByCategory = Map<string, CategoryRules>;
 
@@ -92,14 +104,16 @@ const EMPTY_FEES: FeeBreakdown = {
  * ex-GST value TDS and TCS are taken on, exactly as the ledger does.
  */
 export function feesFor(line: FeeLine, settings: PlatformSettings, rules: TaxRulesByCategory): FeeBreakdown {
+  // The fees the line was sold under, exactly as the ledger posts them.
+  const v2 = line.feeModel === 2 && line.feeRates ? (line.feeRates as unknown as SellerFeesV2) : null;
   const e = computeListingEconomics({
     buyerPricePaise: line.pricePaise,
     gstRatePercent: line.gstRatePercent,
     quantity: line.quantity,
-    rates: economicsRates(settings),
+    rates: { ...economicsRates(settings), v2 },
     taxRules: rules.get(line.product.categoryId),
   });
-  const fixedFeesPaise = e.platformFeePaise + e.closingFeePaise + e.gtChargePaise;
+  const fixedFeesPaise = e.platformFeePaise + e.closingFeePaise + e.gtChargePaise + e.handlingFeePaise + e.cloweFeeGstPaise;
   return {
     grossPaise: e.grossPaise,
     commissionPaise: e.commissionPaise,
@@ -163,6 +177,8 @@ export async function eligibleItems(sellerId: string, hold: number | HoldRule) {
       id: true,
       pricePaise: true,
       gstRatePercent: true,
+      feeModel: true,
+      feeRates: true,
       quantity: true,
       deliveredAt: true,
       returnWindowDays: true,

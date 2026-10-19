@@ -122,6 +122,13 @@ export interface SellerPayoutDetail extends SellerPayoutRow {
 export interface SellerPayoutOverview {
   /** Fee/TDS rates in force, so the UI can explain every deduction. */
   rates: {
+    /**
+     * The fees sales are made under now (the owner's Batch 2): a referral fee
+     * set per category, these percents of the selling price, a handling fee
+     * by price slab, and GST on all of Clowe's charges.
+     */
+    fees: { gtPercent: number; collectionPercent: number; gstPercent: number };
+    /** The earlier model's rates, kept for older sales and older clients. */
     commissionPercent: number;
     gatewayPercent: number;
     tdsPercent: number;

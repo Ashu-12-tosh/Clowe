@@ -100,6 +100,30 @@ describe('fees on a new order line', () => {
     expect(e.CLOSING_FEE).toBeUndefined();
   });
 
+  // Pre-launch audit (2026-10-20), H1: the ledger and the payouts were right,
+  // but the statement, payout detail and overview worked the line out with the
+  // old 10% commission — a ₹1,770 sale read ₹1,516.60 net instead of ₹1,623.71.
+  it('read the same on the seller’s statement as on the ledger, to the paisa', async () => {
+    const item = await deliveredLine();
+    await postDeliveryEntries(item.id);
+    const ledgerNet = (await prisma.sellerLedgerEntry.aggregate({ where: { orderItemId: item.id }, _sum: { amountPaise: true } }))._sum.amountPaise!;
+    expect(ledgerNet).toBe(100_000 - 2_000 - 1_500 - 2_000 - 1_900 - 1_332 - 85 - 424);
+
+    const sellerToken = signAccessToken({ sub: sellerUserId, role: 'SELLER' });
+    const month = new Date(Date.now() + 5.5 * 3_600_000).toISOString().slice(0, 7);
+    const res = await fetch(`${base}/api/seller/payouts/statement?month=${month}`, { headers: { authorization: `Bearer ${sellerToken}` } });
+    expect(res.status).toBe(200);
+    const [header, ...rows] = (await res.text()).split('\n').map((l) => l.split(','));
+    const { orderNumber } = await prisma.order.findUniqueOrThrow({ where: { id: item.orderId } });
+    const row = rows.find((r) => r[2] === orderNumber)!;
+    const col = (name: string) => Number(row[header!.findIndex((h) => h.startsWith(name))]) * 100;
+    expect(col('Referral fee')).toBe(2_000);
+    expect(col('Collection fee')).toBe(2_000);
+    expect(col('Other Clowe fees')).toBe(1_500 + 1_900 + 1_332);
+    expect(col('Net')).toBe(ledgerNet);
+    expect(col('Gross') - col('Referral fee') - col('Collection fee') - col('Other Clowe fees') - col('TDS') - col('GST TCS')).toBe(col('Net'));
+  });
+
   it('use the category’s referral fee and keep it after the category changes', async () => {
     await prisma.category.update({ where: { slug: 'fee-gadgets' }, data: { referralPercent: 3 } });
     try {

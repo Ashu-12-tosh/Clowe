@@ -24,6 +24,7 @@ import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { getSettings } from '../services/settingsService';
+import { getCommercial } from '../services/commercial';
 import { payoutProvider } from '../services/payouts';
 import {
   availableBalance,
@@ -128,7 +129,7 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
     const month = typeof req.query.month === 'string' ? req.query.month : undefined;
     const range = monthRange(month);
     const fy = financialYear(range.from);
-    const settings = await getSettings();
+    const [settings, commercial] = await Promise.all([getSettings(), getCommercial()]);
 
     const delivered = (where: Prisma.OrderItemWhereInput) =>
       prisma.orderItem.findMany({
@@ -136,6 +137,8 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         select: {
           pricePaise: true,
           gstRatePercent: true,
+          feeModel: true,
+          feeRates: true,
           quantity: true,
           deliveredAt: true,
           status: true,
@@ -340,6 +343,8 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
 
     const body: SellerPayoutOverview = {
       rates: {
+        // The fees every sale since Batch 2 is made under (referral by category).
+        fees: { gtPercent: commercial.fees.gtPercent, collectionPercent: commercial.fees.collectionPercent, gstPercent: commercial.fees.gstPercent },
         commissionPercent: settings.payoutCommissionPercent,
         gatewayPercent: settings.payoutGatewayPercent,
         tdsPercent: settings.payoutTdsPercent,
@@ -609,6 +614,8 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
         quantity: true,
         pricePaise: true,
         gstRatePercent: true,
+        feeModel: true,
+        feeRates: true,
         deliveredAt: true,
         product: { select: { categoryId: true } },
         payout: { select: { reference: true, status: true } },
@@ -643,8 +650,11 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
       'Item',
       'Qty',
       'Gross (INR)',
-      'Commission (INR)',
-      'Gateway (INR)',
+      'Referral fee / commission (INR)',
+      'Collection fee / gateway (INR)',
+      // GT, handling and platform/closing fees, and the GST on Clowe's fees:
+      // with it, every sale row adds up (gross − fees − TDS − TCS = net).
+      'Other Clowe fees incl. GST (INR)',
       'TDS (INR)',
       'GST TCS (INR)',
       'Net (INR)',
@@ -665,6 +675,7 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
           (fee.grossPaise / 100).toFixed(2),
           (fee.commissionPaise / 100).toFixed(2),
           (fee.gatewayPaise / 100).toFixed(2),
+          (fee.fixedFeesPaise / 100).toFixed(2),
           (fee.tdsPaise / 100).toFixed(2),
           (fee.tcsPaise / 100).toFixed(2),
           (fee.netPaise / 100).toFixed(2),
@@ -684,6 +695,7 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
           c.createdAt.toISOString(),
           c.orderId ? (orderNumbers.get(c.orderId) ?? '') : '',
           c.note ?? '',
+          '',
           '',
           '',
           '',
@@ -779,6 +791,8 @@ sellerPayoutsRouter.get('/:id', async (req, res, next) => {
             quantity: true,
             pricePaise: true,
             gstRatePercent: true,
+            feeModel: true,
+            feeRates: true,
             deliveredAt: true,
             product: { select: { categoryId: true } },
             order: { select: { orderNumber: true } },
