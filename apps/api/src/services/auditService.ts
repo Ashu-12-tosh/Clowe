@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { Request } from 'express';
 import { istDayKey, istStartOfDay } from '@clowe/shared';
 import { prisma } from '../db';
@@ -85,26 +86,32 @@ export async function recordAudit(input: AuditInput): Promise<void> {
     durationMs: input.durationMs ?? null,
   } as const;
 
-  // References are sequential per day. Two writes in the same tick read the
-  // same count, so a unique-violation just takes the next number.
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      const todayCount = await prisma.auditLog.count({ where: { createdAt: { gte: startOfDay } } });
-      await prisma.auditLog.create({
-        data: { ...data, reference: reference(now, todayCount + 1 + attempt) },
-      });
+  // References are sequential per day. Numbering is one step at a time (an
+  // advisory lock around the count and the insert): writes that arrive
+  // together used to read the same count, collide five times and drop the row.
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('audit-log-reference'))`;
+      const todayCount = await tx.auditLog.count({ where: { createdAt: { gte: startOfDay } } });
+      await tx.auditLog.create({ data: { ...data, reference: reference(now, todayCount + 1) } });
+    });
+    return;
+  } catch (err) {
+    const isDuplicate = typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
+    if (!isDuplicate) {
+      // An audit failure must never break the request that triggered it.
+      console.error('[clowe-api] audit write failed:', err);
       return;
-    } catch (err) {
-      const isDuplicate =
-        typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
-      if (!isDuplicate) {
-        // An audit failure must never break the request that triggered it.
-        console.error('[clowe-api] audit write failed:', err);
-        return;
-      }
     }
   }
-  console.error('[clowe-api] audit write gave up after 5 reference collisions');
+  // Only a row stamped with a different day than its createdAt (a write that
+  // straddled midnight) can still collide: keep the row under a unique suffix
+  // rather than lose it.
+  try {
+    await prisma.auditLog.create({ data: { ...data, reference: `${reference(now, 0)}-${randomBytes(3).toString('hex')}` } });
+  } catch (err) {
+    console.error('[clowe-api] audit write failed:', err);
+  }
 }
 
 /** Fire-and-forget wrapper for call sites that must not await the write. */
