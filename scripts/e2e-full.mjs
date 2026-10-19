@@ -1019,8 +1019,9 @@ async function flow6TryOn() {
     // D3 (pre-launch audit 2026-10-20): drawn on a canvas, no <img> of it to
     // save; no context menu; nothing printed; blurred when the window loses focus.
     check((await result.locator('canvas').count()) === 1, 'the result is not drawn on a canvas');
-    const imgs = await page.evaluate(() => [...document.images].map((i) => i.src).filter((s) => /\/api\/files\//.test(s)));
-    check(imgs.length === 0, `try-on images as <img>: ${imgs.join(', ')}`);
+    // Generated results only: the shopper's own photo preview may be an <img>.
+    const imgs = await page.evaluate(() => [...document.images].map((i) => i.src).filter((s) => /tryon-result/.test(decodeURIComponent(s))));
+    check(imgs.length === 0, `try-on results as <img>: ${imgs.join(', ')}`);
     const menuBlocked = await result.evaluate((el) => {
       const e = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
       el.dispatchEvent(e);
@@ -1498,7 +1499,13 @@ async function flow8Shopper() {
   }, { page, needs: ['shopper', 'live'], key: 'cart' });
 
   await step(F, 'prepaid checkout with the mock payment: confirmation, invoice, notification', async () => {
-    // No email on the account yet: My Account offers a gentle prompt to add one…
+    // No email on the account yet (sign-up's optional email is taken off for
+    // this path): My Account offers a gentle prompt to add one…
+    await prisma.user.update({ where: { id: S.shopperId }, data: { email: null, emailVerifiedAt: null, emailVerifyTokenHash: null } });
+    await page.evaluate(() => {
+      const raw = localStorage.getItem('clowe.user');
+      if (raw) localStorage.setItem('clowe.user', JSON.stringify({ ...JSON.parse(raw), email: null, emailVerified: false }));
+    });
     await goto(page, '/account');
     await page.locator('[data-email-prompt]').waitFor({ timeout: 60_000 });
     await page.locator('[data-email-prompt]').screenshot({ path: path.join(OUT, 'account-email-prompt.png') }).catch(() => {});
