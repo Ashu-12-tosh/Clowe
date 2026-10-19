@@ -53,7 +53,7 @@ function ReturnInner() {
     setBusy(true);
     setError('');
     try {
-      settle(await confirmPayment(kind, id, { attempts: 10, intervalMs: 3000 }));
+      settle(await confirmPayment(kind, id, { attempts: 6, intervalMs: 3000 }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not check the payment');
     } finally {

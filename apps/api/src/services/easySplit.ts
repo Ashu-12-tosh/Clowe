@@ -123,7 +123,7 @@ export async function ensureVendor(sellerId: string): Promise<string | null> {
     pan: normalizeTaxId(seller.panNumber),
     gstin,
     accountType: gstin ? 'BUSINESS' : 'INDIVIDUAL',
-    businessType: 'Ecommerce',
+    businessType: 'E-commerce',
   });
   await prisma.sellerProfile.update({
     where: { id: sellerId },

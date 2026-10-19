@@ -10,7 +10,8 @@ import { cashfreeErrorCode, cashfreeHost, idempotencyKey, ipv4Fetch, paiseFromRu
  *   GET  /pg/easy-split/orders/{order_id}       the order's vendor shares and their eligibility dates
  *   PUT  /api/v2/easy-split/orders/{order_id}/settlement-eligibility/vendors/{vendor_id}
  *        bring a deferred share's settlement forward (the older API host and
- *        header style — this call has not moved to /pg)
+ *        header style — this call has not moved to /pg). Needs deferred
+ *        settlement enabled on the account, or Cashfree answers 400.
  *
  * Deferral itself is an account setting (dashboard: Defer settlement, N days):
  * every vendor share waits N days unless released earlier here.
@@ -119,7 +120,9 @@ export class CashfreeEasySplitClient {
   /** Settle a deferred share at `at` (now) instead of at the end of the deferral. */
   async release(orderId: string, vendorId: string, at: Date): Promise<void> {
     const url = `${this.legacyUrl}/orders/${encodeURIComponent(orderId)}/settlement-eligibility/vendors/${encodeURIComponent(vendorId)}`;
-    const reply = await this.call('PUT', url, { settlementEligibilityDateUpdate: istStamp(at) }, undefined, true);
+    // The field is settlementEligibilityDate (yyyy-MM-dd HH:mm:ss, India time), as the sandbox requires —
+    // not the …Update name some of Cashfree's pages show.
+    const reply = await this.call('PUT', url, { settlementEligibilityDate: istStamp(at) }, undefined, true);
     if (!reply.ok) throw this.error('release vendor share', reply);
     const status = (reply.body as { status?: unknown }).status;
     if (typeof status === 'string' && status.toUpperCase() !== 'OK') {
