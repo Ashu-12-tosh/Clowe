@@ -281,4 +281,22 @@ describe('a verified PAN is locked', () => {
     expect(changed.json.error?.code).toBe('KYC_LOCKED');
     expect((await prisma.sellerProfile.findUniqueOrThrow({ where: { id: s.sellerId } })).panNumber).toBe('ABCDE1234F');
   });
+
+  // Pre-launch audit (2026-10-20): registration never asks for the name on
+  // the PAN, so every seller an admin verified by hand was stuck — adding it
+  // was refused as a "change" to a locked PAN.
+  it('lets a seller add the missing name on a verified PAN once, and then locks it', async () => {
+    const s = await payableSeller({ kycStatus: 'VERIFIED' });
+    await call('PUT', '/api/seller/store/business', s.token, { panNumber: 'FGHIJ2345K' });
+    await reviewSellerKyc({ sellerId: s.sellerId, check: 'PAN', decision: 'VERIFY', reviewerId: 'test-admin' });
+    expect((await prisma.sellerProfile.findUniqueOrThrow({ where: { id: s.sellerId } })).panName).toBeNull();
+
+    const added = await call('PUT', '/api/seller/store/business', s.token, { panNumber: 'FGHIJ2345K', panName: 'Pan Holder' });
+    expect(added.status, JSON.stringify(added.json)).toBe(200);
+    expect(await prisma.sellerProfile.findUniqueOrThrow({ where: { id: s.sellerId } })).toMatchObject({ panNumber: 'FGHIJ2345K', panName: 'Pan Holder' });
+
+    const renamed = await call('PUT', '/api/seller/store/business', s.token, { panNumber: 'FGHIJ2345K', panName: 'Someone Else' });
+    expect(renamed.json.error?.code).toBe('KYC_LOCKED');
+    expect((await prisma.sellerProfile.findUniqueOrThrow({ where: { id: s.sellerId } })).panName).toBe('Pan Holder');
+  });
 });

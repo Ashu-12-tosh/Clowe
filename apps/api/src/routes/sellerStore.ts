@@ -334,7 +334,10 @@ sellerStoreRouter.put('/business', async (req, res, next) => {
     const gstLocked = kyc.gstin.state === 'VERIFIED';
     const changingGst = gstLocked && !!input.gstNumber && input.gstNumber !== seller.gstNumber;
     const changingPan = panLocked && !!input.panNumber && input.panNumber !== seller.panNumber;
-    const changingPanName = panLocked && !!input.panName && input.panName !== seller.panName;
+    // A name that was never on file can be added to a verified PAN (sellers
+    // verified by hand were never asked for it); one that is on file is locked.
+    const addingPanName = panLocked && !seller.panName?.trim() && !!input.panName?.trim();
+    const changingPanName = panLocked && !addingPanName && !!input.panName && input.panName !== seller.panName;
     if (changingGst || changingPan || changingPanName) {
       throw ApiError.badRequest('A verified GSTIN or PAN is locked — raise a support ticket to change it', 'KYC_LOCKED');
     }
@@ -345,7 +348,11 @@ sellerStoreRouter.put('/business', async (req, res, next) => {
         businessType: fieldUpdate(input.businessType),
         // Payouts and every tax invoice depend on the GSTIN: never wiped by omission.
         ...(gstLocked ? {} : { gstNumber: fieldUpdate(input.gstNumber) }),
-        ...(panLocked ? {} : { panNumber: fieldUpdate(input.panNumber), panName: fieldUpdate(input.panName) }),
+        ...(panLocked
+          ? addingPanName
+            ? { panName: fieldUpdate(input.panName) }
+            : {}
+          : { panNumber: fieldUpdate(input.panNumber), panName: fieldUpdate(input.panName) }),
         addressLine1: fieldUpdate(input.addressLine1),
         addressLine2: fieldUpdate(input.addressLine2),
         landmark: fieldUpdate(input.landmark),
