@@ -12,8 +12,13 @@ export class MockPaymentProvider implements PaymentProvider {
     return { providerOrderId: `mock_order_${randomBytes(8).toString('hex')}` };
   }
 
+  /**
+   * Never: the mock has no signatures to check. Its payments settle only via
+   * /mock-pay, which refuses on production for anyone but admins and test
+   * accounts. Answering true here let /verify mark any order paid.
+   */
   verifySignature(): boolean {
-    return true; // mock payments settle via /api/payments/mock-pay instead
+    return false;
   }
 
   async refund(_input: GatewayRefundInput): Promise<GatewayRefund> {

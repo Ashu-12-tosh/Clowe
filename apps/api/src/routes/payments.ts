@@ -98,6 +98,11 @@ paymentsRouter.post('/confirm', requireAuth, paymentConfirmLimiter, async (req, 
 
 paymentsRouter.post('/verify', requireAuth, async (req, res, next) => {
   try {
+    // Only Razorpay signs its callback; with any other gateway this route has
+    // nothing to check, so it settles nothing.
+    if (paymentProvider.name !== 'razorpay') {
+      throw ApiError.badRequest('This payment is confirmed another way', 'SIGNATURE_FLOW_UNAVAILABLE');
+    }
     const input = paymentVerifySchema.parse(req.body);
     const order = await ownOrder(req.auth!.userId, input.orderId);
     if (!order.payment || order.payment.providerOrderId !== input.razorpayOrderId) {

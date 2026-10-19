@@ -87,6 +87,59 @@ async function both(sellerId: string) {
 
 // ---------------------------------------------------------------------------
 
+// Pre-launch audit (2026-10-20): the mock gateway answered "valid" to any
+// signature, so /verify marked any order (or top-up) paid for free — on
+// production too, which runs the mock until Cashfree goes live.
+describe('a forged gateway callback settles nothing', () => {
+  const forged = { razorpayPaymentId: 'pay_forged', razorpaySignature: 'not-a-signature' };
+
+  it('refuses /api/payments/verify for an order awaiting payment', async () => {
+    seq += 1;
+    const user = await prisma.user.create({ data: { phone: `92001${String(seq).padStart(5, '0')}`, name: `Verify Buyer ${seq}`, referralCode: `PRM-B-${seq}` } });
+    const order = await prisma.order.create({
+      data: {
+        userId: user.id,
+        orderNumber: `CLW-2026-${String(870000 + seq)}`,
+        status: 'PLACED',
+        subtotalPaise: 50_000,
+        shippingPaise: 0,
+        totalPaise: 50_000,
+        shipName: 'Verify Buyer',
+        shipPhone: '9500000001',
+        shipLine1: '1 Test Street',
+        shipCity: 'Mumbai',
+        shipState: 'Maharashtra',
+        shipPincode: '400001',
+        payment: { create: { provider: 'mock', providerOrderId: `mock_order_verify_${seq}`, amountPaise: 50_000 } },
+      },
+    });
+    const token = signAccessToken({ sub: user.id, role: 'CUSTOMER' });
+    const r = await call('POST', '/api/payments/verify', token, { orderId: order.id, razorpayOrderId: `mock_order_verify_${seq}`, ...forged });
+    expect(r.status).toBe(400);
+    expect(r.json.error?.code).toBe('SIGNATURE_FLOW_UNAVAILABLE');
+    const after = await prisma.order.findUniqueOrThrow({ where: { id: order.id }, include: { payment: true } });
+    expect(after.status).toBe('PLACED');
+    expect(after.payment?.status).toBe('CREATED');
+    await prisma.order.delete({ where: { id: order.id } });
+  });
+
+  it('refuses a seller top-up’s /verify, and the wallet stays empty', async () => {
+    const s = await makeSeller();
+    const started = await call('POST', '/api/seller/promotion-credits/purchase', s.token, { amountPaise: 100_000 });
+    const { purchaseId } = started.json.data as { purchaseId: string };
+    const purchase = await prisma.promotionCreditPurchase.findUniqueOrThrow({ where: { id: purchaseId } });
+    const r = await call('POST', `/api/seller/promotion-credits/purchase/${purchaseId}/verify`, s.token, { razorpayOrderId: purchase.providerOrderId, ...forged });
+    expect(r.status).toBe(400);
+    expect(r.json.error?.code).toBe('SIGNATURE_FLOW_UNAVAILABLE');
+    expect(await balance(s.sellerId, 'PROMOTION')).toBe(0);
+  });
+
+  it('the mock gateway vouches for no signature', async () => {
+    const { MockPaymentProvider } = await import('../services/payments/MockPaymentProvider');
+    expect(new MockPaymentProvider().verifySignature()).toBe(false);
+  });
+});
+
 describe('buying credits', () => {
   it('adds the amount once the payment settles, and never before', async () => {
     const s = await makeSeller();

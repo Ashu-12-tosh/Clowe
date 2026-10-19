@@ -84,6 +84,10 @@ sellerPromotionCreditsRouter.post('/purchase/:id/mock-pay', async (req, res, nex
 /** Real gateway: the checkout widget's signed callback. */
 sellerPromotionCreditsRouter.post('/purchase/:id/verify', async (req, res, next) => {
   try {
+    // Only Razorpay signs its callback (see /api/payments/verify).
+    if (paymentProvider.name !== 'razorpay') {
+      throw ApiError.badRequest('This payment is confirmed another way', 'SIGNATURE_FLOW_UNAVAILABLE');
+    }
     const input = promotionCreditVerifySchema.parse(req.body);
     const purchase = await ownPurchase(req.seller!.id, req.params.id);
     if (purchase.providerOrderId !== input.razorpayOrderId) {
