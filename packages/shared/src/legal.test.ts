@@ -88,3 +88,12 @@ describe('legalEntityType', () => {
     expect(fillLegalEntity('Type: {{legal.entityType}}', DEFAULT_LEGAL_ENTITY)).toBe('Type: Limited Liability Partnership (LLP)');
   });
 });
+
+describe('the registered address on the GST certificate', () => {
+  it('reaches every page exactly as typed: house number, floor, pole, gali and PIN', () => {
+    const registeredAddress = 'H. No. 22-A, Ground Floor, Pole 43, Surakh Pur Road, Gali No. 21, Najafgarh, New Delhi 110043';
+    expect(fillLegalEntity('Registered office at {{legal.registeredAddress}}', { ...DEFAULT_LEGAL_ENTITY, registeredAddress })).toBe(
+      `Registered office at ${registeredAddress}`,
+    );
+  });
+});

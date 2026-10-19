@@ -36,7 +36,7 @@ const topUp = (sellerId: string, paise: number) =>
   postEntry({ sellerId, type: 'PROMOTION_CREDIT_PURCHASE', bucket: 'PROMOTION', amountPaise: paise, note: 'test top-up', idempotencyKey: `test-topup:${sellerId}:${paise}:${Math.random()}` });
 
 beforeAll(async () => {
-  await setSetting('legalEntity', { ...DEFAULT_SETTINGS.legalEntity, gstin: '07AAWFC9519L1ZL', registeredAddress: 'A22, Street No. 21, Najafgarh, New Delhi 110073' });
+  await setSetting('legalEntity', { ...DEFAULT_SETTINGS.legalEntity, gstin: '07AAWFC9519L1ZL', registeredAddress: 'H. No. 22-A, Ground Floor, Pole 43, Surakh Pur Road, Gali No. 21, Najafgarh, New Delhi 110043' });
   server = createApp().listen(0);
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });

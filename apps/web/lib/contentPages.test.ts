@@ -61,7 +61,8 @@ describe('content pages', () => {
 
   it('never hard-code the company address: it comes from Admin -> Settings -> Legal ({{legal.registeredAddress}})', () => {
     for (const page of CONTENT_PAGES) {
-      expect(read(page.slug), page.slug).not.toMatch(/NAJAFGARH|GOPAL NAGAR|Defence En|Mohan Garden|Uttam Nagar|110059|110073/i);
+      // Old addresses and the current one alike: a page carries only the token.
+      expect(read(page.slug), page.slug).not.toMatch(/NAJAFGARH|GOPAL NAGAR|MD MARG|SURAKH ?PUR|Defence En|Mohan Garden|Uttam Nagar|110059|110073|110043/i);
     }
   });
 
