@@ -1,4 +1,4 @@
-import type { SellerLedgerType } from '@prisma/client';
+import type { Prisma, SellerLedgerType } from '@prisma/client';
 import { cloweGst } from '@clowe/shared';
 import { prisma } from '../db';
 import { getCommercial } from './commercial';
@@ -17,6 +17,8 @@ import { balance, postEntry } from './sellerLedgerService';
 // tax invoice to the seller. A charge is posted once per idempotency key.
 // ---------------------------------------------------------------------------
 
+type Db = Prisma.TransactionClient | typeof prisma;
+
 export type ChargeType = Extract<SellerLedgerType, 'SUBSCRIPTION_FEE' | 'AD_SPEND' | 'SPONSORSHIP_FEE' | 'TRYON_CREDITS'>;
 
 export interface ChargeResult {
@@ -28,11 +30,11 @@ export interface ChargeResult {
   fromPayoutPaise: number;
 }
 
-export async function walletView(sellerId: string) {
+export async function walletView(sellerId: string, db: Db = prisma) {
   const [walletPaise, adCreditPaise, settlementPaise] = await Promise.all([
-    balance(sellerId, 'PROMOTION'),
-    balance(sellerId, 'AD_CREDIT'),
-    balance(sellerId, 'SETTLEMENT'),
+    balance(sellerId, 'PROMOTION', db),
+    balance(sellerId, 'AD_CREDIT', db),
+    balance(sellerId, 'SETTLEMENT', db),
   ]);
   return { walletPaise, adCreditPaise, settlementPaise };
 }
@@ -42,6 +44,10 @@ export async function walletView(sellerId: string) {
  * first. `walletOnly` refuses (charges nothing) when the wallet and credit
  * cannot cover it, instead of taking it from the next payout — for things the
  * seller is buying now and can top up for.
+ *
+ * One charge per seller at a time (an advisory lock around the balance read
+ * and the posts): two charges arriving together would otherwise both see the
+ * same advertising credit and wallet balance and spend them twice.
  */
 export async function chargeSeller(input: {
   sellerId: string;
@@ -56,10 +62,22 @@ export async function chargeSeller(input: {
   const { fees } = await getCommercial();
   const nothing: ChargeResult = { charged: false, basePaise: input.basePaise, gstPaise: 0, fromAdCreditPaise: 0, fromWalletPaise: 0, fromPayoutPaise: 0 };
   if (input.basePaise <= 0) return { ...nothing, charged: true };
-  const already = await prisma.sellerLedgerEntry.findFirst({ where: { idempotencyKey: { startsWith: `${input.idempotencyKey}:` } } });
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`seller-charge:${input.sellerId}`}))`;
+    return chargeLocked(input, fees, nothing, tx);
+  });
+}
+
+async function chargeLocked(
+  input: Parameters<typeof chargeSeller>[0],
+  fees: { gstPercent: number },
+  nothing: ChargeResult,
+  tx: Prisma.TransactionClient,
+): Promise<ChargeResult> {
+  const already = await tx.sellerLedgerEntry.findFirst({ where: { idempotencyKey: { startsWith: `${input.idempotencyKey}:` } } });
   if (already) return nothing;
 
-  const { walletPaise, adCreditPaise } = await walletView(input.sellerId);
+  const { walletPaise, adCreditPaise } = await walletView(input.sellerId, tx);
   const fromCredit = input.useAdCredit ? Math.max(0, Math.min(adCreditPaise, input.basePaise)) : 0;
   const base = input.basePaise - fromCredit;
   const gst = cloweGst(base, fees.gstPercent);
@@ -86,9 +104,7 @@ export async function chargeSeller(input: {
   if (payoutGst > 0) {
     posts.push({ sellerId: input.sellerId, type: 'CLOWE_FEE_GST', bucket: 'SETTLEMENT', amountPaise: -payoutGst, note: `GST ${fees.gstPercent}% — ${input.note}`, taxablePaise: payoutBase, chargeType: input.type, idempotencyKey: `${k}:payout-gst` });
   }
-  await prisma.$transaction(async (tx) => {
-    for (const p of posts) await postEntry(p, tx);
-  });
+  for (const p of posts) await postEntry(p, tx);
   return { charged: true, basePaise: input.basePaise, gstPaise: gst, fromAdCreditPaise: fromCredit, fromWalletPaise: fromWallet, fromPayoutPaise: fromPayout };
 }
 

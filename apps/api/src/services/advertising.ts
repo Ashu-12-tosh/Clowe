@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { AdCampaign, Prisma } from '@prisma/client';
 import {
   adMetrics,
@@ -16,6 +17,7 @@ import {
   type SlotAvailability,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { env } from '../env';
 import { ApiError } from '../utils/ApiError';
 import { productListItemInclude, toProductListItem } from '../utils/productListing';
 import { getCommercial } from './commercial';
@@ -70,9 +72,11 @@ const SURFACE_PLACEMENTS: Record<AdSurface, PlacementKind[]> = {
 };
 const ROW_SIZE = 4;
 
-async function bumpStat(campaignId: string, slotType: string, at: Date, data: { impressions?: number; clicks?: number; spendPaise?: number; orders?: number; revenuePaise?: number }) {
+type Db = Prisma.TransactionClient | typeof prisma;
+
+async function bumpStat(campaignId: string, slotType: string, at: Date, data: { impressions?: number; clicks?: number; spendPaise?: number; orders?: number; revenuePaise?: number }, db: Db = prisma) {
   const day = istDay(at);
-  await prisma.adDailyStat.upsert({
+  await db.adDailyStat.upsert({
     where: { campaignId_day_slotType: { campaignId, day, slotType } },
     create: { campaignId, day, slotType, impressions: data.impressions ?? 0, clicks: data.clicks ?? 0, spendPaise: data.spendPaise ?? 0, orders: data.orders ?? 0, revenuePaise: data.revenuePaise ?? 0 },
     update: {
@@ -86,10 +90,10 @@ async function bumpStat(campaignId: string, slotType: string, at: Date, data: { 
 }
 
 /** Spend today and this month (India time). */
-async function spendOf(campaignIds: string[], now: Date): Promise<Map<string, { today: number; month: number }>> {
+async function spendOf(campaignIds: string[], now: Date, db: Db = prisma): Promise<Map<string, { today: number; month: number }>> {
   const today = istDay(now);
   const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
-  const rows = await prisma.adDailyStat.groupBy({
+  const rows = await db.adDailyStat.groupBy({
     by: ['campaignId', 'day'],
     where: { campaignId: { in: campaignIds }, day: { gte: monthStart } },
     _sum: { spendPaise: true },
@@ -114,16 +118,25 @@ function smartBid(c: AdCampaign, type: CpcAdType, ranges: Partial<Record<CpcAdTy
   return Math.round(lo + (hi - lo) * (c.goal === 'ORDERS' ? 0.75 : 0.25));
 }
 
-/** Running, in its dates, approved, not paused, inside its budgets. */
+/**
+ * Is there room in the campaign's budgets for one more charge of `bidPaise`?
+ * A charge never takes spend past a budget: the last few paise of a budget
+ * smaller than a bid go unspent rather than over.
+ */
+function withinBudget(c: AdCampaign, spend: { today: number; month: number } | undefined, bidPaise: number): boolean {
+  if (c.kind !== 'CPC' && c.kind !== 'SMART') return true;
+  const s = spend ?? { today: 0, month: 0 };
+  if (c.dailyBudgetPaise && s.today + bidPaise > c.dailyBudgetPaise) return false;
+  if (c.monthlyBudgetPaise && s.month + bidPaise > c.monthlyBudgetPaise) return false;
+  if (c.kind === 'SMART' && c.totalBudgetPaise && s.month + bidPaise > c.totalBudgetPaise) return false;
+  return true;
+}
+
+/** Running, in its dates, approved, not paused, with room in its budgets for another click. */
 function running(c: AdCampaign, now: Date, spend: { today: number; month: number } | undefined): boolean {
   if (c.status !== 'ACTIVE' || c.startAt > now || (c.endAt && c.endAt <= now)) return false;
-  if (c.kind === 'CPC' || c.kind === 'SMART') {
-    const s = spend ?? { today: 0, month: 0 };
-    if (c.dailyBudgetPaise && s.today >= c.dailyBudgetPaise) return false;
-    if (c.monthlyBudgetPaise && s.month >= c.monthlyBudgetPaise) return false;
-    if (c.kind === 'SMART' && c.totalBudgetPaise && s.month >= c.totalBudgetPaise) return false;
-  }
-  return true;
+  // A smart campaign's bid depends on the slot; serving checks there is any room left.
+  return withinBudget(c, spend, c.kind === 'CPC' ? Math.max(1, c.bidPaise ?? 0) : 1);
 }
 
 /**
@@ -262,58 +275,94 @@ export interface ClickOutcome {
   chargedPaise: number;
 }
 
-/** A click on an ad: validated, recorded, and for CPC charged the bid. */
+/**
+ * Who clicked, as far as the server can tell. A signed-in shopper is their
+ * account; anyone else is the address the request came from (req.ip, which
+ * behind nginx is the real client), never the device id the browser sends —
+ * that is the caller's to invent, so a fresh one per click would make every
+ * click "new". Hashed: the raw address is not kept.
+ */
+export function clickViewerKey(input: { userId?: string | null; ip?: string | null; deviceId: string }): string {
+  if (input.userId) return `u:${input.userId}`;
+  if (input.ip) return `ip:${createHash('sha256').update(`ad-click:${input.ip}:${env.JWT_ACCESS_SECRET}`).digest('hex').slice(0, 32)}`;
+  return `d:${input.deviceId}`;
+}
+
+/** The bid a click on this campaign costs, before GST. */
+async function clickBid(campaign: AdCampaign, slotType: string): Promise<number> {
+  if (campaign.kind !== 'CPC' && campaign.kind !== 'SMART') return 0;
+  const c = await getCommercial();
+  if (campaign.kind === 'SMART') return smartBid(campaign, slotType as CpcAdType, c.ads.cpcRanges);
+  if (campaign.sponsorship) return Math.round((campaign.bidPaise ?? 0) * (1 - (await sponsorshipDiscount(campaign.sellerId)) / 100));
+  return campaign.bidPaise ?? 0;
+}
+
+/**
+ * A click on an ad: validated, recorded, and for CPC charged the bid.
+ *
+ * Only a campaign that is running when the click lands is charged — active,
+ * in its dates, and with room in its budgets for this click's bid — so a
+ * paused campaign, or a stream of clicks after the day's budget is spent,
+ * costs the seller nothing. The check, the record and the spend are one step
+ * per campaign (an advisory lock), so clicks arriving together cannot each
+ * see the same room in the budget.
+ */
 export async function registerClick(input: {
   campaignId: string;
   productId?: string | null;
   deviceId: string;
   slotType: string;
   userId?: string | null;
+  ip?: string | null;
   userAgent?: string | null;
   now?: Date;
 }): Promise<ClickOutcome> {
   const now = input.now ?? new Date();
   const campaign = await prisma.adCampaign.findUnique({ where: { id: input.campaignId }, include: { seller: { select: { userId: true } } } });
   if (!campaign) throw ApiError.notFound('Ad not found');
-  const viewerKey = input.userId ? `u:${input.userId}` : `d:${input.deviceId}`;
+  const viewerKey = clickViewerKey(input);
   const productId = input.productId ?? campaign.productId;
-  let reason: string | null = null;
-  if (!input.userAgent || BOT.test(input.userAgent)) reason = 'bot';
-  else if (input.userId && input.userId === campaign.seller.userId) reason = 'own click';
-  else {
-    const recent = await prisma.adClick.findFirst({
-      where: { campaignId: campaign.id, productId, valid: true, createdAt: { gt: new Date(now.getTime() - DAY_MS) }, OR: [{ viewerKey }, ...(input.userId ? [{ userId: input.userId }] : [])] },
-    });
-    if (recent) reason = 'repeat within 24 hours';
-  }
-  const valid = reason === null;
-  const click = await prisma.adClick.create({ data: { campaignId: campaign.id, productId, viewerKey, userId: input.userId ?? null, valid, reason, createdAt: now } });
-  if (!valid) return { valid, reason, chargedPaise: 0 };
+  const bid = await clickBid(campaign, input.slotType);
+
+  const { click, reason, reserved } = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`ad-click:${campaign.id}`}))`;
+    const current = await tx.adCampaign.findUniqueOrThrow({ where: { id: campaign.id } });
+    let reason: string | null = null;
+    if (!input.userAgent || BOT.test(input.userAgent)) reason = 'bot';
+    else if (input.userId && input.userId === campaign.seller.userId) reason = 'own click';
+    else if (current.status !== 'ACTIVE' || current.startAt > now || (current.endAt && current.endAt <= now)) reason = 'campaign not running';
+    else {
+      const recent = await tx.adClick.findFirst({
+        where: { campaignId: campaign.id, productId, valid: true, createdAt: { gt: new Date(now.getTime() - DAY_MS) }, OR: [{ viewerKey }, ...(input.userId ? [{ userId: input.userId }] : [])] },
+      });
+      if (recent) reason = 'repeat within 24 hours';
+      else if (bid > 0 && !withinBudget(current, (await spendOf([campaign.id], now, tx)).get(campaign.id), bid)) reason = 'budget reached';
+    }
+    const valid = reason === null;
+    const click = await tx.adClick.create({ data: { campaignId: campaign.id, productId, viewerKey, userId: input.userId ?? null, valid, reason, createdAt: now } });
+    // The spend is reserved here, under the lock; a charge that does not go
+    // through gives it back below.
+    const reserved = valid ? bid : 0;
+    if (valid) await bumpStat(campaign.id, input.slotType, now, { clicks: 1, spendPaise: reserved }, tx);
+    return { click, reason, reserved };
+  });
+  if (reason !== null) return { valid: false, reason, chargedPaise: 0 };
 
   let charged = 0;
-  if (campaign.kind === 'CPC' || campaign.kind === 'SMART') {
-    const c = await getCommercial();
-    const bid =
-      campaign.kind === 'SMART'
-        ? smartBid(campaign, input.slotType as CpcAdType, c.ads.cpcRanges)
-        : campaign.sponsorship
-          ? Math.round((campaign.bidPaise ?? 0) * (1 - (await sponsorshipDiscount(campaign.sellerId)) / 100))
-          : (campaign.bidPaise ?? 0);
-    if (bid > 0) {
-      const r = await chargeSeller({
-        sellerId: campaign.sellerId,
-        type: campaign.sponsorship ? 'SPONSORSHIP_FEE' : 'AD_SPEND',
-        basePaise: bid,
-        note: `${campaign.sponsorship ? 'Sponsored product' : CPC_AD_TYPE_LABELS[input.slotType as CpcAdType] ?? 'Ad'} click — ${campaign.name}`,
-        idempotencyKey: `click:${click.id}`,
-        useAdCredit: !campaign.sponsorship,
-      });
-      charged = r.charged ? bid : 0;
-      await prisma.adClick.update({ where: { id: click.id }, data: { chargedPaise: charged } });
-    }
+  if (reserved > 0) {
+    const r = await chargeSeller({
+      sellerId: campaign.sellerId,
+      type: campaign.sponsorship ? 'SPONSORSHIP_FEE' : 'AD_SPEND',
+      basePaise: reserved,
+      note: `${campaign.sponsorship ? 'Sponsored product' : CPC_AD_TYPE_LABELS[input.slotType as CpcAdType] ?? 'Ad'} click — ${campaign.name}`,
+      idempotencyKey: `click:${click.id}`,
+      useAdCredit: !campaign.sponsorship,
+    });
+    charged = r.charged ? reserved : 0;
+    await prisma.adClick.update({ where: { id: click.id }, data: { chargedPaise: charged } });
+    if (charged < reserved) await bumpStat(campaign.id, input.slotType, now, { spendPaise: charged - reserved });
   }
-  await bumpStat(campaign.id, input.slotType, now, { clicks: 1, spendPaise: charged });
-  return { valid, reason, chargedPaise: charged };
+  return { valid: true, reason: null, chargedPaise: charged };
 }
 
 /** Orders within attributionDays of a valid click on that product's ad. */

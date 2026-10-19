@@ -119,10 +119,11 @@ describe('pay-per-click campaigns', () => {
     const c = await call<{ id: string }>('POST', '/api/seller/advertising/cpc', s.token, { name: 'SP', adTypes: ['SPONSORED_PRODUCT'], productId: s.productId, bidPaise: 600, dailyBudgetPaise: 10_000 });
     const u = await shopper();
     const click = { campaignId: c.json.data.id, productId: s.productId, deviceId: 'device-aaaa-1111', slotType: 'SPONSORED_PRODUCT' };
-    expect((await call('POST', '/api/ad-serve/click', u.token, click)).json.data).toMatchObject({ counted: true });
+    // Whether a click counted stays on the server.
+    expect((await call('POST', '/api/ad-serve/click', u.token, click)).json.data).toEqual({ ok: true });
     expect((await walletView(s.id)).adCreditPaise).toBe(50_000 - 600); // no GST on credit
     // Again within 24 hours — even from another device — counts nothing.
-    expect((await call('POST', '/api/ad-serve/click', u.token, { ...click, deviceId: 'device-bbbb-2222' })).json.data).toMatchObject({ counted: false });
+    await call('POST', '/api/ad-serve/click', u.token, { ...click, deviceId: 'device-bbbb-2222' });
     expect((await walletView(s.id)).adCreditPaise).toBe(50_000 - 600);
     // A day later it counts again.
     const later = await registerClick({ ...click, userId: u.id, userAgent: UA, now: new Date(Date.now() + DAY + 60_000) });
@@ -133,10 +134,10 @@ describe('pay-per-click campaigns', () => {
     const s = await seller();
     const c = await call<{ id: string }>('POST', '/api/seller/advertising/cpc', s.token, { name: 'SP', adTypes: ['SPONSORED_PRODUCT'], productId: s.productId, bidPaise: 300, dailyBudgetPaise: 10_000 });
     const click = { campaignId: c.json.data.id, productId: s.productId, deviceId: 'device-cccc-3333', slotType: 'SPONSORED_PRODUCT' };
-    expect((await call('POST', '/api/ad-serve/click', null, click)).json.data).toMatchObject({ counted: true });
-    expect((await call('POST', '/api/ad-serve/click', null, click)).json.data).toMatchObject({ counted: false });
-    expect((await call('POST', '/api/ad-serve/click', s.token, { ...click, deviceId: 'device-dddd-4444' })).json.data).toMatchObject({ counted: false });
-    expect((await call('POST', '/api/ad-serve/click', null, { ...click, deviceId: 'device-eeee-5555' }, { 'user-agent': 'Googlebot/2.1' })).json.data).toMatchObject({ counted: false });
+    await call('POST', '/api/ad-serve/click', null, click);
+    await call('POST', '/api/ad-serve/click', null, click);
+    await call('POST', '/api/ad-serve/click', s.token, { ...click, deviceId: 'device-dddd-4444' });
+    await call('POST', '/api/ad-serve/click', null, { ...click, deviceId: 'device-eeee-5555' }, { 'user-agent': 'Googlebot/2.1' });
     const rows = await prisma.adClick.findMany({ where: { campaignId: c.json.data.id }, orderBy: { createdAt: 'asc' } });
     expect(rows.map((r) => r.reason)).toEqual([null, 'repeat within 24 hours', 'own click', 'bot']);
     expect(rows.reduce((t, r) => t + r.chargedPaise, 0)).toBe(300);
@@ -151,6 +152,72 @@ describe('pay-per-click campaigns', () => {
     expect((await walletView(s.id)).walletPaise).toBe(10_000 - 1_000 - 180);
     const served = await serveAds('SEARCH', { q: 'kurta' });
     expect(served.items.some((i) => i.campaignId === c.json.data.id)).toBe(false);
+  });
+
+  // Pre-launch audit (2026-10-20): signed out, a fresh deviceId per click made
+  // every click "new", a paused or over-budget campaign was still charged, and
+  // once the advertising credit ran out the charges came off the payout.
+  it('does not let a signed-out caller drain a seller by inventing a new device id per click', async () => {
+    const s = await seller();
+    const c = await call<{ id: string }>('POST', '/api/seller/advertising/cpc', s.token, { name: 'Drain', adTypes: ['SPONSORED_PRODUCT'], productId: s.productId, bidPaise: 700, dailyBudgetPaise: 50_000 });
+    for (const n of [1, 2, 3, 4, 5]) {
+      await call('POST', '/api/ad-serve/click', null, { campaignId: c.json.data.id, productId: s.productId, deviceId: `fresh-device-${n}-${Math.random()}`, slotType: 'SPONSORED_PRODUCT' });
+    }
+    const rows = await prisma.adClick.findMany({ where: { campaignId: c.json.data.id } });
+    expect(rows).toHaveLength(5);
+    expect(rows.filter((r) => r.valid)).toHaveLength(1); // one address, one charge a day
+    expect(rows.reduce((t, r) => t + r.chargedPaise, 0)).toBe(700);
+    expect(new Set(rows.map((r) => r.viewerKey)).size).toBe(1);
+    expect(rows[0]!.viewerKey).toMatch(/^ip:[0-9a-f]{32}$/); // hashed, not the raw address
+  });
+
+  it('charges nothing for a click on a paused or ended campaign', async () => {
+    const s = await seller();
+    await topUp(s.id, 100_000);
+    const c = await call<{ id: string }>('POST', '/api/seller/advertising/cpc', s.token, { name: 'Paused', adTypes: ['SPONSORED_PRODUCT'], productId: s.productId, bidPaise: 800, dailyBudgetPaise: 50_000 });
+    await call('PATCH', `/api/seller/advertising/${c.json.data.id}`, s.token, { status: 'PAUSED' });
+    const before = await walletView(s.id);
+    const u = await shopper();
+    const r = await registerClick({ campaignId: c.json.data.id, productId: s.productId, deviceId: 'device-paused-1', slotType: 'SPONSORED_PRODUCT', userId: u.id, userAgent: UA });
+    expect(r).toMatchObject({ valid: false, reason: 'campaign not running', chargedPaise: 0 });
+    await prisma.adCampaign.update({ where: { id: c.json.data.id }, data: { status: 'ACTIVE', endAt: new Date(Date.now() - 60_000) } });
+    const v = await shopper();
+    expect(await registerClick({ campaignId: c.json.data.id, productId: s.productId, deviceId: 'device-ended-1', slotType: 'SPONSORED_PRODUCT', userId: v.id, userAgent: UA })).toMatchObject({ valid: false, chargedPaise: 0 });
+    expect(await walletView(s.id)).toEqual(before);
+  });
+
+  it('never charges past the daily budget, even for clicks that arrive together', async () => {
+    const s = await seller();
+    const c = await call<{ id: string }>('POST', '/api/seller/advertising/cpc', s.token, { name: 'Cap', adTypes: ['SPONSORED_PRODUCT'], productId: s.productId, bidPaise: 1_000, dailyBudgetPaise: 3_500 });
+    expect((await call('GET', '/api/seller/advertising', s.token)).status).toBe(200); // ₹500 welcome credit
+    const shoppers = await Promise.all(Array.from({ length: 8 }, () => shopper()));
+    const outcomes = await Promise.all(
+      shoppers.map((u, i) => registerClick({ campaignId: c.json.data.id, productId: s.productId, deviceId: `device-cap-${i}`, slotType: 'SPONSORED_PRODUCT', userId: u.id, userAgent: UA })),
+    );
+    // ₹35 budget, ₹10 bid: three clicks fit, the fourth would pass it.
+    expect(outcomes.filter((o) => o.chargedPaise > 0)).toHaveLength(3);
+    expect(outcomes.filter((o) => o.reason === 'budget reached')).toHaveLength(5);
+    const stats = await prisma.adDailyStat.aggregate({ where: { campaignId: c.json.data.id }, _sum: { spendPaise: true, clicks: true } });
+    expect(stats._sum).toEqual({ spendPaise: 3_000, clicks: 3 });
+    expect((await walletView(s.id)).adCreditPaise).toBe(50_000 - 3_000);
+  });
+
+  it('spends a seller’s advertising credit once when charges arrive together', async () => {
+    const s = await seller();
+    await postEntry({ sellerId: s.id, type: 'AD_CREDIT_GRANT', bucket: 'AD_CREDIT', amountPaise: 5_000, note: 'test', idempotencyKey: `ad-credit:${s.id}` });
+    // Ten campaigns, so no one campaign's lock is what keeps the charges apart.
+    const campaigns = await Promise.all(
+      Array.from({ length: 10 }, (_, i) => call<{ id: string }>('POST', '/api/seller/advertising/cpc', s.token, { name: `Race ${i}`, adTypes: ['SPONSORED_PRODUCT'], productId: s.productId, bidPaise: 1_000, dailyBudgetPaise: 50_000 })),
+    );
+    const shoppers = await Promise.all(campaigns.map(() => shopper()));
+    await Promise.all(
+      campaigns.map((c, i) => registerClick({ campaignId: c.json.data.id, productId: s.productId, deviceId: `device-race-${i}`, slotType: 'SPONSORED_PRODUCT', userId: shoppers[i]!.id, userAgent: UA })),
+    );
+    // ₹100 of clicks against ₹50 of credit: the credit ends at exactly zero,
+    // and the other ₹50 (+ 18% GST) is charged once, from the payout.
+    const w = await walletView(s.id);
+    expect(w.adCreditPaise).toBe(0);
+    expect(w.settlementPaise).toBe(-(5_000 + 900));
   });
 
   it('pauses and resumes', async () => {

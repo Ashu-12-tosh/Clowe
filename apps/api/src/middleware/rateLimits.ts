@@ -76,6 +76,14 @@ export const cspReportLimiter = rateLimit({
   message: limitError('Too many reports.'),
 });
 
+/** Ad clicks: a shopper clicks a few ads, not dozens a minute. */
+export const adClickLimiter = rateLimit({
+  ...common,
+  windowMs: 60 * 1000,
+  limit: 30,
+  message: limitError(TOO_MANY_REQUESTS),
+});
+
 /** Image uploads. */
 export const uploadLimiter = rateLimit({
   ...common,

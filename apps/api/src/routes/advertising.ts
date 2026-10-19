@@ -14,6 +14,7 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { optionalAuth, requireAuth, requireRole } from '../middleware/auth';
+import { adClickLimiter } from '../middleware/rateLimits';
 import {
   adsOverview,
   grantWelcomeCredit,
@@ -69,12 +70,13 @@ adServeRouter.post('/impressions', async (req, res, next) => {
   }
 });
 
-adServeRouter.post('/click', optionalAuth, async (req, res, next) => {
+adServeRouter.post('/click', adClickLimiter, optionalAuth, async (req, res, next) => {
   try {
     const input = adClickSchema.parse(req.body);
-    const r = await registerClick({ ...input, userId: req.auth?.userId ?? null, userAgent: req.get('user-agent') ?? null });
-    // The outcome stays on the server; the shopper only needs to move on.
-    res.json({ success: true, data: { ok: true, counted: r.valid } });
+    await registerClick({ ...input, userId: req.auth?.userId ?? null, ip: req.ip ?? null, userAgent: req.get('user-agent') ?? null });
+    // The outcome stays on the server — whether a click counted is not the
+    // caller's to learn, or to tune a script against.
+    res.json({ success: true, data: { ok: true } });
   } catch (err) {
     next(err);
   }
