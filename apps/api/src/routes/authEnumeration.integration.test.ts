@@ -7,8 +7,9 @@ import { seedFixture } from '../test/fixture';
 import { authService } from '../services/authService';
 
 /**
- * The sign-in endpoints answer the same whether or not a phone number has an
- * account, so they cannot be used to find out which numbers do.
+ * What the sign-in endpoints tell about an account. The old phone checks
+ * answer the same for every number; PIN login now says what went wrong (see
+ * its block below for why).
  */
 
 const prisma = new PrismaClient();
@@ -54,24 +55,18 @@ async function post(path: string, body: unknown) {
 
 const pinLogin = (phone: string, pin: string) => post('/api/auth/pin-login', { phone, pin });
 
+// The owner's login redesign (pre-launch audit 2026-10-20, D1) says whether a
+// number has an account ("No account found — create one"), so PIN login says
+// what went wrong instead of one answer for everything; the lookup is
+// rate-limited (loginRedesign.integration.test.ts). A deactivated account is
+// still told only to someone who got its PIN right.
 describe('PIN login', () => {
-  it('fails the same way for every reason: no account, no PIN, wrong PIN, deactivated', async () => {
-    const answers = [
-      await pinLogin(P.unknown, '1111'),
-      await pinLogin(P.withoutPin, '1111'),
-      await pinLogin(P.withPin, '1111'),
-      await pinLogin(P.deactivated, '1111'),
-    ];
-    for (const a of answers) expect(a).toEqual(answers[0]);
-    expect(answers[0].status).toBe(400);
-    expect(JSON.parse(answers[0].text).error.code).toBe('PIN_INVALID');
-  });
-
-  it('answers a locked-out account the same way, even with the right PIN, until OTP clears it', async () => {
-    const reference = await pinLogin(P.unknown, '1111');
-    for (let i = 0; i < 5; i++) expect(await pinLogin(P.withPin, '0000')).toEqual(reference);
-    expect(await pinLogin(P.withPin, '2468')).toEqual(reference);
-    expect((await prisma.user.findUniqueOrThrow({ where: { phone: P.withPin } })).pinAttempts).toBeGreaterThanOrEqual(5);
+  it('says what went wrong: no account, no PIN yet, wrong PIN', async () => {
+    const codeOf = async (r: Promise<{ text: string }>) => JSON.parse((await r).text).error.code;
+    expect(await codeOf(pinLogin(P.unknown, '1111'))).toBe('NO_ACCOUNT');
+    expect(await codeOf(pinLogin(P.withoutPin, '1111'))).toBe('PIN_NOT_SET');
+    expect(await codeOf(pinLogin(P.withPin, '1111'))).toBe('PIN_INVALID');
+    expect(await codeOf(pinLogin(P.deactivated, '1111'))).toBe('PIN_INVALID');
   });
 
   it('signs in with the right PIN, and tells a deactivated account only once its PIN is right', async () => {

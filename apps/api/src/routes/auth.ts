@@ -1,9 +1,15 @@
 import { Router, type Response } from 'express';
 import { env } from '../env';
 import {
+  accountLookupSchema,
   deleteAccountSchema,
+  pinResetConfirmSchema,
+  pinResetRequestSchema,
+  signupSchema,
+  signupVerifyPhoneSchema,
   type SecurityOverview,
   type SessionInfo,
+  type SignupPhoneVerified,
   checkPhoneSchema,
   phoneChangeConfirmSchema,
   phoneChangeRequestSchema,
@@ -23,7 +29,7 @@ import { ApiError } from '../utils/ApiError';
 import { authService } from '../services/authService';
 import { auditLogin } from '../services/auditService';
 import { requireAuth } from '../middleware/auth';
-import { otpRequestLimiter, otpVerifyLimiter } from '../middleware/rateLimits';
+import { accountLookupLimiter, otpRequestLimiter, otpVerifyLimiter } from '../middleware/rateLimits';
 import { confirmEmail, sendVerificationLink, setUserEmail } from '../services/emailVerification';
 
 export const authRouter = Router();
@@ -78,25 +84,96 @@ async function recordTermsAcceptance(userId: string, termsVersion: string | unde
   });
 }
 
+/** What a failed sign-in was attempted with, for the audit row. */
+function typedIdentifier(body: unknown): string {
+  const b = (body ?? {}) as { identifier?: unknown; phone?: unknown };
+  const v = typeof b.identifier === 'string' ? b.identifier : typeof b.phone === 'string' ? b.phone : '';
+  return v.trim().slice(0, 120) || 'unknown';
+}
+
+/** Signed in: the refresh cookie, the accepted terms, the audit row. */
+async function signedIn(req: Parameters<typeof auditLogin>[0], res: Response, data: Awaited<ReturnType<typeof authService.pinLogin>>, termsVersion?: string) {
+  await recordTermsAcceptance(data.user.id, termsVersion);
+  setRefreshCookie(res, data.refreshToken);
+  auditLogin(req, 'SUCCESS', { userId: data.user.id, name: data.user.name, role: data.user.role, phone: data.user.phone });
+}
+
+// Step 1 of the login page: is there an account for this number or email?
+// It says so — the page offers "create one" — so it is rate-limited per address.
+authRouter.post('/lookup', accountLookupLimiter, async (req, res, next) => {
+  try {
+    const { identifier } = accountLookupSchema.parse(req.body);
+    res.json({ success: true, data: await authService.lookup(identifier) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Sign in with the 4-digit PIN, by phone number or email (no OTP/SMS cost).
 authRouter.post('/pin-login', otpVerifyLimiter, async (req, res, next) => {
-  const { phone } = req.body ?? {};
   try {
     const input = pinLoginSchema.parse(req.body);
-    const data = await authService.pinLogin(input.phone, input.pin);
-    await recordTermsAcceptance(data.user.id, input.termsVersion);
-    setRefreshCookie(res, data.refreshToken);
-    auditLogin(req, 'SUCCESS', {
-      userId: data.user.id,
-      name: data.user.name,
-      role: data.user.role,
-      phone: input.phone,
-    });
+    const data = await authService.pinLogin(input.identifier, input.pin);
+    await signedIn(req, res, data, input.termsVersion);
     res.json({ success: true, data });
   } catch (err) {
     auditLogin(req, 'FAILED', {
-      phone: typeof phone === 'string' ? phone : 'unknown',
+      phone: typedIdentifier(req.body),
       reason: err instanceof Error ? err.message : 'PIN login failed',
     });
+    next(err);
+  }
+});
+
+// "Forgot PIN?" (and a first PIN for an account without one): a code to the
+// account's phone, then the code and the new PIN together.
+authRouter.post('/pin-reset/request', otpRequestLimiter, async (req, res, next) => {
+  try {
+    const { identifier } = pinResetRequestSchema.parse(req.body);
+    res.json({ success: true, data: await authService.requestPinReset(identifier) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+authRouter.post('/pin-reset/confirm', otpVerifyLimiter, async (req, res, next) => {
+  try {
+    const input = pinResetConfirmSchema.parse(req.body);
+    const data = await authService.confirmPinReset(input.identifier, input.code, input.pin);
+    await signedIn(req, res, data, input.termsVersion);
+    res.json({ success: true, data });
+  } catch (err) {
+    auditLogin(req, 'FAILED', { phone: typedIdentifier(req.body), reason: err instanceof Error ? err.message : 'PIN reset failed' });
+    next(err);
+  }
+});
+
+// Create account: "Verify" beside the phone (the code is sent with
+// /request-otp), then the form with a proof of that verification.
+authRouter.post('/signup/verify-phone', otpVerifyLimiter, async (req, res, next) => {
+  try {
+    const { phone, code } = signupVerifyPhoneSchema.parse(req.body);
+    const data: SignupPhoneVerified = await authService.verifySignupPhone(phone, code);
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+authRouter.post('/signup', otpVerifyLimiter, async (req, res, next) => {
+  try {
+    const input = signupSchema.parse(req.body);
+    const { email, ...data } = await authService.signup({ ...input, email: input.email || undefined });
+    // An email given at sign-up is saved unconfirmed and gets its one-time link.
+    if (email) {
+      await setUserEmail(data.user.id, email).catch((err) => {
+        console.error('[clowe-api] sign-up email not saved:', err instanceof Error ? err.message : err);
+      });
+      data.user = await authService.getMe(data.user.id);
+    }
+    await signedIn(req, res, data, input.termsVersion);
+    res.status(201).json({ success: true, data });
+  } catch (err) {
     next(err);
   }
 });

@@ -3,13 +3,32 @@ import type { UserRole } from './index';
 import { imageUrlSchema } from './imageUrl';
 
 /**
- * Indian 10-digit mobile number (stored without +91).
- * Kept permissive enough for dev; providers validate again on their side.
+ * An Indian mobile number as people type or paste it — "+91 98765 43210",
+ * "919876543210", "098765-43210", "(98765) 43210" — reduced to the 10 digits
+ * it is stored as. The same function runs at sign-up and at every login, so a
+ * number can never be stored one way and looked up another. Anything that is
+ * not a number of that shape comes back as its digits, for the schema to refuse.
  */
-export const phoneSchema = z
-  .string()
-  .trim()
-  .regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit mobile number');
+export function normalizePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
+  if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1);
+  return digits;
+}
+
+/** An email address as stored and looked up: trimmed, lower-case. */
+export function normalizeEmail(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+/**
+ * Indian 10-digit mobile number (stored without +91). Accepts the number in
+ * any of the usual written forms (see normalizePhone).
+ */
+export const phoneSchema = z.preprocess(
+  (v) => (typeof v === 'string' ? normalizePhone(v) : v),
+  z.string().regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit mobile number'),
+);
 
 export const otpCodeSchema = z
   .string()
@@ -111,19 +130,120 @@ export const updatePreferencesSchema = z.object({
 });
 export type UpdatePreferencesInput = z.infer<typeof updatePreferencesSchema>;
 
-/** 4-digit quick-login PIN. */
-export const pinSchema = z.string().regex(/^\d{4}$/, 'PIN must be 4 digits');
+/**
+ * 4-digit PIN, always a string: "0123" keeps its leading zero (a number would
+ * not), and a space a password manager or paste added is dropped.
+ */
+export const pinSchema = z
+  .string({ invalid_type_error: 'PIN must be 4 digits' })
+  .transform((v) => v.replace(/\s/g, ''))
+  .pipe(z.string().regex(/^\d{4}$/, 'PIN must be 4 digits'));
 
 /** POST /api/auth/check-phone: kept for older pages, same answer for every number. */
 export const checkPhoneSchema = z.object({ phone: phoneSchema });
 
-/** POST /api/auth/pin-login */
-export const pinLoginSchema = z.object({
-  phone: phoneSchema,
+/** What someone typed to sign in: a phone number or an email address. */
+export type LoginIdentifier = { kind: 'phone'; value: string } | { kind: 'email'; value: string };
+
+/** Mobile number or email, normalised the way sign-up stores them; null when it is neither. */
+export function parseLoginIdentifier(raw: string): LoginIdentifier | null {
+  const text = raw.trim();
+  if (text.includes('@')) {
+    const email = customerEmailSchema.safeParse(normalizeEmail(text));
+    return email.success ? { kind: 'email', value: email.data } : null;
+  }
+  const phone = phoneSchema.safeParse(text);
+  return phone.success ? { kind: 'phone', value: phone.data } : null;
+}
+
+export const loginIdentifierSchema = z
+  .string()
+  .max(160)
+  .transform((v, ctx) => {
+    const id = parseLoginIdentifier(v);
+    if (!id) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter your 10-digit mobile number or your email address' });
+      return z.NEVER;
+    }
+    return id;
+  });
+
+/** POST /api/auth/lookup — is there an account for this number or email? */
+export const accountLookupSchema = z.object({ identifier: loginIdentifierSchema });
+
+export interface AccountLookupResult {
+  exists: boolean;
+  /** The identifier as normalised (what the next step sends back). */
+  kind: 'phone' | 'email';
+  identifier: string;
+  /** The account has a PIN; otherwise the next step sets one by OTP. */
+  hasPin: boolean;
+  /** "+91 98XXX XX210": where a reset code goes. Null when there is no account. */
+  phoneMasked: string | null;
+}
+
+/**
+ * POST /api/auth/pin-login. `identifier` (phone or email) is what the login
+ * page sends; `phone` is kept for the seller login and older clients.
+ */
+export const pinLoginSchema = z
+  .object({
+    identifier: loginIdentifierSchema.optional(),
+    phone: phoneSchema.optional(),
+    pin: pinSchema,
+    /** The Terms/Privacy version shown beside the button ("By continuing you…"). */
+    termsVersion: z.string().trim().max(20).optional(),
+  })
+  .refine((v) => v.identifier || v.phone, { message: 'Enter your mobile number or email', path: ['identifier'] })
+  .transform(({ identifier, phone, ...rest }) => ({ ...rest, identifier: identifier ?? { kind: 'phone' as const, value: phone! } }));
+
+const newPinFields = {
   pin: pinSchema,
-  /** The Terms/Privacy version shown beside the button ("By continuing you…"). */
-  termsVersion: z.string().trim().max(20).optional(),
-});
+  confirmPin: pinSchema,
+};
+const pinsMatch = (v: { pin: string; confirmPin: string }) => v.pin === v.confirmPin;
+const PINS_DIFFER = { message: 'The two PINs don’t match', path: ['confirmPin'] };
+
+/** POST /api/auth/signup/verify-phone — the OTP sent to the new number. */
+export const signupVerifyPhoneSchema = z.object({ phone: phoneSchema, code: otpCodeSchema });
+export interface SignupPhoneVerified {
+  /** Short-lived proof the number was verified, sent with the account details. */
+  phoneToken: string;
+}
+
+/** POST /api/auth/signup — the Create account form. */
+export const signupSchema = z
+  .object({
+    name: z.string().trim().min(2, 'Enter your name').max(60),
+    phone: phoneSchema,
+    phoneToken: z.string().min(20).max(1000),
+    email: customerEmailSchema.transform(normalizeEmail).or(z.literal('')).optional(),
+    ...newPinFields,
+    referralCode: z.string().trim().min(4).max(20).optional(),
+    termsVersion: z.string().trim().max(20).optional(),
+  })
+  .refine(pinsMatch, PINS_DIFFER);
+
+/** POST /api/auth/pin-reset/request — "Forgot PIN?": a code to the account's phone. */
+export const pinResetRequestSchema = z.object({ identifier: loginIdentifierSchema });
+export interface PinResetRequestResult extends OtpRequestResult {
+  phoneMasked: string;
+}
+
+/** POST /api/auth/pin-reset/confirm — the code and the new PIN, in one step. */
+export const pinResetConfirmSchema = z
+  .object({
+    identifier: loginIdentifierSchema,
+    code: otpCodeSchema,
+    ...newPinFields,
+    termsVersion: z.string().trim().max(20).optional(),
+  })
+  .refine(pinsMatch, PINS_DIFFER);
+
+/** "+91 98XXX XX210" */
+export function maskPhone(phone: string): string {
+  return `+91 ${phone.slice(0, 2)}XXX XX${phone.slice(7)}`;
+}
 
 /** POST /api/auth/me/set-pin. confirmPin, when sent, must match. */
 export const setPinSchema = z

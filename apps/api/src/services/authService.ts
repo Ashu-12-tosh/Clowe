@@ -1,40 +1,45 @@
 import type { User } from '@prisma/client';
-import type { AuthTokensResponse, AuthUser, OtpRequestResult } from '@clowe/shared';
+import {
+  maskPhone,
+  type AccountLookupResult,
+  type AuthTokensResponse,
+  type AuthUser,
+  type LoginIdentifier,
+  type OtpRequestResult,
+  type PinResetRequestResult,
+} from '@clowe/shared';
 import { prisma } from '../db';
 import { env } from '../env';
 import { ApiError } from '../utils/ApiError';
-import {
-  generateOtpCode,
-  generateReferralCode,
-  generateRefreshToken,
-  hashMatches,
-  sha256,
-} from '../utils/crypto';
-import { signAccessToken } from '../utils/jwt';
+import { generateOtpCode, generateReferralCode, generateRefreshToken, hashMatches, sha256 } from '../utils/crypto';
+import { signAccessToken, signPhoneToken, verifyPhoneToken } from '../utils/jwt';
+import { hashPin, verifyPin } from '../utils/pinHash';
 import { OtpSendError, otpProvider } from './otp';
 
 const OTP_RESEND_COOLDOWN_SEC = 45;
+/** Codes one number can be sent in an hour, whoever asks for them: SMS costs money. */
+export const OTP_SENDS_PER_HOUR = 6;
 /**
  * How many still-valid codes a sign-in accepts: the latest and the two before
  * it, for an SMS that arrives after its resend. Few, so guessing stays as hard.
  */
 const OTP_OPEN_CODES = 3;
-const PIN_MAX_ATTEMPTS = 5;
-/** The one answer to a failed PIN login, whatever the reason. */
-const PIN_LOGIN_FAILED = "That number and PIN don't match. Use OTP if you've forgotten your PIN.";
+/**
+ * Wrong PINs since the last good one: every PIN_PAUSE_EVERY-th pauses PIN
+ * sign-in (15 minutes, then 30), and from PIN_OTP_ONLY_AFTER only "Forgot
+ * PIN?" — a code to the phone — opens it again: 15 guesses out of 10,000.
+ * A correct PIN during a pause is refused with the pause, never as "wrong".
+ */
+export const PIN_PAUSE_EVERY = 5;
+export const PIN_OTP_ONLY_AFTER = 15;
+const PIN_PAUSE_MIN = 15;
 /**
  * The one answer when the code could not be sent, whatever the reason. It
- * depends only on the SMS provider, never on whether the number has an
- * account; the reason itself is in the API log.
+ * depends only on the SMS provider; the reason itself is in the API log.
  */
 const OTP_SEND_FAILED = "We couldn't send the code. Please try again.";
-/** Compared against when a number has no PIN, so the work is the same either way. */
-const NO_PIN_HASH = sha256('no-pin-set');
 
-/** PIN is peppered + scoped to the user before hashing (never stored raw). */
-function pinPlain(userId: string, pin: string): string {
-  return `${userId}:${pin}:${env.JWT_ACCESS_SECRET}`;
-}
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export function toAuthUser(user: User): AuthUser {
   return {
@@ -110,11 +115,11 @@ async function issueTokens(user: User): Promise<{ accessToken: string; refreshTo
 }
 
 /** Create a user with a collision-safe referral code. */
-async function createUser(phone: string, name?: string, referredById?: string): Promise<User> {
+async function createUser(phone: string, name?: string, referredById?: string, extra: { pinHash?: string } = {}): Promise<User> {
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       return await prisma.user.create({
-        data: { phone, name: name ?? null, referralCode: generateReferralCode(), referredById },
+        data: { phone, name: name ?? null, referralCode: generateReferralCode(), referredById, ...extra },
       });
     } catch (err: unknown) {
       // P2002 = unique violation; retry only for referralCode collisions.
@@ -127,9 +132,43 @@ async function createUser(phone: string, name?: string, referredById?: string): 
   throw new Error('Could not generate a unique referral code');
 }
 
+/** A referral code typed at sign-up: its owner, or nobody (sign-up never fails on it). */
+async function referrerOf(code: string | undefined): Promise<User | null> {
+  return code ? prisma.user.findUnique({ where: { referralCode: code } }) : null;
+}
+
+const NO_ACCOUNT = (id: LoginIdentifier) =>
+  ApiError.notFound(`No account found with this ${id.kind === 'phone' ? 'number' : 'email'} — create one`, 'NO_ACCOUNT');
+
+/**
+ * The account a phone number or email signs in to. Emails are matched without
+ * regard to case (they are stored lower-case, but older rows may not be); an
+ * email on two accounts signs in to neither — the phone number decides.
+ */
+export async function findAccount(id: LoginIdentifier): Promise<User | null> {
+  if (id.kind === 'phone') return prisma.user.findUnique({ where: { phone: id.value } });
+  const rows = await prisma.user.findMany({ where: { email: { equals: id.value, mode: 'insensitive' } }, take: 2 });
+  if (rows.length > 1) {
+    throw ApiError.badRequest('This email is on more than one account — sign in with your mobile number', 'EMAIL_AMBIGUOUS');
+  }
+  return rows[0] ?? null;
+}
+
+/** Why PIN sign-in is closed right now, in words for the person — or null when it is open. */
+function pinLockMessage(user: Pick<User, 'pinAttempts' | 'pinLockedUntil' | 'phone'>, now: Date): string | null {
+  if (user.pinAttempts >= PIN_OTP_ONLY_AFTER) {
+    return `Your PIN is locked after too many wrong tries. Tap “Forgot PIN?” to set a new one — we'll send a code to ${maskPhone(user.phone)}.`;
+  }
+  if (user.pinLockedUntil && user.pinLockedUntil > now) {
+    const minutes = Math.max(1, Math.ceil((user.pinLockedUntil.getTime() - now.getTime()) / 60_000));
+    return `Too many wrong PINs. Try again in ${plural(minutes, 'minute')}, or tap “Forgot PIN?” to reset it by OTP.`;
+  }
+  return null;
+}
+
 export const authService = {
   /**
-   * Step 1: generate an OTP, store its hash, deliver via the configured provider.
+   * Generate an OTP, store its hash, deliver via the configured provider.
    * With the mock provider outside production, the OTP is also returned in the
    * response (devOtp) so the login page can show it. Never once a real SMS
    * provider is live: then the code exists only in the SMS.
@@ -147,6 +186,18 @@ export const authService = {
           'OTP_COOLDOWN',
         );
       }
+    }
+    // Per number, not per address: a script spread over many addresses still
+    // cannot run up an SMS bill on one number, or flood its owner.
+    const hourAgo = new Date(Date.now() - 3_600_000);
+    const lastHour = await prisma.otpCode.findMany({
+      where: { phone, createdAt: { gt: hourAgo } },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true },
+    });
+    if (lastHour.length >= OTP_SENDS_PER_HOUR) {
+      const minutes = Math.max(1, Math.ceil((lastHour[0]!.createdAt.getTime() + 3_600_000 - Date.now()) / 60_000));
+      throw ApiError.tooMany(`Too many codes sent to this number. Try again in ${plural(minutes, 'minute')}.`, 'OTP_HOURLY_LIMIT');
     }
 
     const code = generateOtpCode();
@@ -177,8 +228,8 @@ export const authService = {
   },
 
   /**
-   * Step 2: verify the OTP. Creates the account on first login (with optional
-   * name and referral code), then issues access + refresh tokens.
+   * Verify the OTP (seller login and older clients). Creates the account on
+   * first login (with optional name and referral code), then issues tokens.
    */
   async verifyOtp(input: {
     phone: string;
@@ -194,11 +245,7 @@ export const authService = {
 
     if (!user) {
       isNewUser = true;
-      // Resolve referral code (ignored silently if invalid — signup must not fail on it).
-      let referrer: User | null = null;
-      if (input.referralCode) {
-        referrer = await prisma.user.findUnique({ where: { referralCode: input.referralCode } });
-      }
+      const referrer = await referrerOf(input.referralCode);
       user = await createUser(input.phone, input.name, referrer?.id);
       if (referrer) {
         await prisma.referral.create({
@@ -211,14 +258,14 @@ export const authService = {
       throw ApiError.forbidden('This account has been deactivated', 'ACCOUNT_DISABLED');
     }
 
-    // "Forgot PIN?": the code proves the phone, so from this moment the old
-    // PIN is gone (not merely replaced later — a page closed halfway must not
-    // leave it working), the lockout is cleared, and every session signed in
-    // until now is signed out. The new session is issued after, so it stays.
+    // "Forgot PIN?" on older pages: the code proves the phone, so from this
+    // moment the old PIN is gone, the lockout is cleared, and every session
+    // signed in until now is signed out. (The login page now sends the code
+    // and the new PIN together — pin-reset/confirm — so nothing is half done.)
     if (input.purpose === 'PIN_RESET' && !isNewUser) {
       const now = new Date();
       [user] = await prisma.$transaction([
-        prisma.user.update({ where: { id: user.id }, data: { pinHash: null, pinAttempts: 0 } }),
+        prisma.user.update({ where: { id: user.id }, data: { pinHash: null, pinAttempts: 0, pinLockedUntil: null } }),
         prisma.refreshToken.updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: now } }),
       ]);
       const tokens = await issueTokens(user);
@@ -226,51 +273,148 @@ export const authService = {
     }
 
     // A successful OTP login clears any PIN lockout.
-    if (user.pinAttempts > 0) {
-      await prisma.user.update({ where: { id: user.id }, data: { pinAttempts: 0 } });
+    if (user.pinAttempts > 0 || user.pinLockedUntil) {
+      await prisma.user.update({ where: { id: user.id }, data: { pinAttempts: 0, pinLockedUntil: null } });
     }
 
     const tokens = await issueTokens(user);
     return { user: toAuthUser(user), ...tokens, isNewUser };
   },
 
+  /** Is there an account for this number or email, and does it have a PIN? */
+  async lookup(id: LoginIdentifier): Promise<AccountLookupResult> {
+    const user = await findAccount(id);
+    return {
+      exists: !!user,
+      kind: id.kind,
+      identifier: id.value,
+      hasPin: !!user?.pinHash,
+      phoneMasked: user ? maskPhone(user.phone) : null,
+    };
+  },
+
   /**
-   * Quick login with the 4-digit PIN (5 attempts, then OTP-only).
+   * Sign in with the 4-digit PIN, by phone number or email.
    *
-   * Every failure looks the same — no such number, no PIN set, locked out,
-   * wrong PIN — down to the work done for it, so the answer says nothing
-   * about which numbers have accounts. Whether an account is deactivated is
-   * told only to someone who got its PIN right.
+   * Each answer says what happened — no account, no PIN yet, paused after
+   * wrong tries (with how long), or wrong with tries left — because "that PIN
+   * is wrong" for a correct PIN on a paused account is exactly the confusion
+   * this replaced. Whether an account is deactivated is told only to someone
+   * who got its PIN right. Tries on one account are taken one at a time.
    */
-  async pinLogin(phone: string, pin: string): Promise<AuthTokensResponse> {
-    const user = await prisma.user.findUnique({ where: { phone } });
-    const ok =
-      hashMatches(pinPlain(user?.id ?? 'no-account', pin), user?.pinHash ?? NO_PIN_HASH) &&
-      !!user?.pinHash &&
-      user.pinAttempts < PIN_MAX_ATTEMPTS;
-    if (!ok || !user) {
-      // The same write whatever went wrong: counts a real PIN's failed try,
-      // and matches nothing for a number without one.
-      await prisma.user.updateMany({
-        where: { phone, pinHash: { not: null } },
-        data: { pinAttempts: { increment: 1 } },
-      });
-      throw ApiError.badRequest(PIN_LOGIN_FAILED, 'PIN_INVALID');
+  async pinLogin(id: LoginIdentifier, pin: string): Promise<AuthTokensResponse> {
+    const found = await findAccount(id);
+    if (!found) throw NO_ACCOUNT(id);
+    if (!found.pinHash) {
+      throw ApiError.badRequest('You haven’t set a PIN yet. Tap “Forgot PIN?” to set one — we’ll send a code to your phone.', 'PIN_NOT_SET');
     }
-    if (!user.isActive) {
+
+    const outcome = await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`pin-login:${found.id}`}))`;
+        const user = await tx.user.findUniqueOrThrow({ where: { id: found.id } });
+        const now = new Date();
+        const locked = pinLockMessage(user, now);
+        if (locked) return { kind: 'locked' as const, message: locked };
+
+        const check = await verifyPin(user.id, pin, user.pinHash!);
+        if (!check.ok) {
+          const attempts = user.pinAttempts + 1;
+          const pauses = attempts % PIN_PAUSE_EVERY === 0 && attempts < PIN_OTP_ONLY_AFTER;
+          // 15 minutes at the 5th wrong PIN, 30 at the 10th; the 15th needs "Forgot PIN?".
+          const pauseMs = PIN_PAUSE_MIN * 60_000 * 2 ** (attempts / PIN_PAUSE_EVERY - 1);
+          const until = pauses ? new Date(now.getTime() + pauseMs) : user.pinLockedUntil;
+          const updated = await tx.user.update({ where: { id: user.id }, data: { pinAttempts: attempts, pinLockedUntil: until } });
+          const nowLocked = pinLockMessage(updated, now);
+          if (nowLocked) return { kind: 'locked' as const, message: nowLocked };
+          const left = PIN_PAUSE_EVERY - (attempts % PIN_PAUSE_EVERY);
+          return { kind: 'wrong' as const, message: `Wrong PIN. ${left === 1 ? '1 try' : `${left} tries`} left before a short pause — or tap “Forgot PIN?”.` };
+        }
+        // Right PIN. An older hash is replaced by the current kind as it is used.
+        const user2 = await tx.user.update({
+          where: { id: user.id },
+          data: { pinAttempts: 0, pinLockedUntil: null, ...(check.legacy ? { pinHash: await hashPin(pin) } : {}) },
+        });
+        return { kind: 'ok' as const, user: user2 };
+      },
+      { timeout: 15_000 },
+    );
+    if (outcome.kind === 'locked') throw ApiError.tooMany(outcome.message, 'PIN_LOCKED');
+    if (outcome.kind === 'wrong') throw ApiError.badRequest(outcome.message, 'PIN_INVALID');
+    if (!outcome.user.isActive) {
       throw ApiError.forbidden('This account has been deactivated', 'ACCOUNT_DISABLED');
     }
-    await prisma.user.update({ where: { id: user.id }, data: { pinAttempts: 0 } });
-    const tokens = await issueTokens(user);
-    return { user: toAuthUser(user), ...tokens };
+    const tokens = await issueTokens(outcome.user);
+    return { user: toAuthUser(outcome.user), ...tokens };
   },
 
   /** Set (or replace) the quick-login PIN for the authenticated user. */
   async setPin(userId: string, pin: string): Promise<void> {
     await prisma.user.update({
       where: { id: userId },
-      data: { pinHash: sha256(pinPlain(userId, pin)), pinAttempts: 0 },
+      data: { pinHash: await hashPin(pin), pinAttempts: 0, pinLockedUntil: null },
     });
+  },
+
+  /** "Forgot PIN?" (or setting a first PIN): a code to the account's own phone. */
+  async requestPinReset(id: LoginIdentifier): Promise<PinResetRequestResult> {
+    const user = await findAccount(id);
+    if (!user) throw NO_ACCOUNT(id);
+    return { ...(await authService.requestOtp(user.phone)), phoneMasked: maskPhone(user.phone) };
+  },
+
+  /**
+   * The code and the new PIN together, in one step: the old PIN works until
+   * the new one is saved, so a page closed halfway leaves nothing broken. The
+   * lockout clears and every other session is signed out; this one stays.
+   */
+  async confirmPinReset(id: LoginIdentifier, code: string, pin: string): Promise<AuthTokensResponse> {
+    const found = await findAccount(id);
+    if (!found) throw NO_ACCOUNT(id);
+    await consumeOtp(found.phone, code);
+    if (!found.isActive) throw ApiError.forbidden('This account has been deactivated', 'ACCOUNT_DISABLED');
+    const pinHash = await hashPin(pin);
+    const [user] = await prisma.$transaction([
+      prisma.user.update({ where: { id: found.id }, data: { pinHash, pinAttempts: 0, pinLockedUntil: null } }),
+      prisma.refreshToken.updateMany({ where: { userId: found.id, revokedAt: null }, data: { revokedAt: new Date() } }),
+    ]);
+    const tokens = await issueTokens(user);
+    return { user: toAuthUser(user), ...tokens };
+  },
+
+  /** Sign-up's "Verify" beside the phone: the code is checked here, once. */
+  async verifySignupPhone(phone: string, code: string): Promise<{ phoneToken: string }> {
+    if (await prisma.user.findUnique({ where: { phone }, select: { id: true } })) {
+      throw new ApiError(409, 'PHONE_TAKEN', 'This number already has an account — log in instead');
+    }
+    await consumeOtp(phone, code);
+    return { phoneToken: signPhoneToken(phone) };
+  },
+
+  /** "Create account": a verified phone, a name, an optional email and a PIN. */
+  async signup(input: {
+    name: string;
+    phone: string;
+    phoneToken: string;
+    email?: string;
+    pin: string;
+    referralCode?: string;
+  }): Promise<AuthTokensResponse & { email: string | null }> {
+    if (!verifyPhoneToken(input.phoneToken, input.phone)) {
+      throw ApiError.badRequest('Verify your phone number again — the code has expired', 'PHONE_NOT_VERIFIED');
+    }
+    if (await prisma.user.findUnique({ where: { phone: input.phone }, select: { id: true } })) {
+      throw new ApiError(409, 'PHONE_TAKEN', 'This number already has an account — log in instead');
+    }
+    const email = input.email || null;
+    if (email && (await prisma.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true } }))) {
+      throw new ApiError(409, 'EMAIL_TAKEN', 'This email is already on another account — use another, or leave it empty');
+    }
+    const referrer = await referrerOf(input.referralCode);
+    const user = await createUser(input.phone, input.name, referrer?.id, { pinHash: await hashPin(input.pin) });
+    if (referrer) await prisma.referral.create({ data: { referrerId: referrer.id, referredUserId: user.id } });
+    const tokens = await issueTokens(user);
+    return { user: toAuthUser(user), ...tokens, isNewUser: true, email };
   },
 
   /** Rotate a refresh token: revoke the old one, issue a fresh pair. */

@@ -14,6 +14,28 @@ export function signAccessToken(payload: AccessTokenPayload): string {
   });
 }
 
+/**
+ * Sign-up: proof that this browser verified the number by OTP, carried from
+ * the "Verify" button to "Create account". Its own audience and no subject,
+ * so it is never accepted as an access token (or one as it), and short-lived.
+ */
+const PHONE_TOKEN_AUDIENCE = 'clowe-signup-phone';
+export const PHONE_TOKEN_TTL_MIN = 20;
+
+export function signPhoneToken(phone: string): string {
+  return jwt.sign({ phone }, env.JWT_ACCESS_SECRET, { expiresIn: `${PHONE_TOKEN_TTL_MIN}m`, issuer: 'clowe-api', audience: PHONE_TOKEN_AUDIENCE });
+}
+
+/** Is this a live proof that `phone` was verified? */
+export function verifyPhoneToken(token: string, phone: string): boolean {
+  try {
+    const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET, { issuer: 'clowe-api', audience: PHONE_TOKEN_AUDIENCE });
+    return typeof decoded !== 'string' && decoded.phone === phone;
+  } catch {
+    return false;
+  }
+}
+
 /** Returns the payload, or null when the token is invalid/expired. */
 export function verifyAccessToken(token: string): AccessTokenPayload | null {
   try {

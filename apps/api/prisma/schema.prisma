@@ -267,9 +267,13 @@ model User {
   // The one-time confirmation link (sha256 of its token) and when it was sent; cleared once used.
   emailVerifyTokenHash String?  @unique
   emailVerifySentAt  DateTime?
-  // Quick-login PIN (4 digits, hashed; OTP always works as fallback)
-  pinHash     String?
-  pinAttempts Int     @default(0)
+  // Quick-login PIN (4 digits; scrypt with its own salt, or the older peppered
+  // sha256 until its next sign-in). Wrong PINs since the last good one count
+  // in pinAttempts: every 5th pauses PIN sign-in until pinLockedUntil, the
+  // 15th leaves only "Forgot PIN?" (OTP).
+  pinHash        String?
+  pinAttempts    Int       @default(0)
+  pinLockedUntil DateTime?
   // Notification preferences (OTP + order-critical messages always sent)
   notifyEmail    Boolean @default(true)
   notifySms      Boolean @default(true)

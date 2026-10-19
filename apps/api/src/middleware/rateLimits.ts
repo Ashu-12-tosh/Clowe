@@ -60,6 +60,18 @@ export const otpVerifyLimiter = rateLimit({
   message: limitError('Too many attempts. Please try again in 15 minutes.'),
 });
 
+/**
+ * Login's "is there an account?" step. It answers yes or no, so it is kept to
+ * what a person needs (a typo or two), not what a list of numbers would.
+ */
+export const ACCOUNT_LOOKUP_LIMIT = 15;
+export const accountLookupLimiter = rateLimit({
+  ...common,
+  windowMs: 15 * 60 * 1000,
+  limit: ACCOUNT_LOOKUP_LIMIT,
+  message: limitError('Too many lookups from this connection. Please try again in 15 minutes.'),
+});
+
 /** Public order tracking: a shopper checks an order a few times, not hundreds. */
 export const trackLimiter = rateLimit({
   ...common,

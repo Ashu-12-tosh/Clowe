@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
-import { authService } from '../services/authService';
+import { authService, PIN_OTP_ONLY_AFTER } from '../services/authService';
 import { sha256 } from '../utils/crypto';
 
 /**
@@ -35,8 +35,9 @@ async function post(path: string, body: unknown, token?: string) {
 async function userWithPin(phone: string, locked = false) {
   const user = await prisma.user.create({ data: { phone, name: 'Pin Person', referralCode: `PIN-${phone.slice(-4)}` } });
   await authService.setPin(user.id, '1234');
-  if (locked) await prisma.user.update({ where: { id: user.id }, data: { pinAttempts: 5 } });
-  const devices = [await authService.pinLogin(phone, '1234').catch(() => null), null];
+  // Locked: past the wrong tries after which only "Forgot PIN?" opens it.
+  if (locked) await prisma.user.update({ where: { id: user.id }, data: { pinAttempts: PIN_OTP_ONLY_AFTER } });
+  const devices = [await authService.pinLogin({ kind: 'phone', value: phone }, '1234').catch(() => null), null];
   // A locked-out user cannot PIN-login; sign two devices in by OTP instead.
   for (let i = 0; i < 2; i++) {
     if (devices[i]) continue;
@@ -75,14 +76,13 @@ describe('Forgot PIN', () => {
     expect((await post('/api/auth/refresh', { refreshToken: r.json.data.refreshToken })).status).toBe(200);
   });
 
-  it('leaves the old PIN refused with the same answer as a wrong one', async () => {
+  it('leaves the old PIN refused, saying no PIN is set (not that it is wrong)', async () => {
     await userWithPin('9199200002');
     await code('9199200002', '135791');
     await post('/api/auth/verify-otp', { phone: '9199200002', code: '135791', purpose: 'PIN_RESET' });
     const old = await post('/api/auth/pin-login', { phone: '9199200002', pin: '1234' });
-    const wrong = await post('/api/auth/pin-login', { phone: '9199200099', pin: '1234' });
     expect(old.status).toBe(400);
-    expect(old.json.error).toEqual(wrong.json.error);
+    expect(old.json.error?.code).toBe('PIN_NOT_SET');
   });
 
   it('closed midway: no PIN works, and the next login is by OTP (without asking for a reset again)', async () => {
