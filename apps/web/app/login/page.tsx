@@ -29,6 +29,11 @@ export default function LoginPage() {
     if (getStoredUser()) router.replace('/account');
   }, [router]);
 
+  // The header's "Create Account" (/login?new=1) opens straight on the sign-up form.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('new') === '1') flow.current?.openSignup();
+  }, []);
+
   // Esc leaves the login page (nothing typed is sent), like the X and the back arrow.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

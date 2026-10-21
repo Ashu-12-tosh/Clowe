@@ -1327,6 +1327,9 @@ async function flow8Shopper() {
   // email" box; no account → "No account found … — create one" and the Create
   // account form, whose button waits for a verified phone and matching PINs.
   await step(F, 'sign up: no account found → create one (phone verified by OTP, email, PIN twice)', async () => {
+    // The header's "Create Account" opens straight on the form.
+    await goto(page, '/login?new=1');
+    await page.locator('#signup-name').waitFor({ timeout: 120_000 });
     await goto(page, '/login');
     // Typed with +91 and a space: normalised exactly as login looks it up.
     await page.locator('#login-identifier').fill(`+91 ${S.shopperPhone.slice(0, 5)} ${S.shopperPhone.slice(5)}`, { timeout: 120_000 });
