@@ -199,7 +199,7 @@ export const EMAIL_NOTIFICATIONS: Record<string, string> = {
   RETURN_SELF_SHIP: 'View your return',
   RETURN_SELF_SHIP_PAID: 'View your return',
   // Sellers
-  NEW_ORDER: 'Open your orders',
+  // NEW_ORDER is emailed by sellerOrderNotice itself (its own address and detail).
   SELLER_APPROVED: 'Open your seller dashboard',
   SELLER_REJECTED: 'Open your seller dashboard',
   SELLER_TRYON: 'Try-on credits',

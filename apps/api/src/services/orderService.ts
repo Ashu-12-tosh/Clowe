@@ -5,6 +5,7 @@ import { sendMessageSafe, sendToUserSafe } from './messaging';
 import { creditExpiryFrom } from '../routes/credits';
 import { returnStock } from './stockService';
 import { attributeOrder } from './advertising';
+import { notifySellersOfNewOrder } from './sellerOrderNotice';
 
 /** A confirmed order credited to the ads its shopper clicked (never blocks the order). */
 function attributeAdsSafe(orderId: string) {
@@ -117,21 +118,8 @@ export async function settlePaymentSuccess(orderId: string, providerPaymentId?: 
     ]);
   }
 
-  // Tell each seller they have a new order.
-  const sellerIds = [...new Set(order.items.map((i) => i.sellerId))];
-  const sellers = await prisma.sellerProfile.findMany({
-    where: { id: { in: sellerIds } },
-    select: { userId: true },
-  });
-  await prisma.notification.createMany({
-    data: sellers.map((s) => ({
-      userId: s.userId,
-      type: 'NEW_ORDER',
-      title: 'New order received 🛍',
-      linkHref: '/seller/orders',
-      body: `You have new items to ship in order ${order.orderNumber}.`,
-    })),
-  });
+  // Tell each seller they have a new order: the bell and an email.
+  await notifySellersOfNewOrder(order, false);
 
   // WhatsApp order confirmation (provider-agnostic; mock logs in dev).
   const buyer = await prisma.user.findUnique({ where: { id: order.userId } });
@@ -332,18 +320,5 @@ export async function confirmCodOrder(orderId: string) {
     ]);
   }
 
-  const sellerIds = [...new Set(order.items.map((i) => i.sellerId))];
-  const sellers = await prisma.sellerProfile.findMany({
-    where: { id: { in: sellerIds } },
-    select: { userId: true },
-  });
-  await prisma.notification.createMany({
-    data: sellers.map((s) => ({
-      userId: s.userId,
-      type: 'NEW_ORDER',
-      title: 'New COD order received 🛍',
-      body: `Order ${order.orderNumber} is Cash on Delivery — collect on handover.`,
-      linkHref: '/seller/orders',
-    })),
-  });
+  await notifySellersOfNewOrder(order, true);
 }
