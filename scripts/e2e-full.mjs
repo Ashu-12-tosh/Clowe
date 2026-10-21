@@ -1182,8 +1182,14 @@ async function flow7Ads() {
         headers: { authorization: `Bearer ${S.tryToken}`, 'content-type': 'application/json', 'user-agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/128 Mobile Safari/537.36' },
         body: JSON.stringify({ campaignId: S.cpcId, productId: S.simpleId, deviceId, slotType: 'SPONSORED_PRODUCT' }),
       }).then((r) => r.json());
-    check((await human('e2e-phone-0001')).data?.counted === true, 'the first real click was not counted');
-    check((await human('e2e-phone-0002')).data?.counted === false, 'a repeat click within 24 hours was counted');
+    // Whether a click counted is not in the answer any more (pre-launch audit
+    // 2026-10-20, S1): it is read from the click's own record.
+    const lastClick = () => prisma.adClick.findFirst({ where: { campaignId: S.cpcId }, orderBy: { createdAt: 'desc' } });
+    check((await human('e2e-phone-0001')).data?.counted === undefined, 'the click answer says whether it counted');
+    check((await lastClick())?.valid === true, 'the first real click was not counted');
+    await human('e2e-phone-0002');
+    const repeat = await lastClick();
+    check(repeat?.valid === false && repeat.reason === 'repeat within 24 hours', `a repeat click within 24 hours: ${repeat?.valid}/${repeat?.reason}`);
     const credit1 = (await wallet()).adCreditPaise;
     check(credit0 - credit1 === 500, `ad credit ${credit0} → ${credit1}`);
   }, { page: () => S.tryPage, needs: ['cpc', 'tryon'] });
