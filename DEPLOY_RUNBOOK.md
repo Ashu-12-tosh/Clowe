@@ -1000,6 +1000,22 @@ curl -sk -H 'Host: cloweshop.com' https://localhost/api/health
 Migrations run automatically when the API container starts. The database and
 uploads live in named volumes, so nothing is lost.
 
+**When the pull changed anything in `nginx/`,** recreate nginx too — `up -d
+--build` does not, and a reload is not enough:
+
+```sh
+git diff --name-only HEAD@{1} HEAD -- nginx/     # anything listed? then:
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --no-deps --force-recreate nginx
+docker compose -f docker-compose.prod.yml --env-file .env.production exec nginx nginx -t
+curl -sI http://cloweshop.com/api/health | head -1    # must be a 301 to https
+```
+
+nginx's config files are mounted one file at a time. `git pull` replaces a
+changed file with a new one, and a single-file mount keeps showing the old one
+until the container is recreated — so `nginx -t` and `nginx -s reload` test
+and load the old config. That is how the 21 Oct 2026 deploy kept serving the
+API over plain HTTP until nginx was recreated.
+
 ❌ **`git pull` asks for a username, or says `Permission denied
 (publickey)`:** the server is not using its deploy key — the remote is still
 `https://`, or the key was removed from GitHub. Check `git remote get-url
