@@ -4,6 +4,7 @@ import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../app';
 import { signAccessToken } from '../utils/jwt';
+import { invalidateCategoryRules } from '../services/categoryRules';
 
 /**
  * Booking with Delhivery (the mock here). Delhivery is the only courier, so
@@ -250,6 +251,31 @@ describe('parcels and money', () => {
     const loose = await confirmedOrder({ cod: true, totalPaise: 56_000 });
     const single = (await call('GET', `/api/seller/orders/labels?ids=${loose.ids[0]}`)).json.data as unknown as Array<Record<string, unknown>>;
     expect(single[0]).toMatchObject({ awbNumber: null, courierName: null, codAmountPaise: 56_000, key: loose.ids[0] });
+  });
+
+  it('prints each line’s HSN code and the declared value the courier is told', async () => {
+    const { ids } = await confirmedOrder({ cod: false, totalPaise: 56_000, lines: [{ pricePaise: 30_000 }, { pricePaise: 20_000 }] });
+    const item = await prisma.orderItem.findUniqueOrThrow({ where: { id: ids[0]! }, select: { product: { select: { categoryId: true } } } });
+    const category = await prisma.category.findUniqueOrThrow({ where: { id: item.product.categoryId }, select: { hsnCode: true } });
+    await prisma.category.update({ where: { id: item.product.categoryId }, data: { hsnCode: '6109' } });
+    invalidateCategoryRules();
+    try {
+      await call('POST', '/api/seller/orders/bulk', { itemIds: ids, action: 'assign' });
+      const labels = (await call('GET', `/api/seller/orders/labels?ids=${ids[0]}`)).json.data as unknown as Array<{
+        declaredValuePaise: number;
+        isCod: boolean;
+        contents: { hsnCode: string | null }[];
+      }>;
+      // Prepaid: nothing to collect, but the goods are still worth what was paid.
+      expect(labels[0]).toMatchObject({ isCod: false, declaredValuePaise: 56_000 });
+      expect(labels[0]!.contents.map((l) => l.hsnCode)).toEqual(['6109', '6109']);
+      // …and the parcel itself collects nothing.
+      const parcel = await prisma.shipment.findFirstOrThrow({ where: { items: { some: { id: ids[0]! } } } });
+      expect(parcel.codAmountPaise).toBe(0);
+    } finally {
+      await prisma.category.update({ where: { id: item.product.categoryId }, data: { hsnCode: category.hsnCode } });
+      invalidateCategoryRules();
+    }
   });
 
   it('shows Surface and Express parcels on the summary, with no courier list', async () => {

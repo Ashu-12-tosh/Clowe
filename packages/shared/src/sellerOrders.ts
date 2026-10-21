@@ -371,7 +371,10 @@ export interface SellerShippingLabel {
   isCod: boolean;
   /** Amount to collect on delivery (0 for prepaid). */
   codAmountPaise: number;
-  contents: { title: string; variantLabel: string; quantity: number; status: string }[];
+  /** What the goods are worth, as the courier is told (the invoice value). */
+  declaredValuePaise: number;
+  /** Each line with its HSN code (the category's; null when it has none). */
+  contents: { title: string; variantLabel: string; quantity: number; status: string; hsnCode: string | null }[];
   shipTo: SellerShipTo;
   shipFrom: {
     shopName: string;

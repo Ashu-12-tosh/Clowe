@@ -69,6 +69,28 @@ function etaLabel(from: string | null, to: string | null): string {
   if (!from || fmtShort(from) === fmtShort(to)) return fmtShort(to);
   return `${fmtShort(from)} – ${fmtShort(to)}`;
 }
+const NOT_ON_THE_WAY = new Set(['DELIVERED', 'CANCELLED', 'RETURNED', 'RETURN_REQUESTED', 'REFUNDED']);
+
+/**
+ * The window the header quotes: checkout's estimate for what has not left
+ * yet, and each dispatched parcel's own, firmer one (from its dispatch date)
+ * for what is on its way — so the page never shows two different windows
+ * for the same goods (pre-launch audit L5).
+ */
+function currentEtaWindow(order: OrderDetailView): { from: string | null; to: string | null } {
+  const windows: { from: string; to: string }[] = [];
+  for (const item of order.items) {
+    if (NOT_ON_THE_WAY.has(item.status)) continue;
+    const parcel = item.parcel;
+    if (item.status === 'SHIPPED' && parcel?.etaFrom && parcel.etaTo) windows.push({ from: parcel.etaFrom, to: parcel.etaTo });
+    else if (order.etaFrom && order.etaTo) windows.push({ from: order.etaFrom, to: order.etaTo });
+  }
+  if (windows.length === 0) return { from: order.etaFrom, to: order.etaTo };
+  const from = windows.reduce((a, w) => (w.from < a ? w.from : a), windows[0]!.from);
+  const to = windows.reduce((a, w) => (w.to > a ? w.to : a), windows[0]!.to);
+  return { from, to };
+}
+
 function statusLabel(status: string): string {
   return status
     .replace(/_/g, ' ')
@@ -204,7 +226,8 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
   const itemCount = order.items.reduce((sum, i) => sum + i.quantity, 0);
   const paymentLabel = paymentMethodLabel(order.paymentMethod, order.payment?.provider);
   const orderedSlugs = order.items.map((i) => i.productSlug);
-  const eta = etaLabel(order.etaFrom, order.etaTo);
+  const etaWindow = currentEtaWindow(order);
+  const eta = etaLabel(etaWindow.from, etaWindow.to);
   const cancelled = order.status === 'CANCELLED';
 
   // Real stamps where we have them; the quoted ETA for what is still ahead.

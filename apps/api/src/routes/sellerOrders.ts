@@ -40,7 +40,7 @@ import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
 import { shippingProvider } from '../services/shipping';
-import { bookShipment, deliveredByHandAllowed, pickupAddress, planParcel } from '../services/shipping/shipments';
+import { bookShipment, declaredValueOf, deliveredByHandAllowed, hsnByCategory, pickupAddress, planParcel } from '../services/shipping/shipments';
 import { separateReturnAddress } from '../services/shipping/warehouses';
 import { markLineDelivered, markLineShipped } from '../services/shipping/lineTransitions';
 import { requestPickup } from '../services/shipping/pickups';
@@ -876,12 +876,20 @@ sellerOrdersRouter.get('/labels', async (req, res, next) => {
       where: { id: { in: ids }, sellerId: seller.id },
       include: {
         order: { include: { items: { select: { id: true, pricePaise: true, quantity: true, promoDiscountPaise: true } } } },
+        product: { select: { categoryId: true } },
         shipment: {
-          include: { items: { select: { id: true, title: true, variantLabel: true, quantity: true, status: true } } },
+          include: {
+            items: {
+              select: { id: true, title: true, variantLabel: true, quantity: true, status: true, product: { select: { categoryId: true } } },
+            },
+          },
         },
       },
     });
     items.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+    const hsn = await hsnByCategory(
+      items.flatMap((i) => [i.product.categoryId, ...(i.shipment?.items ?? []).map((l) => l.product.categoryId)]),
+    );
 
     // One label per parcel: every line in the box is on it, whichever were
     // picked. A line not booked yet gets its own, without an AWB.
@@ -913,7 +921,14 @@ sellerOrdersRouter.get('/labels', async (req, res, next) => {
             : shipment
               ? shipment.codAmountPaise
               : valueOfLines(i.order.totalPaise, i.order.items, [i.id]),
-          contents: lines.map((l) => ({ title: l.title, variantLabel: l.variantLabel, quantity: l.quantity, status: l.status })),
+          declaredValuePaise: declaredValueOf(i.order, lines.map((l) => l.id)),
+          contents: lines.map((l) => ({
+            title: l.title,
+            variantLabel: l.variantLabel,
+            quantity: l.quantity,
+            status: l.status,
+            hsnCode: hsn.get(l.product.categoryId) ?? null,
+          })),
           shipTo: {
             name: i.order.shipName,
             line1: i.order.shipLine1,

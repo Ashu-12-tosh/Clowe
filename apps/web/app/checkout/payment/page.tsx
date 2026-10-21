@@ -73,8 +73,6 @@ function loadRazorpayScript(): Promise<void> {
   });
 }
 
-/** `name@bank` — the format every UPI handle follows. */
-const UPI_ID_RE = /^[a-z0-9.\-_]{2,64}@[a-z]{2,32}$/i;
 
 // Indian calendar dates, as checkout quotes them: in the browser's own zone a
 // window could read a day off what checkout said (pre-launch audit L5).
@@ -103,8 +101,6 @@ function PaymentPageInner() {
   const [billingId, setBillingId] = useState('');
   const [buyerGstin, setBuyerGstin] = useState('');
   const gstinError = buyerGstin.trim() ? gstinProblem(buyerGstin) : null;
-  const [upiId, setUpiId] = useState('');
-  const [upiState, setUpiState] = useState<'idle' | 'ok' | 'bad'>('idle');
   const [bank, setBank] = useState(BANKS[0]);
   const [wallet, setWallet] = useState(WALLETS[0]);
 
@@ -230,10 +226,6 @@ function PaymentPageInner() {
       }
       return;
     }
-    if (method === 'UPI' && upiId.trim() && upiState !== 'ok') {
-      setError('Check your UPI ID before continuing');
-      return;
-    }
     if (gstinError) {
       setError(`GSTIN: ${gstinError}`);
       return;
@@ -279,7 +271,6 @@ function PaymentPageInner() {
         order_id: result.payment.providerOrderId,
         // Open Razorpay on the method the shopper already picked.
         method: method.toLowerCase(),
-        prefill: upiId.trim() ? { vpa: upiId.trim() } : undefined,
         handler: (response: {
           razorpay_order_id: string;
           razorpay_payment_id: string;
@@ -466,46 +457,14 @@ function PaymentPageInner() {
                 {method === 'UPI' && (
                   <>
                     <p className="t-card-label text-ink-900">Pay using UPI</p>
+                    {/* Our page used to ask for the UPI ID too, but the gateway never
+                        received it (pre-launch audit B7): it is asked for there. */}
                     <p className="t-caption mt-0.5 text-gray-500">
-                      Enter your UPI ID — we hand it to the gateway so your app opens with the
-                      amount pre-filled.
+                      On the secure payment page you pick your UPI app, scan a QR code or enter your
+                      UPI ID, and approve the amount in your app.
                     </p>
 
-                    <label className="t-caption mt-4 block text-gray-600">
-                      UPI ID
-                      <span className="mt-1 flex gap-2">
-                        <input
-                          value={upiId}
-                          onChange={(e) => {
-                            setUpiId(e.target.value);
-                            setUpiState('idle');
-                          }}
-                          placeholder="yourname@bank"
-                          aria-label="UPI ID"
-                          className="t-body min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2.5 outline-none focus:border-brand-600"
-                        />
-                        <button
-                          onClick={() =>
-                            setUpiState(UPI_ID_RE.test(upiId.trim()) ? 'ok' : 'bad')
-                          }
-                          className="t-btn shrink-0 rounded-lg bg-ink-900 px-5 text-white transition hover:bg-ink-800"
-                        >
-                          Check
-                        </button>
-                      </span>
-                    </label>
-                    {upiState === 'ok' && (
-                      <p className="t-caption mt-1.5 font-semibold text-green-700">
-                        ✓ That looks like a valid UPI ID
-                      </p>
-                    )}
-                    {upiState === 'bad' && (
-                      <p className="t-caption mt-1.5 font-semibold text-red-600">
-                        That doesn&apos;t look like a UPI ID — the format is name@bank
-                      </p>
-                    )}
-
-                    <p className="t-caption mt-4 font-bold text-gray-600">Popular UPI apps</p>
+                    <p className="t-caption mt-4 font-bold text-gray-600">Works with</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {UPI_APPS.map((app) => (
                         <span

@@ -209,7 +209,7 @@ Ad spend is not charged upfront: it is recovered from your next payout. If a pay
     tags: ['try-on', 'ai', 'virtual', 'eligibility'],
     body: `AI Try-On lets shoppers see your item on their own photo. It shows on a product when the platform's minimum-price rule is met and you have left Enable AI Try-On ticked on the listing (step 7 of the wizard).
 
-It is available in wearable categories such as apparel, footwear and eyewear. Untick it for anything where a virtual try-on would look wrong. Try-On runs cost you nothing — the marketplace pays the provider.`,
+It is available in wearable categories such as apparel, footwear and eyewear. Untick it for anything where a virtual try-on would look wrong. Each try-on a shopper runs uses one of your AI Try-On credits. The first approved sellers get free credits; after that, buy a credit pack on the AI Try-On page. When your credits run out, the Try On button is hidden until you add more.`,
   },
   {
     id: 'kyc',

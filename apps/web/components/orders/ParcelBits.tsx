@@ -4,10 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { MAX_DELIVERY_ATTEMPTS, type LostParcelChoice, type OrderDetailItem } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
-import { formatPaise } from '@/lib/format';
+import { formatPaise, istDay } from '@/lib/format';
 
+// Indian calendar dates, as the order page and checkout quote them.
 function fmtShort(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  return istDay(iso);
 }
 
 /**

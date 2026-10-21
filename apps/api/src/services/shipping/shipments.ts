@@ -54,18 +54,34 @@ export interface ParcelPlan {
   mode: ShippingMode;
 }
 
+/**
+ * What the goods in a parcel are worth, as the courier is told (the invoice
+ * value) and as the label prints it: the lines' share of what the buyer paid.
+ * A free replacement's order total is ₹0; the courier still needs the goods'
+ * value, so there it is the lines' own price.
+ */
+export function declaredValueOf(order: { paymentMethod: string; totalPaise: number; items: LineValue[] }, lineIds: Iterable<string>): number {
+  const ids = new Set(lineIds);
+  return order.paymentMethod === 'REPLACEMENT'
+    ? order.items.filter((i) => ids.has(i.id)).reduce((sum, i) => sum + i.pricePaise * i.quantity - i.promoDiscountPaise, 0)
+    : valueOfLines(order.totalPaise, order.items, ids);
+}
+
+/** Each category's valid HSN code (its own or inherited), or null. */
+export async function hsnByCategory(categoryIds: Iterable<string>): Promise<Map<string, string | null>> {
+  const rules = await categoryRulesMap(categoryIds);
+  const out = new Map<string, string | null>();
+  for (const [id, r] of rules) out.set(id, isValidHsn(r?.hsnCode) ? r!.hsnCode!.trim() : null);
+  return out;
+}
+
 /** One parcel for these lines of an order: what it weighs, measures and collects. */
 export function planParcel(
   order: { paymentMethod: string; totalPaise: number; items: LineValue[] },
   lines: { id: string; quantity: number; product: { weightGrams: number | null; lengthMm: number | null; widthMm: number | null; heightMm: number | null } }[],
 ): ParcelPlan {
   const isCod = order.paymentMethod === 'COD';
-  // A free replacement's order total is ₹0; the courier still needs the goods' value.
-  const ids = new Set(lines.map((l) => l.id));
-  const valuePaise =
-    order.paymentMethod === 'REPLACEMENT'
-      ? order.items.filter((i) => ids.has(i.id)).reduce((sum, i) => sum + i.pricePaise * i.quantity - i.promoDiscountPaise, 0)
-      : valueOfLines(order.totalPaise, order.items, ids);
+  const valuePaise = declaredValueOf(order, lines.map((l) => l.id));
   // One unit of one product: its own box size. Several go in a box the seller confirms later.
   const single = lines.length === 1 && lines[0]!.quantity === 1 ? lines[0]!.product : null;
   return {

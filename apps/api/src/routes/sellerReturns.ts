@@ -307,7 +307,8 @@ sellerReturnsRouter.get('/summary', async (req, res, next) => {
         // This shop's window for what it sells now: its own, else the platform's.
         returnWindowDays: req.seller!.returnWindowDays ?? (await getSettings()).returnWindowDays,
         refundBusinessDays: '3–5 business days',
-        returnShipping: 'Free pickup — return shipping is on the marketplace',
+        // The seller pays: the trip is posted to their ledger as RETURN_FREIGHT.
+        returnShipping: 'Free for the buyer. You pay Delhivery’s pickup charge — it is posted to your ledger as “Return pickup freight (Delhivery)”.',
         decisionSlaHours: DECISION_SLA_HOURS,
         overdueCount: rows.filter(
           (r) => r.status === 'REQUESTED' && new Date(r.requestedAt) < slaCutoff,

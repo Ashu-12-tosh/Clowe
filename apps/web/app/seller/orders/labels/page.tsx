@@ -78,14 +78,20 @@ function Label({ label }: { label: SellerShippingLabel }) {
       </div>
 
       <div className="border-t-2 border-dashed border-gray-300 py-2">
-        <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
-          Contents{label.weightGrams ? ` · ${label.weightGrams / 1000} kg` : ''}
-        </p>
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500">
+            Contents{label.weightGrams ? ` · ${label.weightGrams / 1000} kg` : ''}
+          </p>
+          <p className="text-xs font-semibold text-ink-900" data-declared-value>
+            Declared value {formatPaise(label.declaredValuePaise)}
+          </p>
+        </div>
         {label.contents.map((c, i) => (
-          <p key={i} className="text-sm text-ink-900">
+          <p key={i} className="text-sm text-ink-900" data-label-line>
             {c.title}{' '}
             <span className="text-gray-500">
               {c.variantLabel ? `· ${c.variantLabel} ` : ''}· Qty {c.quantity}
+              {c.hsnCode ? ` · HSN ${c.hsnCode}` : ''}
             </span>
           </p>
         ))}
