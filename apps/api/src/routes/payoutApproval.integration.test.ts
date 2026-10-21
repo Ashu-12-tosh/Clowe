@@ -330,3 +330,50 @@ describe('the hold', () => {
     }
   });
 });
+
+// Pre-launch audit (2026-10-21): money moving twice when requests arrive
+// together — a double-clicked request or approval, or the webhook, the poller
+// and a manual sync all finding the same reversal at once.
+describe('races', () => {
+  const fake = new FakePayouts();
+  let restore: () => void;
+  beforeAll(() => {
+    restore = setPayoutProviderForTests(fake);
+  });
+  afterAll(() => restore());
+
+  it('five payout requests at once: one payout, the balance set aside once', async () => {
+    const s = await payableSeller();
+    const before = await balanceOf(s.sellerId);
+    const answers = await Promise.all(Array.from({ length: 5 }, () => request(s.token, s.methodId)));
+    const made = answers.filter((a) => a.status === 200);
+    expect(made).toHaveLength(1);
+    expect(await prisma.payout.count({ where: { sellerId: s.sellerId } })).toBe(1);
+    expect(await balanceOf(s.sellerId)).toBe(before - made[0]!.json.data.netPaise);
+  });
+
+  it('an approval double-clicked (or two admins at once): one transfer', async () => {
+    const s = await payableSeller();
+    const payout = (await request(s.token, s.methodId)).json.data;
+    const sent = fake.transfers.length;
+    const answers = await Promise.all(Array.from({ length: 4 }, () => call('POST', `/api/admin/payouts/${payout.id}/approve`, adminToken)));
+    expect(fake.transfers.length - sent).toBe(1);
+    expect(answers.filter((a) => a.status === 200)).toHaveLength(1);
+    expect(answers.filter((a) => a.json.error?.code === 'PAYOUT_NOT_PENDING')).toHaveLength(3);
+    expect(await prisma.auditLog.count({ where: { action: 'Payout approved', entityId: payout.id } })).toBe(1);
+  });
+
+  it('the same reversal found three ways at once: the money comes back once', async () => {
+    const s = await payableSeller();
+    const payout = (await request(s.token, s.methodId)).json.data;
+    await call('POST', `/api/admin/payouts/${payout.id}/approve`, adminToken);
+    const row = await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } });
+    const reserved = await balanceOf(s.sellerId);
+    fake.settle(row.transferId!, 'REVERSED');
+    const { syncPayout } = await import('../services/payoutService');
+    await Promise.all([syncPayout(row.id), syncPayout(row.id), pollProcessingPayouts(new Date(Date.now() + 3_600_000))]);
+    expect((await prisma.payout.findUniqueOrThrow({ where: { id: row.id } })).status).toBe('REVERSED');
+    expect(await balanceOf(s.sellerId)).toBe(reserved + row.netPaise);
+    expect(await prisma.auditLog.count({ where: { action: 'Payout reversed', entityId: row.id } })).toBe(1);
+  });
+});

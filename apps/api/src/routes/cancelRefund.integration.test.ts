@@ -168,3 +168,38 @@ describe('an admin cancelling with a reason from the list', () => {
     expect(told.body).not.toMatch(/fraud/i);
   });
 });
+
+// Pre-launch audit (2026-10-21): a refund must leave once, however many
+// requests for it arrive together — a double-tapped Cancel, the shopper and an
+// admin cancelling at the same moment, an admin's Retry clicked three times.
+describe('refunds when requests arrive together', () => {
+  it('cancelled three times by the shopper and once by an admin, at once: one refund, asked of the gateway once', async () => {
+    const refundSpy = vi.spyOn(paymentProvider, 'refund');
+    const { token, orderId } = await orderAs('UPI');
+    const paid = await prisma.payment.findUniqueOrThrow({ where: { orderId } });
+    await Promise.all([
+      call('POST', `/api/orders/${orderId}/cancel`, token),
+      call('POST', `/api/orders/${orderId}/cancel`, token),
+      call('POST', `/api/orders/${orderId}/cancel`, token),
+      call('POST', `/api/admin/orders/${orderId}/cancel`, adminToken, { reason: 'Out of stock at the seller' }),
+    ]);
+    const refunds = await prisma.refund.findMany({ where: { orderId, status: { not: 'FAILED' } } });
+    expect(refunds).toHaveLength(1);
+    expect(refunds[0]!.amountPaise).toBe(paid.amountPaise);
+    expect(refundSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed refund retried three times at once: sent once', async () => {
+    const { token, orderId } = await orderAs('UPI');
+    vi.spyOn(paymentProvider, 'refund').mockRejectedValueOnce(new Error('gateway down'));
+    await call('POST', `/api/orders/${orderId}/cancel`, token);
+    const failed = await prisma.refund.findFirstOrThrow({ where: { orderId } });
+    expect(failed.status).toBe('FAILED');
+    vi.restoreAllMocks();
+    const refundSpy = vi.spyOn(paymentProvider, 'refund');
+    await Promise.all(Array.from({ length: 3 }, () => call('POST', `/api/admin/payments/refunds/${failed.id}/retry`, adminToken)));
+    expect(refundSpy).toHaveBeenCalledTimes(1);
+    expect((await prisma.refund.findUniqueOrThrow({ where: { id: failed.id } })).status).toBe('PROCESSED');
+    expect(await prisma.refund.count({ where: { orderId } })).toBe(1);
+  });
+});

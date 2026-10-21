@@ -229,6 +229,19 @@ describe('after the quality check (2.2–2.4, 4.3, 6)', () => {
     expect((await call('PATCH', `/api/seller/returns/${r.id}`, sellerToken, { action: 'received', condition: 'OK' })).status).toBe(200);
   });
 
+  it('passed three times at once: refunded once', async () => {
+    const b = await delivered();
+    expect((await claim(b, { reason: 'WRONG_ITEM', remedy: 'REFUND' })).status).toBe(200);
+    const r = await prisma.return.findUniqueOrThrow({ where: { orderItemId: b.itemId } });
+    expect((await call('PATCH', `/api/seller/returns/${r.id}`, sellerToken, { action: 'approve' })).status).toBe(200);
+    await backWithSeller(r.id);
+    const answers = await Promise.all(Array.from({ length: 3 }, () => call('PATCH', `/api/seller/returns/${r.id}`, sellerToken, { action: 'received', condition: 'OK' })));
+    expect(answers.filter((a) => a.status === 200)).toHaveLength(1);
+    expect(await prisma.refund.count({ where: { returnId: r.id } })).toBe(1);
+    const reversal = await prisma.sellerLedgerEntry.count({ where: { orderItemId: b.itemId, type: 'RETURN_REVERSAL' } });
+    expect(reversal).toBeLessThanOrEqual(1);
+  });
+
   it('refunds the net amount paid at once when the refund passes the check', async () => {
     const b = await delivered();
     expect((await claim(b, { reason: 'WRONG_ITEM', remedy: 'REFUND' })).status).toBe(200);

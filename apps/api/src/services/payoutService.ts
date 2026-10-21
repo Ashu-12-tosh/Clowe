@@ -749,8 +749,11 @@ export async function approvePayout(payoutId: string, adminId: string) {
   if (seller.status !== 'APPROVED') throw ApiError.badRequest('The seller is not active — reject this payout instead', 'SELLER_NOT_PAYABLE');
   const block = (await panBlockFor(payout.sellerId)) ?? (await bankBlockFor(payout.sellerId)) ?? (await gstinBlockFor(payout.sellerId));
   if (block) throw ApiError.badRequest(`Not payable now: ${block.reason}`, block.code);
+  // Only the first approval marks it (not yet reviewed): approvals arriving
+  // together used to all pass here — one transfer, but each admin told
+  // "approved" and the audit log written once per click.
   const marked = await prisma.payout.updateMany({
-    where: { id: payoutId, status: 'PENDING' },
+    where: { id: payoutId, status: 'PENDING', reviewedAt: null },
     data: { reviewedById: adminId, reviewedAt: new Date() },
   });
   if (marked.count === 0) throw ApiError.badRequest('This payout was just handled by someone else', 'PAYOUT_NOT_PENDING');

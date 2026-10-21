@@ -307,3 +307,44 @@ describe('OTP sends', () => {
     expect(over.json.error).toMatchObject({ code: 'OTP_HOURLY_LIMIT', message: expect.stringMatching(/Try again in \d+ minutes?/) });
   });
 });
+
+// Pre-launch audit (2026-10-21): the brute-force tests nobody had run.
+describe('guessing, from many addresses at once', () => {
+  it('OTP: five wrong per code, ten per number an hour across resends — then even the right code is refused', async () => {
+    const a = await account({ pin: '2580' });
+    const guess = (code: string) => client()('/api/auth/verify-otp', { phone: a.phone, code });
+    await otp(a.phone, '111111');
+    for (let i = 0; i < 5; i++) expect((await guess('000000')).json.error?.code).toBe('OTP_INCORRECT');
+    expect((await guess('111111')).json.error?.code).toBe('OTP_LOCKED'); // the code itself is spent
+    // A resend starts that code's count afresh — but not the number's.
+    await otp(a.phone, '222222');
+    for (let i = 0; i < 5; i++) expect((await guess('000001')).json.error?.code).toBe('OTP_INCORRECT');
+    await otp(a.phone, '333333');
+    const right = await guess('333333');
+    expect(right.status).toBe(429);
+    expect(right.json.error).toMatchObject({ code: 'OTP_LOCKED', message: expect.stringMatching(/an hour/) });
+    // The same cap guards Forgot PIN, which takes the same codes.
+    expect((await client()('/api/auth/pin-reset/confirm', { identifier: a.phone, code: '333333', pin: '1111', confirmPin: '1111' })).json.error?.code).toBe('OTP_LOCKED');
+    // An hour on, it is open again.
+    await prisma.otpCode.updateMany({ where: { phone: a.phone }, data: { createdAt: new Date(Date.now() - 2 * 3_600_000) } });
+    await otp(a.phone, '444444');
+    expect((await guess('444444')).status).toBe(200);
+  });
+
+  it('PIN: fifteen wrong guesses from fifteen addresses lock it until "Forgot PIN?" — the right PIN after is refused', async () => {
+    const a = await account({ pin: '7351' });
+    let answeredWrong = 0;
+    for (let i = 0; i < 20; i++) {
+      // Waiting out each pause, as a patient attacker would.
+      await prisma.user.update({ where: { id: a.id }, data: { pinLockedUntil: null } });
+      const r = await client()('/api/auth/pin-login', { identifier: a.phone, pin: String(1000 + i) });
+      if (r.json.error?.code === 'PIN_INVALID') answeredWrong += 1;
+    }
+    const u = await prisma.user.findUniqueOrThrow({ where: { id: a.id } });
+    expect(u.pinAttempts).toBe(PIN_OTP_ONLY_AFTER);
+    // 1–4, 6–9 and 11–14 are "wrong"; the 5th and 10th start a pause, the 15th and later are locked.
+    expect(answeredWrong).toBe(PIN_OTP_ONLY_AFTER - PIN_OTP_ONLY_AFTER / PIN_PAUSE_EVERY);
+    await prisma.user.update({ where: { id: a.id }, data: { pinLockedUntil: null } });
+    expect((await client()('/api/auth/pin-login', { identifier: a.phone, pin: '7351' })).json.error?.code).toBe('PIN_LOCKED');
+  });
+});

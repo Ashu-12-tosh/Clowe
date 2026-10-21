@@ -24,6 +24,8 @@ export const OTP_SENDS_PER_HOUR = 6;
  * it, for an SMS that arrives after its resend. Few, so guessing stays as hard.
  */
 const OTP_OPEN_CODES = 3;
+/** Wrong codes one number may have in an hour, over all the codes sent to it. */
+export const OTP_WRONG_PER_HOUR = 10;
 /**
  * Wrong PINs since the last good one: every PIN_PAUSE_EVERY-th pauses PIN
  * sign-in (15 minutes, then 30), and from PIN_OTP_ONLY_AFTER only "Forgot
@@ -89,6 +91,17 @@ export async function consumeOtp(phone: string, code: string): Promise<void> {
   }
   if (newest.attempts >= env.OTP_MAX_ATTEMPTS) {
     throw ApiError.tooMany('Too many wrong attempts. Please request a new OTP.', 'OTP_LOCKED');
+  }
+  // Per number, across every code sent in the last hour: a resend starts the
+  // per-code count afresh, so without this each new code bought five more
+  // guesses. An hour, not longer, so a stranger typing wrong codes for someone
+  // else's number cannot keep them out (and their PIN still works).
+  const lastHour = await prisma.otpCode.aggregate({
+    where: { phone, createdAt: { gt: new Date(Date.now() - 3_600_000) } },
+    _sum: { attempts: true },
+  });
+  if ((lastHour._sum.attempts ?? 0) >= OTP_WRONG_PER_HOUR) {
+    throw ApiError.tooMany('Too many wrong codes for this number. Please try again in an hour, or sign in with your PIN.', 'OTP_LOCKED');
   }
   if (!open.some((otp) => hashMatches(code, otp.codeHash))) {
     await prisma.otpCode.update({ where: { id: newest.id }, data: { attempts: { increment: 1 } } });
