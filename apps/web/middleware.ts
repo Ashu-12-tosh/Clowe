@@ -11,15 +11,18 @@ import { renamedProductPath } from './lib/productSlugRedirect';
  * (for Next) and the response (for the browser). That only works for pages
  * rendered per request, which is why the root layout is force-dynamic.
  *
- * REPORT-ONLY for now: the browser reports what the policy would block, to
- * /api/csp-reports, and blocks nothing. Flip ENFORCE once a clean run of
- * reports shows the policy fits the site.
+ * ENFORCED (pre-launch audit 2026-10-21): production's report-only run showed
+ * nothing left to allow — its last reports were pages served from www before
+ * www redirected — and a local crawl of every page plus a Cashfree sandbox
+ * checkout ran clean under it. Violations are still reported, to
+ * /api/csp-reports. Building with CSP_REPORT_ONLY=1 goes back to report-only
+ * (blocking nothing) without a code change, should a page need it.
  *
  * Reports go by report-uri only. With a report-to group as well, Chrome uses
  * that instead and, measured locally, delivered nothing within 75 seconds,
  * where report-uri arrives at once.
  */
-const ENFORCE = false;
+const ENFORCE = process.env.CSP_REPORT_ONLY !== '1';
 
 const HEADER = ENFORCE ? 'content-security-policy' : 'content-security-policy-report-only';
 const dev = process.env.NODE_ENV !== 'production';
