@@ -33,6 +33,7 @@ import {
 } from '@clowe/shared';
 import { bookReversePickup, bookReversePickupSafe } from '../services/shipping/reversePickup';
 import { prisma } from '../db';
+import { issueCreditNoteSafe } from '../services/creditNotes';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { processRefund } from '../services/refundService';
@@ -848,6 +849,7 @@ async function applyAdminAction(
           ),
         ]);
         await postReturnReversal(r.orderItemId);
+        await issueCreditNoteSafe(r.orderItemId);
         await settleEarnedCredits(r.orderItem.orderId);
       } else {
         // Back through the gateway the order was paid with.
@@ -867,6 +869,7 @@ async function applyAdminAction(
           data: { status: 'RETURNED' },
         });
         await postReturnReversal(r.orderItemId);
+        await issueCreditNoteSafe(r.orderItemId);
         await settleEarnedCredits(r.orderItem.orderId);
         // processRefund flips the return to REFUNDED and notifies the shopper.
         await processRefund(refund.id);

@@ -449,6 +449,35 @@ export interface SellerInvoice {
  */
 export type TaxInvoice = Omit<SellerInvoice, 'qr'>;
 
+/**
+ * A GST credit note (CGST Act s.34): issued by the seller when a line on
+ * their tax invoice comes back and is refunded. It names the invoice it
+ * reduces, credits that line at exactly the figures the invoice charged it
+ * (the same rate, HSN and CGST + SGST / IGST split), and is kept as issued —
+ * never rebuilt. Numbered in the invoice's own series: CN-<order>-<seller>-<n>.
+ */
+export interface CreditNote {
+  creditNoteNumber: string;
+  issuedAt: string;
+  /** Why the value is credited, e.g. "Goods returned (RMA-2026-000049)". */
+  reason: string;
+  /** The invoice this credit note reduces. */
+  original: { invoiceNumber: string; issuedAt: string };
+  orderNumber: string;
+  seller: TaxInvoice['seller'];
+  marketplace: TaxInvoice['marketplace'];
+  billTo: TaxInvoice['billTo'];
+  buyerGstin: string | null;
+  isIntraState: boolean;
+  lines: TaxInvoice['lines'];
+  taxablePaise: number;
+  gstPaise: number;
+  cgstPaise: number;
+  sgstPaise: number;
+  igstPaise: number;
+  totalPaise: number;
+}
+
 
 // ---------------------------------------------------------------------------
 // Packing video, per order

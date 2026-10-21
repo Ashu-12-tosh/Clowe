@@ -9,6 +9,7 @@ import {
   type ClaimReason,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { issueCreditNoteSafe } from './creditNotes';
 import { ApiError } from '../utils/ApiError';
 import { assertOwnAssets, resolveFileUrls } from './assets';
 import { encryptCodRefundAccount } from './codRefundCrypto';
@@ -119,6 +120,8 @@ async function refundClaim(r: Awaited<ReturnType<typeof returnWithLine>>, why: s
     },
   });
   await postReturnReversal(earnedLineId);
+  // The invoiced line is the one paid for (an exchanged item's original).
+  await issueCreditNoteSafe(paidLineId);
   await settleEarnedCredits(paidLine.orderId);
   await prisma.notification.create({
     data: {

@@ -1,4 +1,4 @@
-import { DEFAULT_LEGAL_ENTITY, gstRateForInclusive, type TaxInvoice } from '@clowe/shared';
+import { DEFAULT_LEGAL_ENTITY, gstRateForInclusive, type CreditNote, type TaxInvoice } from '@clowe/shared';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 import { categoryRulesMap } from './categoryRules';
@@ -13,11 +13,22 @@ import { getSettings } from './settingsService';
  * sale went through. Each line is taxed at the rate it was sold at
  * (OrderItem.gstRatePercent), split into CGST + SGST for a same-state supply
  * and IGST otherwise. The seller's copy and the buyer's are built here, so
- * the two always carry the same number and the same figures.
+ * the two always carry the same number and the same figures — and a credit
+ * note credits a line at exactly what its invoice charged (invoiceLines).
  *
  * Returns null when the seller has no lines on the order (or only cancelled ones).
  */
 export async function buildTaxInvoice(orderId: string, sellerId: string): Promise<TaxInvoice | null> {
+  const ctx = await invoiceContext(orderId, sellerId);
+  if (!ctx) return null;
+  return { ...ctx.header, ...totalsOf(ctx.lines.map((l) => l.line)), lines: ctx.lines.map((l) => l.line), gstRatePercent: ctx.lines[0]!.line.gstRatePercent };
+}
+
+type InvoiceLine = TaxInvoice['lines'][number];
+type Header = Omit<TaxInvoice, 'lines' | 'gstRatePercent' | 'taxablePaise' | 'gstPaise' | 'cgstPaise' | 'sgstPaise' | 'igstPaise' | 'totalPaise'>;
+
+/** Everything an invoice of this seller's lines says, and each line with its order item. */
+async function invoiceContext(orderId: string, sellerId: string): Promise<{ header: Header; lines: { orderItemId: string; line: InvoiceLine }[] } | null> {
   const [order, seller, settings] = await Promise.all([
     prisma.order.findUnique({
       where: { id: orderId },
@@ -25,7 +36,7 @@ export async function buildTaxInvoice(orderId: string, sellerId: string): Promis
         user: { select: { name: true } },
         payment: { select: { status: true, paidAt: true } },
         // Cancelled lines were never supplied, so they are not invoiced.
-        items: { where: { sellerId, status: { not: 'CANCELLED' } }, include: { product: { select: { categoryId: true } } } },
+        items: { where: { sellerId, status: { not: 'CANCELLED' } }, include: { product: { select: { categoryId: true } } }, orderBy: { id: 'asc' } },
       },
     }),
     prisma.sellerProfile.findUnique({ where: { id: sellerId } }),
@@ -50,7 +61,7 @@ export async function buildTaxInvoice(orderId: string, sellerId: string): Promis
     const taxable = Math.round(gross / (1 + rate / 100));
     const tax = gross - taxable;
     const cgst = isIntraState ? Math.floor(tax / 2) : 0;
-    return {
+    const line: InvoiceLine = {
       title: i.title,
       size: i.size,
       color: i.color,
@@ -66,17 +77,16 @@ export async function buildTaxInvoice(orderId: string, sellerId: string): Promis
       sgstPaise: isIntraState ? tax - cgst : 0,
       igstPaise: isIntraState ? 0 : tax,
     };
+    return { orderItemId: i.id, line };
   });
-  const sum = (key: 'taxablePaise' | 'gstPaise' | 'cgstPaise' | 'sgstPaise' | 'igstPaise') =>
-    lines.reduce((s, l) => s + l[key], 0);
 
   const legal = { ...DEFAULT_LEGAL_ENTITY, ...settings.legalEntity };
   // The invoice is dated when the order was confirmed — paid, or for Cash on
   // Delivery placed — and reads the same on every view. (It was "now", so
   // every download carried a different date.)
   const confirmedAt = order.paymentMethod !== 'COD' && order.payment?.paidAt ? order.payment.paidAt : order.createdAt;
-  return {
-    invoiceNumber: `INV-${order.orderNumber}-${seller.id.slice(-4).toUpperCase()}`,
+  const header: Header = {
+    invoiceNumber: invoiceNumberOf(order.orderNumber, seller.id),
     issuedAt: confirmedAt.toISOString(),
     orderNumber: order.orderNumber,
     placedAt: order.createdAt.toISOString(),
@@ -107,14 +117,62 @@ export async function buildTaxInvoice(orderId: string, sellerId: string): Promis
       pincode: order.billPincode ?? order.shipPincode,
     },
     customer: { name: order.user.name ?? order.shipName },
-    lines,
-    gstRatePercent: lines[0]!.gstRatePercent,
+    isIntraState,
+  };
+  return { header, lines };
+}
+
+/** INV-<order number>-<last 4 of the seller id>: one invoice per seller per order. */
+export function invoiceNumberOf(orderNumber: string, sellerId: string): string {
+  return `INV-${orderNumber}-${sellerId.slice(-4).toUpperCase()}`;
+}
+
+function totalsOf(lines: InvoiceLine[]) {
+  const sum = (key: 'taxablePaise' | 'gstPaise' | 'cgstPaise' | 'sgstPaise' | 'igstPaise') => lines.reduce((s, l) => s + l[key], 0);
+  return {
     taxablePaise: sum('taxablePaise'),
     gstPaise: sum('gstPaise'),
-    isIntraState,
     cgstPaise: sum('cgstPaise'),
     sgstPaise: sum('sgstPaise'),
     igstPaise: sum('igstPaise'),
     totalPaise: sum('taxablePaise') + sum('gstPaise'),
+  };
+}
+
+/**
+ * The credit note for some of a seller's invoiced lines: the invoice's own
+ * header, those lines at the invoice's figures, and what it reduces. Null
+ * when there is no invoice to reduce (an unpaid order, a free replacement) or
+ * none of the lines is on it.
+ */
+export async function buildCreditNote(input: {
+  orderId: string;
+  sellerId: string;
+  orderItemIds: string[];
+  creditNoteNumber: string;
+  issuedAt: Date;
+  reason: string;
+}): Promise<CreditNote | null> {
+  const ctx = await invoiceContext(input.orderId, input.sellerId).catch((err) => {
+    if (err instanceof ApiError && err.code === 'ORDER_NOT_PAID') return null;
+    throw err;
+  });
+  if (!ctx) return null;
+  const lines = ctx.lines.filter((l) => input.orderItemIds.includes(l.orderItemId)).map((l) => l.line);
+  if (lines.length === 0) return null;
+  const h = ctx.header;
+  return {
+    creditNoteNumber: input.creditNoteNumber,
+    issuedAt: input.issuedAt.toISOString(),
+    reason: input.reason,
+    original: { invoiceNumber: h.invoiceNumber, issuedAt: h.issuedAt },
+    orderNumber: h.orderNumber,
+    seller: h.seller,
+    marketplace: h.marketplace,
+    billTo: h.billTo,
+    buyerGstin: h.buyerGstin,
+    isIntraState: h.isIntraState,
+    lines,
+    ...totalsOf(lines),
   };
 }

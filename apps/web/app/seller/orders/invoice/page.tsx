@@ -2,10 +2,11 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import type { SellerInvoice } from '@clowe/shared';
+import type { CreditNote, SellerInvoice } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import TaxInvoiceDocument from '@/components/TaxInvoiceDocument';
+import CreditNoteDocument from '@/components/CreditNoteDocument';
 
 function money(paise: number): string {
   return `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -15,6 +16,8 @@ function InvoiceView() {
   const params = useSearchParams();
   const orderId = params.get('orderId') ?? '';
   const [invoice, setInvoice] = useState<SellerInvoice | null>(null);
+  // Credit notes reducing this invoice (returned, refunded lines).
+  const [creditNotes, setCreditNotes] = useState<CreditNote[]>([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -27,6 +30,9 @@ function InvoiceView() {
       .catch((err) =>
         setError(err instanceof ApiRequestError ? err.message : 'Could not load the invoice'),
       );
+    api<CreditNote[]>(`/api/seller/orders/${orderId}/credit-notes`, { auth: true })
+      .then(setCreditNotes)
+      .catch(() => setCreditNotes([]));
   }, [orderId]);
 
   return (
@@ -77,6 +83,12 @@ function InvoiceView() {
           }
         />
       )}
+      {invoice &&
+        creditNotes.map((note) => (
+          <div key={note.creditNoteNumber} className="mt-4">
+            <CreditNoteDocument note={note} />
+          </div>
+        ))}
     </div>
   );
 }

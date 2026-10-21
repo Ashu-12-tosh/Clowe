@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { PrismaClient, ProductStatus, Role, SellerStatus, type AssetPurpose } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { MyReturnsResponse, OrderDetailView } from '@clowe/shared';
+import type { CreditNote, MyReturnsResponse, OrderDetailView, TaxInvoice } from '@clowe/shared';
 import { createApp } from '../app';
 import { seedFixture } from '../test/fixture';
 import { useClaimRules, useEarlierReturnRules } from '../test/returnRules';
@@ -200,6 +200,50 @@ describe('time limit and evidence (3)', () => {
     } finally {
       await useClaimRules(prisma);
     }
+  });
+});
+
+// Pre-launch audit (2026-10-21), M3: a returned, refunded line stayed on its
+// tax invoice with nothing reducing it. The invoice stands as issued; the
+// seller's GST credit note reduces it, at the invoice's own figures.
+describe('the credit note', () => {
+  it('is issued once for a refunded return, credits the line exactly as invoiced, and names the invoice', async () => {
+    const b = await delivered();
+    expect((await claim(b, { reason: 'WRONG_ITEM', remedy: 'REFUND' })).status).toBe(200);
+    const { returnId } = await approveAndCheck(b.itemId, true);
+    const ret = await prisma.return.findUniqueOrThrow({ where: { id: returnId } });
+
+    const invoice = (await call<TaxInvoice[]>('GET', `/api/orders/${b.orderId}/invoices`, b.token)).json.data[0]!;
+    const notes = (await call<CreditNote[]>('GET', `/api/orders/${b.orderId}/credit-notes`, b.token)).json.data;
+    expect(notes).toHaveLength(1);
+    const note = notes[0]!;
+    const { orderNumber } = await prisma.order.findUniqueOrThrow({ where: { id: b.orderId } });
+    expect(note.creditNoteNumber).toBe(`CN-${orderNumber}-${sellerId.slice(-4).toUpperCase()}-1`);
+    expect(note.original).toEqual({ invoiceNumber: invoice.invoiceNumber, issuedAt: invoice.issuedAt });
+    expect(note.reason).toBe(`Goods returned (${ret.rmaNumber})`);
+    // The very line, at the very figures, the invoice charged — and the invoice itself unchanged.
+    expect(note.lines).toEqual(invoice.lines);
+    expect(note).toMatchObject({ taxablePaise: invoice.taxablePaise, gstPaise: invoice.gstPaise, cgstPaise: invoice.cgstPaise, sgstPaise: invoice.sgstPaise, igstPaise: invoice.igstPaise, totalPaise: invoice.totalPaise });
+    expect(invoice.lines).toHaveLength(1);
+
+    // The seller sees the same note; another seller sees none; issuing again changes nothing.
+    expect((await call<CreditNote[]>('GET', `/api/seller/orders/${b.orderId}/credit-notes`, sellerToken)).json.data).toEqual([note]);
+    const other = await prisma.user.create({ data: { phone: `91943${String(seq).padStart(5, '0')}`, name: 'Other Seller', role: Role.SELLER, referralCode: `CLM-O-${seq}` } });
+    await prisma.sellerProfile.create({ data: { userId: other.id, shopName: `Other ${seq}`, status: SellerStatus.APPROVED, approvedAt: new Date() } });
+    expect((await call<CreditNote[]>('GET', `/api/seller/orders/${b.orderId}/credit-notes`, signAccessToken({ sub: other.id, role: 'SELLER' }))).json.data).toEqual([]);
+    const { issueCreditNote } = await import('../services/creditNotes');
+    expect(await issueCreditNote(b.itemId)).toEqual(note);
+    expect(await prisma.creditNote.count({ where: { orderId: b.orderId } })).toBe(1);
+    // Nobody else's to read.
+    const stranger = await prisma.user.create({ data: { phone: `91944${String(seq).padStart(5, '0')}`, name: 'Stranger', referralCode: `CLM-X-${seq}` } });
+    expect((await call('GET', `/api/orders/${b.orderId}/credit-notes`, signAccessToken({ sub: stranger.id, role: 'CUSTOMER' }))).status).toBe(404);
+  });
+
+  it('is not issued for an exchange: the sale stands', async () => {
+    const b = await delivered();
+    expect((await claim(b, { reason: 'DEFECTIVE', remedy: 'EXCHANGE' })).status).toBe(200);
+    await approveAndCheck(b.itemId, true);
+    expect(await prisma.creditNote.count({ where: { orderId: b.orderId } })).toBe(0);
   });
 });
 

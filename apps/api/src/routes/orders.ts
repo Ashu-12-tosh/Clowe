@@ -28,6 +28,7 @@ import {
   type LostParcelChoice,
   PO_BOX_MESSAGE,
   CLAIM_WINDOW_HOURS,
+  type CreditNote,
 } from '@clowe/shared';
 import { chooseLostOutcome } from '../services/shipping/lostParcels';
 import { cancelOrderLines } from '../services/lineCancellation';
@@ -37,6 +38,7 @@ import { exchangeAllowed, raiseClaim, rulesForDelivery } from '../services/retur
 import { raiseComplaint } from '../services/complaintService';
 import { scanViews } from './track';
 import { prisma } from '../db';
+import { creditNotesFor } from '../services/creditNotes';
 import { buildTaxInvoice } from '../services/taxInvoice';
 import { hiddenProductTest } from '../services/shopperVisibility';
 import { getSettings } from '../services/settingsService';
@@ -926,6 +928,18 @@ ordersRouter.get('/:id/invoices', async (req, res, next) => {
       (inv): inv is TaxInvoice => inv !== null,
     );
     res.json({ success: true, data: invoices });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The credit notes reducing those invoices, for lines returned and refunded.
+ordersRouter.get('/:id/credit-notes', async (req, res, next) => {
+  try {
+    const order = await prisma.order.findUnique({ where: { id: req.params.id }, select: { userId: true } });
+    if (!order || order.userId !== req.auth!.userId) throw ApiError.notFound('Order not found');
+    const body: CreditNote[] = await creditNotesFor(req.params.id);
+    res.json({ success: true, data: body });
   } catch (err) {
     next(err);
   }

@@ -29,9 +29,11 @@ import {
   type SellerShippingLabel,
   type SellerBookingQuote,
   isNotASale,
+  type CreditNote,
 } from '@clowe/shared';
 import QRCode from 'qrcode';
 import { prisma } from '../db';
+import { creditNotesFor } from '../services/creditNotes';
 import { buildTaxInvoice } from '../services/taxInvoice';
 import { webPublicUrl } from '../env';
 import { requireAuth } from '../middleware/auth';
@@ -951,6 +953,16 @@ sellerOrdersRouter.get('/:orderId/invoice', async (req, res, next) => {
       ...invoice,
       qr: await sellerOrderQr(req.params.orderId, { invoice: invoice.invoiceNumber }),
     };
+    res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The credit notes reducing that invoice (returned, refunded lines): only this seller's.
+sellerOrdersRouter.get('/:orderId/credit-notes', async (req, res, next) => {
+  try {
+    const body: CreditNote[] = await creditNotesFor(req.params.orderId, req.seller!.id);
     res.json({ success: true, data: body });
   } catch (err) {
     next(err);

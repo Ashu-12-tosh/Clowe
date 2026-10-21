@@ -3122,3 +3122,21 @@ model GatewayWebhookEvent {
   @@index([receivedAt])
   @@map("gateway_webhook_events")
 }
+
+/// A GST credit note (CGST Act s.34): issued by the seller when an invoiced line comes back
+/// and is refunded. Kept exactly as issued; one per returned line; numbered in the invoice's
+/// series (CN-<order>-<seller>-<n>).
+model CreditNote {
+  id            String   @id @default(cuid())
+  number        String   @unique
+  orderId       String
+  sellerId      String
+  orderItemId   String   @unique
+  invoiceNumber String
+  totalPaise    Int
+  document      Json
+  issuedAt      DateTime @default(now())
+
+  @@index([orderId, sellerId])
+  @@map("credit_notes")
+}

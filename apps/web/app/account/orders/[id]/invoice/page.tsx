@@ -2,9 +2,10 @@
 
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { OrderDetailView, PaymentMethod, TaxInvoice } from '@clowe/shared';
+import type { CreditNote, OrderDetailView, PaymentMethod, TaxInvoice } from '@clowe/shared';
 import { api } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
+import CreditNoteDocument from '@/components/CreditNoteDocument';
 import TaxInvoiceDocument from '@/components/TaxInvoiceDocument';
 
 const METHOD_LABELS: Record<PaymentMethod, string> = {
@@ -54,6 +55,8 @@ export default function InvoicePage({ params: paramsPromise }: { params: Promise
   const params = use(paramsPromise);
   const [order, setOrder] = useState<OrderDetailView | null>(null);
   const [invoices, setInvoices] = useState<TaxInvoice[] | null>(null);
+  // Credit notes against those invoices, for lines returned and refunded.
+  const [creditNotes, setCreditNotes] = useState<CreditNote[]>([]);
   const [notFound, setNotFound] = useState(false);
   const [notIssued, setNotIssued] = useState(false);
 
@@ -66,6 +69,9 @@ export default function InvoicePage({ params: paramsPromise }: { params: Promise
           setNotIssued(true);
           return;
         }
+        void api<CreditNote[]>(`/api/orders/${params.id}/credit-notes`, { auth: true })
+          .then(setCreditNotes)
+          .catch(() => setCreditNotes([]));
         return api<TaxInvoice[]>(`/api/orders/${params.id}/invoices`, { auth: true })
           .then(setInvoices)
           .catch(() => setNotIssued(true));
@@ -123,6 +129,9 @@ export default function InvoicePage({ params: paramsPromise }: { params: Promise
       ) : (
         invoices.map((invoice) => <TaxInvoiceDocument key={invoice.invoiceNumber} invoice={invoice} payment={paymentNote} />)
       )}
+      {creditNotes.map((note) => (
+        <CreditNoteDocument key={note.creditNoteNumber} note={note} />
+      ))}
 
       <section className="rounded-2xl border border-gray-100 bg-white p-6">
         <p className="t-caption font-bold uppercase tracking-wide text-gray-500">Order {order.orderNumber} — summary</p>
