@@ -183,7 +183,14 @@ export default function SellerPayoutsPage() {
         body: {},
         auth: true,
       });
-      const message = `${payout.reference}: ${money(payout.netPaise)} sent to ${payout.methodLabel ?? 'your account'}${payout.utr ? ` · UTR ${payout.utr}` : ''}`;
+      // Requested is not sent: most payouts wait for Clowe's approval first.
+      const to = payout.methodLabel ?? 'your account';
+      const message =
+        payout.status === 'PAID'
+          ? `${payout.reference}: ${money(payout.netPaise)} sent to ${to}${payout.utr ? ` · UTR ${payout.utr}` : ''}`
+          : payout.status === 'PROCESSING'
+            ? `${payout.reference}: ${money(payout.netPaise)} is on its way to ${to}`
+            : `${payout.reference}: ${money(payout.netPaise)} to ${to} — waiting for Clowe's approval. We'll tell you when it is sent.`;
       setNotice(message);
       toast.success(`Payout requested — ${message}`);
       await Promise.all([loadOverview(), loadHistory()]);

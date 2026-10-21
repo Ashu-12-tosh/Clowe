@@ -24,7 +24,7 @@ import {
   type SavedPaymentMethodInfo,
 } from '@clowe/shared';
 import { api, ApiRequestError, getStoredUser } from '@/lib/api';
-import { formatPaise } from '@/lib/format';
+import { formatPaise, istDay } from '@/lib/format';
 import { LaunchingSoon, useOrdersOpen } from '@/lib/ordersOpen';
 import { getPublicSettings } from '@/lib/settings';
 import { payWithCashfree } from '@/lib/cashfree';
@@ -76,8 +76,10 @@ function loadRazorpayScript(): Promise<void> {
 /** `name@bank` — the format every UPI handle follows. */
 const UPI_ID_RE = /^[a-z0-9.\-_]{2,64}@[a-z]{2,32}$/i;
 
+// Indian calendar dates, as checkout quotes them: in the browser's own zone a
+// window could read a day off what checkout said (pre-launch audit L5).
 function fmtShort(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  return istDay(iso);
 }
 
 function PaymentPageInner() {

@@ -522,27 +522,30 @@ export default function SellerOrdersPage() {
                         <Link
                           href={`/seller/orders/${row.orderId}`}
                           title="View order"
+                          aria-label={`View order ${row.orderNumber}`}
                           className="rounded-lg border border-gray-300 px-2 py-1 hover:bg-gray-50"
                         >
-                          👁
+                          <span aria-hidden="true">👁</span>
                         </Link>
                         <a
                           href={`/seller/orders/labels?ids=${row.lines.map((l) => l.id).join(',')}`}
                           target="_blank"
                           rel="noreferrer"
                           title="Print labels"
+                          aria-label={`Print labels for order ${row.orderNumber}`}
                           className="rounded-lg border border-gray-300 px-2 py-1 hover:bg-gray-50"
                         >
-                          🏷
+                          <span aria-hidden="true">🏷</span>
                         </a>
                         <a
                           href={`/seller/orders/invoice?orderId=${row.orderId}`}
                           target="_blank"
                           rel="noreferrer"
                           title="Generate invoice"
+                          aria-label={`Invoice for order ${row.orderNumber}`}
                           className="rounded-lg border border-gray-300 px-2 py-1 hover:bg-gray-50"
                         >
-                          🧾
+                          <span aria-hidden="true">🧾</span>
                         </a>
                       </div>
                     </td>

@@ -47,3 +47,18 @@ export function discountPercent(pricePaise: number, mrpPaise: number | null): nu
   if (!mrpPaise || mrpPaise <= pricePaise) return null;
   return Math.round(((mrpPaise - pricePaise) / mrpPaise) * 100);
 }
+
+const GATEWAY_NAMES: Record<string, string> = { cashfree: 'Cashfree', razorpay: 'Razorpay' };
+
+/**
+ * How an order was paid, in words: "Cash on Delivery", or an online payment
+ * and the gateway that took it — never the provider's raw id ("cashfree").
+ */
+export function paymentMethodLabel(paymentMethod: string, provider: string | null | undefined): string {
+  if (paymentMethod === 'COD') return 'Cash on Delivery';
+  if (paymentMethod === 'REPLACEMENT') return 'Replacement — no charge';
+  if (!provider) return '—';
+  if (provider === 'mock') return 'Mock gateway (dev)';
+  const gateway = GATEWAY_NAMES[provider] ?? provider.charAt(0).toUpperCase() + provider.slice(1);
+  return `Online payment (${gateway})`;
+}

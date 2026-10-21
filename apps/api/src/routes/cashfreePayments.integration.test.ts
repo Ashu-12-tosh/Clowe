@@ -126,9 +126,9 @@ async function placed() {
 const confirm = (token: string, kind: string, id: string) => call<PaymentConfirmResult>('POST', '/api/payments/confirm', token, { kind, id });
 const stockOf = async () => (await prisma.productVariant.findUniqueOrThrow({ where: { id: variantId } })).stock;
 
-function signed(body: unknown, idempotencyKey?: string) {
+function signed(body: unknown, idempotencyKey?: string, signedAt = Date.now()) {
   const raw = JSON.stringify(body);
-  const ts = String(Math.floor(Date.now() / 1000));
+  const ts = String(signedAt);
   const signature = createHmac('sha256', WEBHOOK_SECRET).update(ts).update(raw).digest('base64');
   return { raw, headers: { 'x-webhook-timestamp': ts, 'x-webhook-signature': signature, ...(idempotencyKey ? { 'x-idempotency-key': idempotencyKey } : {}) } };
 }
@@ -179,7 +179,7 @@ describe('a Cashfree checkout', () => {
     const stock = await stockOf();
     cf.attempt(checkout.orderNumber, 'FAILED');
     const r = await confirm(token, 'ORDER', checkout.orderId);
-    expect(r.json.data).toMatchObject({ outcome: 'RETRY', message: 'Card declined', checkout: { provider: 'cashfree', paymentSessionId: `session_${checkout.orderNumber}` } });
+    expect(r.json.data).toMatchObject({ outcome: 'RETRY', message: 'The payment did not go through (Card declined).', checkout: { provider: 'cashfree', paymentSessionId: `session_${checkout.orderNumber}` } });
     const order = await prisma.order.findUniqueOrThrow({ where: { id: checkout.orderId }, include: { payment: true } });
     expect(order.status).toBe('PLACED');
     expect(order.payment!.status).toBe('CREATED');
@@ -250,16 +250,33 @@ describe('the Cashfree webhook', () => {
     expect((await prisma.payment.findUniqueOrThrow({ where: { orderId: checkout.orderId } })).status).toBe('CREATED');
   });
 
-  it('recognises a redelivery by its idempotency key and handles it once', async () => {
+  it('recognises a redelivery by its signed body — under the same or a new idempotency key — and handles it once', async () => {
     const { checkout } = await placed();
     cf.attempt(checkout.orderNumber, 'SUCCESS');
-    const key = `idem-${checkout.orderNumber}`;
-    const hook = signed({ type: 'PAYMENT_SUCCESS_WEBHOOK', data: { order: { order_id: checkout.orderNumber } } }, key);
+    const body = { type: 'PAYMENT_SUCCESS_WEBHOOK', data: { order: { order_id: checkout.orderNumber } } };
+    const hook = signed(body, `idem-${checkout.orderNumber}`);
     const first = await call<{ duplicate?: boolean }>('POST', '/api/payments/cashfree/webhook', null, hook.raw, hook.headers);
     const again = await call<{ duplicate?: boolean }>('POST', '/api/payments/cashfree/webhook', null, hook.raw, hook.headers);
+    const newKey = await call<{ duplicate?: boolean }>('POST', '/api/payments/cashfree/webhook', null, hook.raw, { ...hook.headers, 'x-idempotency-key': 'replayed-under-a-new-key' });
     expect(first.status).toBe(200);
     expect(again.json).toMatchObject({ received: true, duplicate: true });
-    expect(await prisma.gatewayWebhookEvent.count({ where: { provider: 'cashfree-pg', eventKey: key } })).toBe(1);
+    expect(newKey.json).toMatchObject({ received: true, duplicate: true });
+    expect(await prisma.gatewayWebhookEvent.count({ where: { provider: 'cashfree-pg', reference: checkout.orderNumber } })).toBe(1);
+    expect((await prisma.payment.findUniqueOrThrow({ where: { orderId: checkout.orderId } })).status).toBe('PAID');
+  });
+
+  it('turns away a correctly signed event signed over an hour ago, or too far ahead', async () => {
+    const { checkout } = await placed();
+    cf.attempt(checkout.orderNumber, 'SUCCESS');
+    const body = { type: 'PAYMENT_SUCCESS_WEBHOOK', data: { order: { order_id: checkout.orderNumber } } };
+    const old = signed(body, undefined, Date.now() - 61 * 60 * 1000);
+    const ahead = signed(body, undefined, Date.now() + 10 * 60 * 1000);
+    expect((await call('POST', '/api/payments/cashfree/webhook', null, old.raw, old.headers)).status).toBe(401);
+    expect((await call('POST', '/api/payments/cashfree/webhook', null, ahead.raw, ahead.headers)).status).toBe(401);
+    expect((await prisma.payment.findUniqueOrThrow({ where: { orderId: checkout.orderId } })).status).toBe('CREATED');
+    // The same event signed just now is handled.
+    const fresh = signed(body);
+    expect((await call('POST', '/api/payments/cashfree/webhook', null, fresh.raw, fresh.headers)).status).toBe(200);
     expect((await prisma.payment.findUniqueOrThrow({ where: { orderId: checkout.orderId } })).status).toBe('PAID');
   });
 });

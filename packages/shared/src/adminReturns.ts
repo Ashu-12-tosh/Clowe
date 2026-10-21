@@ -59,12 +59,23 @@ export const RETURN_STAGE_LABELS: Record<ReturnStage, string> = {
 // RETURN_REASONS / RETURN_REASON_LABELS live in ./checkout — the shopper picks
 // them, so the admin desk reads the same list rather than keeping its own.
 
-export const RETURN_RESOLUTIONS = ['REFUND', 'STORE_CREDIT'] as const;
+/** How a refund is paid — what an admin picks when issuing one. */
+export const REFUND_RESOLUTIONS = ['REFUND', 'STORE_CREDIT'] as const;
+export type RefundResolutionValue = (typeof REFUND_RESOLUTIONS)[number];
+
+/**
+ * How a return ended: money back (either way), an identical item instead
+ * (EXCHANGE), or nothing paid (NONE — rejected, or sent back after a failed
+ * quality check). Every return used to read REFUND (pre-launch audit L6).
+ */
+export const RETURN_RESOLUTIONS = [...REFUND_RESOLUTIONS, 'EXCHANGE', 'NONE'] as const;
 export type ReturnResolutionValue = (typeof RETURN_RESOLUTIONS)[number];
 
 export const RETURN_RESOLUTION_LABELS: Record<ReturnResolutionValue, string> = {
   REFUND: 'Refund to source',
   STORE_CREDIT: 'Clowe Credits',
+  EXCHANGE: 'Exchange',
+  NONE: 'No refund',
 };
 
 export const ADMIN_RETURN_SORTS = [
@@ -244,7 +255,7 @@ export const adminReturnActionSchema = z.object({
   /** MARK_RECEIVED: did the item come back in a sellable state? */
   qcPassed: z.boolean().optional(),
   /** REFUND: pay to the original method or as Clowe Credits. */
-  resolution: z.enum(RETURN_RESOLUTIONS).optional(),
+  resolution: z.enum(REFUND_RESOLUTIONS).optional(),
 });
 export type AdminReturnActionInput = z.infer<typeof adminReturnActionSchema>;
 
@@ -253,7 +264,7 @@ export const adminReturnBulkSchema = z.object({
   action: z.enum(ADMIN_RETURN_ACTIONS),
   note: z.string().trim().max(300).optional(),
   qcPassed: z.boolean().optional(),
-  resolution: z.enum(RETURN_RESOLUTIONS).optional(),
+  resolution: z.enum(REFUND_RESOLUTIONS).optional(),
 });
 export type AdminReturnBulkInput = z.infer<typeof adminReturnBulkSchema>;
 
@@ -267,7 +278,7 @@ export const manualRefundSchema = z.object({
   orderId: z.string().min(1, 'Pick an order'),
   amountPaise: z.number().int().min(100, 'Refund at least ₹1').max(100_000_000),
   reason: z.string().trim().min(5, 'Say why this refund is being issued').max(300),
-  resolution: z.enum(RETURN_RESOLUTIONS).default('REFUND'),
+  resolution: z.enum(REFUND_RESOLUTIONS).default('REFUND'),
 });
 export type ManualRefundInput = z.infer<typeof manualRefundSchema>;
 

@@ -323,7 +323,7 @@ export async function syncGatewayPayment(target: GatewayTarget, opts: { sweep?: 
   if (latest && ENDED_ATTEMPT.has(latest.status)) {
     return {
       outcome: 'RETRY',
-      message: latest.status === 'USER_DROPPED' ? 'The payment was not completed.' : (latest.message ?? 'The payment did not go through.'),
+      message: latest.status === 'USER_DROPPED' ? 'The payment was not completed.' : attemptFailedMessage(latest.message),
     };
   }
   return { outcome: 'PENDING' };
@@ -527,6 +527,16 @@ export function startPaymentSweeper(): () => void {
 // ---------------------------------------------------------------------------
 
 /** Whether this provider already delivered (and we handled) this event. */
+/**
+ * Our sentence, with the gateway's reason in brackets: its text used to stand
+ * in for ours and run into the next one ("Simulated response message Nothing
+ * was charged…", pre-launch audit B13).
+ */
+export function attemptFailedMessage(gatewayMessage: string | null | undefined): string {
+  const reason = gatewayMessage?.replace(/\s+/g, ' ').trim().replace(/[.\s]+$/, '').slice(0, 120);
+  return reason ? `The payment did not go through (${reason}).` : 'The payment did not go through.';
+}
+
 export async function webhookSeen(provider: string, eventKey: string): Promise<boolean> {
   return (await prisma.gatewayWebhookEvent.count({ where: { provider, eventKey } })) > 0;
 }

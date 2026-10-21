@@ -118,6 +118,7 @@ export async function applyReturnDecision(
         where: { id: r.id },
         data: {
           status: 'REJECTED',
+          resolution: 'NONE',
           rejectionReason: input.rejectionReason,
           rejectedAt: new Date(),
           resolvedAt: new Date(),

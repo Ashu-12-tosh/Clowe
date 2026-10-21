@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { AuthUser, OrderDetailView, ProductListItem } from '@clowe/shared';
 import { api, getStoredUser } from '@/lib/api';
-import { formatPaise } from '@/lib/format';
+import { formatPaise, istDay, paymentMethodLabel } from '@/lib/format';
 import { fetchWishlistIds } from '@/lib/wishlist';
 import { Scroller } from '@/components/home/HomeBits';
 import ProductCard from '@/components/ProductCard';
@@ -54,8 +54,10 @@ function fmtDateTime(iso: string): string {
     minute: '2-digit',
   });
 }
+// Indian calendar dates, as checkout quotes them: in the browser's own zone a
+// window could read a day off what checkout said (pre-launch audit L5).
 function fmtShort(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  return istDay(iso);
 }
 function etaLabel(from: string | null, to: string | null): string | null {
   if (!to) return null;
@@ -144,8 +146,7 @@ export default function OrderConfirmationPage({ params: paramsPromise }: { param
   const eta = etaLabel(order.etaFrom, order.etaTo);
   const orderedIds = order.items.map((i) => i.productSlug);
   const itemCount = order.items.reduce((sum, i) => sum + i.quantity, 0);
-  const paymentLabel =
-    order.payment?.provider === 'mock' ? 'Mock gateway (dev)' : (order.payment?.provider ?? '—');
+  const paymentLabel = paymentMethodLabel(order.paymentMethod, order.payment?.provider);
 
   /** Date shown under each step: real for what happened, expected for the rest. */
   const stepDates: (string | null)[] = [

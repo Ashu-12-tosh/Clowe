@@ -121,13 +121,13 @@ export function PenaltiesPanel({ refreshKey = 0 }: { refreshKey?: number }) {
                     }`}
                   >
                     {PENALTY_KIND_LABELS[row.kind]}
-                  </span>
+                  </span>{' '}
                   {row.orderId && row.orderNumber ? (
                     <Link href={`/seller/orders/${row.orderId}`} className="text-brand-600 hover:underline">
                       {row.orderNumber}
                     </Link>
                   ) : (
-                    (row.orderNumber ?? 'Order')
+                    (row.orderNumber ?? 'Not tied to an order')
                   )}
                   {row.itemTitle && <span className="font-normal text-gray-500"> · {row.itemTitle}</span>}
                 </p>

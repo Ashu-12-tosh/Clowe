@@ -104,7 +104,7 @@ describe('the pickup slot', () => {
     expect(nextPickupSlot(ist('2026-10-25', '09:00')).toISOString()).toBe(ist('2026-10-26', '11:00').toISOString());
   });
 
-  it('from 22:00 — too late for Delhivery to promise tomorrow — the pickup day after that', () => {
+  it('from 22:00 — too late for Delhivery to promise tomorrow — the first pickup day after tomorrow', () => {
     // Monday 2026-10-19 23:00 → Wednesday; 21:59 is still Tuesday.
     expect(nextPickupSlot(ist('2026-10-19', '23:00')).toISOString()).toBe(ist('2026-10-21', '11:00').toISOString());
     expect(nextPickupSlot(ist('2026-10-19', '22:00')).toISOString()).toBe(ist('2026-10-21', '11:00').toISOString());
@@ -113,6 +113,11 @@ describe('the pickup slot', () => {
     expect(nextPickupSlot(ist('2026-10-23', '23:00')).toISOString()).toBe(ist('2026-10-26', '11:00').toISOString());
     // Pickup days only: Tuesday and Thursday, asked Monday 23:00 → Thursday.
     expect(nextPickupSlot(ist('2026-10-19', '23:00'), { slot: '15:00', days: [2, 4] }).toISOString()).toBe(ist('2026-10-22', '15:00').toISOString());
+    // Saturday 22:30 → Monday, not Tuesday: Sunday was never tomorrow's pickup.
+    expect(nextPickupSlot(ist('2026-10-24', '22:30')).toISOString()).toBe(ist('2026-10-26', '11:00').toISOString());
+    expect(nextPickupSlot(ist('2026-10-24', '21:59')).toISOString()).toBe(ist('2026-10-26', '11:00').toISOString());
+    // Monday, Wednesday, Friday; Monday 23:00 → Wednesday, not Friday.
+    expect(nextPickupSlot(ist('2026-10-19', '23:00'), { slot: '11:00', days: [1, 3, 5] }).toISOString()).toBe(ist('2026-10-21', '11:00').toISOString());
   });
 
   it('follows the seller’s own time and days, and skips today after a failed pickup', () => {

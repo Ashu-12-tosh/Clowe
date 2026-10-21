@@ -19,7 +19,26 @@ export function getContentPage(slug: string): (ContentPageMeta & { markdown: str
 }
 
 const escapeHtml = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * A link target the page may carry: a path on this site, an anchor, or an
+ * http(s), mailto: or tel: address. Anything else — javascript:, data:,
+ * vbscript: — is dropped. The pages are filled from settings an admin types,
+ * so a link there must not be able to run script (pre-launch audit 2026-10-20).
+ */
+export function safeHref(escaped: string): string | null {
+  // Entities decoded and control characters dropped first, as a browser would.
+  const href = escaped
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/[\u0000-\u0020\u007f]/g, '');
+  if (/^(\/(?!\/)|#|\?)/.test(href)) return escaped;
+  if (/^(https?:\/\/|mailto:|tel:)/i.test(href)) return escaped;
+  return null;
+}
 
 /** Inline markdown: **bold**, *italic*, [text](href), `code`. */
 function inline(md: string): string {
@@ -27,15 +46,18 @@ function inline(md: string): string {
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/\*([^*]+)\*/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(
-      /\[([^\]]+)\]\(([^)]+)\)/g,
-      '<a href="$2" class="font-semibold text-brand-600 hover:underline">$1</a>',
-    );
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, text: string, href: string) => {
+      const safe = safeHref(href.trim());
+      return safe
+        ? `<a href="${safe}" class="font-semibold text-brand-600 hover:underline">${text}</a>`
+        : text;
+    });
 }
 
 /**
  * Tiny markdown → HTML renderer (headings, lists, blockquote, paragraphs).
- * Content is our own repo files — not user input.
+ * Content is our own repo files plus settings an admin types: everything is
+ * escaped, and links are limited to safe targets (safeHref).
  */
 export function renderMarkdown(md: string): string {
   const out: string[] = [];

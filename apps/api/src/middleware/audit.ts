@@ -130,6 +130,34 @@ function fallbackModule(path: string): string {
 
 const MUTATIONS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+/** Query parameters whose values are credentials and never belong in a log. */
+const SECRET_PARAMS = /^(token|access_token|api_key|apikey|key|secret|signature|sig|password|pin|otp|code)$/i;
+
+/**
+ * The URL as stored in the audit log, with credential values replaced: the
+ * courier webhook may carry its token as ?token=, and the full URL used to
+ * land in audit_logs.metadata.path (pre-launch audit 2026-10-20).
+ */
+export function redactUrl(url: string): string {
+  const q = url.indexOf('?');
+  if (q < 0) return url;
+  const params = url
+    .slice(q + 1)
+    .split('&')
+    .map((pair) => {
+      const eq = pair.indexOf('=');
+      const name = eq < 0 ? pair : pair.slice(0, eq);
+      let decoded = name;
+      try {
+        decoded = decodeURIComponent(name);
+      } catch {
+        // keep the raw name
+      }
+      return eq >= 0 && SECRET_PARAMS.test(decoded) ? `${name}=[redacted]` : pair;
+    });
+  return `${url.slice(0, q)}?${params.join('&')}`;
+}
+
 export function auditLogger(req: Request, res: Response, next: NextFunction): void {
   // Only API traffic is auditable; static uploads are not.
   if (
@@ -186,7 +214,7 @@ export function auditLogger(req: Request, res: Response, next: NextFunction): vo
         summary: failed
           ? `${action} failed (HTTP ${res.statusCode})`
           : `${action} via ${method} ${path}`,
-        metadata: { method, path: originalUrl, statusCode: res.statusCode },
+        metadata: { method, path: redactUrl(originalUrl), statusCode: res.statusCode },
         severity,
         status: failed ? 'FAILED' : 'SUCCESS',
         ipAddress: ipFrom(req),

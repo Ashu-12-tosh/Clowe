@@ -436,7 +436,7 @@ sellerRouter.get('/brand-proofs', requireSeller, async (req, res, next) => {
   }
 });
 
-sellerRouter.put('/brand-proofs/:brandId', requireSeller, async (req, res, next) => {
+sellerRouter.put('/brand-proofs/:brandId', requireSeller, blockSuspendedWrites, async (req, res, next) => {
   try {
     const input = brandProofSubmitSchema.parse(req.body);
     const brand = await prisma.brand.findUnique({ where: { id: req.params.brandId }, select: { id: true, name: true, authorizationRequired: true } });

@@ -94,7 +94,9 @@ export async function grantFreeCredits(sellerId: string): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
     // One grant at a time, so two approvals cannot both take the last place.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(7745001)`;
-    const given = await tx.sellerProfile.count({ where: { tryOnFreeGrant: true, status: 'APPROVED' } });
+    // Everyone ever granted counts, whatever their status now: suspending a
+    // seller must not free their place for another (pre-launch audit L7).
+    const given = await tx.sellerProfile.count({ where: { tryOnFreeGrant: true } });
     if (given >= tryon.freeGrantSellers) return false;
     const again = await tx.sellerProfile.findUnique({ where: { id: sellerId }, select: { tryOnFreeGrant: true } });
     if (again?.tryOnFreeGrant) return false;

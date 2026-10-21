@@ -11,7 +11,7 @@ import type {
   ProductListItem,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
-import { formatPaise } from '@/lib/format';
+import { formatPaise, istDay, paymentMethodLabel } from '@/lib/format';
 import { BADGES_EVENT } from '@/components/Header';
 import { SUPPORT_CHAT_EVENT } from '@/components/SupportChat';
 import { Scroller } from '@/components/home/HomeBits';
@@ -59,8 +59,10 @@ function fmtDate(iso: string): string {
     year: 'numeric',
   });
 }
+// Indian calendar dates, as checkout quotes them: in the browser's own zone a
+// window could read a day off what checkout said (pre-launch audit L5).
 function fmtShort(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  return istDay(iso);
 }
 function etaLabel(from: string | null, to: string | null): string {
   if (!to) return '';
@@ -200,8 +202,7 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
 
   const savings = order.discountPaise;
   const itemCount = order.items.reduce((sum, i) => sum + i.quantity, 0);
-  const paymentLabel =
-    order.payment?.provider === 'mock' ? 'Mock gateway (dev)' : (order.payment?.provider ?? '—');
+  const paymentLabel = paymentMethodLabel(order.paymentMethod, order.payment?.provider);
   const orderedSlugs = order.items.map((i) => i.productSlug);
   const eta = etaLabel(order.etaFrom, order.etaTo);
   const cancelled = order.status === 'CANCELLED';

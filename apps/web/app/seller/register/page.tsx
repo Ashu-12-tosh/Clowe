@@ -113,6 +113,14 @@ export default function SellerRegisterPage() {
     try {
       const data = await api<AuthTokensResponse>('/api/auth/verify-otp', { body: { phone, code } });
       saveSession(data);
+      reload();
+      // Signed in just now: someone who already applied goes to where their
+      // application stands, not to a blank form (pre-launch audit B12).
+      const existing = await api<SellerProfileInfo>('/api/seller/profile', { auth: true, quiet: true }).catch(() => null);
+      if (existing) {
+        router.replace('/seller');
+        return;
+      }
       setStep('form');
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
@@ -279,6 +287,16 @@ export default function SellerRegisterPage() {
       <FieldError message={fieldErrors[name]} />
     </div>
   );
+
+  // Signed in already: the form waits until we know there is no shop yet.
+  if (step === 'form' && (state.kind === 'loading' || state.kind === 'ready')) {
+    return (
+      <main className="flex min-h-[50vh] items-center justify-center text-sm text-gray-500">
+        <Spinner className="mr-2" />
+        Checking your seller account…
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto max-w-xl px-4 py-8">

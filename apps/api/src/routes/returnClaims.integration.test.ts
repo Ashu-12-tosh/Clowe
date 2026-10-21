@@ -292,9 +292,21 @@ describe('after the quality check (2.2–2.4, 4.3, 6)', () => {
     const { checked } = await approveAndCheck(b.itemId, true);
     expect(checked.status, JSON.stringify(checked.json)).toBe(200);
     const r = await prisma.return.findUniqueOrThrow({ where: { orderItemId: b.itemId }, include: { refund: true } });
-    expect(r).toMatchObject({ status: 'REFUNDED', qcPassed: true });
+    expect(r).toMatchObject({ status: 'REFUNDED', qcPassed: true, resolution: 'REFUND' });
     expect(r.refund).toMatchObject({ status: 'PROCESSED', amountPaise: 120_000 });
     expect((await prisma.orderItem.findUniqueOrThrow({ where: { id: b.itemId } })).status).toBe('RETURNED');
+  });
+
+  it('a rejected claim ends with no refund, and an admin overturning it reopens it for one', async () => {
+    const b = await delivered();
+    expect((await claim(b, { reason: 'WRONG_ITEM', remedy: 'REFUND' })).status).toBe(200);
+    const r = await prisma.return.findUniqueOrThrow({ where: { orderItemId: b.itemId } });
+    const rejected = await call('PATCH', `/api/seller/returns/${r.id}`, sellerToken, { action: 'reject', rejectionReason: 'Item shows wear' });
+    expect(rejected.status, JSON.stringify(rejected.json)).toBe(200);
+    expect(await prisma.return.findUniqueOrThrow({ where: { id: r.id } })).toMatchObject({ status: 'REJECTED', resolution: 'NONE' });
+    const overturned = await call('POST', `/api/admin/returns/${r.id}/action`, adminToken, { action: 'OVERRIDE', note: 'Photos show the wrong item' });
+    expect(overturned.status, JSON.stringify(overturned.json)).toBe(200);
+    expect(await prisma.return.findUniqueOrThrow({ where: { id: r.id } })).toMatchObject({ status: 'APPROVED', resolution: 'REFUND' });
   });
 
   it('sends an identical item free for an exchange, and the sale stands', async () => {
@@ -304,6 +316,7 @@ describe('after the quality check (2.2–2.4, 4.3, 6)', () => {
     await approveAndCheck(b.itemId, true);
     const r = await prisma.return.findUniqueOrThrow({ where: { orderItemId: b.itemId }, include: { refund: true } });
     expect(r.refund).toBeNull();
+    expect(r.resolution).toBe('EXCHANGE');
     expect(r.replacementOrderId).toBeTruthy();
     const rep = await prisma.order.findUniqueOrThrow({ where: { id: r.replacementOrderId! }, include: { items: true } });
     expect(rep).toMatchObject({ paymentMethod: 'REPLACEMENT', totalPaise: 0, status: 'CONFIRMED' });
@@ -350,7 +363,7 @@ describe('after the quality check (2.2–2.4, 4.3, 6)', () => {
     expect(res.status, JSON.stringify(res.json)).toBe(200);
     const r = await prisma.return.findUniqueOrThrow({ where: { id: noReason.returnId }, include: { refund: true } });
     expect(r.refund).toBeNull();
-    expect(r).toMatchObject({ qcPassed: false, qcNote: 'Worn and washed, tags removed' });
+    expect(r).toMatchObject({ qcPassed: false, qcNote: 'Worn and washed, tags removed', resolution: 'NONE' });
     const back = await prisma.order.findUniqueOrThrow({ where: { id: r.sentBackOrderId! }, include: { items: true } });
     expect(back).toMatchObject({ paymentMethod: 'REPLACEMENT', totalPaise: 0 });
     expect((await prisma.user.findUniqueOrThrow({ where: { id: b.userId } })).claimsReviewNote).toContain('Worn and washed');

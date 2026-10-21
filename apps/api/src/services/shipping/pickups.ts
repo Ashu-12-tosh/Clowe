@@ -56,7 +56,8 @@ function scheduleOrDefault(schedule: PickupSchedule): { minutes: number; days: n
  *   or two hours from now (on the half hour) if the slot is sooner than that;
  * - otherwise — after 14:00, on a day off, or when Delhivery already failed to
  *   come today (`notToday`) — the next pickup day at their slot;
- * - from 22:00, the pickup day after that (Monday 23:00 → Wednesday).
+ * - from 22:00, not tomorrow: the first pickup day after it (Monday 23:00 →
+ *   Wednesday; Saturday 22:30 → Monday, as Sunday is off anyway).
  * Never a Sunday.
  */
 export function nextPickupSlot(now: Date = new Date(), schedule: PickupSchedule = DEFAULT_PICKUP_SCHEDULE, opts: { notToday?: boolean } = {}): Date {
@@ -70,12 +71,14 @@ export function nextPickupSlot(now: Date = new Date(), schedule: PickupSchedule 
     const earliest = Math.ceil((nowMinutes + SAME_DAY_LEAD_MINUTES) / 30) * 30;
     return at(0, Math.max(slot, earliest));
   }
-  // Pickup days to pass over: the next one, or from 22:00 the one after it.
-  let skip = nowMinutes >= NEXT_DAY_CUTOFF_HOUR_IST * 60 ? 2 : 1;
-  for (let offset = 1; offset <= 14; offset += 1) {
-    if (days.includes((ist.getUTCDay() + offset) % 7) && --skip === 0) return at(offset, slot);
+  // From 22:00 tomorrow is too soon to ask for: the search starts the day
+  // after. It skips calendar days, not pickup days — Saturday night used to
+  // pass over Monday too and land on Tuesday (pre-launch audit 2026-10-20).
+  const first = nowMinutes >= NEXT_DAY_CUTOFF_HOUR_IST * 60 ? 2 : 1;
+  for (let offset = first; offset <= 14; offset += 1) {
+    if (days.includes((ist.getUTCDay() + offset) % 7)) return at(offset, slot);
   }
-  return at(1, slot);
+  return at(first, slot);
 }
 
 const istDay = (d: Date) => new Date(d.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);

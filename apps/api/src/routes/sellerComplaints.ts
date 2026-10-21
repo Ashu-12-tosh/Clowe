@@ -4,7 +4,7 @@ import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { sellerReplyToComplaint } from '../services/complaintService';
 import { ApiError } from '../utils/ApiError';
-import { requireSeller } from './seller';
+import { blockSuspendedWrites, requireSeller } from './seller';
 
 // ---------------------------------------------------------------------------
 // Customer complaints about a seller's own products, routed to them by
@@ -47,7 +47,7 @@ sellerComplaintsRouter.get('/', async (req, res, next) => {
   }
 });
 
-sellerComplaintsRouter.post('/:id/reply', async (req, res, next) => {
+sellerComplaintsRouter.post('/:id/reply', blockSuspendedWrites, async (req, res, next) => {
   try {
     const { body } = sellerComplaintReplySchema.parse(req.body);
     if (!req.params.id) throw ApiError.notFound('Complaint not found');

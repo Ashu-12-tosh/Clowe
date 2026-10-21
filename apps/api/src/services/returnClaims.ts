@@ -182,7 +182,7 @@ export async function settleClaimAfterQc(input: {
     await prisma.$transaction([
       prisma.return.update({
         where: { id: r.id },
-        data: { status: 'RECEIVED', resolvedAt: now, sentBackOrderId: back?.orderId ?? null },
+        data: { status: 'RECEIVED', resolvedAt: now, resolution: 'NONE', sentBackOrderId: back?.orderId ?? null },
       }),
       // The sale stands: the item is the buyer's and goes back to them.
       prisma.orderItem.update({ where: { id: item.id }, data: { status: 'DELIVERED' } }),
@@ -217,7 +217,7 @@ export async function settleClaimAfterQc(input: {
     });
     if (rep) {
       await prisma.$transaction([
-        prisma.return.update({ where: { id: r.id }, data: { status: 'RECEIVED', resolvedAt: now, replacementOrderId: rep.orderId } }),
+        prisma.return.update({ where: { id: r.id }, data: { status: 'RECEIVED', resolvedAt: now, resolution: 'EXCHANGE', replacementOrderId: rep.orderId } }),
         // The sale stands: the buyer keeps an identical item.
         prisma.orderItem.update({ where: { id: item.id }, data: { status: 'DELIVERED' } }),
       ]);

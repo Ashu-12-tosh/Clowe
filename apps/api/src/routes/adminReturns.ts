@@ -24,6 +24,7 @@ import {
   type AdminReturnsSummary,
   type ReturnPolicyView,
   type ReturnReasonValue,
+  type RefundResolutionValue,
   type ReturnResolutionValue,
   type ReturnRiskRow,
   type ReturnStage,
@@ -661,7 +662,7 @@ interface ActionInput {
   action: string;
   note?: string;
   qcPassed?: boolean;
-  resolution?: ReturnResolutionValue;
+  resolution?: RefundResolutionValue;
 }
 
 /**
@@ -733,6 +734,7 @@ async function applyAdminAction(
           where: { id: r.id },
           data: {
             status: 'REJECTED',
+            resolution: 'NONE',
             rejectionReason: input.note,
             rejectedAt: new Date(),
             resolvedAt: new Date(),
@@ -818,7 +820,7 @@ async function applyAdminAction(
       if (r.refund) throw ApiError.badRequest(`${r.rmaNumber} already has a refund`);
 
       const amountPaise = r.orderItem.pricePaise * r.orderItem.quantity;
-      const resolution = input.resolution ?? (r.resolution as ReturnResolutionValue);
+      const resolution: RefundResolutionValue = input.resolution ?? (r.resolution === 'STORE_CREDIT' ? 'STORE_CREDIT' : 'REFUND');
 
       if (resolution === 'STORE_CREDIT') {
         // Credits settle instantly — no gateway, no waiting.
@@ -894,6 +896,8 @@ async function applyAdminAction(
             status: 'APPROVED',
             approvedAt: new Date(),
             resolvedAt: null,
+            // Reopened for a refund; how it is paid is chosen when it is issued.
+            resolution: 'REFUND',
             adminOverrideAt: new Date(),
             adminOverrideNote: input.note,
           },

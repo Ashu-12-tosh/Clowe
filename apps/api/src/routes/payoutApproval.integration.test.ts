@@ -218,9 +218,9 @@ describe('Cashfree payouts', () => {
     fake.nextTransfer = [];
   });
 
-  const webhook = (transferId: string, type = 'TRANSFER_SUCCESS') => {
-    const raw = JSON.stringify({ type, data: { transfer: { transfer_id: transferId } } });
-    const ts = String(Math.floor(Date.now() / 1000));
+  const webhook = (transferId: string, type = 'TRANSFER_SUCCESS', signedAt = Date.now()) => {
+    const raw = JSON.stringify({ type, event_time: new Date(signedAt).toISOString(), data: { transfer: { transfer_id: transferId } } });
+    const ts = String(signedAt);
     const sig = createHmac('sha256', PAYOUT_SECRET).update(ts).update(raw).digest('base64');
     return call('POST', '/api/payouts/cashfree/webhook', null, raw, { 'x-webhook-timestamp': ts, 'x-webhook-signature': sig });
   };
@@ -246,6 +246,9 @@ describe('Cashfree payouts', () => {
     const { payout, userId } = await approved();
     fake.settle(payout.transferId!, 'PAID');
     expect((await call('POST', '/api/payouts/cashfree/webhook', null, '{"type":"TRANSFER_SUCCESS"}', {})).status).toBe(401);
+    // Signed, but over an hour ago: a captured delivery sent again is refused.
+    expect((await webhook(payout.transferId!, 'TRANSFER_SUCCESS', Date.now() - 61 * 60 * 1000)).status).toBe(401);
+    expect((await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } })).status).toBe('PROCESSING');
     expect((await webhook(payout.transferId!)).status).toBe(200);
     expect(await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } })).toMatchObject({ status: 'PAID', utr: `UTR_${payout.transferId}` });
     expect(await prisma.notification.count({ where: { userId, type: 'PAYOUT_SENT' } })).toBe(1);

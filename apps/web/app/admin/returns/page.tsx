@@ -9,6 +9,7 @@ import {
   ADMIN_RETURN_TAB_LABELS,
   RETURN_REASONS,
   RETURN_REASON_LABELS,
+  REFUND_RESOLUTIONS,
   RETURN_RESOLUTIONS,
   RETURN_RESOLUTION_LABELS,
   type AdminReturnBulkResult,
@@ -21,6 +22,7 @@ import {
   type AdminReturnsSummary,
   type ReturnPolicyView,
   type ReturnReasonValue,
+  type RefundResolutionValue,
   type ReturnResolutionValue,
   type ReturnStage,
 } from '@clowe/shared';
@@ -1037,7 +1039,7 @@ function ReturnDrawer({
   // The action running ('APPROVE', 'REFUND'…), so its button shows it.
   const [busy, setBusy] = useState<string | null>(null);
   const [refunding, setRefunding] = useState(false);
-  const [resolution, setResolution] = useState<ReturnResolutionValue>('REFUND');
+  const [resolution, setResolution] = useState<RefundResolutionValue>('REFUND');
   const [qcNote, setQcNote] = useState('');
 
   const load = useCallback(async () => {
@@ -1257,10 +1259,10 @@ function ReturnDrawer({
             <label className={labelClass}>Settle as</label>
             <select
               value={resolution}
-              onChange={(e) => setResolution(e.target.value as ReturnResolutionValue)}
+              onChange={(e) => setResolution(e.target.value as RefundResolutionValue)}
               className={`${inputClass} mt-1`}
             >
-              {RETURN_RESOLUTIONS.map((r) => (
+              {REFUND_RESOLUTIONS.map((r) => (
                 <option key={r} value={r}>
                   {RETURN_RESOLUTION_LABELS[r]}
                 </option>
@@ -1534,7 +1536,7 @@ function ManualRefundModal({
   const [order, setOrder] = useState<OrderHit | null>(null);
   const [rupees, setRupees] = useState('');
   const [reason, setReason] = useState('');
-  const [resolution, setResolution] = useState<ReturnResolutionValue>('REFUND');
+  const [resolution, setResolution] = useState<RefundResolutionValue>('REFUND');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -1667,10 +1669,10 @@ function ManualRefundModal({
               <label className={labelClass}>Settle as</label>
               <select
                 value={resolution}
-                onChange={(e) => setResolution(e.target.value as ReturnResolutionValue)}
+                onChange={(e) => setResolution(e.target.value as RefundResolutionValue)}
                 className={`${inputClass} mt-1`}
               >
-                {RETURN_RESOLUTIONS.map((r) => (
+                {REFUND_RESOLUTIONS.map((r) => (
                   <option key={r} value={r}>
                     {RETURN_RESOLUTION_LABELS[r]}
                   </option>

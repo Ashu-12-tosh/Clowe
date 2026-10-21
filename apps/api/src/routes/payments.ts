@@ -7,7 +7,7 @@ import { requireAuth } from '../middleware/auth';
 import { paymentConfirmLimiter } from '../middleware/rateLimits';
 import { ApiError } from '../utils/ApiError';
 import { paymentProvider, RazorpayProvider } from '../services/payments';
-import { verifyCashfreeWebhook } from '../services/cashfree/client';
+import { cashfreeWebhookFresh, cashfreeWebhookTime, verifyCashfreeWebhook } from '../services/cashfree/client';
 import {
   checkoutPayload,
   recordWebhook,
@@ -158,11 +158,18 @@ paymentsRouter.post('/cashfree/webhook', async (req, res, next) => {
     if (!rawBody || !verifyCashfreeWebhook(rawBody, timestamp, signature, secret)) {
       throw ApiError.unauthorized('Invalid webhook signature');
     }
+    if (!cashfreeWebhookFresh(timestamp)) throw ApiError.unauthorized('Stale webhook');
 
     const body = req.body as { type?: unknown };
     const type = typeof body.type === 'string' ? body.type : 'UNKNOWN';
-    const eventKey = req.get('x-idempotency-key') || createHash('sha256').update(rawBody).digest('hex');
-    if (await webhookSeen('cashfree-pg', eventKey)) return res.status(200).json({ received: true, duplicate: true });
+    // Recognised by the signed body, not the unsigned x-idempotency-key (a
+    // replay under a new key would otherwise pass as a new event). Keys
+    // recorded before this change are still honoured.
+    const eventKey = createHash('sha256').update(rawBody).digest('hex');
+    const legacyKey = req.get('x-idempotency-key');
+    if ((await webhookSeen('cashfree-pg', eventKey)) || (legacyKey && (await webhookSeen('cashfree-pg', legacyKey)))) {
+      return res.status(200).json({ received: true, duplicate: true });
+    }
 
     let reference: string | null = null;
     if (type.startsWith('PAYMENT_')) {
@@ -177,7 +184,9 @@ paymentsRouter.post('/cashfree/webhook', async (req, res, next) => {
       reference = pick(body, ['data', 'vendor_id'], ['data', 'settlement', 'vendor_id']);
       const status = pick(body, ['data', 'status'], ['data', 'settlement', 'status']);
       if (reference && type === 'VENDOR_SETTLEMENT_SUCCESS' && (!status || status.toUpperCase() === 'SUCCESS')) {
-        await markVendorSettled(reference, pick(body, ['data', 'utr'], ['data', 'settlement', 'utr']));
+        // Settles only what was released before the event was signed, so
+        // a replay inside the window cannot settle later releases either.
+        await markVendorSettled(reference, pick(body, ['data', 'utr'], ['data', 'settlement', 'utr']), cashfreeWebhookTime(timestamp) ?? undefined);
       }
     }
     await recordWebhook('cashfree-pg', eventKey, type, reference);

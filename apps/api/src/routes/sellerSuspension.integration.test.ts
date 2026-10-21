@@ -158,6 +158,21 @@ describe('a suspended seller cannot write', () => {
     const after = await prisma.product.findUnique({ where: { id: s.product.id } });
     expect(after!.isVisible).toBe(false);
   });
+
+  // Found open in the pre-launch audit (2026-10-20): each is refused before
+  // its body is even read, so the placeholder ids and bodies are enough.
+  it('cannot switch plan auto-renew, answer a customer complaint, or file a brand proof', async () => {
+    const s = await makeSeller(SellerStatus.SUSPENDED);
+    const attempts = [
+      await call('POST', '/api/seller/billing/plan/auto-renew', s.token, { autoRenew: true }),
+      await call('POST', '/api/seller/customer-complaints/any-complaint/reply', s.token, { body: 'We will look into it.' }),
+      await call('PUT', '/api/seller/brand-proofs/any-brand', s.token, { doc: 'x' }),
+    ];
+    for (const { status, json } of attempts) {
+      expect(status).toBe(403);
+      expect(json.error?.code).toBe('SELLER_BLOCKED');
+    }
+  });
 });
 
 describe('a suspended seller can still', () => {

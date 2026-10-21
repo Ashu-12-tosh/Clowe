@@ -1788,6 +1788,8 @@ model Review {
 enum ReturnResolution {
   REFUND // money back to the original payment method
   STORE_CREDIT // Clowe Credits instead of a gateway refund
+  EXCHANGE // an identical item sent instead (Return Policy 2)
+  NONE // nothing paid: rejected, or sent back after a failed quality check
 }
 
 model Return {
@@ -1839,7 +1841,7 @@ model Return {
   selfShipReimbursedPaise Int?
   selfShipReimbursedAt    DateTime?
   selfShipReimburseRef    String?
-  // How the shopper gets their money back.
+  // How the return ended: money back (and how), an exchange, or nothing.
   resolution        ReturnResolution @default(REFUND)
   // Cash on Delivery returns only: where the buyer wants the money sent.
   codRefundAccount  CodRefundAccount?

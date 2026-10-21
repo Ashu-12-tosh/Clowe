@@ -92,7 +92,7 @@ sellerBillingRouter.post('/plan', blockSuspendedWrites, async (req, res, next) =
   }
 });
 
-sellerBillingRouter.post('/plan/auto-renew', async (req, res, next) => {
+sellerBillingRouter.post('/plan/auto-renew', blockSuspendedWrites, async (req, res, next) => {
   try {
     const { autoRenew } = sellerAutoRenewSchema.parse(req.body);
     await setAutoRenew(req.seller!.id, autoRenew);

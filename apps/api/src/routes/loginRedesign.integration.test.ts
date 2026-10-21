@@ -348,3 +348,22 @@ describe('guessing, from many addresses at once', () => {
     expect((await client()('/api/auth/pin-login', { identifier: a.phone, pin: '7351' })).json.error?.code).toBe('PIN_LOCKED');
   });
 });
+
+describe('the audit log records the address nginx saw', () => {
+  it('not a forged left-most X-Forwarded-For entry', async () => {
+    const { phone } = await account({ pin: '4826' });
+    // nginx appends the real peer to whatever the client sent: "forged, real".
+    const res = await fetch(`${base}/api/auth/pin-login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': '6.6.6.6, 203.0.113.77' },
+      body: JSON.stringify({ identifier: phone, pin: '0000' }),
+    });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    let row = null;
+    for (let i = 0; i < 40 && !row; i += 1) {
+      row = await prisma.auditLog.findFirst({ where: { action: 'Login failed', summary: { contains: phone } } });
+      if (!row) await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(row?.ipAddress).toBe('203.0.113.77');
+  });
+});

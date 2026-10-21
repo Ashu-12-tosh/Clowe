@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CASHFREE_PG_API_VERSION, CashfreePaymentProvider } from './CashfreePaymentProvider';
 import { GatewayError } from './PaymentProvider';
-import { idempotencyKey, verifyCashfreeWebhook } from '../cashfree/client';
+import { cashfreeWebhookFresh, cashfreeWebhookTime, idempotencyKey, verifyCashfreeWebhook } from '../cashfree/client';
 import { createHmac } from 'node:crypto';
 
 interface Sent {
@@ -213,6 +213,28 @@ describe('Cashfree webhook signature', () => {
     expect(verifyCashfreeWebhook(raw, '1760870001', sign(ts, raw), secret)).toBe(false);
     expect(verifyCashfreeWebhook(raw, ts, sign(ts, raw), 'other')).toBe(false);
     expect(verifyCashfreeWebhook(raw, '', '', secret)).toBe(false);
+  });
+});
+
+describe('Cashfree webhook freshness', () => {
+  const now = new Date('2026-10-21T10:00:00.000Z');
+  const ms = (offset: number) => String(now.getTime() + offset);
+
+  it('reads milliseconds (what Cashfree sends) and seconds', () => {
+    expect(cashfreeWebhookTime(ms(0))?.toISOString()).toBe(now.toISOString());
+    expect(cashfreeWebhookTime(String(now.getTime() / 1000))?.toISOString()).toBe(now.toISOString());
+    expect(cashfreeWebhookTime('')).toBeNull();
+    expect(cashfreeWebhookTime('2026-10-21')).toBeNull();
+    expect(cashfreeWebhookTime('1e12')).toBeNull();
+  });
+
+  it('accepts up to an hour old and five minutes ahead, nothing beyond', () => {
+    expect(cashfreeWebhookFresh(ms(0), now)).toBe(true);
+    expect(cashfreeWebhookFresh(ms(-60 * 60 * 1000), now)).toBe(true);
+    expect(cashfreeWebhookFresh(ms(-60 * 60 * 1000 - 1), now)).toBe(false);
+    expect(cashfreeWebhookFresh(ms(5 * 60 * 1000), now)).toBe(true);
+    expect(cashfreeWebhookFresh(ms(5 * 60 * 1000 + 1), now)).toBe(false);
+    expect(cashfreeWebhookFresh('nonsense', now)).toBe(false);
   });
 });
 

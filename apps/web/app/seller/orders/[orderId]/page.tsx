@@ -499,7 +499,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
                 <dd className="font-semibold text-ink-900">{order.unitCount}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-gray-500">Your share</dt>
+                <dt className="text-gray-500" title="What the buyer pays for your lines, GST included — before Clowe's fees">Sale value (incl. GST)</dt>
                 <dd className="font-semibold text-ink-900">{formatPaise(order.amountPaise)}</dd>
               </div>
             </dl>

@@ -171,12 +171,12 @@ export default function AdsSection({ section }: { section: Section }) {
   const gst = plan?.gstPercent ?? 18;
 
   /** Create a campaign or booking: `create` is one of the literal POST calls below. */
-  async function submit(create: () => Promise<unknown>, done: string) {
+  async function submit<T>(create: () => Promise<T>, done: string | ((result: T) => string)) {
     setBusy(true);
     setMsg(null);
     try {
-      await create();
-      setMsg({ ok: true, text: done });
+      const result = await create();
+      setMsg({ ok: true, text: typeof done === 'function' ? done(result) : done });
       load();
     } catch (e) {
       setMsg({ ok: false, text: errText(e) });
@@ -276,7 +276,14 @@ export default function AdsSection({ section }: { section: Section }) {
           ) : tab === 'package' ? (
             <PackageForm config={config} gst={gst} busy={busy} onSubmit={(b) => submit(() => api('/api/seller/advertising/packages', { method: 'POST', body: b, auth: true }), 'Package booked.')} />
           ) : (
-            <PlacementForm config={config} sponsorship={sponsorship} discount={discount} gst={gst} busy={busy} onSubmit={(b) => submit(() => api('/api/seller/advertising/placements', { method: 'POST', body: b, auth: true }), 'Booked. A banner runs once it is approved; a rejected one is refunded.')} />
+            <PlacementForm config={config} sponsorship={sponsorship} discount={discount} gst={gst} busy={busy} onSubmit={(b) => submit(
+                  () => api<{ status: string }>('/api/seller/advertising/placements', { method: 'POST', body: b, auth: true }),
+                  // Only a banner waits for Clowe's check; a featured product runs on its dates.
+                  (booked) =>
+                    booked.status === 'PENDING_APPROVAL'
+                      ? 'Booked. Your banner runs once Clowe approves it; if it is not approved, the booking is refunded.'
+                      : 'Booked. It runs on the dates you picked.',
+                )} />
           )}
           {msg && <p className={`mt-3 text-sm ${msg.ok ? 'text-green-700' : 'text-red-600'}`} role="status">{msg.text}</p>}
         </section>

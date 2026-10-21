@@ -201,7 +201,7 @@ describe('expiry, the free grant, admin credits and the report', () => {
   });
 
   it('gives the free credits to the first approved sellers only, once each', async () => {
-    const given = await prisma.sellerProfile.count({ where: { tryOnFreeGrant: true, status: 'APPROVED' } });
+    const given = await prisma.sellerProfile.count({ where: { tryOnFreeGrant: true } });
     await updateCommercial({ tryon: { freeGrantSellers: given + 1 } });
     try {
       const a = await seller();
@@ -210,6 +210,21 @@ describe('expiry, the free grant, admin credits and the report', () => {
       expect(await grantFreeCredits(a.id)).toBe(false);
       expect(await grantFreeCredits(b.id)).toBe(false);
       expect(await credits(a.id)).toBe(50);
+      expect(await credits(b.id)).toBe(0);
+    } finally {
+      await updateCommercial({ tryon: { freeGrantSellers: 51 } });
+    }
+  });
+
+  it('a suspended seller keeps their place among the first sellers: it is not given again', async () => {
+    const given = await prisma.sellerProfile.count({ where: { tryOnFreeGrant: true } });
+    await updateCommercial({ tryon: { freeGrantSellers: given + 1 } });
+    try {
+      const a = await seller();
+      const b = await seller();
+      expect(await grantFreeCredits(a.id)).toBe(true);
+      await prisma.sellerProfile.update({ where: { id: a.id }, data: { status: 'SUSPENDED' } });
+      expect(await grantFreeCredits(b.id)).toBe(false);
       expect(await credits(b.id)).toBe(0);
     } finally {
       await updateCommercial({ tryon: { freeGrantSellers: 51 } });

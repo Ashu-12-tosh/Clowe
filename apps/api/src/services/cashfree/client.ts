@@ -127,6 +127,34 @@ export function verifyCashfreeWebhook(rawBody: Buffer, timestamp: string, signat
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/**
+ * When a webhook was signed, from x-webhook-timestamp (Cashfree sends epoch
+ * milliseconds; seconds are accepted too), or null when it isn't a number.
+ */
+export function cashfreeWebhookTime(timestamp: string): Date | null {
+  if (!/^\d{9,14}$/.test(timestamp)) return null;
+  const n = Number(timestamp);
+  return new Date(n < 1e12 ? n * 1000 : n);
+}
+
+/** How old a signed webhook may be, and how far ahead of our clock. */
+export const CASHFREE_WEBHOOK_MAX_AGE_MS = 60 * 60 * 1000;
+export const CASHFREE_WEBHOOK_MAX_AHEAD_MS = 5 * 60 * 1000;
+
+/**
+ * A signed timestamp within the last hour (five minutes ahead allowed for
+ * clock drift). The signature covers the timestamp, so an old delivery
+ * captured and sent again is turned away instead of acted on (pre-launch
+ * audit 2026-10-20). An event that misses the window is still picked up by
+ * the gateway sync, which asks Cashfree for the state.
+ */
+export function cashfreeWebhookFresh(timestamp: string, now: Date = new Date()): boolean {
+  const at = cashfreeWebhookTime(timestamp);
+  if (!at) return false;
+  const age = now.getTime() - at.getTime();
+  return age <= CASHFREE_WEBHOOK_MAX_AGE_MS && age >= -CASHFREE_WEBHOOK_MAX_AHEAD_MS;
+}
+
 /** Rupees as Cashfree wants them (a number, two decimals) from paise. */
 export function rupeesFromPaise(paise: number): number {
   return Math.round(paise) / 100;

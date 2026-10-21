@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { POLICY_TOKENS } from '@clowe/shared';
 import { CONTENT_PAGES } from './contentPageList';
+import { renderMarkdown } from './contentPages';
 import { FAQ_ENTRIES } from './support/faq-content';
 
 const PAGES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'content', 'pages');
@@ -68,5 +69,28 @@ describe('content pages', () => {
 
   it('the support FAQ carries no internal notes', () => {
     for (const e of FAQ_ENTRIES) expect(e.answer, e.label).not.toMatch(/TODO/);
+  });
+});
+
+describe('renderMarkdown links', () => {
+  it('keeps links to this site, anchors, http(s), mailto: and tel:', () => {
+    const html = renderMarkdown('[a](/pages/faq) [b](#top) [c](https://cloweshop.com) [d](mailto:support@cloweshop.com) [e](tel:+911234567890)');
+    expect(html.match(/<a href=/g)).toHaveLength(5);
+    expect(html).toContain('href="/pages/faq"');
+    expect(html).toContain('href="mailto:support@cloweshop.com"');
+  });
+
+  it('drops script links and keeps only their text', () => {
+    for (const href of ['javascript:alert(1)', 'JaVaScRiPt:alert(1)', ' javascript:alert(1)', 'java\tscript:alert(1)', 'data:text/html,<b>x</b>', 'vbscript:x', '//evil.example']) {
+      const html = renderMarkdown(`[click](${href})`);
+      expect(html, href).not.toContain('<a ');
+      expect(html, href).toContain('click');
+    }
+  });
+
+  it('cannot break out of the href attribute', () => {
+    const html = renderMarkdown('[x](https://a.example/" onmouseover="alert(1))');
+    expect(html).not.toMatch(/onmouseover="/);
+    expect(html).toContain('&quot;');
   });
 });

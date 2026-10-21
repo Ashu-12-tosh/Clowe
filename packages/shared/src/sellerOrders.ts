@@ -130,7 +130,7 @@ export interface SellerOrderRow {
   lines: SellerOrderLine[];
   itemCount: number;
   unitCount: number;
-  /** Seller's share of this order (price × qty over their lines). */
+  /** Sale value of the seller's lines (price × qty, GST included), before Clowe's fees. */
   amountPaise: number;
   paymentMethod: string;
   paymentStatus: string;

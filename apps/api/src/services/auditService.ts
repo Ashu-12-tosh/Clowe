@@ -49,12 +49,13 @@ export function deviceFromUserAgent(ua: string | undefined): string {
   return 'OTHER';
 }
 
-/** The client IP, honouring the proxy header the app already trusts. */
+/**
+ * The client IP as Express resolved it ('trust proxy' 1: the address nginx
+ * saw). Not the left-most X-Forwarded-For entry: nginx appends to whatever the
+ * client sent, so that one is whatever the client chose — every audit row,
+ * logins included, could carry a forged address (pre-launch audit 2026-10-20).
+ */
 export function ipFrom(req: Request): string | null {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.length > 0) {
-    return forwarded.split(',')[0]!.trim();
-  }
   return req.ip ?? null;
 }
 
