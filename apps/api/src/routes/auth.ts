@@ -5,6 +5,7 @@ import {
   deleteAccountSchema,
   pinResetConfirmSchema,
   pinResetRequestSchema,
+  pinResetVerifySchema,
   signupSchema,
   signupVerifyPhoneSchema,
   type SecurityOverview,
@@ -125,13 +126,24 @@ authRouter.post('/pin-login', otpVerifyLimiter, async (req, res, next) => {
   }
 });
 
-// "Forgot PIN?" (and a first PIN for an account without one): a code to the
-// account's phone, then the code and the new PIN together.
+// "Forgot PIN?" (and a first PIN for an account without one): the account's
+// phone typed again and a code to it, the code (a reset token), then the new
+// PIN with that token. Each step is rate-limited, per address and per number.
 authRouter.post('/pin-reset/request', otpRequestLimiter, async (req, res, next) => {
   try {
-    const { identifier } = pinResetRequestSchema.parse(req.body);
-    res.json({ success: true, data: await authService.requestPinReset(identifier) });
+    const { identifier, phone } = pinResetRequestSchema.parse(req.body);
+    res.json({ success: true, data: await authService.requestPinReset(identifier, phone) });
   } catch (err) {
+    next(err);
+  }
+});
+
+authRouter.post('/pin-reset/verify', otpVerifyLimiter, async (req, res, next) => {
+  try {
+    const { identifier, phone, code } = pinResetVerifySchema.parse(req.body);
+    res.json({ success: true, data: await authService.verifyPinReset(identifier, phone, code) });
+  } catch (err) {
+    auditLogin(req, 'FAILED', { phone: typedIdentifier(req.body), reason: err instanceof Error ? err.message : 'PIN reset code failed' });
     next(err);
   }
 });
@@ -139,7 +151,7 @@ authRouter.post('/pin-reset/request', otpRequestLimiter, async (req, res, next) 
 authRouter.post('/pin-reset/confirm', otpVerifyLimiter, async (req, res, next) => {
   try {
     const input = pinResetConfirmSchema.parse(req.body);
-    const data = await authService.confirmPinReset(input.identifier, input.code, input.pin);
+    const data = await authService.confirmPinReset(input.resetToken, input.pin);
     await signedIn(req, res, data, input.termsVersion);
     res.json({ success: true, data });
   } catch (err) {

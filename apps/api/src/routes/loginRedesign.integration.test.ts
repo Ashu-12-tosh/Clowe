@@ -245,23 +245,31 @@ describe('D2: a correct PIN is never answered as wrong', () => {
   });
 });
 
-describe('Forgot PIN, in one step', () => {
-  it('the old PIN works until the code and the new PIN are sent together; then only the new one does', async () => {
+describe('Forgot PIN: the phone, the code, then the new PIN', () => {
+  it('the old PIN works until the new one is saved; then only the new one does', async () => {
     const post = client();
     const a = await account({ pin: '1234', email: 'forgot.one@example.com' });
     const other = await authService.pinLogin({ kind: 'phone', value: a.phone }, '1234');
     await prisma.user.update({ where: { id: a.id }, data: { pinAttempts: PIN_OTP_ONLY_AFTER } });
 
-    const sent = await post('/api/auth/pin-reset/request', { identifier: 'Forgot.One@example.com' });
+    // Signed in with the email: the phone is typed again, and must be this account's.
+    const sent = await post('/api/auth/pin-reset/request', { identifier: 'Forgot.One@example.com', phone: `+91 ${a.phone}` });
     expect(sent.status, JSON.stringify(sent.json)).toBe(200);
     expect(sent.json.data.phoneMasked).toBe(`+91 ${a.phone.slice(0, 2)}XXX XX${a.phone.slice(7)}`);
-    // Asked for, not used: the PIN is untouched (a page closed here breaks nothing).
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: a.id } })).pinHash).not.toBeNull();
-
     const code = sent.json.data.devOtp as string;
-    expect((await post('/api/auth/pin-reset/confirm', { identifier: a.phone, code, pin: '5678', confirmPin: '5679' })).status).toBe(400);
-    const done = await post('/api/auth/pin-reset/confirm', { identifier: a.phone, code, pin: '5678', confirmPin: '5678' });
+
+    // The code: a reset token, and the PIN still untouched (a page closed here breaks nothing).
+    const before = (await prisma.user.findUniqueOrThrow({ where: { id: a.id } })).pinHash;
+    const verified = await post('/api/auth/pin-reset/verify', { identifier: 'forgot.one@example.com', phone: a.phone, code });
+    expect(verified.status, JSON.stringify(verified.json)).toBe(200);
+    const resetToken = verified.json.data.resetToken as unknown as string;
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: a.id } })).pinHash).toBe(before);
+    expect((await post('/api/auth/pin-login', { identifier: a.phone, pin: '1234' })).json.error?.code).toBe('PIN_LOCKED');
+
+    expect((await post('/api/auth/pin-reset/confirm', { resetToken, pin: '5678', confirmPin: '5679' })).status).toBe(400);
+    const done = await post('/api/auth/pin-reset/confirm', { resetToken, pin: '5678', confirmPin: '5678' });
     expect(done.status, JSON.stringify(done.json)).toBe(200);
+    expect(done.json.data.accessToken).toBeTruthy();
     expect(await prisma.user.findUniqueOrThrow({ where: { id: a.id } })).toMatchObject({ pinAttempts: 0, pinLockedUntil: null });
 
     expect((await post('/api/auth/pin-login', { identifier: a.phone, pin: '5678' })).status).toBe(200);
@@ -269,27 +277,74 @@ describe('Forgot PIN, in one step', () => {
     // Signed out elsewhere; the reset's own session stays.
     expect((await post('/api/auth/refresh', { refreshToken: other.refreshToken })).status).toBe(401);
     expect((await post('/api/auth/refresh', { refreshToken: done.json.data.refreshToken })).status).toBe(200);
+    // The token was for the old PIN: it cannot set another.
+    expect((await post('/api/auth/pin-reset/confirm', { resetToken, pin: '9999', confirmPin: '9999' })).json.error?.code).toBe('RESET_EXPIRED');
+  });
+
+  it('sends nothing to a number that is not the account’s', async () => {
+    const post = client();
+    const a = await account({ pin: '1234', email: 'forgot.two@example.com' });
+    const stranger = nextPhone();
+    const res = await post('/api/auth/pin-reset/request', { identifier: 'forgot.two@example.com', phone: stranger });
+    expect(res.status).toBe(400);
+    expect(res.json.error).toMatchObject({ code: 'PHONE_NOT_LINKED', message: 'This number isn’t linked to this account' });
+    expect(await prisma.otpCode.count({ where: { phone: { in: [stranger, a.phone] } } })).toBe(0);
+    // Nor does a code sent to the account's phone verify under another number.
+    await otp(a.phone, '565656');
+    expect((await post('/api/auth/pin-reset/verify', { identifier: a.phone, phone: stranger, code: '565656' })).json.error?.code).toBe('PHONE_NOT_LINKED');
   });
 
   it('sets a first PIN for an account that never had one', async () => {
     const post = client();
     const a = await account();
     await otp(a.phone, '909090');
-    expect((await post('/api/auth/pin-reset/confirm', { identifier: a.phone, code: '909090', pin: '4444', confirmPin: '4444' })).status).toBe(200);
+    const verified = await post('/api/auth/pin-reset/verify', { identifier: a.phone, phone: a.phone, code: '909090' });
+    expect(verified.status, JSON.stringify(verified.json)).toBe(200);
+    const resetToken = verified.json.data.resetToken as unknown as string;
+    expect((await post('/api/auth/pin-reset/confirm', { resetToken, pin: '4444', confirmPin: '4444' })).status).toBe(200);
     expect((await post('/api/auth/pin-login', { identifier: a.phone, pin: '4444' })).status).toBe(200);
   });
 
-  it('a wrong code changes nothing', async () => {
+  it('a wrong code changes nothing and gives no token', async () => {
     const post = client();
     const a = await account({ pin: '1234' });
     await otp(a.phone, '121212');
-    expect((await post('/api/auth/pin-reset/confirm', { identifier: a.phone, code: '000000', pin: '9999', confirmPin: '9999' })).json.error?.code).toBe('OTP_INCORRECT');
+    const wrong = await post('/api/auth/pin-reset/verify', { identifier: a.phone, phone: a.phone, code: '000000' });
+    expect(wrong.json.error?.code).toBe('OTP_INCORRECT');
+    expect(wrong.json.data).toBeUndefined();
     expect((await post('/api/auth/pin-login', { identifier: a.phone, pin: '1234' })).status).toBe(200);
+  });
+
+  it('a reset token is no access token, and a forged or stale one sets nothing', async () => {
+    const post = client();
+    const a = await account({ pin: '1234' });
+    await otp(a.phone, '343434');
+    const resetToken = (await post('/api/auth/pin-reset/verify', { identifier: a.phone, phone: a.phone, code: '343434' })).json.data.resetToken as unknown as string;
+    // As a bearer token it opens nothing.
+    const me = await fetch(`${base}/api/me`, { headers: { authorization: `Bearer ${resetToken}` } });
+    expect(me.status).toBe(401);
+    expect((await post('/api/auth/pin-reset/confirm', { resetToken: `${resetToken.slice(0, -4)}AAAA`, pin: '7777', confirmPin: '7777' })).json.error?.code).toBe('RESET_EXPIRED');
+    // The PIN changed another way meanwhile: the token is for a PIN that is gone.
+    await authService.setPin(a.id, '2468');
+    expect((await post('/api/auth/pin-reset/confirm', { resetToken, pin: '7777', confirmPin: '7777' })).json.error?.code).toBe('RESET_EXPIRED');
+    expect((await post('/api/auth/pin-login', { identifier: a.phone, pin: '2468' })).status).toBe(200);
+  });
+
+  it('two saves at once: one wins, the other is told the reset is used', async () => {
+    const post = client();
+    const a = await account({ pin: '1234' });
+    await otp(a.phone, '787878');
+    const resetToken = (await post('/api/auth/pin-reset/verify', { identifier: a.phone, phone: a.phone, code: '787878' })).json.data.resetToken as unknown as string;
+    const results = await Promise.all([
+      post('/api/auth/pin-reset/confirm', { resetToken, pin: '1111', confirmPin: '1111' }),
+      post('/api/auth/pin-reset/confirm', { resetToken, pin: '2222', confirmPin: '2222' }),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 400]);
   });
 
   it('no account: says so', async () => {
     const post = client();
-    expect((await post('/api/auth/pin-reset/request', { identifier: nextPhone() })).json.error?.code).toBe('NO_ACCOUNT');
+    expect((await post('/api/auth/pin-reset/request', { identifier: nextPhone(), phone: nextPhone() })).json.error?.code).toBe('NO_ACCOUNT');
   });
 });
 
@@ -324,7 +379,7 @@ describe('guessing, from many addresses at once', () => {
     expect(right.status).toBe(429);
     expect(right.json.error).toMatchObject({ code: 'OTP_LOCKED', message: expect.stringMatching(/an hour/) });
     // The same cap guards Forgot PIN, which takes the same codes.
-    expect((await client()('/api/auth/pin-reset/confirm', { identifier: a.phone, code: '333333', pin: '1111', confirmPin: '1111' })).json.error?.code).toBe('OTP_LOCKED');
+    expect((await client()('/api/auth/pin-reset/verify', { identifier: a.phone, phone: a.phone, code: '333333' })).json.error?.code).toBe('OTP_LOCKED');
     // An hour on, it is open again.
     await prisma.otpCode.updateMany({ where: { phone: a.phone }, data: { createdAt: new Date(Date.now() - 2 * 3_600_000) } });
     await otp(a.phone, '444444');

@@ -333,21 +333,14 @@ async function renewAll() {
 }
 
 /**
- * Sign in with a phone (or email) and PIN: at /login, one "Phone number or
- * email" box → Continue → the PIN; at /seller/login, its own phone + PIN.
+ * Sign in with a phone (or email) and PIN: one "Phone number or email" box →
+ * Continue → "Enter your PIN" — the same at /login and /seller/login.
  */
 async function pinLogin(page, phone, pin, at = '/login') {
   await goto(page, at);
-  if (at === '/login') {
-    await page.locator('#login-identifier').fill(phone, { timeout: 120_000 });
-    await page.locator('[data-action=continue]').click();
-    await page.locator('[data-digits=pin] input').first().click({ timeout: 30_000 });
-  } else {
-    await page.getByPlaceholder('10-digit mobile number').fill(phone);
-    await page.getByRole('button', { name: /Login with PIN/ }).click();
-    await page.getByText(/Enter your 4-digit PIN/i).waitFor({ timeout: 30_000 });
-    await page.locator('input[type=password]').first().click();
-  }
+  await page.locator('#login-identifier').fill(phone, { timeout: 120_000 });
+  await page.locator('[data-action=continue]').click();
+  await page.locator('[data-digits=pin] input').first().click({ timeout: 30_000 });
   await typeDigits(page, pin);
   await page.waitForFunction(() => !!localStorage.getItem('clowe.accessToken'), null, { timeout: 30_000 });
 }
@@ -1337,10 +1330,14 @@ async function flow8Shopper() {
     await goto(page, '/login');
     // Typed with +91 and a space: normalised exactly as login looks it up.
     await page.locator('#login-identifier').fill(`+91 ${S.shopperPhone.slice(0, 5)} ${S.shopperPhone.slice(5)}`, { timeout: 120_000 });
+    // No "Login with PIN" / "Get OTP" choice; the 18+ / Terms line once.
+    check((await page.getByRole('button', { name: /Login with PIN|Get OTP/ }).count()) === 0, 'the first screen still offers Login with PIN / Get OTP');
+    check((await page.locator('[data-login-consent]').count()) === 1, 'the 18+ / Terms line is not shown exactly once');
     await page.locator('[data-action=continue]').click();
     const notice = page.locator('[data-login-notice]');
     await notice.waitFor({ timeout: 30_000 });
-    check(/No account found with this number — create one/.test(await notice.innerText()), `notice: ${await notice.innerText()}`);
+    check(/No account found with this number/.test(await notice.innerText()), `notice: ${await notice.innerText()}`);
+    check((await page.locator('[data-login-consent]').count()) === 0, 'the 18+ / Terms line is shown a second time on the sign-up form');
     check((await page.locator('#signup-phone').inputValue()) === S.shopperPhone, 'the number was not carried to the form');
     const create = page.locator('[data-action=create-account]');
     await page.locator('#signup-name').fill('E2E Shopper');
@@ -1423,14 +1420,23 @@ async function flow8Shopper() {
     }
   }, { page, needs: ['admin'] });
 
-  await step(F, 'forgot PIN (from the email): the code and a new PIN on one screen, signed in; only the new PIN works', async () => {
+  await step(F, 'forgot PIN (from the email): the registered phone, the OTP, then the new PIN twice — signed in; only the new PIN works', async () => {
     await page.evaluate(() => localStorage.clear());
     await goto(page, '/login');
     await page.locator('#login-identifier').fill(S.shopperEmail, { timeout: 120_000 });
     await page.locator('[data-action=continue]').click();
     await page.locator('[data-digits=pin]').waitFor({ timeout: 30_000 });
-    await withOtpCooldown(page, () => page.locator('[data-action=forgot-pin]').click());
+    check(await page.getByRole('heading', { name: 'Enter your PIN' }).isVisible(), 'the PIN screen is not headed "Enter your PIN"');
+    await page.locator('[data-action=forgot-pin]').click();
+    // Logged in with the email: the phone is asked for. A number that isn't the account's gets nothing.
+    await page.locator('#reset-phone').fill('9999999999');
+    await page.locator('[data-action=send-reset-otp]').click();
+    await page.getByText('This number isn’t linked to this account').waitFor({ timeout: 30_000 });
+    await page.locator('#reset-phone').fill(S.shopperPhone);
+    await withOtpCooldown(page, () => page.locator('[data-action=send-reset-otp]').click());
     await page.locator('[data-digits=reset-code]').waitFor({ timeout: 60_000 });
+    await page.locator('[data-action=verify-reset-otp]').click();
+    await page.locator('[data-digits=new-pin]').waitFor({ timeout: 30_000 });
     // The old PIN still works until the new one is saved (a page closed here breaks nothing).
     check((await api('POST', '/api/auth/pin-login', null, { identifier: S.shopperPhone, pin: '1357' })).status === 200, 'the old PIN stopped working before a new one was saved');
     await page.locator('[data-digits=new-pin] input').first().click();

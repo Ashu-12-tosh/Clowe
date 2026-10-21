@@ -36,11 +36,42 @@ export function verifyPhoneToken(token: string, phone: string): boolean {
   }
 }
 
+/**
+ * "Forgot PIN?": proof that this browser entered the right code for the
+ * account, carried from the code step to the new-PIN step. It names the user
+ * in its own claim (never `sub`) under its own audience, so it can never pass
+ * as an access token; and it is bound to the PIN as it was, so once a new PIN
+ * is saved the same token is worthless.
+ */
+const PIN_RESET_AUDIENCE = 'clowe-pin-reset';
+export const PIN_RESET_TOKEN_TTL_MIN = 15;
+
+export function signPinResetToken(userId: string, pinVersion: string): string {
+  return jwt.sign({ uid: userId, pv: pinVersion }, env.JWT_ACCESS_SECRET, {
+    expiresIn: `${PIN_RESET_TOKEN_TTL_MIN}m`,
+    issuer: 'clowe-api',
+    audience: PIN_RESET_AUDIENCE,
+  });
+}
+
+/** The user and PIN version a live reset token was issued for, else null. */
+export function verifyPinResetToken(token: string): { userId: string; pinVersion: string } | null {
+  try {
+    const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET, { issuer: 'clowe-api', audience: PIN_RESET_AUDIENCE });
+    if (typeof decoded === 'string' || typeof decoded.uid !== 'string' || typeof decoded.pv !== 'string') return null;
+    return { userId: decoded.uid, pinVersion: decoded.pv };
+  } catch {
+    return null;
+  }
+}
+
 /** Returns the payload, or null when the token is invalid/expired. */
 export function verifyAccessToken(token: string): AccessTokenPayload | null {
   try {
     const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET, { issuer: 'clowe-api' });
-    if (typeof decoded === 'string' || !decoded.sub) return null;
+    // Access tokens carry no audience: one that does is some other proof
+    // (sign-up phone, PIN reset) and never signs anyone in.
+    if (typeof decoded === 'string' || !decoded.sub || decoded.aud !== undefined) return null;
     return { sub: decoded.sub, role: decoded.role as UserRole };
   } catch {
     return null;

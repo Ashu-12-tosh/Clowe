@@ -224,17 +224,31 @@ export const signupSchema = z
   })
   .refine(pinsMatch, PINS_DIFFER);
 
-/** POST /api/auth/pin-reset/request — "Forgot PIN?": a code to the account's phone. */
-export const pinResetRequestSchema = z.object({ identifier: loginIdentifierSchema });
+/**
+ * "Forgot PIN?", in three steps:
+ *   POST /api/auth/pin-reset/request  the account and its phone number, typed
+ *                                     again: a code goes to that phone only if
+ *                                     it is the account's (PHONE_NOT_LINKED)
+ *   POST /api/auth/pin-reset/verify   the code: a short-lived reset token
+ *   POST /api/auth/pin-reset/confirm  the token and the new PIN, twice
+ * The old PIN keeps working until the new one is saved.
+ */
+export const pinResetRequestSchema = z.object({ identifier: loginIdentifierSchema, phone: phoneSchema });
 export interface PinResetRequestResult extends OtpRequestResult {
   phoneMasked: string;
 }
 
-/** POST /api/auth/pin-reset/confirm — the code and the new PIN, in one step. */
+export const PHONE_NOT_LINKED_MESSAGE = 'This number isn’t linked to this account';
+
+export const pinResetVerifySchema = z.object({ identifier: loginIdentifierSchema, phone: phoneSchema, code: otpCodeSchema });
+export interface PinResetVerified {
+  /** Proof the code was right, for the new-PIN step (15 minutes, once). */
+  resetToken: string;
+}
+
 export const pinResetConfirmSchema = z
   .object({
-    identifier: loginIdentifierSchema,
-    code: otpCodeSchema,
+    resetToken: z.string().min(20).max(2000),
     ...newPinFields,
     termsVersion: z.string().trim().max(20).optional(),
   })

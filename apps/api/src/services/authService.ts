@@ -1,20 +1,27 @@
 import type { User } from '@prisma/client';
 import {
   maskPhone,
+  PHONE_NOT_LINKED_MESSAGE,
   type AccountLookupResult,
   type AuthTokensResponse,
   type AuthUser,
   type LoginIdentifier,
   type OtpRequestResult,
   type PinResetRequestResult,
+  type PinResetVerified,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { env } from '../env';
 import { ApiError } from '../utils/ApiError';
 import { generateOtpCode, generateReferralCode, generateRefreshToken, hashMatches, sha256 } from '../utils/crypto';
-import { signAccessToken, signPhoneToken, verifyPhoneToken } from '../utils/jwt';
+import { signAccessToken, signPhoneToken, signPinResetToken, verifyPhoneToken, verifyPinResetToken } from '../utils/jwt';
 import { hashPin, verifyPin } from '../utils/pinHash';
 import { OtpSendError, otpProvider } from './otp';
+
+/** Which PIN a reset token was issued against: a new PIN makes it worthless. */
+function pinVersion(pinHash: string | null): string {
+  return sha256(`pin-version:${pinHash ?? 'none'}`).slice(0, 16);
+}
 
 const OTP_RESEND_COOLDOWN_SEC = 45;
 /** Codes one number can be sent in an hour, whoever asks for them: SMS costs money. */
@@ -369,28 +376,51 @@ export const authService = {
     });
   },
 
-  /** "Forgot PIN?" (or setting a first PIN): a code to the account's own phone. */
-  async requestPinReset(id: LoginIdentifier): Promise<PinResetRequestResult> {
+  /**
+   * "Forgot PIN?" (or setting a first PIN), step 1: the account and its phone
+   * number typed again. The code goes to that phone only when it is the
+   * account's own; any other number is refused and nothing is sent.
+   */
+  async requestPinReset(id: LoginIdentifier, phone: string): Promise<PinResetRequestResult> {
     const user = await findAccount(id);
     if (!user) throw NO_ACCOUNT(id);
+    if (user.phone !== phone) throw ApiError.badRequest(PHONE_NOT_LINKED_MESSAGE, 'PHONE_NOT_LINKED');
     return { ...(await authService.requestOtp(user.phone)), phoneMasked: maskPhone(user.phone) };
   },
 
   /**
-   * The code and the new PIN together, in one step: the old PIN works until
-   * the new one is saved, so a page closed halfway leaves nothing broken. The
-   * lockout clears and every other session is signed out; this one stays.
+   * Step 2: the code. Right, it gives a reset token for the new PIN; the PIN
+   * itself is not touched, so the old one keeps working until step 3.
    */
-  async confirmPinReset(id: LoginIdentifier, code: string, pin: string): Promise<AuthTokensResponse> {
-    const found = await findAccount(id);
-    if (!found) throw NO_ACCOUNT(id);
-    await consumeOtp(found.phone, code);
-    if (!found.isActive) throw ApiError.forbidden('This account has been deactivated', 'ACCOUNT_DISABLED');
+  async verifyPinReset(id: LoginIdentifier, phone: string, code: string): Promise<PinResetVerified> {
+    const user = await findAccount(id);
+    if (!user) throw NO_ACCOUNT(id);
+    if (user.phone !== phone) throw ApiError.badRequest(PHONE_NOT_LINKED_MESSAGE, 'PHONE_NOT_LINKED');
+    await consumeOtp(user.phone, code);
+    if (!user.isActive) throw ApiError.forbidden('This account has been deactivated', 'ACCOUNT_DISABLED');
+    return { resetToken: signPinResetToken(user.id, pinVersion(user.pinHash)) };
+  },
+
+  /**
+   * Step 3: the new PIN, with the token from step 2. The lockout clears and
+   * every other session is signed out; this one is signed in. The token was
+   * bound to the old PIN, so it cannot be used a second time.
+   */
+  async confirmPinReset(resetToken: string, pin: string): Promise<AuthTokensResponse> {
+    const proof = verifyPinResetToken(resetToken);
+    const expired = () => ApiError.badRequest('This reset has expired — tap “Forgot PIN?” to start again', 'RESET_EXPIRED');
+    if (!proof) throw expired();
     const pinHash = await hashPin(pin);
-    const [user] = await prisma.$transaction([
-      prisma.user.update({ where: { id: found.id }, data: { pinHash, pinAttempts: 0, pinLockedUntil: null } }),
-      prisma.refreshToken.updateMany({ where: { userId: found.id, revokedAt: null }, data: { revokedAt: new Date() } }),
-    ]);
+    const user = await prisma.$transaction(async (tx) => {
+      // One reset at a time per account, so a double tap cannot save twice.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`pin-reset:${proof.userId}`}))`;
+      const found = await tx.user.findUnique({ where: { id: proof.userId } });
+      if (!found || pinVersion(found.pinHash) !== proof.pinVersion) throw expired();
+      if (!found.isActive) throw ApiError.forbidden('This account has been deactivated', 'ACCOUNT_DISABLED');
+      const updated = await tx.user.update({ where: { id: found.id }, data: { pinHash, pinAttempts: 0, pinLockedUntil: null } });
+      await tx.refreshToken.updateMany({ where: { userId: found.id, revokedAt: null }, data: { revokedAt: new Date() } });
+      return updated;
+    });
     const tokens = await issueTokens(user);
     return { user: toAuthUser(user), ...tokens };
   },
