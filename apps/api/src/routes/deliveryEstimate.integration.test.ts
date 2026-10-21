@@ -25,7 +25,7 @@ let seq = 0;
 async function seller(pincode: string | null) {
   seq += 1;
   const user = await prisma.user.create({
-    data: { phone: `91955000${String(seq).padStart(2, '0')}`, name: `Estimate Seller ${seq}`, role: Role.SELLER, referralCode: `EST-${seq}` },
+    data: { phone: `91956000${String(seq).padStart(2, '0')}`, name: `Estimate Seller ${seq}`, role: Role.SELLER, referralCode: `EST-${seq}` },
   });
   await prisma.sellerProfile.create({
     data: {

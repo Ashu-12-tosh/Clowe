@@ -30,7 +30,7 @@ async function call(method: string, path: string, token: string, body?: unknown)
 
 async function order(method: 'UPI' | 'COD') {
   seq += 1;
-  const user = await prisma.user.create({ data: { phone: `91955${String(seq).padStart(5, '0')}`, name: `Notice Buyer ${seq}`, referralCode: `NTC-${seq}` } });
+  const user = await prisma.user.create({ data: { phone: `91957${String(seq).padStart(5, '0')}`, name: `Notice Buyer ${seq}`, referralCode: `NTC-${seq}` } });
   const token = signAccessToken({ sub: user.id, role: 'CUSTOMER' });
   const address = await prisma.address.create({ data: { userId: user.id, name: 'Notice Buyer', phone: user.phone, line1: '1 Road', city: 'Pune', state: 'Maharashtra', pincode: '411001', isDefault: true } });
   expect((await call('POST', '/api/cart/items', token, { variantId, quantity: 2 })).status).toBe(200);
