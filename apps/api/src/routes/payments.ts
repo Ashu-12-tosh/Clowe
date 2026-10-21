@@ -7,7 +7,7 @@ import { requireAuth } from '../middleware/auth';
 import { paymentConfirmLimiter } from '../middleware/rateLimits';
 import { ApiError } from '../utils/ApiError';
 import { paymentProvider, RazorpayProvider } from '../services/payments';
-import { cashfreeWebhookFresh, cashfreeWebhookTime, verifyCashfreeWebhook } from '../services/cashfree/client';
+import { CASHFREE_WEBHOOK_MAX_AHEAD_MS, cashfreeWebhookFresh, cashfreeWebhookTime, verifyCashfreeWebhook } from '../services/cashfree/client';
 import {
   checkoutPayload,
   recordWebhook,
@@ -184,9 +184,12 @@ paymentsRouter.post('/cashfree/webhook', async (req, res, next) => {
       reference = pick(body, ['data', 'vendor_id'], ['data', 'settlement', 'vendor_id']);
       const status = pick(body, ['data', 'status'], ['data', 'settlement', 'status']);
       if (reference && type === 'VENDOR_SETTLEMENT_SUCCESS' && (!status || status.toUpperCase() === 'SUCCESS')) {
-        // Settles only what was released before the event was signed, so
-        // a replay inside the window cannot settle later releases either.
-        await markVendorSettled(reference, pick(body, ['data', 'utr'], ['data', 'settlement', 'utr']), cashfreeWebhookTime(timestamp) ?? undefined);
+        // Settles only what was released by the time the event was signed
+        // (with the clock drift allowed), so a replay inside the window
+        // cannot settle releases made after it.
+        const signedAt = cashfreeWebhookTime(timestamp);
+        const upTo = signedAt ? new Date(Math.min(Date.now(), signedAt.getTime() + CASHFREE_WEBHOOK_MAX_AHEAD_MS)) : undefined;
+        await markVendorSettled(reference, pick(body, ['data', 'utr'], ['data', 'settlement', 'utr']), upTo);
       }
     }
     await recordWebhook('cashfree-pg', eventKey, type, reference);

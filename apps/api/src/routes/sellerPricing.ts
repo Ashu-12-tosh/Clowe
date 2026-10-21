@@ -9,6 +9,7 @@ import { economicsRates } from '../services/payoutService';
 import { requireSeller } from './seller';
 import { deliveryEstimate } from '../services/shipping/deliveryEstimate';
 import { categoryRulesMap } from '../services/categoryRules';
+import { referralSlabsByCategory } from '../services/referralFees/views';
 
 export const sellerPricingRouter = Router();
 sellerPricingRouter.use(requireAuth, requireSeller);
@@ -25,6 +26,8 @@ sellerPricingRouter.get('/', async (req, res, next) => {
       ...economicsRates(await getSettings()),
       v2: { ...c.fees, handlingWaived: waived },
       categoryReferralPercent: Object.fromEntries(categories.map((cat) => [cat.id, cat.referralPercent])),
+      // The fee schedule's slabs where a category has them: the rate follows the price.
+      categoryReferralSlabs: await referralSlabsByCategory(),
     };
     res.json({ success: true, data: rates });
   } catch (err) {

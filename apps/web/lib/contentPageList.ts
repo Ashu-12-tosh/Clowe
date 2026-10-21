@@ -35,6 +35,9 @@ export const CONTENT_PAGES: ContentPageMeta[] = [
 ];
 
 /** True for a slug that has a page. */
+/** Pages under /pages/ built from data rather than markdown (their own route). */
+export const DATA_PAGE_SLUGS = ['referral-fee-schedule'];
+
 export function isContentPageSlug(slug: string): boolean {
-  return CONTENT_PAGES.some((p) => p.slug === slug);
+  return CONTENT_PAGES.some((p) => p.slug === slug) || DATA_PAGE_SLUGS.includes(slug);
 }

@@ -323,7 +323,9 @@ function RulesEditor({
           </p>
         </div>
         <div>
-          <label className="text-xs font-semibold text-gray-700">Referral fee (% of the selling price)</label>
+          <label className="text-xs font-semibold text-gray-700">
+            Flat referral fee (% of the selling price) — only while the category has no fee-schedule category (Admin → Referral fee schedule)
+          </label>
           <input
             type="number"
             step="0.1"

@@ -250,6 +250,6 @@ describe('features by plan', () => {
   it('waives the handling fee on PREMIUM orders', async () => {
     const premium = await seller('PREMIUM');
     const [p] = await products(premium.id, 1);
-    expect(((await feeSnapshots([{ productId: p!, sellerId: premium.id }])).get(p!) as SellerFeesV2).handlingWaived).toBe(true);
+    expect(((await feeSnapshots([{ productId: p!, sellerId: premium.id, unitPricePaise: 100_000 }]))[0] as SellerFeesV2).handlingWaived).toBe(true);
   });
 });

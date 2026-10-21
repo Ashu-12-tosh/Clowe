@@ -1,4 +1,4 @@
-import { feeExampleMarkdown, handlingFeesText, type CommercialPublic } from './commercialPublic';
+import { feeExamplesMarkdown, handlingFeesText, type CommercialPublic } from './commercialPublic';
 import { fillReturnWindow } from './returnWindow';
 import { PACKING_VIDEO_RETENTION_DAYS } from './sellerOrders';
 import type { SellerFeeSchedule } from './settings';
@@ -83,7 +83,11 @@ function tokens(v: PolicyValues): Record<string, string> {
     '{{tcs}}': fee('tcsPercent', percent, 'the rate set by law'),
     '{{payoutHold}}': fee('payoutHoldDays', days, 'the clearing period shown on your Payouts page'),
     '{{payoutMin}}': fee('payoutMinPaise', rupees, onPayouts),
-    '{{referralFee}}': c ? percent(c.fees.referralPercent) : 'the referral rate of the product’s category',
+    '{{referralFee}}': c?.referral
+      ? 'set by the product’s category and its selling price — each category has price slabs, and the rate of the slab the price falls in applies to the whole price (see the [Referral Fee Schedule](/pages/referral-fee-schedule))'
+      : c
+        ? percent(c.fees.referralPercent)
+        : 'the referral rate of the product’s category',
     '{{gtFee}}': c ? percent(c.fees.gtPercent) : onFeesPage,
     '{{collectionFee}}': c ? percent(c.fees.collectionPercent) : onFeesPage,
     '{{handlingFees}}': c ? handlingFeesText(c.fees.handlingSlabs) : 'the per-unit amount on the Seller Fees page',
@@ -97,7 +101,7 @@ function tokens(v: PolicyValues): Record<string, string> {
     '{{tryonExtraCredit}}': c ? rupees(c.tryon.extraCreditPaise) : 'a per-credit price',
     '{{tryonFreeGrant}}': c ? `${c.tryon.freeGrantCredits} free credits for each of the first ${c.tryon.freeGrantSellers} approved sellers` : 'free credits for the first approved sellers',
     '{{tryonExpiry}}': c ? (c.tryon.expiryDays ? `credits expire ${days(c.tryon.expiryDays)} after they are added` : 'credits do not expire') : 'credits expire as shown on your AI Try-On page',
-    '{{feeExample}}': c ? feeExampleMarkdown(c, fees.tdsPercent ?? 0.1, fees.tcsPercent ?? 0.5) : 'Your Payouts page and the pricing calculator show the exact amount for every order.',
+    '{{feeExample}}': c ? feeExamplesMarkdown(c, fees.tdsPercent ?? 0.1, fees.tcsPercent ?? 0.5) : 'Your Payouts page and the pricing calculator show the exact amount for every order.',
     '{{tryonPhotoRetention}}': hours(TRYON_PHOTO_RETENTION_HOURS),
     '{{packingVideoDays}}': days(PACKING_VIDEO_RETENTION_DAYS),
     '{{customerSupportEmail}}': v.supportEmails?.customer || 'our customer support email',

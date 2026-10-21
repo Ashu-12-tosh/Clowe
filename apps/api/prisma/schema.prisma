@@ -962,7 +962,12 @@ model Category {
   // Category landing page content.
   description String?
   // Referral fee for products in this category, percent of the selling price (Batch 2).
+  // Used only while the category has no fee-schedule category (below).
   referralPercent Float @default(2)
+  // The fee schedule's category its sales are charged under ("Apparel - Shirts"):
+  // the rate then follows the item price's slab. Null = as the parent; none up
+  // the tree = the flat referralPercent above.
+  referralFeeCategory String?
   // Subcategory tile shape on the landing rail: "square" | "circle".
   tileShape   String  @default("square")
   // Hero side-card bullets: [{ icon, title, subtitle }].
@@ -3141,4 +3146,47 @@ model CreditNote {
 
   @@index([orderId, sellerId])
   @@map("credit_notes")
+}
+
+/// The referral fee schedule (the owner's spreadsheet), by version. An order
+/// line keeps the rate it was placed under (OrderItem.feeRates); the newest
+/// version whose effectiveFrom has passed applies to orders placed from then.
+model ReferralFeeSchedule {
+  id            String            @id @default(cuid())
+  version       Int               @unique
+  /// Where it came from: the spreadsheet's file name, or "Admin edit".
+  source        String
+  effectiveFrom DateTime
+  note          String?
+  createdById   String?
+  createdAt     DateTime          @default(now())
+  rates         ReferralFeeRate[]
+
+  @@map("referral_fee_schedules")
+}
+
+/// One slab of one schedule category, gaps already filled ("borrowedFrom").
+model ReferralFeeRate {
+  id                String              @id @default(cuid())
+  scheduleId        String
+  schedule          ReferralFeeSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  group             String
+  sheetCategory     String
+  /// The slab as the schedule writes it: "> 1,000", "> 250 and <= 500", "All prices".
+  slabLabel         String
+  /// Exclusive lower bound of the unit price (GST included), paise; 0 holds ₹0 too.
+  abovePaise        Int
+  /// Inclusive upper bound, paise; null = no upper bound.
+  upToPaise         Int?
+  /// CLOWE Rate in basis points of the full item price: 19% = 1900.
+  rateBps           Int
+  /// The sheet's benchmark rate, for reference.
+  benchmarkBps      Int?
+  /// A gap filled from another row: that row's category.
+  borrowedFrom      String?
+  /// The sheet's order, kept for display.
+  position          Int                 @default(0)
+
+  @@index([scheduleId, sheetCategory])
+  @@map("referral_fee_rates")
 }

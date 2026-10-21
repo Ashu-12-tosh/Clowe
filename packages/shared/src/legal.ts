@@ -13,7 +13,7 @@ export const TERMS_VERSION = '2026-10-16';
  * updated" date. Raise it when the document changes in a way that needs
  * accepting again: every seller is then asked once more on their next visit.
  */
-export const VENDOR_TERMS_VERSION = '2026-10-16';
+export const VENDOR_TERMS_VERSION = '2026-10-21';
 
 export const VENDOR_TERMS_ACCEPT_TEXT =
   'I have read and accept the Vendor Terms & Seller Agreement, the Terms & Conditions and the Privacy Policy';

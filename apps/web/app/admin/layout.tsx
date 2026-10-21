@@ -37,6 +37,7 @@ const NAV: DashNavItem[] = [
   { href: '/admin/audit', label: 'Audit Logs', icon: '📋' },
   { href: '/admin/csp-reports', label: 'CSP Reports', icon: '🛡' },
   { href: '/admin/commercial', label: 'Commercial rules', icon: '₹' },
+  { href: '/admin/referral-fees', label: 'Referral fee schedule', icon: '%' },
   { href: '/admin/settings', label: 'Settings', icon: '⚙' },
 ];
 

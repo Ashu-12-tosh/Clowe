@@ -109,3 +109,4 @@ export * from './codRemittance';
 export * from './adminShipments';
 export * from './aiFeatures';
 export * from './brandAuth';
+export * from './referralFees';

@@ -4,7 +4,7 @@ CLOWE SHOP— www.cloweshop.com
 
 Operated by CLOWE PARTNERS LLP, registered office at {{legal.registeredAddress}}
 
-*Last updated: 16 October 2026*
+*Last updated: 21 October 2026*
 
 These Vendor Terms govern the registration of a Vendor on the Platform and the listing and sale of Products through it. They are to be read with the Terms and Conditions of Use and all policies incorporated therein. By registering as a Vendor, You enter into a binding agreement with the Company on a principal-to-principal basis.
 
@@ -160,7 +160,7 @@ These Vendor Terms govern the registration of a Vendor on the Platform and the l
 
 **Sl. No. — Head of Charge — Basis — Rate**
 
-- 1 — Referral fee — Per unit, % of the selling price (GST included) — {{referralFee}} (a category may carry its own rate, shown when listing)
+- 1 — Referral fee — Per unit, % of the whole selling price (GST included) — {{referralFee}}
 - 2 — GT (goods transfer) charge — Per unit, % of the selling price — {{gtFee}}
 - 3 — Payment collection fee — Per unit, % of the selling price — {{collectionFee}}
 - 4 — Handling fee — Per unit, by the unit's selling price — {{handlingFees}}; nil on the Premium plan

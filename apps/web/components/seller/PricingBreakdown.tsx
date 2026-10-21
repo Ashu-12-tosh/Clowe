@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  bpsToPercent,
   breakdownRows,
+  slabDescription,
+  slabFor,
   computeListingEconomics,
   type BreakdownRowKind,
   type CategoryRules,
@@ -82,11 +85,26 @@ export function PricingBreakdown({
 
   const economics = useMemo(() => {
     if (!rates) return null;
-    // The referral fee is the chosen category's (Admin → Categories).
-    const own = categoryId ? (rates as SellerEconomicsRates & Partial<PricingRatesView>).categoryReferralPercent?.[categoryId] : undefined;
-    const withCategory = rates.v2 && own !== undefined ? { ...rates, v2: { ...rates.v2, referralPercent: own } } : rates;
+    // The referral fee is the chosen category's: its fee-schedule slabs (the
+    // rate follows the selling price), else its flat percent.
+    const view = rates as SellerEconomicsRates & Partial<PricingRatesView>;
+    const own = categoryId ? view.categoryReferralPercent?.[categoryId] : undefined;
+    const slabs = categoryId ? view.categoryReferralSlabs?.[categoryId] : undefined;
+    const withCategory = rates.v2
+      ? { ...rates, v2: { ...rates.v2, referralPercent: own ?? rates.v2.referralPercent, referralSlabs: slabs?.slabs ?? null } }
+      : rates;
     return computeListingEconomics({ sellerPricePaise: pricePaise, rates: withCategory, taxRules });
   }, [rates, pricePaise, taxRules, categoryId]);
+
+  // Which schedule row and slab the fee came from, under the breakdown.
+  const referralNote = useMemo(() => {
+    if (!rates || !categoryId || !economics) return null;
+    const found = (rates as SellerEconomicsRates & Partial<PricingRatesView>).categoryReferralSlabs?.[categoryId];
+    if (!found) return null;
+    // One unit: its selling price, GST included, picks the slab.
+    const slab = slabFor(found.slabs, economics.grossPaise);
+    return slab ? `Referral fee: ${found.sheetCategory}, ${slabDescription(slab)} — ${bpsToPercent(slab.rateBps)}% of the whole price.` : null;
+  }, [rates, categoryId, economics]);
 
   // Delivery for this parcel, once the seller stops typing. Answers are cached
   // per weight slab and route on the server, so this rarely reaches Delhivery.
@@ -157,6 +175,14 @@ export function PricingBreakdown({
         // from the buyer, which the seller files. It is what the ledger posts.
         <p className="mt-1 text-right text-[11px] text-gray-500" data-bank>
           Paid to your bank: {signed(economics.sellerReceivesPaise, 'total')} (includes the GST you file)
+        </p>
+      )}
+      {referralNote && (
+        <p className="mt-1 text-[11px] text-gray-500" data-referral-slab>
+          {referralNote}{' '}
+          <a href="/pages/referral-fee-schedule" target="_blank" rel="noreferrer" className="font-semibold text-brand-600 hover:underline">
+            All rates
+          </a>
         </p>
       )}
 

@@ -1,3 +1,4 @@
+import { referralPercentFor, type ReferralFeeSlab, type ReferralFeeSource } from './referralFees';
 import { buyerPriceFor, gstRateForInclusive, type CategoryRules, type GstSettings } from './categoryRules';
 import type { SellerLedgerTypeValue } from './sellerLedger';
 
@@ -60,7 +61,16 @@ export interface SellerEconomicsRates {
 }
 
 export interface SellerFeesV2 {
+  /**
+   * The referral fee as a percent of the full selling price. On an order line
+   * it is the rate the line was sold under, fixed at checkout; with
+   * referralSlabs (the listing form's preview) it is only the fallback.
+   */
   referralPercent: number;
+  /** The category's slabs from the fee schedule: the rate follows the unit price. */
+  referralSlabs?: ReferralFeeSlab[] | null;
+  /** Where an order line's referral rate came from (schedule, category, slab). */
+  referralSource?: ReferralFeeSource | null;
   gtPercent: number;
   collectionPercent: number;
   handlingSlabs: { fromPaise: number; feePaise: number }[];
@@ -252,7 +262,9 @@ function feesV2(input: {
   const { rates, v2, quantity, grossPaise, gstPaise, gstRatePercent, exGstPaise } = input;
   const sold = grossPaise > 0;
   const unitPaise = quantity > 0 ? Math.round(grossPaise / quantity) : 0;
-  const referralPaise = percentOf(grossPaise, v2.referralPercent);
+  // The slab of the unit price, GST included, sets the rate on the full price.
+  const referral = referralPercentFor(v2.referralSlabs, unitPaise, v2.referralPercent);
+  const referralPaise = percentOf(grossPaise, referral.percent);
   const gtPaise = percentOf(grossPaise, v2.gtPercent);
   const collectionPaise = percentOf(grossPaise, v2.collectionPercent);
   const sortedSlabs = [...v2.handlingSlabs].sort((a, b) => a.fromPaise - b.fromPaise);
@@ -266,7 +278,7 @@ function feesV2(input: {
   const units = quantity > 1 ? ` × ${quantity}` : '';
   const lines: SellerEconomicsLine[] = [
     { key: 'sale', label: 'Sale', amountPaise: grossPaise, ledgerType: 'SALE_EARNING' },
-    { key: 'commission', label: `Referral fee (${v2.referralPercent}% of the selling price)`, amountPaise: -referralPaise, ledgerType: 'COMMISSION' },
+    { key: 'commission', label: `Referral fee (${referral.percent}% of the selling price)`, amountPaise: -referralPaise, ledgerType: 'COMMISSION' },
     { key: 'gt', label: `GT charge (${v2.gtPercent}% of the selling price)`, amountPaise: -gtPaise, ledgerType: 'GT_CHARGE' },
     { key: 'gateway', label: `Payment collection fee (${v2.collectionPercent}% of the selling price)`, amountPaise: -collectionPaise, ledgerType: 'GATEWAY_FEE' },
     {

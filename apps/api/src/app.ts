@@ -1,4 +1,5 @@
 import { courierWebhookRouter } from './routes/courierWebhook';
+import { adminReferralFeesRouter, referralFeesRouter } from './routes/referralFees';
 import { payoutWebhookRouter } from './routes/payoutWebhook';
 import { adminPayoutsRouter } from './routes/adminPayouts';
 import express from 'express';
@@ -170,6 +171,7 @@ export function createApp() {
   // Specific admin routers first — a catch-all /api/admin mount would
   // otherwise answer (or 404) their paths before they are reached.
   app.use('/api/admin/tryon', adminTryonRouter);
+  app.use('/api/admin/referral-fees', adminReferralFeesRouter);
   app.use('/api/admin/sellers', adminSellersRouter);
   app.use('/api/admin/category-facets', adminCategoryFacetsRouter);
   app.use('/api/admin/audit', adminAuditRouter);
@@ -203,6 +205,7 @@ export function createApp() {
   app.use('/api/track', trackLimiter, trackRouter);
   app.use('/api/complaints', complaintsRouter);
   app.use('/api/settings', settingsRouter);
+  app.use('/api/referral-fees', referralFeesRouter);
   app.use('/api/ads', adsRouter);
   app.use('/api/ad-serve', adServeRouter);
   app.use('/api/credits', creditsRouter);

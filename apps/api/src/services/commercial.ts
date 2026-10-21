@@ -7,6 +7,7 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
+import { referralForLine } from './referralFees';
 
 // ---------------------------------------------------------------------------
 // The owner's commercial rules (Batch 2), as one platform setting: read with
@@ -61,28 +62,35 @@ export async function handlingWaivedFor(sellerIds: string[]): Promise<Map<string
 }
 
 /**
- * The fees a new order line is sold under, fixed at checkout: the category's
- * referral fee, the GT and collection percents, the handling slabs, the GST on
- * Clowe's charges, and whether the seller's handling fee is waived.
+ * The fees each new order line is sold under, fixed at checkout, in the
+ * lines' order: the referral fee of the category's slab for the line's unit
+ * price under the fee schedule in force (or the category's flat percent when
+ * it has no schedule category), the GT and collection percents, the handling
+ * slabs, the GST on Clowe's charges, and whether the seller's handling fee is
+ * waived. Lines placed earlier keep the fees they were placed under.
  */
-export async function feeSnapshots(lines: { productId: string; sellerId: string }[]): Promise<Map<string, SellerFeesV2>> {
+export async function feeSnapshots(lines: { productId: string; sellerId: string; unitPricePaise: number }[]): Promise<SellerFeesV2[]> {
   const c = await getCommercial();
   const products = await prisma.product.findMany({
     where: { id: { in: [...new Set(lines.map((l) => l.productId))] } },
-    select: { id: true, sellerId: true, category: { select: { referralPercent: true } } },
+    select: { id: true, sellerId: true, categoryId: true, category: { select: { referralPercent: true } } },
   });
+  const byId = new Map(products.map((p) => [p.id, p]));
   const waived = await handlingWaivedFor(products.map((p) => p.sellerId));
-  return new Map(
-    products.map((p) => [
-      p.id,
-      {
-        referralPercent: p.category.referralPercent,
+  return Promise.all(
+    lines.map(async (line) => {
+      const p = byId.get(line.productId);
+      if (!p) throw new Error(`feeSnapshots: product ${line.productId} not found`);
+      const referral = await referralForLine(p.categoryId, line.unitPricePaise, p.category.referralPercent);
+      return {
+        referralPercent: referral.percent,
+        referralSource: referral.source,
         gtPercent: c.fees.gtPercent,
         collectionPercent: c.fees.collectionPercent,
         handlingSlabs: c.fees.handlingSlabs,
         handlingWaived: waived.get(p.sellerId) ?? false,
         gstPercent: c.fees.gstPercent,
-      },
-    ]),
+      };
+    }),
   );
 }

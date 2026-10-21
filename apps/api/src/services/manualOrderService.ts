@@ -126,7 +126,7 @@ export async function createManualOrder(input: {
   const windowByProduct = await saleReturnWindows(lines.map((l) => l.productId));
   const returnableByProduct = await saleReturnability(lines.map((l) => l.productId));
   const gstRates = await saleGstRates(lines.map((l) => ({ productId: l.productId, unitPaise: l.pricePaise })));
-  const feesByProduct = await feeSnapshots(lines.map((l) => ({ productId: l.productId, sellerId: l.sellerId })));
+  const feesByLine = await feeSnapshots(lines.map((l) => ({ productId: l.productId, sellerId: l.sellerId, unitPricePaise: l.pricePaise })));
 
   const order = await prisma.$transaction(async (tx) => {
     for (const line of lines) {
@@ -192,7 +192,7 @@ export async function createManualOrder(input: {
             nonCancellable: l.nonCancellable,
             gstRatePercent: gstRates[i],
             feeModel: 2,
-            feeRates: feesByProduct.get(l.productId) as object | undefined,
+            feeRates: feesByLine[i] as object,
           })),
         },
       },

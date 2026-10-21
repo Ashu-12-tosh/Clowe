@@ -254,7 +254,13 @@ ordersRouter.post('/checkout', async (req, res, next) => {
       orderLines.map((l) => ({ productId: l.productId, unitPaise: l.pricePaise - Math.floor(l.promoDiscountPaise / l.quantity) })),
     );
     // Clowe's fees, fixed for these lines now (new orders only; older lines keep theirs).
-    const feesByProduct = await feeSnapshots(orderLines.map((l) => ({ productId: l.productId, sellerId: sellerByVariant.get(l.variantId)! })));
+    const feesByLine = await feeSnapshots(
+      orderLines.map((l) => ({
+        productId: l.productId,
+        sellerId: sellerByVariant.get(l.variantId)!,
+        unitPricePaise: l.pricePaise - Math.floor(l.promoDiscountPaise / l.quantity),
+      })),
+    );
 
     // Create the order and reserve stock atomically. Conditional decrements
     // guard against a concurrent checkout taking the last unit.
@@ -361,7 +367,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
               nonCancellable: line.nonCancellable,
               gstRatePercent: gstRates[i],
               feeModel: 2,
-              feeRates: feesByProduct.get(line.productId) as object | undefined,
+              feeRates: feesByLine[i] as object,
             })),
           },
         },

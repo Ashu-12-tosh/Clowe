@@ -667,7 +667,13 @@ export default function SellerPayoutsPage() {
               <Panel title="Fees breakdown" subtitle={monthLabel(month)}>
                 <dl className="space-y-2 text-xs">
                   <div className="flex justify-between">
-                    <dt className="text-gray-500">Referral fee (% of the selling price, set by category)</dt>
+                    <dt className="text-gray-500">
+                      Referral fee (by category and price slab, on the whole selling price —{' '}
+                      <a href="/pages/referral-fee-schedule" target="_blank" rel="noreferrer" className="font-semibold text-brand-600 hover:underline">
+                        rates
+                      </a>
+                      )
+                    </dt>
                     <dd className="font-semibold" data-fee="referral">{money(overview.fees.commissionPaise)}</dd>
                   </div>
                   <div className="flex justify-between">

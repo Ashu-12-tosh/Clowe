@@ -18,7 +18,7 @@ type Json = unknown;
 type Path = (string | number)[];
 
 const SECTIONS: { key: keyof CommercialSettings; title: string; note: string }[] = [
-  { key: 'fees', title: 'Seller fees per order line', note: 'Percents are of the selling price (GST included). Each category has its own referral fee (Admin → Categories); this is the default. New orders only.' },
+  { key: 'fees', title: 'Seller fees per order line', note: 'Percents are of the selling price (GST included). The referral fee comes from the Referral fee schedule (by category and price slab); this percent is the default only for a category with no schedule category. New orders only.' },
   { key: 'penalties', title: 'Admin penalties', note: 'Applied by an admin from a seller’s page, with a reason; deducted from payout.' },
   { key: 'plans', title: 'Seller plans', note: 'Monthly, auto-renewing, paid from the Seller Wallet first and then the next payout.' },
   { key: 'ads', title: 'Advertising', note: 'CPC ranges, fixed packages, and premium placements (price inside the range).' },

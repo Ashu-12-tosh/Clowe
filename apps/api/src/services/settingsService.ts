@@ -242,7 +242,10 @@ export async function getPublicSettings(): Promise<PublicSettings> {
       payoutMinPaise: s.payoutMinPaise,
     },
     nonReturnableCategories: await nonReturnableCategoryNames(),
-    commercial: publicCommercial(await (await import('./commercial')).getCommercial()),
+    commercial: {
+      ...publicCommercial(await (await import('./commercial')).getCommercial()),
+      referral: await (await import('./referralFees/views')).publicReferralSchedule(),
+    },
   };
 }
 

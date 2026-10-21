@@ -1,4 +1,5 @@
 import type { CommercialSettings, SellerPlan } from './commercial';
+import { bpsToPercent, slabFor, slabDescription, type ReferralFeeSlab } from './referralFees';
 import { computeListingEconomics } from './sellerEconomics';
 
 // ---------------------------------------------------------------------------
@@ -15,6 +16,16 @@ export interface CommercialPublic {
   ads: Pick<CommercialSettings['ads'], 'cpcRanges' | 'unavailableTypes' | 'campaignDays' | 'packages' | 'placements' | 'welcomeCreditPaise' | 'attributionDays'>;
   sponsorship: CommercialSettings['sponsorship'];
   tryon: Pick<CommercialSettings['tryon'], 'packs' | 'extraCreditPaise' | 'expiryDays' | 'freeGrantCredits' | 'freeGrantSellers'>;
+  /** The referral fee schedule in force, when one has taken effect (set by the API). */
+  referral?: PublicReferralSchedule | null;
+}
+
+/** What the public pages say about the referral fee schedule. */
+export interface PublicReferralSchedule {
+  version: number;
+  effectiveFrom: string;
+  /** Worked examples: a product in a real category, at a price, with its GST rate. */
+  examples: { title: string; pricePaise: number; gstRatePercent: number; sheetCategory: string; slabs: ReferralFeeSlab[] }[];
 }
 
 export function publicCommercial(c: CommercialSettings): CommercialPublic {
@@ -48,11 +59,34 @@ export function handlingFeesText(slabs: CommercialSettings['fees']['handlingSlab
 }
 
 /**
+ * The worked examples: with a referral fee schedule in force, one per example
+ * it carries (a shirt at ₹1,000 and at ₹1,500); otherwise a ₹1,000 sale at the
+ * flat rate.
+ */
+export function feeExamplesMarkdown(c: CommercialPublic, tdsPercent: number, tcsPercent: number): string {
+  const examples = c.referral?.examples ?? [];
+  if (examples.length === 0) return feeExampleMarkdown(c, tdsPercent, tcsPercent);
+  return examples
+    .map((x) => `**${x.title}**\n\n${feeExampleMarkdown(c, tdsPercent, tcsPercent, x.pricePaise, x.gstRatePercent, { sheetCategory: x.sheetCategory, slabs: x.slabs }, false)}`)
+    .join('\n\n')
+    .concat('\n\nCourier charges (forward freight, and the COD fee on a Cash on Delivery order) come on top, at the courier’s actual rates.');
+}
+
+/**
  * A worked example as a markdown list: a sale at `pricePaise` (GST included)
  * under the fees in force, with the statutory TDS and TCS — the same maths the
- * ledger posts.
+ * ledger posts. With `referral`, the referral fee is the slab's for the price.
  */
-export function feeExampleMarkdown(c: CommercialPublic, tdsPercent: number, tcsPercent: number, pricePaise = 100_000, gstPercent = 18): string {
+export function feeExampleMarkdown(
+  c: CommercialPublic,
+  tdsPercent: number,
+  tcsPercent: number,
+  pricePaise = 100_000,
+  gstPercent = 18,
+  referral: { sheetCategory: string; slabs: ReferralFeeSlab[] } | null = null,
+  courierNote = true,
+): string {
+  const slab = referral ? slabFor(referral.slabs, pricePaise) : null;
   const e = computeListingEconomics({
     buyerPricePaise: pricePaise,
     gstRatePercent: gstPercent,
@@ -65,22 +99,24 @@ export function feeExampleMarkdown(c: CommercialPublic, tdsPercent: number, tcsP
       platformFeePaise: 0,
       closingFeePaise: 0,
       gtChargePaise: 0,
-      v2: { ...c.fees, handlingWaived: false },
+      v2: { ...c.fees, referralSlabs: referral?.slabs ?? null, handlingWaived: false },
     },
   });
   const row = (key: string) => -(e.lines.find((l) => l.key === key)?.amountPaise ?? 0);
   const feesBase = row('commission') + row('gt') + row('gateway') + row('handling');
+  const referralLine = slab
+    ? `- Referral fee ${pct(bpsToPercent(slab.rateBps))} (${referral!.sheetCategory}, ${slabDescription(slab)}${slab.borrowedFrom ? ` — the ${slab.borrowedFrom} rate` : ''}): ${rupees(row('commission'))}`
+    : `- Referral fee ${pct(c.fees.referralPercent)}: ${rupees(row('commission'))}`;
   return [
     `A buyer pays ${rupees(pricePaise)} for one unit (GST ${gstPercent}% included):`,
     '',
-    `- Referral fee ${pct(c.fees.referralPercent)}: ${rupees(row('commission'))}`,
+    referralLine,
     `- GT charge ${pct(c.fees.gtPercent)}: ${rupees(row('gt'))}`,
     `- Payment collection fee ${pct(c.fees.collectionPercent)}: ${rupees(row('gateway'))}`,
     `- Handling fee: ${rupees(row('handling'))}`,
     `- Clowe's fees: ${rupees(feesBase)}, plus GST ${pct(c.fees.gstPercent)} on them: ${rupees(row('feeGst'))}`,
     `- TDS ${pct(tdsPercent)} and TCS ${pct(tcsPercent)} (by law, on the price before GST): ${rupees(row('tds'))} and ${rupees(row('tcs'))}`,
     `- **You receive ${rupees(e.sellerReceivesPaise)}**, from which you pay the GST on your sale (${rupees(e.gstPaise)}) — you keep ${rupees(e.sellerKeepsAfterGstPaise)}.`,
-    '',
-    'Courier charges (forward freight, and the COD fee on a Cash on Delivery order) come on top, at the courier’s actual rates.',
+    ...(courierNote ? ['', 'Courier charges (forward freight, and the COD fee on a Cash on Delivery order) come on top, at the courier’s actual rates.'] : []),
   ].join('\n');
 }

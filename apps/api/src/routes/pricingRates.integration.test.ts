@@ -71,6 +71,7 @@ describe('GET /api/seller/pricing-rates', () => {
         uniformPercent: DEFAULT_SETTINGS.gstUniformPercent,
       },
       platformFeePaise: DEFAULT_SETTINGS.platformFeePaise,
+      categoryReferralSlabs: expect.any(Object),
       closingFeePaise: DEFAULT_SETTINGS.closingFeePaise,
       gtChargePaise: DEFAULT_SETTINGS.gtChargePaise,
       // New orders pay the owner's Batch 2 fees, so the calculator shows those,

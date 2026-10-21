@@ -1,6 +1,6 @@
 # Seller Fees
 
-*Last updated: 16 October 2026*
+*Last updated: 21 October 2026*
 
 What it costs to sell on Clowe. Registering and listing products are free. The amounts below are read from our current settings, so this page always shows the fees in force; your Payouts page and the pricing calculator show the exact amount on every order. Every Clowe charge is before GST: GST at {{cloweGst}} is added, and all of it appears on Clowe's monthly tax invoice to you, which you can download from Billing & Wallet.
 
@@ -8,7 +8,7 @@ What it costs to sell on Clowe. Registering and listing products are free. The a
 
 Percentages are of the selling price, which includes GST.
 
-- **Referral fee:** {{referralFee}}. A category may carry its own rate; the product form shows the rate for yours.
+- **Referral fee:** {{referralFee}}. The product form shows the fee for your category at every price you try.
 - **GT (goods transfer) charge:** {{gtFee}}.
 - **Payment collection fee:** {{collectionFee}}, for online payment or Cash on Delivery collection.
 - **Handling fee:** per unit, by the unit's selling price — {{handlingFees}}. No handling fee on the Premium plan.

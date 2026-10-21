@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ReferralFeeSlab } from './referralFees';
 
 // ---------------------------------------------------------------------------
 // Clowe's commercial rules (owner's Batch 2): what sellers pay Clowe — per
@@ -379,7 +380,17 @@ export const sellerVipSchema = z.object({ vip: z.boolean() });
 
 /** The price calculator's rates: the current Batch 2 fees, and each category's referral fee. */
 export interface PricingRatesView {
+  /** Each category's flat referral percent: used where it has no fee-schedule slabs. */
   categoryReferralPercent: Record<string, number>;
+  /** Categories charged under the referral fee schedule: their slabs, by unit price. */
+  categoryReferralSlabs?: Record<string, CategoryReferralSlabs>;
+}
+
+/** A category's referral fee slabs under the schedule in force. */
+export interface CategoryReferralSlabs {
+  scheduleVersion: number;
+  sheetCategory: string;
+  slabs: ReferralFeeSlab[];
 }
 
 /** A partial update an admin sends: any section, any field. Merged over the current rules, then validated whole. */
