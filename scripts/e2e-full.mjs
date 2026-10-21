@@ -1734,8 +1734,10 @@ async function fulfil(orderId, itemId, page, { tag }) {
     await step('9 Fulfilment', 'pack screen: "Ready for pickup" and the packing checklist; the label has real AWB and order barcodes', async () => {
       await page.reload();
       await hydrated(page);
-      check(await page.getByRole('button', { name: /Ready for pickup/ }).count(), 'no "Ready for pickup" button on the order page');
-      check(await page.locator('[data-packaging-checklist]').count(), 'no packing checklist on the order page');
+      // Waited for, not counted at once: the order's lines load after the page.
+      const seen = (loc) => loc.first().waitFor({ timeout: 60_000 }).then(() => true, () => false);
+      check(await seen(page.getByRole('button', { name: /Ready for pickup/ })), 'no "Ready for pickup" button on the order page');
+      check(await seen(page.locator('[data-packaging-checklist]')), 'no packing checklist on the order page');
       const sheet = await page.context().newPage();
       try {
         await sheet.goto(`${WEB}/seller/orders/labels?ids=${itemId}`);
@@ -2026,7 +2028,11 @@ async function flow11Payouts() {
     await goto(page, '/seller/payouts');
     const btn = page.getByRole('button', { name: /Request payout/ });
     await btn.waitFor({ timeout: 120_000 });
-    check(await btn.isEnabled(), `request button disabled: ${await btn.getAttribute('title')}`);
+    // It is drawn before the overview loads (disabled until then): wait for it.
+    const enabled = await page
+      .waitForFunction(() => [...document.querySelectorAll('button')].some((b) => /Request payout/.test(b.textContent ?? '') && !b.disabled), null, { timeout: 60_000 })
+      .then(() => true, () => false);
+    check(enabled, `request button disabled: ${await btn.getAttribute('title')}`);
     await btn.click();
     await toast(page, /Payout requested/, 30_000);
     check(await prisma.payout.count({ where: { sellerId: S.sellerId } }) > 0, 'no payout row');
