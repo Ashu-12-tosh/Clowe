@@ -100,7 +100,17 @@ export const CATEGORY_MAPPING: Record<string, CategoryMappingEntry> = {
 };
 
 /**
- * Gaps the "same family" rule cannot fill, and the row the owner chose for
- * each. Empty until they choose: those prices keep the category's flat rate.
+ * Gaps the "same family" rule cannot fill: the row the owner chose to borrow
+ * from (21 Oct 2026).
  */
-export const GAP_DONORS: Record<string, string> = {};
+export const GAP_DONORS: Record<string, string> = {
+  'Gas Stoves and Pressure Cookers': 'Kitchen - Other products',
+};
+
+/**
+ * Gaps with no row to borrow from: a rate the owner set (21 Oct 2026),
+ * marked provisional in the admin fee table until confirmed.
+ */
+export const GAP_RATES: Record<string, { ratePercent: number; note: string; provisional: boolean }> = {
+  'PC Components - RAM and Motherboards': { ratePercent: 7, note: 'same as Desktops', provisional: true },
+};

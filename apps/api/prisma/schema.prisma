@@ -3186,6 +3186,10 @@ model ReferralFeeRate {
   borrowedFrom      String?
   /// The sheet's order, kept for display.
   position          Int                 @default(0)
+  /// A rate the owner set for a gap the sheet leaves, to be confirmed.
+  provisional       Boolean             @default(false)
+  /// Why this rate (e.g. "same as Desktops").
+  note              String?
 
   @@index([scheduleId, sheetCategory])
   @@map("referral_fee_rates")

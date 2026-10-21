@@ -3,6 +3,7 @@ import {
   fillSlabGaps,
   parseSlabLabel,
   slabDescription,
+  slabLabelOf,
   type ReferralFeeCategory,
   type ReferralFeeSlab,
 } from '@clowe/shared';
@@ -33,6 +34,9 @@ export interface ScheduleRate {
   rateBps: number;
   benchmarkBps: number | null;
   borrowedFrom: string | null;
+  /** Set by the owner for a gap, to be confirmed. */
+  provisional?: boolean;
+  note?: string | null;
 }
 
 export interface ScheduleGap {
@@ -40,10 +44,12 @@ export interface ScheduleGap {
   sheetCategory: string;
   /** The price range the sheet leaves out, in words. */
   range: string;
-  /** The row it borrows from, or null when none fits (left on the flat rate). */
+  /** The row it borrows from, or null when none fits. */
   borrowedFrom: string | null;
   /** Whether the owner chose it (vs the "same family" rule). */
   chosen: boolean;
+  /** A rate the owner set for it, when nothing could be borrowed; null = the flat rate. */
+  ownerRate?: { ratePercent: number; note: string; provisional: boolean } | null;
 }
 
 const HEADER = ['Group', 'Category', 'Item Price Slab (INR)', 'Benchmark Rate', 'CLOWE Rate'];
@@ -90,12 +96,17 @@ export function parseFeeSheet(rows: SheetRow[]): { categories: ParsedCategory[];
 }
 
 /**
- * Every category's slabs as stored: the sheet's own, and each gap filled from
- * its family's "… - Other products" row (or the row the owner chose in
- * `donors`). Gaps nothing fills are listed and stay unstored, so sales there
- * keep the category's flat rate.
+ * Every category's slabs as stored: the sheet's own, each gap filled from its
+ * family's "… - Other products" row (or the row the owner chose in `donors`),
+ * and what is still open given the owner's own rate in `gapRates` (kept as
+ * provisional). Gaps nothing fills are listed and stay unstored, so sales
+ * there keep the category's flat rate.
  */
-export function scheduleRates(categories: ParsedCategory[], donors: Record<string, string> = {}): { rates: ScheduleRate[]; gaps: ScheduleGap[] } {
+export function scheduleRates(
+  categories: ParsedCategory[],
+  donors: Record<string, string> = {},
+  gapRates: Record<string, { ratePercent: number; note: string; provisional: boolean }> = {},
+): { rates: ScheduleRate[]; gaps: ScheduleGap[] } {
   const byName = new Map(categories.map((c) => [c.sheetCategory, c]));
   const rates: ScheduleRate[] = [];
   const gaps: ScheduleGap[] = [];
@@ -116,8 +127,23 @@ export function scheduleRates(categories: ParsedCategory[], donors: Record<strin
       });
       if (s.borrowedFrom) gaps.push({ group: c.group, sheetCategory: c.sheetCategory, range: slabDescription(s), borrowedFrom: s.borrowedFrom, chosen: !!chosen });
     }
+    const ownerRate = gapRates[c.sheetCategory] ?? null;
     for (const [from, to] of filled.unfilled) {
-      gaps.push({ group: c.group, sheetCategory: c.sheetCategory, range: slabDescription({ abovePaise: from, upToPaise: to }), borrowedFrom: null, chosen: false });
+      gaps.push({ group: c.group, sheetCategory: c.sheetCategory, range: slabDescription({ abovePaise: from, upToPaise: to }), borrowedFrom: null, chosen: !!ownerRate, ownerRate });
+      if (ownerRate) {
+        rates.push({
+          group: c.group,
+          sheetCategory: c.sheetCategory,
+          slabLabel: slabLabelOf(from, to),
+          abovePaise: from,
+          upToPaise: to,
+          rateBps: Math.round(ownerRate.ratePercent * 100),
+          benchmarkBps: null,
+          borrowedFrom: null,
+          provisional: ownerRate.provisional,
+          note: ownerRate.note,
+        });
+      }
     }
   }
   return { rates, gaps };

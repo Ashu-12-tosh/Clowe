@@ -59,7 +59,10 @@ export interface ReferralScheduleTable {
   version: number;
   effectiveFrom: string;
   source: string;
-  groups: { group: string; categories: { sheetCategory: string; slabs: (ReferralFeeSlab & { benchmarkBps: number | null })[] }[] }[];
+  groups: {
+    group: string;
+    categories: { sheetCategory: string; slabs: (ReferralFeeSlab & { benchmarkBps: number | null; provisional: boolean; note: string | null })[] }[];
+  }[];
 }
 
 /** A whole schedule version, grouped as the sheet is, for the public page and the admin. */
@@ -68,12 +71,22 @@ export async function scheduleTable(version?: number): Promise<ReferralScheduleT
     ? await prisma.referralFeeSchedule.findUnique({ where: { version }, include: { rates: true } })
     : await prisma.referralFeeSchedule.findFirst({ where: { effectiveFrom: { lte: new Date() } }, orderBy: { version: 'desc' }, include: { rates: true } });
   if (!row) return null;
-  const groups = new Map<string, Map<string, (ReferralFeeSlab & { benchmarkBps: number | null })[]>>();
+  type Row = ReferralFeeSlab & { benchmarkBps: number | null; provisional: boolean; note: string | null };
+  const groups = new Map<string, Map<string, Row[]>>();
   // Rows keep the sheet's order.
   for (const r of [...row.rates].sort((a, b) => a.position - b.position)) {
     const g = groups.get(r.group) ?? new Map();
     const list = g.get(r.sheetCategory) ?? [];
-    list.push({ abovePaise: r.abovePaise, upToPaise: r.upToPaise, rateBps: r.rateBps, label: r.slabLabel, borrowedFrom: r.borrowedFrom, benchmarkBps: r.benchmarkBps });
+    list.push({
+      abovePaise: r.abovePaise,
+      upToPaise: r.upToPaise,
+      rateBps: r.rateBps,
+      label: r.slabLabel,
+      borrowedFrom: r.borrowedFrom,
+      benchmarkBps: r.benchmarkBps,
+      provisional: r.provisional,
+      note: r.note,
+    });
     g.set(r.sheetCategory, list);
     groups.set(r.group, g);
   }

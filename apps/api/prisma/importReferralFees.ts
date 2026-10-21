@@ -28,7 +28,7 @@ import { categoryRulesMap } from '../src/services/categoryRules';
 import { getCommercial } from '../src/services/commercial';
 import { economicsRates, gstSettings } from '../src/services/economicsRates';
 import { getSettings } from '../src/services/settingsService';
-import { CATEGORY_MAPPING, GAP_DONORS } from '../src/services/referralFees/categoryMapping';
+import { CATEGORY_MAPPING, GAP_DONORS, GAP_RATES } from '../src/services/referralFees/categoryMapping';
 import { applyCategoryMapping, createScheduleVersion, notifySellersOfSchedule } from '../src/services/referralFees/apply';
 import { FEE_SHEET_NAME, parseFeeSheet, scheduleRates } from '../src/services/referralFees/sheet';
 import { readSheet } from '../src/services/referralFees/xlsx';
@@ -47,13 +47,15 @@ async function main() {
 
   // ---------------- the sheet ----------------
   const { categories: sheet, problems } = parseFeeSheet(readSheet(file, FEE_SHEET_NAME));
-  const { rates, gaps } = scheduleRates(sheet, GAP_DONORS);
+  const { rates, gaps } = scheduleRates(sheet, GAP_DONORS, GAP_RATES);
   const sheetNames = new Set(sheet.map((c) => c.sheetCategory));
   const rows = sheet.reduce((n, c) => n + c.slabs.length, 0);
   console.log(`\n=== ${basename(file)} — sheet "${FEE_SHEET_NAME}" ===`);
   console.log(`${rows} slab rows, ${sheet.length} categories:`);
   for (const g of [...new Set(sheet.map((c) => c.group))]) console.log(`  ${g}: ${sheet.filter((c) => c.group === g).length} categories`);
   console.log(`${rates.length} rates to store (the sheet's ${rows} + ${rates.length - rows} filled gaps)`);
+  const provisional = rates.filter((r) => r.provisional);
+  if (provisional.length) console.log(`Provisional (to confirm): ${provisional.map((r) => `${r.sheetCategory} ${r.slabLabel} ${r.rateBps / 100}%`).join('; ')}`);
   if (problems.length) {
     console.log(`\n!!! ${problems.length} rows not understood — nothing is applied until they are fixed:`);
     for (const p of problems) console.log(`  ${p}`);
@@ -63,7 +65,11 @@ async function main() {
   for (const g of gaps) {
     console.log(
       `  [${g.group}] ${g.sheetCategory}, ${g.range}: ${
-        g.borrowedFrom ? `${g.borrowedFrom}${g.chosen ? ' (chosen)' : ''}` : 'NO "Other products" row fits — stays on the flat rate until you choose one'
+        g.borrowedFrom
+          ? `${g.borrowedFrom}${g.chosen ? ' (your choice)' : ''}`
+          : g.ownerRate
+            ? `${g.ownerRate.ratePercent}% set by you (${g.ownerRate.note})${g.ownerRate.provisional ? ', provisional' : ''}`
+            : 'NO "Other products" row fits — stays on the flat rate until you choose one'
       }`,
     );
   }

@@ -39,6 +39,8 @@ export async function createScheduleVersion(input: {
         rateBps: r.rateBps,
         benchmarkBps: r.benchmarkBps,
         borrowedFrom: r.borrowedFrom,
+        provisional: r.provisional ?? false,
+        note: r.note ?? null,
         position,
       })),
     });
@@ -60,6 +62,8 @@ export async function ratesOfVersion(version: number): Promise<ScheduleRate[]> {
     rateBps: r.rateBps,
     benchmarkBps: r.benchmarkBps,
     borrowedFrom: r.borrowedFrom,
+    provisional: r.provisional,
+    note: r.note,
   }));
 }
 

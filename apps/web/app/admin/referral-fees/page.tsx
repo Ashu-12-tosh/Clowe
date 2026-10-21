@@ -18,7 +18,7 @@ interface Table {
   version: number;
   effectiveFrom: string;
   source: string;
-  groups: { group: string; categories: { sheetCategory: string; slabs: (ReferralFeeSlab & { benchmarkBps: number | null })[] }[] }[];
+  groups: { group: string; categories: { sheetCategory: string; slabs: (ReferralFeeSlab & { benchmarkBps: number | null; provisional?: boolean; note?: string | null })[] }[] }[];
 }
 interface CategoryRow {
   id: string;
@@ -177,6 +177,11 @@ export default function AdminReferralFeesPage() {
                               <span className="text-gray-600">
                                 {slabDescription(s)}
                                 {s.borrowedFrom && <span className="ml-1 text-[11px] text-amber-700">borrowed: {s.borrowedFrom}</span>}
+                                {s.provisional && (
+                                  <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-800" data-provisional>
+                                    Provisional{s.note ? ` — ${s.note}` : ''}
+                                  </span>
+                                )}
                               </span>
                               <span>
                                 <span className="font-semibold">{bpsToPercent(s.rateBps)}%</span>
