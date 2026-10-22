@@ -9,6 +9,7 @@ import { SellerContext, type SellerState } from '@/components/seller/SellerConte
 import DashShell, { type DashNavItem } from '@/components/DashShell';
 import { ApplicationStatus } from '@/components/seller/ApplicationStatus';
 import { VendorTermsModal } from '@/components/seller/VendorTermsModal';
+import BrandLogo from '@/components/BrandLogo';
 
 const NAV: DashNavItem[] = [
   { href: '/seller', label: 'Dashboard', icon: '▦' },
@@ -38,8 +39,9 @@ function SellerPublicShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen flex-col bg-cream-50">
       <header className="bg-ink-950 px-5 py-4">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
-          <Link href="/sell" className="font-display text-lg font-bold uppercase tracking-[0.2em] text-brand-400">
-            Clowe <span className="text-white">Seller</span>
+          <Link href="/sell" className="flex items-center gap-3" aria-label="Clowe Shop — sell on Clowe">
+            <BrandLogo tone="gold" height={28} className="w-[110px]" />
+            <span className="border-l border-white/20 pl-3 text-xs font-bold uppercase tracking-[0.2em] text-white">Seller</span>
           </Link>
           <Link href="/" className="text-sm font-semibold text-gray-300 hover:text-brand-400">
             Go to store →

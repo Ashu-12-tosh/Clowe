@@ -55,9 +55,7 @@ export function renderEmail(c: EmailContent): { html: string; text: string } {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:12px;border:1px solid #ebe8e1;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <tr><td align="center" style="padding:22px 24px 14px;border-bottom:1px solid #f0ede6;">
 <a href="${escapeHtml(site)}" style="text-decoration:none;color:#111111;">
-<img src="${escapeHtml(site)}/apple-touch-icon.png" width="40" height="40" alt="" style="display:block;margin:0 auto 6px;border-radius:8px;">
-<span style="display:block;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;letter-spacing:2px;color:#111111;">CLOWE</span>
-<span style="display:block;font-size:11px;letter-spacing:1px;color:#B8860B;">Shop Your Style</span>
+<img src="${escapeHtml(site)}/brand/wordmark-black-480.png" width="160" height="40" alt="CLOWE SHOP" style="display:block;margin:0 auto;border:0;width:160px;height:auto;max-width:160px;">
 </a>
 </td></tr>
 <tr><td style="padding:24px 28px 20px;">
@@ -74,7 +72,7 @@ This is an automatic email from Clowe. To ask us anything, just reply, or write 
 </body>
 </html>`;
   const text = [
-    'CLOWE',
+    'CLOWE SHOP',
     '',
     c.title,
     '',

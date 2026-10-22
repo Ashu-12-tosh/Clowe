@@ -139,6 +139,11 @@ export interface CategoryDetail {
   }[];
   /** Live products in this category and everything under it. */
   productCount: number;
+  /**
+   * Only while this category has nothing live: the departments that do, in
+   * menu order, for its "Coming soon — sellers are joining" page to link to.
+   */
+  liveDepartments: { name: string; slug: string }[];
 }
 
 export interface ProductListItem {

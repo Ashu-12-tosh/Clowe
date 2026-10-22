@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import type { AuthUser } from '@clowe/shared';
 import { getStoredUser, logoutSession } from '@/lib/api';
 import { useUnreadNotifications } from '@/lib/badges';
+import BrandLogo from './BrandLogo';
 
 export interface DashNavItem {
   href: string;
@@ -42,9 +43,10 @@ function SidebarContent({
   const active = activeItem(nav, pathname);
   return (
     <div className="flex h-full flex-col px-3 py-5">
-      {/* Brand card */}
+      {/* Brand card: the Clowe Shop wordmark (gold on dark), then whose panel this is. */}
       <div className="rounded-2xl bg-ink-900 px-4 py-3.5 text-white">
-        <p className="break-words font-display text-xl font-bold uppercase leading-tight tracking-wide text-brand-400">
+        <BrandLogo tone="gold" height={26} className="mb-2 w-[102px]" />
+        <p className="break-words font-display text-lg font-bold uppercase leading-tight tracking-wide text-brand-400">
           {brand}
         </p>
         <p className="mt-0.5 break-words text-[11px] uppercase tracking-widest text-gray-400">

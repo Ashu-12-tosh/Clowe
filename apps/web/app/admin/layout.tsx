@@ -73,7 +73,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <DashShell brand="Clowe Admin" subtitle="Platform Control" nav={NAV}>
+    <DashShell brand="Admin" subtitle="Platform Control" nav={NAV}>
       <CourierWalletBanner />
       <div className="mx-auto max-w-6xl">{children}</div>
     </DashShell>

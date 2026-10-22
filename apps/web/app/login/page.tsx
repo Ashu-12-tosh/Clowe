@@ -8,6 +8,7 @@ import LoginFlow, { type LoginFlowHandle, type LoginStep } from '@/components/au
 import { closeLogin } from '@/lib/returnTo';
 import type { AuthTokensResponse, UserRole } from '@clowe/shared';
 import { getStoredUser, saveSession } from '@/lib/api';
+import BrandLogo from '@/components/BrandLogo';
 
 // The shopper login: the brand panel, and the login and sign-up flow
 // (components/auth/LoginFlow) on a card over the blurred storefront.
@@ -74,8 +75,8 @@ export default function LoginPage() {
           >
             ←
           </button>
-          <span className="font-display text-xl font-bold uppercase tracking-[0.25em] text-brand-400">Clowe</span>
-          <p className="mt-0.5 text-[11px] text-brand-400/80">Your Style, Our Intelligence.</p>
+          <BrandLogo tone="gold" height={30} className="mx-auto w-[118px]" />
+          <p className="mt-1 text-[11px] text-brand-400/80">Your Style, Our Intelligence.</p>
         </div>
 
         {/* Top-right switch */}

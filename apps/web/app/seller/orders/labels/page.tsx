@@ -7,6 +7,7 @@ import type { SellerShippingLabel } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import { Code128 } from '@/components/Code128';
+import BrandLogo from '@/components/BrandLogo';
 
 function Label({ label }: { label: SellerShippingLabel }) {
   const { shipTo, shipFrom } = label;
@@ -14,9 +15,7 @@ function Label({ label }: { label: SellerShippingLabel }) {
     <article className="print-sheet mb-4 break-inside-avoid rounded-xl border-2 border-ink-900 bg-white p-4">
       <header className="flex items-start justify-between border-b-2 border-dashed border-gray-300 pb-2">
         <div>
-          <p className="font-display text-lg font-bold uppercase tracking-[0.2em] text-ink-900">
-            Clowe
-          </p>
+          <BrandLogo tone="black" height={24} className="w-[96px]" />
           <Code128 value={label.orderNumber} heightMm={8} moduleMm={0.254} className="mt-1" />
           <p className="text-[11px] text-gray-700">Order {label.orderNumber}</p>
         </div>

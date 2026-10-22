@@ -478,12 +478,32 @@ function CategoryPageInner() {
           {/* Empty with no filters set means nothing is listed yet, not that a
               filter was too tight; "More on Clowe" follows when there is any. */}
           {data && data.items.length === 0 && sponsoredAds.length === 0 && railCount === 0 && (
-            <div className={`mt-4 flex flex-col items-center justify-center text-center ${more.length > 0 ? 'h-32' : 'h-72'}`}>
-              <p className="text-sm font-semibold text-ink-900">Nothing listed in {category?.name ?? 'this category'} yet.</p>
-              <p className="mt-1 text-sm text-gray-500">
-                Sellers are setting up shop — new listings appear here as they go live.
-                {more.length > 0 && ' Meanwhile, here is what is on Clowe now.'}
+            <div
+              className="mt-4 flex min-h-[18rem] flex-col items-center justify-center rounded-2xl border border-cream-200 bg-white px-6 py-10 text-center"
+              data-coming-soon
+            >
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-600">Coming soon</p>
+              <p className="mt-2 font-display text-2xl font-bold text-ink-900">Sellers are joining {category?.name ?? 'this department'}</p>
+              <p className="mt-2 max-w-md text-sm text-gray-500">
+                New listings appear here as they go live. Meanwhile, these departments are open now:
               </p>
+              {(category?.liveDepartments?.length ?? 0) > 0 ? (
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {category!.liveDepartments.map((d) => (
+                    <Link
+                      key={d.slug}
+                      href={`/category/${encodeURIComponent(d.slug)}`}
+                      className="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-ink-900 hover:border-brand-600 hover:text-brand-700"
+                    >
+                      {d.name}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <Link href="/products" className="mt-4 text-sm font-semibold text-brand-600 hover:underline">
+                  Browse everything on Clowe
+                </Link>
+              )}
             </div>
           )}
 

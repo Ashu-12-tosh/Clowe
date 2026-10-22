@@ -1,5 +1,6 @@
 import type { CreditNote } from '@clowe/shared';
 import { formatPaise } from '@/lib/format';
+import BrandLogo from './BrandLogo';
 
 const money = (paise: number) =>
   `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -39,6 +40,8 @@ export default function CreditNoteDocument({ note }: { note: CreditNote }) {
           </p>
         </div>
         <div className="text-right">
+          {/* The marketplace it was sold through; the seller above is the one issuing it. */}
+          <BrandLogo tone="black" height={22} className="mb-2 ml-auto w-[88px]" />
           <p className="font-mono text-sm font-bold text-ink-900">{note.creditNoteNumber}</p>
           <p className="mt-1 text-xs text-gray-600">
             Issued {day(note.issuedAt)}

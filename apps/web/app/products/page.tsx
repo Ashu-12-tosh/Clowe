@@ -10,6 +10,7 @@ import {
   withRailCleared,
   withValueToggled,
   type AppliedFilter,
+  type CategoryDetail,
   type CategoryNode,
   type ProductListResponse,
   type ProductSort,
@@ -34,6 +35,8 @@ function ProductsPageInner() {
 
   const [data, setData] = useState<ProductListResponse | null>(null);
   const [categories, setCategories] = useState<CategoryNode[]>([]);
+  // A department with nothing listed yet: its name and the departments that do have products.
+  const [comingSoon, setComingSoon] = useState<CategoryDetail | null>(null);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -52,6 +55,23 @@ function ProductsPageInner() {
   const chosenSort = searchParams.get('sort') as ProductSort | null;
   const sortValue: string =
     chosenSort ?? (q ? (data?.search?.appliedSort ?? 'relevance') : 'newest');
+
+  // Landing on an empty department (its tile, no search, no filter): fetch its
+  // name and the departments that are open, for the "Coming soon" page.
+  const emptyDepartment = !!data && data.items.length === 0 && unfiltered && !!category && !q;
+  useEffect(() => {
+    if (!emptyDepartment) {
+      setComingSoon(null);
+      return;
+    }
+    let live = true;
+    api<CategoryDetail>(`/api/categories/${encodeURIComponent(category)}`)
+      .then((d) => live && setComingSoon(d))
+      .catch(() => live && setComingSoon(null));
+    return () => {
+      live = false;
+    };
+  }, [emptyDepartment, category]);
 
   // Every order a search can be in has an option, so the dropdown always has
   // a true answer. Labels are the ones the chips use, so "Top rated" in a chip
@@ -308,7 +328,37 @@ function ProductsPageInner() {
             />
           )}
 
-          {data && data.items.length === 0 && (
+          {emptyDepartment && comingSoon && (
+            <div
+              className="mt-6 flex min-h-[18rem] flex-col items-center justify-center rounded-2xl border border-cream-200 bg-white px-6 py-10 text-center"
+              data-coming-soon
+            >
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-600">Coming soon</p>
+              <p className="mt-2 font-display text-2xl font-bold text-ink-900">Sellers are joining {comingSoon.name}</p>
+              <p className="mt-2 max-w-md text-sm text-gray-500">
+                New listings appear here as they go live. Meanwhile, these departments are open now:
+              </p>
+              {comingSoon.liveDepartments.length > 0 ? (
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {comingSoon.liveDepartments.map((d) => (
+                    <Link
+                      key={d.slug}
+                      href={`/products?category=${encodeURIComponent(d.slug)}`}
+                      className="rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-ink-900 hover:border-brand-600 hover:text-brand-700"
+                    >
+                      {d.name}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <Link href="/products" className="mt-4 text-sm font-semibold text-brand-600 hover:underline">
+                  Browse everything on Clowe
+                </Link>
+              )}
+            </div>
+          )}
+
+          {data && data.items.length === 0 && !(emptyDepartment && comingSoon) && (
             <div className="mt-10 text-center">
               <p className="text-sm font-semibold text-ink-900">
                 {q

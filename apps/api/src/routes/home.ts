@@ -7,9 +7,8 @@ import {
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { isLiveBrand, liveBrands } from '../services/productSearch';
-import { categoryRows } from '../services/categoryRules';
 import { isStockPhoto } from '../services/stockPhotos';
-import { linkedCategorySlug, productTestFrom, shopperHidden, visibleProductWhere, whereFrom } from '../services/shopperVisibility';
+import { linkedCategorySlug, productTestFrom, shopperHidden, visibleProductWhere } from '../services/shopperVisibility';
 
 export const homeRouter = Router();
 
@@ -110,47 +109,17 @@ async function trendingCards(): Promise<HomeProductCard[]> {
   return cards;
 }
 
-/**
- * The categories with something a shopper can buy, counting everything below
- * them ("fashion" is stocked when a t-shirt is), each with the photo of a live
- * product in it — the home tile shows real goods, never stock art.
- */
-async function stockedCategories(hidden: Awaited<ReturnType<typeof shopperHidden>>): Promise<Map<string, string | null>> {
-  const [perCategory, rows] = await Promise.all([
-    // One live product per category, best seller first, with its first photo.
-    prisma.product.findMany({
-      where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, planHidden: false, ...whereFrom(hidden) },
-      distinct: ['categoryId'],
-      orderBy: [{ soldCount: 'desc' }, { createdAt: 'desc' }],
-      select: { categoryId: true, images: { orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } } },
-    }),
-    categoryRows(),
-  ]);
-  const photos = new Map<string, string | null>();
-  for (const { categoryId, images } of perCategory) {
-    const url = images[0]?.url ?? null;
-    for (let row = rows.get(categoryId); row; row = row.parentId ? rows.get(row.parentId) : undefined) {
-      if (!photos.get(row.slug)) photos.set(row.slug, url);
-    }
-  }
-  return photos;
-}
+/** A stock/random photo (picsum, loremflickr…) — never shown as Clowe art. */
+const isStockArt = (url: string | null | undefined) => !!url && isStockPhoto(url);
 
 async function buildHomePayload(): Promise<HomePayload> {
   const now = new Date();
   // What shoppers cannot see (closed food categories, the demo catalog) stays
   // off the homepage: its products, its category tiles, and any banner or
-  // promo that links into a category with nothing to show. A tile promising
-  // "Up to 60% off" on an empty department is worse than no tile.
+  // promo that links into it. A department that is open but still empty is
+  // shown (the owner's call): its page says sellers are joining.
   const hidden = await shopperHidden();
   const isHiddenProduct = productTestFrom(hidden);
-  const stocked = await stockedCategories(hidden);
-  const opensHidden = (href: string | null | undefined) => {
-    const slug = linkedCategorySlug(href);
-    return slug !== null && !stocked.has(slug);
-  };
-  // A hero slide stays up while its category fills (the owner's call): it
-  // goes only when it leads into a category shoppers cannot see at all.
   const opensClosed = (href: string | null | undefined) => {
     const slug = linkedCategorySlug(href);
     return slug !== null && hidden.categorySlugs.has(slug);
@@ -201,7 +170,7 @@ async function buildHomePayload(): Promise<HomePayload> {
       focalY: b.focalY,
     })),
     promoCards: promoTiles
-      .filter((t) => t.placement === 'PROMO_CARD' && !opensHidden(t.href))
+      .filter((t) => t.placement === 'PROMO_CARD' && !opensClosed(t.href) && !isStockArt(t.imageUrl))
       .map((t) => ({
         id: t.id,
         title: t.title,
@@ -224,22 +193,21 @@ async function buildHomePayload(): Promise<HomePayload> {
             .map((i) => toCard(i.product)),
         }
       : null,
-    // Only departments with something to buy (an empty department's tile
-    // leads nowhere), each with its own Clowe tile image as before the
-    // Cashfree review — or, where that is a stock photo or missing, one of its
-    // own products' photos.
+    // Every department as before the Cashfree review (33be21c), in its order,
+    // with its own Clowe tile image — including the ones still waiting for
+    // sellers. Never a stock photo: without Clowe art the tile shows its icon.
     categories: rootCategories
-      .filter((c) => !hidden.categoryIds.has(c.id) && stocked.has(c.slug))
+      .filter((c) => !hidden.categoryIds.has(c.id))
       .map((c) => ({
         id: c.id,
         name: c.name,
         slug: c.slug,
         icon: c.icon,
-        imageUrl: c.imageUrl && !isStockPhoto(c.imageUrl) ? c.imageUrl : (stocked.get(c.slug) ?? null),
+        imageUrl: isStockArt(c.imageUrl) ? null : c.imageUrl,
       })),
     trending,
     promoStrips: promoTiles
-      .filter((t) => t.placement === 'PROMO_STRIP' && !opensHidden(t.href))
+      .filter((t) => t.placement === 'PROMO_STRIP' && !opensClosed(t.href) && !isStockArt(t.imageUrl))
       .map((t) => ({
         id: t.id,
         title: t.title,

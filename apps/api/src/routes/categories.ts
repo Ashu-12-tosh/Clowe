@@ -2,7 +2,8 @@ import { Router } from 'express';
 import type { CategoryCallout, CategoryDetail, CategoryNode } from '@clowe/shared';
 import { prisma } from '../db';
 import { categoryIcon, specFieldsFor } from '@clowe/shared';
-import { chainOf, descendantIds, facetsFromChain, rulesFromChain } from '../services/categoryRules';
+import { categoryRows, chainOf, descendantIds, facetsFromChain, rulesFromChain } from '../services/categoryRules';
+import { isStockPhoto } from '../services/stockPhotos';
 import { hiddenCategoryIds } from '../services/shopperVisibility';
 import { ApiError } from '../utils/ApiError';
 
@@ -65,6 +66,25 @@ categoriesRouter.get('/', async (_req, res, next) => {
   }
 });
 
+/**
+ * The top-level departments with something live to buy, in menu order — for
+ * an empty department's page to point shoppers somewhere that has products.
+ */
+async function liveDepartments(hidden: Set<string>): Promise<{ name: string; slug: string }[]> {
+  const [groups, rows, roots] = await Promise.all([
+    prisma.product.groupBy({ by: ['categoryId'], where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false } } }),
+    categoryRows(),
+    prisma.category.findMany({ where: { isActive: true, parentId: null }, orderBy: { sortOrder: 'asc' }, select: { id: true, name: true, slug: true } }),
+  ]);
+  const live = new Set<string>();
+  for (const { categoryId } of groups) {
+    let row = rows.get(categoryId);
+    while (row?.parentId) row = rows.get(row.parentId);
+    if (row) live.add(row.id);
+  }
+  return roots.filter((r) => live.has(r.id) && !hidden.has(r.id)).map(({ name, slug }) => ({ name, slug }));
+}
+
 // One category's landing page: banner, blurb and subcategory tiles with counts.
 categoriesRouter.get('/:slug', async (req, res, next) => {
   try {
@@ -81,7 +101,8 @@ categoriesRouter.get('/:slug', async (req, res, next) => {
         },
       },
     });
-    if (!category || !category.isActive || (await hiddenCategoryIds()).has(category.id)) {
+    const hidden = await hiddenCategoryIds();
+    if (!category || !category.isActive || hidden.has(category.id)) {
       throw ApiError.notFound('Category not found');
     }
 
@@ -101,7 +122,8 @@ categoriesRouter.get('/:slug', async (req, res, next) => {
       description: category.description,
       icon: category.icon,
       tileShape: category.tileShape === 'circle' ? 'circle' : 'square',
-      banners: category.banners.map((b) => ({
+      // Clowe's own banner art only: a stock/random photo is never shown, even if switched on.
+      banners: category.banners.filter((b) => !b.imageUrl || !isStockPhoto(b.imageUrl)).map((b) => ({
         id: b.id,
         eyebrow: b.eyebrow,
         headline: b.headline,
@@ -128,7 +150,9 @@ categoriesRouter.get('/:slug', async (req, res, next) => {
         productCount: countById.get(child.id) ?? 0,
       })),
       productCount: scopeIds.reduce((sum, id) => sum + (countById.get(id) ?? 0), 0),
+      liveDepartments: [],
     };
+    if (body.productCount === 0) body.liveDepartments = (await liveDepartments(hidden)).filter((d) => d.slug !== category.slug);
     res.json({ success: true, data: body });
   } catch (err) {
     next(err);

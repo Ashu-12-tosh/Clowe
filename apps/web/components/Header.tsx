@@ -15,6 +15,7 @@ import { api, getStoredUser, logoutSession } from '@/lib/api';
 import { BADGES_EVENT, useUnreadNotifications } from '@/lib/badges';
 import CategoryNav from './CategoryNav';
 import SearchBar from './search/SearchBar';
+import BrandLogo from './BrandLogo';
 
 // Web Speech API (prefixed in Chrome/Safari).
 interface SpeechRecognitionLike {
@@ -311,11 +312,9 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             ☰
           </button>
 
-          {/* Logo with crown + tagline */}
-          <Link href="/" className="shrink-0 text-center leading-none">
-            <span className="block text-[10px] leading-none text-brand-400">♛</span>
-            <span className="t-logo-sm block uppercase text-ink-900">Clowe</span>
-            <span className="t-tagline mt-0.5 hidden text-brand-600 sm:block">Shop Your Style</span>
+          {/* The Clowe Shop wordmark: black on the light header, smaller on phones. */}
+          <Link href="/" className="shrink-0" aria-label="Clowe Shop — home">
+            <BrandLogo tone="black" height={34} className="w-[104px] sm:w-[136px]" />
           </Link>
 
           {/* Search. The combobox owns its own dropdown, keyboard handling and

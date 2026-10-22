@@ -54,8 +54,9 @@ describe('notifications by email', () => {
     const rows = await mine();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ kind: 'ORDER_CONFIRMED', toEmail: 'mail-shopper@example.com', subject: 'Order placed — Clowe', status: 'PENDING' });
-    expect(rows[0]!.html).toContain('CLOWE');
-    expect(rows[0]!.html).toContain('/apple-touch-icon.png');
+    // The Clowe Shop wordmark as a hosted PNG (email clients do not show SVG), with its name as the alt text.
+    expect(rows[0]!.html).toMatch(/<img src="https?:\/\/[^"]+\/brand\/wordmark-black-480\.png"[^>]*alt="CLOWE SHOP"/);
+    expect(rows[0]!.text.startsWith('CLOWE SHOP')).toBe(true);
     expect(rows[0]!.html).toMatch(/href="https?:\/\/[^"]+\/orders\/abc"/);
     expect(rows[0]!.text).toContain('View your order: ');
   });

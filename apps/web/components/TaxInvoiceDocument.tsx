@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { TaxInvoice } from '@clowe/shared';
 import { formatPaise } from '@/lib/format';
+import BrandLogo from './BrandLogo';
 
 const money = (paise: number) =>
   `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -49,6 +50,8 @@ export default function TaxInvoiceDocument({
           </p>
         </div>
         <div className="text-right">
+          {/* The marketplace it was sold through; the seller above is the one issuing it. */}
+          <BrandLogo tone="black" height={22} className="mb-2 ml-auto w-[88px]" />
           <p className="font-mono text-sm font-bold text-ink-900">{invoice.invoiceNumber}</p>
           <p className="mt-1 text-xs text-gray-600">
             Issued {new Date(invoice.issuedAt).toLocaleDateString('en-IN')}

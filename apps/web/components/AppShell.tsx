@@ -9,6 +9,7 @@ import { recordPage } from '@/lib/returnTo';
 import Header from './Header';
 import Footer from './Footer';
 import CompareBar from './CompareBar';
+import BrandLogo from './BrandLogo';
 
 const ACCOUNT_LINKS = [
   { label: 'Wishlist', href: '/wishlist', icon: '♡' },
@@ -34,8 +35,7 @@ function MobileDrawer({ onNavigate }: { onNavigate: () => void }) {
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <div className="bg-ink-950 px-5 py-4 text-white">
-        <span className="block text-[10px] leading-none text-brand-400">♛</span>
-        <span className="font-display text-xl font-bold uppercase tracking-[0.2em]">Clowe</span>
+        <BrandLogo tone="gold" height={30} className="w-[118px]" />
         <p className="mt-1 text-xs text-gray-400">
           {user ? `Hi, ${user.name?.split(' ')[0] ?? 'there'}` : 'Welcome! Login to shop faster.'}
         </p>

@@ -46,7 +46,10 @@ export const metadata: Metadata = {
     description: 'Electronics, fashion, home, beauty, books and more from trusted sellers - with AI try-on on fashion.',
     type: 'website',
     siteName: 'Clowe',
+    // The Clowe Shop wordmark, gold on near-black, 1200x630.
+    images: [{ url: '/brand/og-image.png', width: 1200, height: 630, alt: 'Clowe Shop' }],
   },
+  twitter: { card: 'summary_large_image', images: ['/brand/og-image.png'] },
   robots: { index: true, follow: true },
 };
 

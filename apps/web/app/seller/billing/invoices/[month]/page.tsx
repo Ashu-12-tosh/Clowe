@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { invoiceMonthLabel, type SellerMonthlyInvoice } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
+import BrandLogo from '@/components/BrandLogo';
 
 /** Clowe's tax invoice to the seller for one month — print or save as PDF from the browser. */
 export default function SellerInvoicePage({ params }: { params: Promise<{ month: string }> }) {
@@ -33,6 +34,8 @@ export default function SellerInvoicePage({ params }: { params: Promise<{ month:
         </button>
       </div>
       <article className="rounded-2xl border border-gray-200 bg-white p-6 text-sm" data-seller-invoice>
+        {/* Clowe issues this one: its wordmark heads the page. */}
+        <BrandLogo tone="black" height={30} className="mb-4 w-[120px]" />
         <div className="flex flex-wrap justify-between gap-4">
           <div>
             <p className="text-lg font-bold text-ink-900">{doc.number ? 'TAX INVOICE' : 'DRAFT — not a tax invoice yet'}</p>

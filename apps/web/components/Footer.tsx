@@ -6,6 +6,7 @@ import { getPublicSettings, onPublicSettingsChanged } from '@/lib/settings';
 import { ExternalLink } from '@/components/ExternalLink';
 import { openCookieSettings } from '@/lib/cookieConsent';
 import { DEFAULT_LEGAL_ENTITY, safeHref, type LegalEntity } from '@clowe/shared';
+import BrandLogo from './BrandLogo';
 
 const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -156,11 +157,8 @@ export default function Footer({ legal: initialLegal = null }: { legal?: LegalEn
       <div className="mx-auto grid max-w-7xl gap-10 px-6 py-12 sm:grid-cols-2 lg:grid-cols-6">
         {/* Brand blurb */}
         <div className="lg:col-span-2 lg:pr-8">
-          <Link href="/" className="inline-block leading-none">
-            <span className="block text-[10px] leading-none text-brand-400">♛</span>
-            <span className="t-logo-sm block uppercase text-ink-900">
-              Clowe
-            </span>
+          <Link href="/" className="inline-block" aria-label="Clowe Shop — home">
+            <BrandLogo tone="black" height={40} className="w-[148px]" />
           </Link>
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-gray-500">
             CLOWE is your one-stop destination for everything you love. Shop smarter. Live better.
