@@ -30,6 +30,15 @@ export async function assertCanPlaceOrders(userId: string): Promise<void> {
   if (!(await canPlaceOrders(userId))) throw ApiError.forbidden(STORE_CLOSED_MESSAGE, 'STORE_NOT_OPEN');
 }
 
+/**
+ * Whether this account may buy a test listing (Product.testOnly): only one an
+ * admin marked as a test account. Admins cannot buy anything anyway.
+ */
+export async function canBuyTestListings(userId: string): Promise<boolean> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { isTestAccount: true } });
+  return u?.isTestAccount === true;
+}
+
 /** On production the mock gateway settles payments only for admins and test accounts. */
 export async function assertMockPaymentAllowed(userId: string): Promise<void> {
   if (env.NODE_ENV !== 'production') return;

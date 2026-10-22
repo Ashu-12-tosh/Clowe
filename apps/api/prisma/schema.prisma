@@ -1130,6 +1130,10 @@ model Product {
   // Over the plan's live-product limit (owner's Batch 2): hidden from shoppers,
   // never deleted; live again when the seller picks it or upgrades.
   planHidden      Boolean       @default(false)
+  // Clowe's own payment-test listing: never in a list, search, sitemap or
+  // recommendation; open only by its direct link, and bought only by an
+  // account an admin marked as a test account.
+  testOnly        Boolean       @default(false)
   // 360° view (Pro and Premium plans): images taken around the product, in
   // order; the product page spins through them as the shopper drags.
   spinImages      String[]      @default([])

@@ -63,7 +63,8 @@ async function main() {
   console.log(`[payment-test] owner: ${user.name ?? 'admin'} (${user.role}) — role stays ${user.role}`);
   console.log(`[payment-test] store open for orders: ${storeOpen ? 'YES' : 'no'} (stays as it is)`);
   console.log(`[payment-test] seller profile: ${existingSeller ? `exists (${existingSeller.shopName}, ${existingSeller.status}) — reused` : `create "${SHOP}", APPROVED, at the registered address (New Delhi 110043)`}`);
-  console.log(`[payment-test] listing: ${existingProduct ? `exists (${existingProduct.status}) — reused` : `create "Payment test — not for sale" in ${category.slug}, ₹${PRICE_PAISE / 100} GST incl., stock 1`}`);
+  console.log(`[payment-test] listing: ${existingProduct ? `exists (${existingProduct.status}, ${existingProduct.isVisible ? 'visible' : 'hidden'}, ${existingProduct.testOnly ? 'test-only' : 'NOT test-only'}) — reused, set APPROVED + visible + test-only` : `create "Payment test — not for sale" in ${category.slug}, ₹${PRICE_PAISE / 100} GST incl., stock 1, test-only`}`);
+  console.log('[payment-test] test-only: in no list, search or sitemap; opens by direct link; only test accounts can buy it');
   console.log(`[payment-test] link: /products/${SLUG}`);
   if (!apply) {
     console.log('[payment-test] Dry run: nothing written. Run again with --apply.');
@@ -92,7 +93,7 @@ async function main() {
     }));
   if (existingProduct) {
     await prisma.$transaction([
-      prisma.product.update({ where: { id: existingProduct.id }, data: { status: 'APPROVED', approvedAt: new Date() } }),
+      prisma.product.update({ where: { id: existingProduct.id }, data: { status: 'APPROVED', approvedAt: new Date(), isVisible: true, testOnly: true } }),
       prisma.productVariant.updateMany({ where: { productId: existingProduct.id }, data: { stock: 1 } }),
     ]);
   } else {
@@ -106,6 +107,8 @@ async function main() {
         basePricePaise: PRICE_PAISE,
         status: 'APPROVED',
         approvedAt: new Date(),
+        // Never listed anywhere; reachable by its link, bought only by a test account.
+        testOnly: true,
         variants: { create: { optionValues: {}, optionsKey: '', label: '', size: '', color: '', sku: SKU, pricePaise: PRICE_PAISE, stock: 1 } },
       },
     });

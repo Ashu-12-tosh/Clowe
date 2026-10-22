@@ -28,6 +28,10 @@ import { exceptionActive } from './onboardingException';
  *   while the store is not yet open for orders);
  * - a listing of a brand an admin marked "authorization required", until its
  *   brand authorization document is approved.
+ *
+ * And Clowe's own test listings (Product.testOnly) are left out of every
+ * storefront query (whereFrom) for good: their page opens by direct link only,
+ * and only a test account can buy them (cart and checkout check that).
  */
 export const FOOD_CATEGORY_ROOT_SLUGS = ['grocery', 'supplements'] as const;
 
@@ -107,11 +111,12 @@ export async function visibleProductWhere(): Promise<Prisma.ProductWhereInput> {
 }
 
 export function whereFrom(hidden: ShopperHidden): Prisma.ProductWhereInput {
-  const or: Prisma.ProductWhereInput[] = [];
+  // Test listings never appear in a list, search or sitemap (their page still opens by link).
+  const or: Prisma.ProductWhereInput[] = [{ testOnly: true }];
   if (hidden.categoryIds.size) or.push({ categoryId: { in: [...hidden.categoryIds] } });
   if (hidden.sellerIds.size) or.push({ sellerId: { in: [...hidden.sellerIds] } });
   if (hidden.productIds.size) or.push({ id: { in: [...hidden.productIds] } });
-  return or.length ? { NOT: { OR: or } } : {};
+  return { NOT: { OR: or } };
 }
 
 type ProductKey = { id: string; categoryId: string; sellerId: string; planHidden?: boolean };

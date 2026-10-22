@@ -189,7 +189,7 @@ async function buildHomePayload(): Promise<HomePayload> {
           title: deal.title,
           endsAt: deal.endAt.toISOString(),
           products: deal.items
-            .filter((i) => i.product.status === 'APPROVED' && !isHiddenProduct(i.product))
+            .filter((i) => i.product.status === 'APPROVED' && !i.product.testOnly && !isHiddenProduct(i.product))
             .map((i) => toCard(i.product)),
         }
       : null,

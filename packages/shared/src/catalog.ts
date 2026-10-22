@@ -458,6 +458,8 @@ export interface ProductDetail {
   attributes: ProductAttribute[];
   /** Optional YouTube/Vimeo link the seller added. */
   videoUrl: string | null;
+  /** Clowe's own test listing: open by link only, never indexed, sold only to test accounts. */
+  testOnly: boolean;
   createdAt: string;
 }
 

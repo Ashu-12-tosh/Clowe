@@ -482,6 +482,7 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
       // Rows stored before keys existed still read back canonical.
       attributes: normaliseAttributes(product.attributes, resolved.rules.attributeSchema),
       videoUrl: product.videoUrl,
+      testOnly: product.testOnly,
       createdAt: product.createdAt.toISOString(),
     };
     res.json({ success: true, data: body });

@@ -33,7 +33,7 @@ import {
 import { chooseLostOutcome } from '../services/shipping/lostParcels';
 import { cancelOrderLines } from '../services/lineCancellation';
 import { feeSnapshots } from '../services/commercial';
-import { assertCanPlaceOrders, canPlaceOrders } from '../services/storeOpen';
+import { assertCanPlaceOrders, canBuyTestListings, canPlaceOrders } from '../services/storeOpen';
 import { exchangeAllowed, raiseClaim, rulesForDelivery } from '../services/returnClaims';
 import { raiseComplaint } from '../services/complaintService';
 import { scanViews } from './track';
@@ -155,6 +155,7 @@ ordersRouter.post('/checkout', async (req, res, next) => {
             status: true,
             isVisible: true,
             categoryId: true,
+            testOnly: true,
             seller: { select: { status: true, vacationMode: true } },
           },
         },
@@ -167,11 +168,14 @@ ordersRouter.post('/checkout', async (req, res, next) => {
     // pointed at them, so the shop kept taking money after it was stopped. The
     // coupon is re-validated a few lines down for the same reason.
     const isHidden = await hiddenProductTest();
+    // Test listings (Product.testOnly) sell only to admin-marked test accounts.
+    const testBuyer = variants.some((v) => v.product.testOnly) && (await canBuyTestListings(req.auth!.userId));
     const unsellable = variants.filter(
       (v) =>
         v.retiredAt !== null ||
         v.product.status !== 'APPROVED' ||
         isHidden(v.product) ||
+        (v.product.testOnly && !testBuyer) ||
         !v.product.isVisible ||
         v.product.seller.vacationMode ||
         v.product.seller.status !== 'APPROVED',

@@ -16,6 +16,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return {
     title: product.title,
     description,
+    // Clowe's own test listing: reachable by its link, kept out of search engines.
+    ...(product.testOnly ? { robots: { index: false, follow: false } } : {}),
     openGraph: {
       title: product.title,
       description,

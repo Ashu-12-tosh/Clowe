@@ -13,6 +13,7 @@ import { type CodAvailability,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { hiddenProductTest, isHiddenProduct } from '../services/shopperVisibility';
+import { canBuyTestListings } from '../services/storeOpen';
 import { categoryRulesMap } from '../services/categoryRules';
 import { getSettings } from '../services/settingsService';
 import { applyPromotions } from '../services/promotionService';
@@ -282,13 +283,15 @@ cartRouter.post('/items', async (req, res, next) => {
     const { variantId, quantity } = cartItemAddSchema.parse(req.body);
     const variant = await prisma.productVariant.findUnique({
       where: { id: variantId },
-      include: { product: { select: { id: true, status: true, categoryId: true, sellerId: true } } },
+      include: { product: { select: { id: true, status: true, categoryId: true, sellerId: true, testOnly: true } } },
     });
     if (
       !variant ||
       variant.retiredAt ||
       variant.product.status !== 'APPROVED' ||
-      (await isHiddenProduct(variant.product))
+      (await isHiddenProduct(variant.product)) ||
+      // A test listing: only for accounts an admin marked as test accounts.
+      (variant.product.testOnly && !(await canBuyTestListings(req.auth!.userId)))
     ) {
       throw ApiError.notFound('Product not available');
     }
