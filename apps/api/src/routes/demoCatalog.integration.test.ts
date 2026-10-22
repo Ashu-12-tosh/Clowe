@@ -184,6 +184,20 @@ describe('while the demo catalog is off (the default)', () => {
     expect(home.categories.some((c) => c.slug === 'demo-dept')).toBe(false);
   });
 
+  it('a department with its own Clowe tile image shows that image, as before the Cashfree review', async () => {
+    const books = await prisma.category.findUniqueOrThrow({ where: { slug: 'books' }, select: { imageUrl: true } });
+    const own = 'https://cloweshop.com/uploads/1792104289086-c94e98e30204-w1600.webp';
+    await prisma.category.update({ where: { slug: 'books' }, data: { imageUrl: own } });
+    bustHomeCache();
+    try {
+      const home = (await get('/api/home')).json.data as { categories: { slug: string; imageUrl: string | null }[] };
+      expect(home.categories.find((c) => c.slug === 'books')?.imageUrl).toBe(own);
+    } finally {
+      await prisma.category.update({ where: { slug: 'books' }, data: { imageUrl: books.imageUrl } });
+      bustHomeCache();
+    }
+  });
+
   it('touches no row: product, image, banner, tile and category keep their stock photos in the database', async () => {
     expect(await prisma.productImage.count({ where: { url: { contains: 'picsum.photos' } } })).toBe(1);
     expect(await prisma.homeBanner.count({ where: { imageUrl: { contains: 'picsum.photos' } } })).toBe(1);

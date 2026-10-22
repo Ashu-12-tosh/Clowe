@@ -8,6 +8,7 @@ import {
 import { prisma } from '../db';
 import { isLiveBrand, liveBrands } from '../services/productSearch';
 import { categoryRows } from '../services/categoryRules';
+import { isStockPhoto } from '../services/stockPhotos';
 import { linkedCategorySlug, productTestFrom, shopperHidden, visibleProductWhere, whereFrom } from '../services/shopperVisibility';
 
 export const homeRouter = Router();
@@ -223,8 +224,10 @@ async function buildHomePayload(): Promise<HomePayload> {
             .map((i) => toCard(i.product)),
         }
       : null,
-    // Only departments with something to buy, each shown by one of its own
-    // products (or its icon): an empty department's tile leads nowhere.
+    // Only departments with something to buy (an empty department's tile
+    // leads nowhere), each with its own Clowe tile image as before the
+    // Cashfree review — or, where that is a stock photo or missing, one of its
+    // own products' photos.
     categories: rootCategories
       .filter((c) => !hidden.categoryIds.has(c.id) && stocked.has(c.slug))
       .map((c) => ({
@@ -232,7 +235,7 @@ async function buildHomePayload(): Promise<HomePayload> {
         name: c.name,
         slug: c.slug,
         icon: c.icon,
-        imageUrl: stocked.get(c.slug) ?? null,
+        imageUrl: c.imageUrl && !isStockPhoto(c.imageUrl) ? c.imageUrl : (stocked.get(c.slug) ?? null),
       })),
     trending,
     promoStrips: promoTiles

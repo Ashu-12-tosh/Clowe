@@ -337,11 +337,12 @@ export default function HomeClient({ initial = null }: { initial?: HomePayload |
       {home.trending.length > 0 && (
         <section className="mt-10">
           <SectionHeader title="Trending Now" href="/products" />
-          {/* A grid, not a rail: every product in view without scrolling sideways. */}
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5" data-trending-grid>
-            {home.trending.map((product) => (
-              <TrendingCard key={product.id} product={product} fluid />
-            ))}
+          <div className="mt-4" data-trending-rail>
+            <Scroller>
+              {home.trending.map((product) => (
+                <TrendingCard key={product.id} product={product} />
+              ))}
+            </Scroller>
           </div>
         </section>
       )}
