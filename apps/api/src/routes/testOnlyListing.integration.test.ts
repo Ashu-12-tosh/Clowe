@@ -81,6 +81,9 @@ describe('a test-only listing', () => {
       const suggest = await call('GET', `/api/search/suggest?q=${word}`, token);
       expect(JSON.stringify(suggest.json.data ?? '')).not.toContain(slug);
     }
+    // Nor does it make its department count as stocked: the page says "Coming soon".
+    const dept = await call<{ productCount: number }>('GET', `/api/categories/${categorySlug}`, null);
+    expect(dept.json.data.productCount).toBe(0);
   });
 
   it('opens by its direct link and tells search engines not to index it', async () => {

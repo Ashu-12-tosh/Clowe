@@ -4,7 +4,8 @@ import { prisma } from '../db';
 import { categoryIcon, specFieldsFor } from '@clowe/shared';
 import { categoryRows, chainOf, descendantIds, facetsFromChain, rulesFromChain } from '../services/categoryRules';
 import { isStockPhoto } from '../services/stockPhotos';
-import { hiddenCategoryIds } from '../services/shopperVisibility';
+import { hiddenCategoryIds, visibleProductWhere } from '../services/shopperVisibility';
+import { getSettings } from '../services/settingsService';
 import { ApiError } from '../utils/ApiError';
 
 export const categoriesRouter = Router();
@@ -72,7 +73,8 @@ categoriesRouter.get('/', async (_req, res, next) => {
  */
 async function liveDepartments(hidden: Set<string>): Promise<{ name: string; slug: string }[]> {
   const [groups, rows, roots] = await Promise.all([
-    prisma.product.groupBy({ by: ['categoryId'], where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false } } }),
+    // What a shopper can actually buy: not a hidden seller's listing, nor a test listing.
+    prisma.product.groupBy({ by: ['categoryId'], where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, ...(await visibleProductWhere()) } }),
     categoryRows(),
     prisma.category.findMany({ where: { isActive: true, parentId: null }, orderBy: { sortOrder: 'asc' }, select: { id: true, name: true, slug: true } }),
   ]);
@@ -110,10 +112,12 @@ categoriesRouter.get('/:slug', async (req, res, next) => {
     const scopeIds = await descendantIds(category.id);
     const counts = await prisma.product.groupBy({
       by: ['categoryId'],
-      where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, categoryId: { in: scopeIds } },
+      // Counted as shoppers see them: a hidden seller's or a test listing makes no department "live".
+      where: { status: 'APPROVED', isVisible: true, seller: { vacationMode: false }, categoryId: { in: scopeIds }, ...(await visibleProductWhere()) },
       _count: { _all: true },
     });
     const countById = new Map(counts.map((c) => [c.categoryId, c._count._all]));
+    const showStock = (await getSettings()).demoCatalogEnabled;
 
     const body: CategoryDetail = {
       id: category.id,
@@ -122,8 +126,9 @@ categoriesRouter.get('/:slug', async (req, res, next) => {
       description: category.description,
       icon: category.icon,
       tileShape: category.tileShape === 'circle' ? 'circle' : 'square',
-      // Clowe's own banner art only: a stock/random photo is never shown, even if switched on.
-      banners: category.banners.filter((b) => !b.imageUrl || !isStockPhoto(b.imageUrl)).map((b) => ({
+      // Clowe's own banner art only: a stock/random photo is never shown, even if switched on
+      // (unless the admin turned the demo catalog on, which is stock photos by design).
+      banners: category.banners.filter((b) => showStock || !b.imageUrl || !isStockPhoto(b.imageUrl)).map((b) => ({
         id: b.id,
         eyebrow: b.eyebrow,
         headline: b.headline,

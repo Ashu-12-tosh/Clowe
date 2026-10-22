@@ -10,7 +10,8 @@ import { bustHomeCache } from './home';
  * A hero slide stays on the homepage while its category is still filling
  * (the owner's call for the Electronics slide); it goes only when it leads
  * into a category shoppers cannot see at all (the closed food categories).
- * Promo tiles still drop when their department is empty.
+ * Promo cards into an open but empty department stay too (owner, 22 Oct):
+ * its page says sellers are joining.
  */
 
 const prisma = new PrismaClient();
@@ -40,12 +41,12 @@ afterAll(async () => {
 });
 
 describe('hero slides', () => {
-  it('keeps a slide into a category with nothing live yet, drops one into a closed category, and still drops the empty tile', async () => {
+  it('keeps a slide and a promo card into a category with nothing live yet, drops a slide into a closed category', async () => {
     const home = ((await (await fetch(`${base}/api/home`)).json()) as { data: { banners: { headline: string }[]; promoCards: { href: string }[] } }).data;
     const headlines = home.banners.map((b) => b.headline);
     expect(headlines).toContain('Gadgets, coming soon');
     expect(headlines).not.toContain('Fresh groceries');
-    expect(home.promoCards.map((c) => c.href)).not.toContain('/products?category=banner-gadgets');
+    expect(home.promoCards.map((c) => c.href)).toContain('/products?category=banner-gadgets');
   });
 });
 

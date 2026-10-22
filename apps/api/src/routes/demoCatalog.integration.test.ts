@@ -17,8 +17,8 @@ import { signAccessToken } from '../utils/jwt';
  * Off: the demo store and everything it sells reach no shopper — listing,
  * search, dropdown, home, product and store pages, cart — and no shopper
  * answer carries a picsum or loremflickr URL, whatever row it comes from
- * (home banners, promo tiles, category images and banners). A home link into
- * a department with nothing to buy is left out. On: all of it comes back.
+ * (home banners, promo tiles, category images and banners); a promo card with
+ * a stock photo is left out. On: all of it comes back.
  * Rows are never touched; the seller's own screens are left as they are.
  */
 
@@ -164,24 +164,19 @@ describe('while the demo catalog is off (the default)', () => {
     expect((await call('POST', '/api/cart/items', shopperToken, { variantId: demoVariantId, quantity: 1 })).status).toBe(404);
   });
 
-  it('home keeps its banner with no image yet, shows the books tile with a real book photo, and drops the tile into an empty department', async () => {
+  // Owner, 22 Oct: only Clowe art on the home page, never a stock photo (a
+  // promo card with one stays off; a tile shows its icon), and every open
+  // department has its tile, an empty one included.
+  it('home keeps its banner with no image yet, leaves out stock-photo promo cards, and shows every department tile without a stock image', async () => {
     const home = (await get('/api/home')).json.data as {
       banners: { headline: string; imageUrl: string | null }[];
       promoCards: { href: string; imageUrl: string | null }[];
       categories: { slug: string; imageUrl: string | null }[];
     };
     expect(home.banners).toEqual([expect.objectContaining({ headline: 'Shop Everything.', imageUrl: null })]);
-    expect(home.promoCards.map((c) => c.href)).toEqual(['/products?category=books']);
-    expect(home.promoCards[0]!.imageUrl).toBeNull();
-    // The books tile shows one of its live products' own photos, never the category's stock image.
-    const booksTile = home.categories.find((c) => c.slug === 'books')?.imageUrl;
-    const bookPhotos = await prisma.productImage.findMany({
-      where: { product: { category: { slug: { startsWith: 'books' } } } },
-      select: { url: true },
-    });
-    expect(bookPhotos.map((i) => i.url)).toContain(booksTile);
-    expect(booksTile).not.toContain('loremflickr.com');
-    expect(home.categories.some((c) => c.slug === 'demo-dept')).toBe(false);
+    expect(home.promoCards).toEqual([]);
+    expect(home.categories.find((c) => c.slug === 'books')).toMatchObject({ imageUrl: null });
+    expect(home.categories.find((c) => c.slug === 'demo-dept')).toMatchObject({ imageUrl: null });
   });
 
   it('a department with its own Clowe tile image shows that image, as before the Cashfree review', async () => {

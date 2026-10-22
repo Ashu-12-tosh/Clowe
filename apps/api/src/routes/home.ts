@@ -8,6 +8,7 @@ import {
 import { prisma } from '../db';
 import { isLiveBrand, liveBrands } from '../services/productSearch';
 import { isStockPhoto } from '../services/stockPhotos';
+import { getSettings } from '../services/settingsService';
 import { linkedCategorySlug, productTestFrom, shopperHidden, visibleProductWhere } from '../services/shopperVisibility';
 
 export const homeRouter = Router();
@@ -109,11 +110,12 @@ async function trendingCards(): Promise<HomeProductCard[]> {
   return cards;
 }
 
-/** A stock/random photo (picsum, loremflickr…) — never shown as Clowe art. */
-const isStockArt = (url: string | null | undefined) => !!url && isStockPhoto(url);
-
 async function buildHomePayload(): Promise<HomePayload> {
   const now = new Date();
+  // A stock/random photo (picsum, loremflickr…) is never shown as Clowe art —
+  // unless the admin turned the demo catalog on, which is stock photos by design.
+  const showStock = (await getSettings()).demoCatalogEnabled;
+  const isStockArt = (url: string | null | undefined) => !showStock && !!url && isStockPhoto(url);
   // What shoppers cannot see (closed food categories, the demo catalog) stays
   // off the homepage: its products, its category tiles, and any banner or
   // promo that links into it. A department that is open but still empty is
