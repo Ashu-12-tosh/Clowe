@@ -58,20 +58,14 @@ const link = 'font-semibold text-brand-600 hover:underline';
 const message = (err: unknown, fallback: string) => (err instanceof ApiRequestError ? err.message : fallback);
 const OFFLINE = 'Could not reach Clowe. Check your connection and try again.';
 
-/** Small gold hanger ornament (reference design divider). */
-function HangerDivider() {
+/** Divider with the round Clowe mark in gold, the size the old hanger ornament was. */
+function BrandDivider() {
   return (
     <div className="flex items-center justify-center gap-3">
       <span className="h-px w-16 bg-brand-400/60" />
-      <svg width="22" height="16" viewBox="0 0 24 18" fill="none" className="text-brand-600" aria-hidden="true">
-        <path
-          d="M12 1.5a2.5 2.5 0 0 1 2.5 2.5c0 1.2-.8 1.9-1.5 2.4-.5.4-.8.7-.8 1.1l9.3 6.1c1 .7.5 2.3-.7 2.3H3.2c-1.2 0-1.7-1.6-.7-2.3l9.3-6.1"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          fill="none"
-        />
-      </svg>
+      {/* Decorative: the heading above already names the step. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/brand/icon.svg" alt="" aria-hidden="true" width={22} height={22} className="block select-none" draggable={false} />
       <span className="h-px w-16 bg-brand-400/60" />
     </div>
   );
@@ -468,7 +462,7 @@ export default function LoginFlow({
       {subtitle && <p className={`mt-1.5 text-sm text-gray-500 ${variant === 'shopper' ? 'text-center' : ''}`}>{subtitle}</p>}
       {variant === 'shopper' && (
         <div className="mt-4">
-          <HangerDivider />
+          <BrandDivider />
         </div>
       )}
 
