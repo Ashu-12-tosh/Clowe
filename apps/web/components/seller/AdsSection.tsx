@@ -96,15 +96,21 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 const inputCls = 'mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm';
 
-/** Contact vendor support (Enterprise packages, more credit): chat or email — no phone on the website. */
+/** Contact vendor support (Enterprise packages, more credit): WhatsApp, chat, email. */
 export function ContactVendorSupport({ topic }: { topic: string }) {
   const [legal, setLegal] = useState<LegalEntity | null>(null);
   useEffect(() => {
     getPublicSettings().then((s) => setLegal({ ...s.legalEntity, supportEmail: s.supportEmails?.vendor || s.legalEntity.supportEmail }) /* seller help: vendor-support@ */).catch(() => {});
   }, []);
-  const text = encodeURIComponent(`Clowe vendor support — ${topic}`);
+  const phone = (legal?.supportPhone ?? '').replace(/\D/g, '').slice(-10);
+  const text = encodeURIComponent(`Hello Clowe vendor support — ${topic}`);
   return (
     <div className="flex flex-wrap gap-2" data-contact-support>
+      {phone && (
+        <a href={`https://wa.me/91${phone}?text=${text}`} target="_blank" rel="noopener noreferrer" className="rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700">
+          WhatsApp {legal?.supportPhone}
+        </a>
+      )}
       <Link href="/seller/support" className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-ink-900 hover:bg-gray-50">
         Chat with vendor support
       </Link>

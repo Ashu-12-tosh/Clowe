@@ -457,8 +457,9 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
         // The registered business name, when it differs from the shop's name.
         legalName: product.seller.panName?.trim() || product.seller.shopName,
         address: sellerAddressLine(product.seller),
-        // Via Clowe: email only (owner, 24 Oct 2026: no Clowe phone number on the website).
-        customerCarePhone: viaClowe ? '' : product.seller.storePhone || product.seller.pickupPhone || product.seller.user.phone,
+        customerCarePhone: viaClowe
+          ? settings.legalEntity.supportPhone || settings.legalEntity.supportPhoneAlt || ''
+          : product.seller.storePhone || product.seller.pickupPhone || product.seller.user.phone,
         customerCareEmail: viaClowe
           ? settings.supportEmails?.customer || settings.legalEntity.supportEmail || null
           : product.seller.storeEmail || product.seller.user.email || null,

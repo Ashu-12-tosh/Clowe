@@ -9,7 +9,7 @@ export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://cloweshop.
 
 /** The home page's search snippet (owner, 23 Oct 2026), and the site's default. */
 export const HOME_DESCRIPTION =
-  'Shop fashion, mobiles and more from verified Indian sellers on Clowe. Try clothes on with AI before you buy. Free delivery on every order.';
+  'Shop fashion, mobiles and more from verified Indian sellers on Clowe. Try clothes on with AI before you buy. Free delivery on every order in India.';
 
 /** Google shows about 155–160 characters; shorter than ~140 wastes the snippet. */
 export const DESCRIPTION_MIN = 140;
@@ -91,9 +91,8 @@ export function websiteJsonLd(): Json {
 export function organizationJsonLd(settings: Partial<PublicSettings> | null): Json {
   const legal: Partial<LegalEntity> = settings?.legalEntity ?? {};
   const email = settings?.supportEmails?.customer || legal.supportEmail || undefined;
+  const pin = legal.registeredAddress?.match(/\b(\d{6})\b/)?.[1];
   const social = settings?.socialLinks ? Object.values(settings.socialLinks).filter((u) => /^https:\/\//.test(u)) : [];
-  // Owner, 24 Oct 2026: the legal name and email addresses only — no
-  // registered address, phone number, GSTIN or LLPIN on the website.
   return {
     '@context': 'https://schema.org',
     '@type': 'Organization',
@@ -103,10 +102,29 @@ export function organizationJsonLd(settings: Partial<PublicSettings> | null): Js
     legalName: legal.name || 'CLOWE PARTNERS LLP',
     url: `${SITE_URL}/`,
     logo: { '@type': 'ImageObject', url: LOGO_URL, width: 512, height: 512 },
-    ...(email
+    ...(email ? { email } : {}),
+    ...(legal.gstin ? { taxID: legal.gstin } : {}),
+    ...(legal.registeredAddress
       ? {
-          email,
-          contactPoint: { '@type': 'ContactPoint', contactType: 'customer support', email, areaServed: 'IN', availableLanguage: ['English', 'Hindi'] },
+          address: {
+            '@type': 'PostalAddress',
+            streetAddress: legal.registeredAddress,
+            ...(pin ? { postalCode: pin } : {}),
+            addressRegion: 'Delhi',
+            addressCountry: 'IN',
+          },
+        }
+      : {}),
+    ...(email || legal.supportPhone
+      ? {
+          contactPoint: {
+            '@type': 'ContactPoint',
+            contactType: 'customer support',
+            ...(email ? { email } : {}),
+            ...(legal.supportPhone ? { telephone: legal.supportPhone } : {}),
+            areaServed: 'IN',
+            availableLanguage: ['English', 'Hindi'],
+          },
         }
       : {}),
     ...(social.length ? { sameAs: social } : {}),

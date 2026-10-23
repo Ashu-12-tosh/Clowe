@@ -46,7 +46,7 @@ the Customer is entitled to raise a claim under this Clause.
 
 ## 3. Time Limit and Manner of Raising a Claim
 
-3.1 A claim under Clause 2 must be raised within 48 hours of delivery, through “My Orders” on the Platform, or by e-mail to support@cloweshop.com.
+3.1 A claim under Clause 2 must be raised within 48 hours of delivery, through “My Orders” on the Platform, by e-mail to support@cloweshop.com, or by calling 8929316316.
 
 3.2 The claim must be supported by:
 

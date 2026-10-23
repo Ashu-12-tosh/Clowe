@@ -14,6 +14,8 @@ This Policy is published under Rule 3(2) of the Information Technology (Intermed
 
 - Help Centre — “Help” / “My Orders” on www.cloweshop.com and the app — 24x7
 - E-mail — support@cloweshop.com — 24x7 (responses in working hours)
+- Telephone — 8929316316, 8929314314 — 24x7 (responses in working hours)
+- WhatsApp — 8929316316 — 24x7 (responses in working hours)
 
 1.1 Please keep Your order number ready. For AI Try-On and data-related queries, please state the registered mobile number or e-mail address.
 
@@ -29,6 +31,7 @@ This Policy is published under Rule 3(2) of the Information Technology (Intermed
 
 - In-web chat — within 1 hour during support hours
 - E-mail — support@cloweshop.com: within 24 hours
+- Telephone — Immediate, during support hours
 
 2.3 Every query is assigned a ticket number, which is communicated to the Customer and may be used to track the matter.
 
@@ -38,7 +41,7 @@ This Policy is published under Rule 3(2) of the Information Technology (Intermed
 
 3.1 Where a Customer is not satisfied with the resolution offered at the first level, the matter may be escalated as follows:
 
-Level 1 — Customer Support: support@cloweshop.com. Response within 24 hours.
+Level 1 — Customer Support: support@cloweshop.com/8929316316, 8929314314. Response within 24 hours.
 
 Level 2 — Nodal Officer
 

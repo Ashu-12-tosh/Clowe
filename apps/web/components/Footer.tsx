@@ -229,13 +229,13 @@ export default function Footer({ legal: initialLegal = null }: { legal?: LegalEn
             ))}
             <span className="ml-1 text-xs text-gray-500">🛡 Secure payments</span>
           </div>
-          {/* Who runs the site, as text on every page: the legal name and the
-              brand line (owner, 24 Oct 2026: no address or phone on the website;
-              Contact Us has the email addresses). */}
+          {/* Who runs the site, as text on every page: the registered name, the
+              brand line and the registered office (Contact Us has the rest). */}
           <div className="text-center text-xs leading-relaxed text-gray-600 sm:text-right" data-legal-line>
             <p>
               © {new Date().getFullYear()} {legal.name}. Clowe is a brand owned and operated by {legal.name}.
             </p>
+            {legal.registeredAddress.trim() && <p>Registered office: {legal.registeredAddress}</p>}
             <Link href="/contact" className="font-semibold text-gray-700 hover:text-brand-600 hover:underline">
               Business details &amp; contact
             </Link>

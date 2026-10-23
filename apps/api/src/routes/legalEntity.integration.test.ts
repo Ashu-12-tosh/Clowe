@@ -65,24 +65,12 @@ describe('legal entity settings', () => {
     });
     expect(second.status).toBe(200);
 
-    // Saved in full, for tax invoices, credit notes and labels…
-    const admin = await call('GET', '/api/admin/settings', adminToken);
-    expect((admin.json.data as { legalEntity: unknown }).legalEntity).toEqual({
+    expect(await publicLegal()).toEqual({
       name: 'CLOWE PARTNERS LLP',
       registeredAddress: '12 MG Road, Bengaluru 560001',
       llpin: '',
       // Trimmed and upper-cased on the way in.
       gstin: '29ABCDE1234F1Z5',
-      supportEmail: 'help@cloweshop.com',
-      supportPhone: '',
-      supportPhoneAlt: '',
-    });
-    // …while the website gets the legal name and email only (owner, 24 Oct 2026).
-    expect(await publicLegal()).toEqual({
-      name: 'CLOWE PARTNERS LLP',
-      registeredAddress: '',
-      llpin: '',
-      gstin: '',
       supportEmail: 'help@cloweshop.com',
       supportPhone: '',
       supportPhoneAlt: '',

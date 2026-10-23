@@ -231,11 +231,7 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     pdpOffers: s.pdpOffers,
     couponsEnabled: s.couponsEnabled,
     storeOpenForOrders: s.storeOpenForOrders,
-    // Owner, 24 Oct 2026: the website names only the legal name and email
-    // addresses — no registered address, phone numbers, GSTIN or LLPIN on any
-    // public page. Tax invoices, credit notes and labels read the full entity
-    // server-side (taxInvoice, sellerInvoice), where GST law needs it.
-    legalEntity: { ...s.legalEntity, registeredAddress: '', llpin: '', gstin: '', supportPhone: '', supportPhoneAlt: '' },
+    legalEntity: s.legalEntity,
     returnWindowDays: s.returnWindowDays,
     claimWindowHours: CLAIM_WINDOW_HOURS,
     gstUniformPercent: s.gstUniformPercent,

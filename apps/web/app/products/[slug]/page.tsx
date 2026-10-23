@@ -625,15 +625,12 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
               <div className="flex gap-2">
                 <dt className="w-24 shrink-0 text-gray-500">{product.seller.contactViaClowe ? 'Customer care (Clowe)' : 'Customer care'}</dt>
                 <dd className="min-w-0 break-words text-ink-900">
-                  {/* The seller's own care number; Clowe's care is by email only. */}
-                  {product.seller.customerCarePhone && (
-                    <a href={`tel:${careTel(product.seller.customerCarePhone)}`} className="hover:underline">
-                      {careDisplay(product.seller.customerCarePhone)}
-                    </a>
-                  )}
+                  <a href={`tel:${careTel(product.seller.customerCarePhone)}`} className="hover:underline">
+                    {careDisplay(product.seller.customerCarePhone)}
+                  </a>
                   {product.seller.customerCareEmail && (
                     <>
-                      {product.seller.customerCarePhone && ' · '}
+                      {' · '}
                       <a href={`mailto:${product.seller.customerCareEmail}`} className="break-all hover:underline">
                         {product.seller.customerCareEmail}
                       </a>

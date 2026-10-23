@@ -136,7 +136,8 @@ export function ApplicationStatus({ profile, onChanged }: { profile: SellerProfi
         )}
       </div>
       <p className="mt-4 text-center text-xs text-gray-500">
-        Questions? Write to {legal?.supportEmail || 'support'}, quoting {profile.applicationId}.{' '}
+        Questions? Write to {legal?.supportEmail || 'support'}
+        {legal?.supportPhone ? ` or call ${legal.supportPhone}` : ''}, quoting {profile.applicationId}.{' '}
         <Link href="/" className="font-semibold text-brand-600 hover:underline">
           Back to the store
         </Link>

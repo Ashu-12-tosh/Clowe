@@ -21,9 +21,10 @@ import {
 const inRange = (s: string) => s.length >= DESCRIPTION_MIN && s.length <= DESCRIPTION_MAX;
 
 describe('meta descriptions', () => {
-  it('the home text is the owner’s, word for word', () => {
+  it('the home text is the owner’s, word for word, 140–160 characters', () => {
+    expect(inRange(HOME_DESCRIPTION)).toBe(true);
     expect(HOME_DESCRIPTION).toBe(
-      'Shop fashion, mobiles and more from verified Indian sellers on Clowe. Try clothes on with AI before you buy. Free delivery on every order.',
+      'Shop fashion, mobiles and more from verified Indian sellers on Clowe. Try clothes on with AI before you buy. Free delivery on every order in India.',
     );
   });
 
@@ -88,7 +89,7 @@ describe('structured data', () => {
     expect(JSON.stringify(w.potentialAction)).toContain('/search?q={search_term_string}');
   });
 
-  it('describes the organisation: legal name, logo, contact email and social profiles — never address, phone or GSTIN', () => {
+  it('describes the organisation: legal name, logo, contact email, address, social profiles', () => {
     const o = organizationJsonLd({
       legalEntity: {
         name: 'CLOWE PARTNERS LLP',
@@ -108,13 +109,9 @@ describe('structured data', () => {
       legalName: 'CLOWE PARTNERS LLP',
       email: 'customer-support@cloweshop.com',
       logo: { url: expect.stringMatching(/\/brand\/icon-512\.png$/), width: 512, height: 512 },
-      contactPoint: { email: 'customer-support@cloweshop.com' },
+      address: { postalCode: '110043', addressCountry: 'IN' },
       sameAs: ['https://www.facebook.com/x', 'https://www.instagram.com/cloweshop/'],
     });
-    const text = JSON.stringify(o);
-    for (const hidden of ['Najafgarh', '110043', '8929316316', '07AAWFC9519L1ZL', 'address', 'telephone', 'taxID']) {
-      expect(text).not.toContain(hidden);
-    }
   });
 
   const product = (over: Partial<ProductDetail> = {}) =>
