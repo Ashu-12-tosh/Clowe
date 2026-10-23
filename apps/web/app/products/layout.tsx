@@ -4,7 +4,8 @@ import type { Metadata } from 'next';
 // A product page below sets its own.
 export const metadata: Metadata = {
   title: 'Shop all products',
-  description: 'Browse products from approved sellers on Clowe — fashion, electronics, home, beauty, books and more.',
+  description:
+    'Shop all products on Clowe: fashion, mobiles, electronics, home and kitchen, beauty and more from verified Indian sellers. Prices include GST, free delivery.',
 };
 
 export default function ProductsLayout({ children }: { children: React.ReactNode }) {

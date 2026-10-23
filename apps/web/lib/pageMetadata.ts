@@ -1,12 +1,5 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
-/** A meta description: one line, at most ~155 characters, cut at a word. */
-export function metaDescription(text: string | null | undefined, fallback: string): string {
-  const clean = (text ?? '').replace(/\s+/g, ' ').trim();
-  if (!clean) return fallback;
-  if (clean.length <= 155) return clean;
-  return `${clean.slice(0, 155).replace(/\s+\S*$/, '')}…`;
-}
+// Descriptions themselves: lib/seo.ts (seoDescription).
 
 /**
  * Read one API resource for a page's <title> and description. Server-side,

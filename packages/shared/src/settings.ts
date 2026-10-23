@@ -144,6 +144,14 @@ export interface PlatformSettings {
   codMaxOrderPaise: number;
   /** Cash on Delivery starts at this order total (Payment Policy 6.1: INR 1,000). */
   codMinOrderPaise: number;
+  /**
+   * Cash on Delivery for all of Clowe (owner, 23 Oct 2026: off until the bank
+   * account that receives Delhivery's COD remittances is ready). Off: checkout
+   * and phone orders refuse COD, the payment step greys it out with the
+   * reason, sellers' own COD switches wait, and the footer and help texts do
+   * not offer it. Off by default on production.
+   */
+  codEnabled: boolean;
   /** PIN codes served on a prepaid basis only (Shipping Policy 2.2): no COD there. */
   prepaidOnlyPincodes: string[];
   // Delivery is free on every order. The old freeShippingThresholdPaise row
@@ -218,6 +226,8 @@ export interface PublicSettings {
   supportEmails: PlatformSettings['supportEmails'];
   codMaxOrderPaise: number;
   codMinOrderPaise: number;
+  /** Cash on Delivery offered at all (PlatformSettings.codEnabled). */
+  codEnabled: boolean;
   pdpOffers: PdpOffer[];
   couponsEnabled: boolean;
   /** False until the admin opens the store for orders. */
@@ -291,6 +301,7 @@ export const updateSettingsSchema = z.object({
   kycNameMatchMinScore: z.number().int().min(0).max(100).optional(),
   couponsEnabled: z.boolean().optional(),
   storeOpenForOrders: z.boolean().optional(),
+  codEnabled: z.boolean().optional(),
   /**
    * Closing the store while the store-open checklist has blockers means it
    * cannot reopen until they are settled: the admin confirms they know.

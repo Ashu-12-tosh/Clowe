@@ -87,6 +87,9 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   },
   codMaxOrderPaise: 500000, // ₹5,000
   codMinOrderPaise: 100000, // ₹1,000 (Payment Policy 6.1)
+  // Production offers Cash on Delivery only when the admin turns it on (the
+  // bank account for Delhivery's COD remittances comes first).
+  codEnabled: env.NODE_ENV !== 'production',
   prepaidOnlyPincodes: [],
   adPricing: {
     HOME_BANNER: { '7': 49900, '15': 89900, '30': 149900 },
@@ -197,6 +200,7 @@ export async function getSettings(): Promise<PlatformSettings> {
       (byKey.get('codMaxOrderPaise') as number | undefined) ?? DEFAULT_SETTINGS.codMaxOrderPaise,
     codMinOrderPaise:
       (byKey.get('codMinOrderPaise') as number | undefined) ?? DEFAULT_SETTINGS.codMinOrderPaise,
+    codEnabled: (byKey.get('codEnabled') as boolean | undefined) ?? DEFAULT_SETTINGS.codEnabled,
     prepaidOnlyPincodes:
       (byKey.get('prepaidOnlyPincodes') as string[] | undefined) ?? DEFAULT_SETTINGS.prepaidOnlyPincodes,
     adPricing:
@@ -223,10 +227,15 @@ export async function getPublicSettings(): Promise<PublicSettings> {
     supportEmails: s.supportEmails,
     codMaxOrderPaise: s.codMaxOrderPaise,
     codMinOrderPaise: s.codMinOrderPaise,
+    codEnabled: s.codEnabled,
     pdpOffers: s.pdpOffers,
     couponsEnabled: s.couponsEnabled,
     storeOpenForOrders: s.storeOpenForOrders,
-    legalEntity: s.legalEntity,
+    // Owner, 24 Oct 2026: the website names only the legal name and email
+    // addresses — no registered address, phone numbers, GSTIN or LLPIN on any
+    // public page. Tax invoices, credit notes and labels read the full entity
+    // server-side (taxInvoice, sellerInvoice), where GST law needs it.
+    legalEntity: { ...s.legalEntity, registeredAddress: '', llpin: '', gstin: '', supportPhone: '', supportPhoneAlt: '' },
     returnWindowDays: s.returnWindowDays,
     claimWindowHours: CLAIM_WINDOW_HOURS,
     gstUniformPercent: s.gstUniformPercent,

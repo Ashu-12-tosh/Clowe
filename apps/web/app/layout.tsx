@@ -5,6 +5,7 @@ import AppShell from '@/components/AppShell';
 import SupportChat from '@/components/SupportChat';
 import Toaster from '@/components/Toaster';
 import { serverPublicSettings } from '@/lib/serverSettings';
+import { HOME_DESCRIPTION } from '@/lib/seo';
 import './globals.css';
 
 // Inter carries ~90% of the UI; Cormorant Garamond is reserved for brand
@@ -38,19 +39,35 @@ export const metadata: Metadata = {
     default: 'Clowe — Everything you need, one marketplace',
     template: '%s | Clowe',
   },
-  description:
-    'Multi-vendor online marketplace for electronics, mobiles, fashion, home & kitchen, beauty, books and more — with AI virtual try-on on fashion.',
+  description: HOME_DESCRIPTION,
   keywords: ['online shopping', 'marketplace', 'electronics', 'mobiles', 'fashion', 'home', 'beauty', 'books', 'AI try-on', 'India'],
   openGraph: {
     title: 'Clowe — Everything you need, one marketplace',
-    description: 'Electronics, fashion, home, beauty, books and more from trusted sellers - with AI try-on on fashion.',
+    description: HOME_DESCRIPTION,
     type: 'website',
     siteName: 'Clowe',
+    locale: 'en_IN',
     // The Clowe Shop wordmark, gold on near-black, 1200x630.
     images: [{ url: '/brand/og-image.png', width: 1200, height: 630, alt: 'Clowe Shop' }],
   },
-  twitter: { card: 'summary_large_image', images: ['/brand/og-image.png'] },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Clowe — Everything you need, one marketplace',
+    description: HOME_DESCRIPTION,
+    images: ['/brand/og-image.png'],
+  },
   robots: { index: true, follow: true },
+  // The round Clowe mark everywhere a browser or search engine looks for one.
+  // Declared here (the files live in public/) so each link states its real
+  // sizes: Google wants a square favicon of 48 px or a multiple of it.
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '16x16 32x32 48x48', type: 'image/x-icon' },
+      { url: '/brand/icon.svg', type: 'image/svg+xml' },
+      { url: '/brand/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

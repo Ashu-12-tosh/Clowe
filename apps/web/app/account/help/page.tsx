@@ -35,8 +35,6 @@ import {
 import PolicyText from '@/components/PolicyText';
 
 /** Where "Call us" actually goes. The email address comes from platform settings. */
-const SUPPORT_PHONE = '+911800000000';
-const SUPPORT_HOURS = 'Available everyday, 9 AM – 9 PM';
 
 const HELP_RESOURCES = [
   { slug: 'shipping-info', label: 'Shipping Information', icon: '🚚' },
@@ -388,21 +386,6 @@ export default function HelpCenterPage() {
                   className="t-caption shrink-0 rounded-lg border border-brand-600 px-3 py-1.5 font-bold text-brand-700 transition hover:bg-brand-50"
                 >
                   Send Email
-                </a>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cream-100">
-                  📞
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="t-card-label text-ink-900">Call Us</p>
-                  <p className="t-caption text-gray-500">{SUPPORT_HOURS}</p>
-                </div>
-                <a
-                  href={`tel:${SUPPORT_PHONE}`}
-                  className="t-caption shrink-0 rounded-lg border border-brand-600 px-3 py-1.5 font-bold text-brand-700 transition hover:bg-brand-50"
-                >
-                  Call Now
                 </a>
               </li>
             </ul>

@@ -2,6 +2,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { COD_OFF_MESSAGE } from '@clowe/shared';
 import { createApp } from '../app';
 import { FIXTURE, seedFixture } from '../test/fixture';
 import { DEFAULT_SETTINGS, setSetting } from '../services/settingsService';
@@ -32,6 +33,7 @@ afterEach(async () => {
   await setSetting('codMaxOrderPaise', DEFAULT_SETTINGS.codMaxOrderPaise);
   await setSetting('codMinOrderPaise', DEFAULT_SETTINGS.codMinOrderPaise);
   await setSetting('prepaidOnlyPincodes', DEFAULT_SETTINGS.prepaidOnlyPincodes);
+  await setSetting('codEnabled', true);
 });
 
 afterAll(async () => {
@@ -173,5 +175,38 @@ describe('the COD floor and prepaid-only PIN codes (Payment Policy 6.1, Shipping
     const json = (await res.json()) as { data?: { available: boolean; reason: string | null } };
     expect(json.data?.available).toBe(false);
     expect(json.data?.reason).toContain('prepaid only');
+  });
+});
+
+// Owner, 23 Oct 2026: COD stays off on Clowe until the bank account for
+// Delhivery's COD remittances is ready. One switch, enforced on every path.
+describe('Cash on Delivery switched off for Clowe', () => {
+  it('refuses COD at checkout inside the range and creates no order; paying online is fine', async () => {
+    await setSetting('codEnabled', false);
+    const s = await shopperWithCart(UNDER_CAP);
+    const { status, json } = await checkout(s.token, s.addressId, 'COD');
+    expect(status).toBe(400);
+    expect(json.error?.code).toBe('COD_NOT_ELIGIBLE');
+    expect(json.error?.message).toBe(COD_OFF_MESSAGE);
+    expect(await prisma.order.count({ where: { userId: s.userId } })).toBe(0);
+    expect((await checkout(s.token, s.addressId, 'UPI')).status).toBe(200);
+  });
+
+  it("says so on the cart's COD check and in the public settings", async () => {
+    await setSetting('codEnabled', false);
+    const s = await shopperWithCart(UNDER_CAP);
+    const res = await fetch(`${base}/api/cart/cod-availability?addressId=${s.addressId}`, {
+      headers: { authorization: `Bearer ${s.token}` },
+    });
+    const json = (await res.json()) as { data?: { available: boolean; reason: string | null } };
+    expect(json.data).toEqual({ available: false, reason: COD_OFF_MESSAGE });
+    const pub = (await (await fetch(`${base}/api/settings/public`)).json()) as { data: { codEnabled: boolean } };
+    expect(pub.data.codEnabled).toBe(false);
+  });
+
+  it('is on again when switched back (outside production it starts on)', async () => {
+    await setSetting('codEnabled', true);
+    const s = await shopperWithCart(UNDER_CAP);
+    expect((await checkout(s.token, s.addressId, 'COD')).status).toBe(200);
   });
 });

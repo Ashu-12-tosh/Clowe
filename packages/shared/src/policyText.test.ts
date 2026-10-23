@@ -59,3 +59,19 @@ describe('non-returnable categories in the Return Policy', () => {
     expect(fillPolicyText('{{nonReturnableCategories}}', null)).toBe('the categories whose products say "Not returnable"');
   });
 });
+
+describe('Cash on Delivery in help texts ({{codOffer}})', () => {
+  it('never offers COD while it is switched off', () => {
+    const off = fillPolicyText('{{codOffer}}', { codEnabled: false, codMinOrderPaise: 100000, codMaxOrderPaise: 500000 });
+    expect(off).toBe('Cash on Delivery is not offered yet: every order is paid online, by UPI, card or net banking.');
+  });
+
+  it('gives the range once it is on', () => {
+    const on = fillPolicyText('{{codOffer}}', { codEnabled: true, codMinOrderPaise: 100000, codMaxOrderPaise: 500000 });
+    expect(on).toContain('Cash on Delivery is available on orders from ₹1,000 to ₹5,000');
+  });
+
+  it('promises nothing when settings are unknown', () => {
+    expect(fillPolicyText('{{codOffer}}', null)).toBe('The payment step shows whether Cash on Delivery is offered for your order.');
+  });
+});

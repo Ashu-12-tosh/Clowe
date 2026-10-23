@@ -26,6 +26,7 @@ import {
   sizeHint
 } from '@clowe/shared';
 import { api, ApiRequestError, uploadImages } from '@/lib/api';
+import { getPublicSettings } from '@/lib/settings';
 import { issuesToFieldErrors, useFieldErrors } from '@/lib/fieldErrors';
 import { toast } from '@/lib/toast';
 import FieldError from '@/components/FieldError';
@@ -107,6 +108,13 @@ export default function SellerStoreSettingsPage() {
   const [uploading, setUploading] = useState<'logo' | 'banner' | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  // Cash on Delivery for all of Clowe: while it is off, a seller's own switch waits.
+  const [codOnForClowe, setCodOnForClowe] = useState(true);
+  useEffect(() => {
+    getPublicSettings()
+      .then((s) => setCodOnForClowe(s.codEnabled !== false))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -914,6 +922,12 @@ export default function SellerStoreSettingsPage() {
                       </span>
                     </span>
                   </label>
+                  {!codOnForClowe && (
+                    <p className="mt-2 rounded-lg bg-white px-3 py-2 text-xs text-gray-700" data-cod-off-for-clowe>
+                      Cash on Delivery is not offered on Clowe yet, so buyers pay online for every order. Your choice
+                      here is kept and applies once Clowe switches COD on.
+                    </p>
+                  )}
                 </div>
                 <p className="mt-3 rounded-lg bg-cream-50 px-3 py-2 text-[11px] text-gray-600">
                   Delivery is free for buyers on every order, from every shop. You pay Delhivery&apos;s

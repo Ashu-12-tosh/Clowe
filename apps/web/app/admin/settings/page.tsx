@@ -47,6 +47,7 @@ export default function AdminSettingsPage() {
   // Off: every payout waits for an admin's approval (Payout approvals).
   const [payoutAutoApprove, setPayoutAutoApprove] = useState(false);
   const [couponsEnabled, setCouponsEnabled] = useState(false);
+  const [codEnabled, setCodEnabled] = useState(false);
   const [storeOpen, setStoreOpen] = useState(false);
   const [foodCategoriesEnabled, setFoodCategoriesEnabled] = useState(false);
   const [demoCatalogEnabled, setDemoCatalogEnabled] = useState(false);
@@ -85,6 +86,7 @@ export default function AdminSettingsPage() {
         setTryonMin(toRupees(s.tryonMinPricePaise));
         setKycMinScore(String(s.kycNameMatchMinScore));
         setCouponsEnabled(s.couponsEnabled);
+        setCodEnabled(s.codEnabled);
         setStoreOpen(s.storeOpenForOrders);
         setFoodCategoriesEnabled(s.foodCategoriesEnabled);
         setDemoCatalogEnabled(s.demoCatalogEnabled);
@@ -157,6 +159,7 @@ export default function AdminSettingsPage() {
           socialLinks: social,
           supportEmails,
           legalEntity: legal,
+          codEnabled,
           codMaxOrderPaise: toPaise(codMaxRupees),
           codMinOrderPaise: toPaise(codMinRupees),
           prepaidOnlyPincodes: prepaidOnly.split(/[\s,]+/).filter(Boolean),
@@ -464,7 +467,22 @@ export default function AdminSettingsPage() {
       {/* Cash on Delivery */}
       <div className="mt-3 rounded-2xl border border-gray-100 bg-white p-4">
         <h2 className="text-sm font-bold">💵 Cash on Delivery</h2>
+        <label className="mt-2 flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="codEnabled"
+            checked={codEnabled}
+            onChange={(e) => setCodEnabled(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>Offer Cash on Delivery on Clowe</span>
+        </label>
         <p className="mt-1 text-xs text-gray-400">
+          Off: every order is paid online. Checkout and phone orders refuse COD, the payment step
+          greys it out with the reason, and the footer and help pages do not offer it. Turn it on
+          only once the bank account that receives Delhivery&apos;s COD remittances is ready.
+        </p>
+        <p className="mt-2 text-xs text-gray-400">
           Offered up to this order total; above it the shopper must pay online. Checked when the
           order is placed, for checkout and phone orders alike. Sellers can still switch COD off for
           their own goods in their store settings.

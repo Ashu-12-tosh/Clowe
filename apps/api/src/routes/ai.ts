@@ -240,7 +240,7 @@ aiRouter.post('/support-chat', async (req, res, next) => {
     const settings = await getSettings();
     const facts = fillPolicyText(
       'Delivery is free on every order; it usually arrives in 2–7 working days depending on the PIN code. ' +
-        'Cash on Delivery is available for orders from {{codMin}} to {{codMax}}. ' +
+        '{{codOffer}} ' +
         'An item that arrives damaged, defective or wrong can be claimed within 48 hours of delivery from My Orders, for an exchange or a refund — there are no change-of-mind returns. ' +
         'Orders can be cancelled until they are shipped. ' +
         'Help: {{customerSupportEmail}}. Grievances: see the Customer Support and Grievance Policy.',

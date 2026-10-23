@@ -457,9 +457,8 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
         // The registered business name, when it differs from the shop's name.
         legalName: product.seller.panName?.trim() || product.seller.shopName,
         address: sellerAddressLine(product.seller),
-        customerCarePhone: viaClowe
-          ? settings.legalEntity.supportPhone || settings.legalEntity.supportPhoneAlt || ''
-          : product.seller.storePhone || product.seller.pickupPhone || product.seller.user.phone,
+        // Via Clowe: email only (owner, 24 Oct 2026: no Clowe phone number on the website).
+        customerCarePhone: viaClowe ? '' : product.seller.storePhone || product.seller.pickupPhone || product.seller.user.phone,
         customerCareEmail: viaClowe
           ? settings.supportEmails?.customer || settings.legalEntity.supportEmail || null
           : product.seller.storeEmail || product.seller.user.email || null,
@@ -483,6 +482,8 @@ productsRouter.get('/:slug', optionalAuth, async (req, res, next) => {
       attributes: normaliseAttributes(product.attributes, resolved.rules.attributeSchema),
       videoUrl: product.videoUrl,
       testOnly: product.testOnly,
+      metaTitle: product.metaTitle,
+      metaDescription: product.metaDescription,
       createdAt: product.createdAt.toISOString(),
     };
     res.json({ success: true, data: body });

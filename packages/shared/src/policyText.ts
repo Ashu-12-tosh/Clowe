@@ -24,6 +24,8 @@ export interface PolicyValues {
   sellerCancelPenaltyPaise?: number | null;
   codMaxOrderPaise?: number | null;
   codMinOrderPaise?: number | null;
+  /** Cash on Delivery switched on for Clowe (PlatformSettings.codEnabled). */
+  codEnabled?: boolean | null;
   gstUniformPercent?: number | null;
   sellerFees?: Partial<SellerFeeSchedule> | null;
   supportEmails?: { customer?: string; vendor?: string } | null;
@@ -73,6 +75,13 @@ function tokens(v: PolicyValues): Record<string, string> {
     '{{sellerCancelPenalty}}': v.sellerCancelPenaltyPaise != null ? rupees(v.sellerCancelPenaltyPaise) : 'a fixed penalty',
     '{{codMax}}': v.codMaxOrderPaise != null ? rupees(v.codMaxOrderPaise) : 'the limit shown at checkout',
     '{{codMin}}': v.codMinOrderPaise != null ? rupees(v.codMinOrderPaise) : 'the minimum shown at checkout',
+    // Whether COD is offered at all, as a whole sentence: never a promise while it is off.
+    '{{codOffer}}':
+      v.codEnabled === false
+        ? 'Cash on Delivery is not offered yet: every order is paid online, by UPI, card or net banking.'
+        : v.codEnabled === true
+          ? `Cash on Delivery is available on orders from ${v.codMinOrderPaise != null ? rupees(v.codMinOrderPaise) : 'the minimum shown at checkout'} to ${v.codMaxOrderPaise != null ? rupees(v.codMaxOrderPaise) : 'the limit shown at checkout'}; pick it on the payment step and keep the amount ready at handover. Some sellers do not offer it, and the payment step says so.`
+          : 'The payment step shows whether Cash on Delivery is offered for your order.',
     '{{gst}}': v.gstUniformPercent != null ? percent(v.gstUniformPercent) : 'the rate shown on each product',
     '{{commission}}': fee('commissionPercent', percent, 'the rate shown on your Payouts page'),
     '{{gatewayFee}}': fee('gatewayPercent', percent, 'the rate shown on your Payouts page'),

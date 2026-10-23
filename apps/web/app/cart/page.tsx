@@ -25,6 +25,7 @@ import {
 import PolicyText from '@/components/PolicyText';
 import { imageAt, STORE_CLOSED_MESSAGE } from '@clowe/shared';
 import { LaunchingSoon, useOrdersOpen } from '@/lib/ordersOpen';
+import { usePaymentMethodNames } from '@/lib/paymentMethods';
 
 const MAX_QTY = 10;
 
@@ -36,8 +37,6 @@ const TRUST_STRIP = [
   { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
 ];
 
-// How customers can pay, by method — not card or wallet brands, which depend on the gateway.
-const PAYMENT_METHODS = ['UPI', 'Cards', 'Net banking', 'Cash on Delivery'];
 
 /** Header/summary counts are in items, matching the "(5 Items)" in the title. */
 function itemCount(lines: CartLine[]): number {
@@ -45,6 +44,8 @@ function itemCount(lines: CartLine[]): number {
 }
 
 export default function CartPage() {
+  // Cash on Delivery is named only while it is switched on for Clowe.
+  const paymentMethods = usePaymentMethodNames();
   const [cart, setCart] = useState<CartView | null>(null);
   const [loggedOut, setLoggedOut] = useState(false);
   const [error, setError] = useState('');
@@ -607,7 +608,7 @@ export default function CartPage() {
           <div className="rounded-2xl border border-gray-100 bg-white p-4">
             <p className="text-sm font-bold text-ink-900">We Accept</p>
             <div className="mt-2.5 flex flex-wrap gap-2">
-              {PAYMENT_METHODS.map((method) => (
+              {paymentMethods.map((method) => (
                 <span
                   key={method}
                   className="rounded-md border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-bold tracking-wide text-gray-600"

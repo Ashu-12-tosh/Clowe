@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getPublicSettings, onPublicSettingsChanged } from '@/lib/settings';
+import { usePaymentMethodNames } from '@/lib/paymentMethods';
 import { ExternalLink } from '@/components/ExternalLink';
 import { openCookieSettings } from '@/lib/cookieConsent';
 import { DEFAULT_LEGAL_ENTITY, safeHref, type LegalEntity } from '@clowe/shared';
@@ -58,8 +59,6 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   },
 ];
 
-// How customers can pay, by method — not card or wallet brands, which depend on the gateway.
-const PAYMENT_METHODS = ['UPI', 'Cards', 'Net banking', 'Cash on Delivery'];
 
 /**
  * Social marks, drawn to the same recipe as the other icons in this app —
@@ -130,6 +129,8 @@ export default function Footer({ legal: initialLegal = null }: { legal?: LegalEn
   });
   // The registered name (at least) from the first paint, so the line never flashes empty.
   const [legal, setLegal] = useState<LegalEntity>({ ...DEFAULT_LEGAL_ENTITY, ...(initialLegal ?? {}) });
+  // Cash on Delivery is named only while it is switched on for Clowe.
+  const paymentMethods = usePaymentMethodNames();
 
   useEffect(() => {
     const load = () =>
@@ -218,7 +219,7 @@ export default function Footer({ legal: initialLegal = null }: { legal?: LegalEn
             <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
               Secure Payments
             </span>
-            {PAYMENT_METHODS.map((method) => (
+            {paymentMethods.map((method) => (
               <span
                 key={method}
                 className="rounded border border-gray-200 bg-cream-50 px-2.5 py-1 text-[11px] font-bold text-gray-600"
@@ -228,13 +229,13 @@ export default function Footer({ legal: initialLegal = null }: { legal?: LegalEn
             ))}
             <span className="ml-1 text-xs text-gray-500">🛡 Secure payments</span>
           </div>
-          {/* Who runs the site, as text on every page: the registered name, the
-              brand line and the registered office (Contact Us has the rest). */}
+          {/* Who runs the site, as text on every page: the legal name and the
+              brand line (owner, 24 Oct 2026: no address or phone on the website;
+              Contact Us has the email addresses). */}
           <div className="text-center text-xs leading-relaxed text-gray-600 sm:text-right" data-legal-line>
             <p>
               © {new Date().getFullYear()} {legal.name}. Clowe is a brand owned and operated by {legal.name}.
             </p>
-            {legal.registeredAddress.trim() && <p>Registered office: {legal.registeredAddress}</p>}
             <Link href="/contact" className="font-semibold text-gray-700 hover:text-brand-600 hover:underline">
               Business details &amp; contact
             </Link>

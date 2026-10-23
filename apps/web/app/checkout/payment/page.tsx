@@ -108,11 +108,14 @@ function PaymentPageInner() {
   // out on its account — the server enforces it regardless.
   const [codMaxPaise, setCodMaxPaise] = useState<number | null>(null);
   const [codMinPaise, setCodMinPaise] = useState<number | null>(null);
+  // Cash on Delivery for all of Clowe: off, the option is greyed out with the reason.
+  const [codOffForClowe, setCodOffForClowe] = useState(false);
   useEffect(() => {
     getPublicSettings()
       .then((s) => {
         setCodMaxPaise(s.codMaxOrderPaise);
         setCodMinPaise(s.codMinOrderPaise);
+        setCodOffForClowe(s.codEnabled === false);
       })
       .catch(() => {});
   }, []);
@@ -180,6 +183,7 @@ function PaymentPageInner() {
     if (m === 'EMI' && totalPaise < EMI_MIN_PAISE) {
       return `Available on orders above ${formatPaise(EMI_MIN_PAISE)}`;
     }
+    if (m === 'COD' && codOffForClowe) return 'Not available yet — please pay online';
     if (m === 'COD' && codMaxPaise !== null && totalPaise > codMaxPaise) {
       return `Not available above ${formatPaise(codMaxPaise)}`;
     }

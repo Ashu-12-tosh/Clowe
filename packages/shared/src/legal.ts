@@ -86,10 +86,26 @@ export function legalEntityType(name: string): string {
 const TOKEN = /\{\{legal\.(name|displayName|entityType|registeredAddress|llpin|gstin|pan|supportEmail|supportPhoneAlt|supportPhone)\}\}/g;
 
 /**
- * Fill {{legal.*}} tokens in a policy page's markdown. A line naming a field
- * that is empty is dropped whole, so "GSTIN: {{legal.gstin}}" disappears
- * rather than reading "GSTIN: ". Values are admin-typed: anything the page's
- * markdown would read as formatting or a link is taken out first.
+ * Phrases a public page leaves out (owner, 24 Oct 2026: the website names only
+ * the legal name and email addresses — no registered address, phone number,
+ * GSTIN, PAN or LLPIN). Tax invoices, credit notes and labels are not filled
+ * from here and keep them, as GST law requires.
+ */
+const PUBLIC_OMIT = [
+  /,?\s*registered office at \{\{legal\.registeredAddress\}\}/g,
+  /\s*\(GSTIN \{\{legal\.gstin\}\}, PAN \{\{legal\.pan\}\}\)/g,
+  // Mid-sentence only ("… officer Address: … E-mail: …"); a line that is just the address is dropped below.
+  /[ \t]+Address: \{\{legal\.registeredAddress\}\}(?=[ \t]+\S)/g,
+];
+const NOT_ON_PUBLIC_PAGES = ['registeredAddress', 'llpin', 'gstin', 'pan', 'supportPhone', 'supportPhoneAlt'] as const;
+
+/**
+ * Fill {{legal.*}} tokens in a public page's markdown. The address, phone,
+ * GSTIN, PAN and LLPIN are never filled in: the phrases above are cut from
+ * their sentence, and a line naming one of them (or any field that is empty)
+ * is dropped whole, so "GSTIN: {{legal.gstin}}" disappears rather than
+ * reading "GSTIN: ". Values are admin-typed: anything the page's markdown
+ * would read as formatting or a link is taken out first.
  */
 export function fillLegalEntity(markdown: string, legal: LegalEntity | null | undefined): string {
   const entity = { ...DEFAULT_LEGAL_ENTITY, ...(legal ?? {}) };
@@ -99,9 +115,10 @@ export function fillLegalEntity(markdown: string, legal: LegalEntity | null | un
     entityType: legalEntityType(entity.name),
     pan: panFromGstin(entity.gstin) ?? '',
   };
+  for (const key of NOT_ON_PUBLIC_PAGES) values[key] = '';
   // A multi-line address reads as one line, without doubling a comma the line already ends with.
   const clean = (v: string) => v.replace(/[[\]*`]/g, '').replace(/\s*,?\s*\n\s*/g, ', ').trim();
-  return markdown
+  return PUBLIC_OMIT.reduce((md, phrase) => md.replace(phrase, ''), markdown)
     .split('\n')
     .flatMap((line) => {
       let empty = false;

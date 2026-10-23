@@ -64,7 +64,7 @@ export const FAQ_ENTRIES: FaqEntry[] = [
     label: 'Payment & refund questions',
     keywords: ['payment', 'refund', 'paisa', 'money', 'upi', 'card', 'paid', 'charged', 'debit'],
     answer:
-      'Payments on Clowe go through certified payment gateways (UPI, cards, net banking). Prices include GST and delivery is free.\n\n• Payment failed but money deducted? Your bank returns it automatically; it usually takes 5–7 business days.\n• Refund for a cancelled order: started as soon as you cancel; banks usually show it in 5–7 business days.\n• Refund for a returned item: made once the item reaches the seller and is checked.\n• Every refund goes back to the original payment method.\n\nCash on Delivery is available on orders up to {{codMax}} — pick it on the payment step and keep the amount ready at handover. Some sellers do not offer it, and the payment step says so.',
+      'Payments on Clowe go through certified payment gateways (UPI, cards, net banking). Prices include GST and delivery is free.\n\n• Payment failed but money deducted? Your bank returns it automatically; it usually takes 5–7 business days.\n• Refund for a cancelled order: started as soon as you cancel; banks usually show it in 5–7 business days.\n• Refund for a returned item: made once the item reaches the seller and is checked.\n• Every refund goes back to the original payment method.\n\n{{codOffer}}',
     followUps: ['helped', 'complaint', 'menu'],
   },
   {

@@ -124,7 +124,7 @@ These FAQs are provided for convenience and ease of understanding. They summaris
 
 ## J. Complaints
 
-49. How do I complain? Through “Help” on the Platform, by e-mail to support@cloweshop.com, or by telephone at 8929316316, 8929314314. Escalation lies to the Nodal Officer and then to the Grievance Officer.
+49. How do I complain? Through “Help” on the Platform, or by e-mail to support@cloweshop.com. Escalation lies to the Nodal Officer and then to the Grievance Officer.
 
 50. How quickly will you respond? Complaints are acknowledged within twenty-four (24) hours and disposed of within fifteen (15) days. Consumer complaints are acknowledged within forty-eight (48) hours and redressed within one (15) days. Complaints about obscene or morphed imagery are acted upon within twenty-four (24) hours.
 

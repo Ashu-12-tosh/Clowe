@@ -1086,6 +1086,8 @@ adminRouter.put('/settings', async (req, res, next) => {
       'couponsEnabled',
       // The pre-launch switch: shoppers can place orders.
       'storeOpenForOrders',
+      // Cash on Delivery for all of Clowe.
+      'codEnabled',
     ] as const) {
       if (input[key] !== undefined) await setSetting(key, input[key]);
     }

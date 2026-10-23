@@ -460,6 +460,9 @@ export interface ProductDetail {
   videoUrl: string | null;
   /** Clowe's own test listing: open by link only, never indexed, sold only to test accounts. */
   testOnly: boolean;
+  /** The seller's own search title and snippet (listing form → SEO), when filled in. */
+  metaTitle: string | null;
+  metaDescription: string | null;
   createdAt: string;
 }
 

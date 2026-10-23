@@ -4,7 +4,8 @@ import { bpsToPercent, slabDescription, type ReferralFeeSlab } from '@clowe/shar
 
 export const metadata: Metadata = {
   title: 'Referral Fee Schedule',
-  description: 'Clowe’s referral fee for sellers, by product category and selling price.',
+  description:
+    'Clowe referral fee schedule for sellers: the rate for every product category and price slab, charged on the whole selling price including GST, with examples.',
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';

@@ -191,7 +191,6 @@ export default function SellerRegisterPage() {
         <p className="mt-2 text-sm text-gray-600">We&apos;ll review it and notify you by SMS and e-mail. You can list products once it is approved.</p>
         <p className="mt-4 text-xs text-gray-500">
           Questions? {legal?.supportEmail ? <span className="font-semibold text-ink-900">{legal.supportEmail}</span> : 'Use the support chat'}
-          {legal?.supportPhone ? <> · {legal.supportPhone}</> : null}
         </p>
         <Link href="/" className="mt-6 inline-block rounded-lg border border-gray-300 px-5 py-2 text-sm font-semibold text-ink-900 hover:border-brand-600">
           Back to the store

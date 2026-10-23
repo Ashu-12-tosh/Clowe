@@ -4,7 +4,6 @@ CLOWE SHOP— www.cloweshop.com
 
 Operated by CLOWE PARTNERS LLP (GSTIN {{legal.gstin}}, PAN {{legal.pan}}), registered office at {{legal.registeredAddress}}
 
-GSTIN: 07AAWFC9519L1ZL , PAN: AAWFC9519L
 
 *Last updated: 16 October 2026*
 

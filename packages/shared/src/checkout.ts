@@ -245,18 +245,23 @@ export const EMI_MIN_PAISE = 300000;
 
 /**
  * Why Cash on Delivery is not offered for this order by the platform's own
- * rules (Payment Policy 6.1, Shipping Policy 2.2), or null: the order total
- * must be within the COD range, and the PIN code not a prepaid-only one. The
- * courier's own serviceability is checked separately.
+ * rules (Payment Policy 6.1, Shipping Policy 2.2), or null: COD must be
+ * switched on for Clowe (PlatformSettings.codEnabled), the order total within
+ * the COD range, and the PIN code not a prepaid-only one. The courier's own
+ * serviceability is checked separately.
  */
+export const COD_OFF_MESSAGE = 'Cash on Delivery is not available yet — please pay online';
+
 export function codPlatformRefusal(input: {
   totalPaise: number;
   pincode: string;
+  codEnabled: boolean;
   codMinOrderPaise: number;
   codMaxOrderPaise: number;
   prepaidOnlyPincodes: readonly string[];
 }): string | null {
   const rupees = (p: number) => `₹${(p / 100).toLocaleString('en-IN')}`;
+  if (!input.codEnabled) return COD_OFF_MESSAGE;
   if (input.totalPaise < input.codMinOrderPaise) {
     return `Cash on Delivery is available on orders from ${rupees(input.codMinOrderPaise)} — please pay online`;
   }

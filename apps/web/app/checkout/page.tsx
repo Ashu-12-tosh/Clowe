@@ -43,6 +43,7 @@ import {
   TruckIcon,
 } from '@/components/cart/CartIcons';
 import PolicyText from '@/components/PolicyText';
+import { usePaymentMethodNames } from '@/lib/paymentMethods';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -55,8 +56,6 @@ const TRUST_STRIP = [
   { Icon: HeadsetIcon, title: 'Help & Support', text: 'Help centre and support chat' },
 ];
 
-// How customers can pay, by method — not card or wallet brands, which depend on the gateway.
-const PAYMENT_METHODS = ['UPI', 'Cards', 'Net banking', 'Cash on Delivery'];
 
 const DELIVERY_ICON: Record<DeliveryMethod, typeof TruckIcon> = {
   STANDARD: TruckIcon,
@@ -94,6 +93,8 @@ function Step({
 
 export default function CheckoutPage() {
   const couponsEnabled = useCouponsEnabled();
+  // Cash on Delivery is named only while it is switched on for Clowe.
+  const paymentMethods = usePaymentMethodNames();
   const router = useRouter();
   const ordersOpen = useOrdersOpen();
   const [cart, setCart] = useState<CartView | null>(null);
@@ -788,7 +789,7 @@ export default function CheckoutPage() {
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {PAYMENT_METHODS.map((method) => (
+              {paymentMethods.map((method) => (
                 <span
                   key={method}
                   className="rounded-md border border-gray-200 px-2.5 py-1.5 text-[11px] font-bold tracking-wide text-gray-600"
