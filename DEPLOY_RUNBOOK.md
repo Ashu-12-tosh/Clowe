@@ -42,10 +42,24 @@ ssh root@YOUR_VPS_IP
 curl -fsSL https://get.docker.com | sh
 apt-get install -y ufw git
 ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw --force enable
+# Rate-limit SSH: more than 6 new connections in 30 s from one address are refused.
+ufw limit OpenSSH
 ```
 
 ✅ **Correct result:** `docker --version` prints `Docker version 2x.x.x`, and
-`docker compose version` prints `Docker Compose version v2.x.x`.
+`docker compose version` prints `Docker Compose version v2.x.x`. `ufw status`
+shows `OpenSSH LIMIT` and `80`, `443 ALLOW` (IPv4 and v6), nothing else.
+
+> 🚫 **Never publish the db, api or web ports.** In `docker-compose.prod.yml`
+> only `nginx` has a `ports:` block (80 and 443). The `db` (5432), `api` (4000)
+> and `web` (3000) services must stay internal — no `ports:` on them, not even
+> "just for a minute" or bound to a test address. Docker writes its own
+> iptables rules for published ports, which **bypass ufw**: a published 5432
+> is open to the whole internet whatever `ufw status` says. To reach the
+> database, SSH in and use `dc exec db psql -U "$POSTGRES_USER" "$POSTGRES_DB"`
+> (or `dc exec api …` for the API) — nothing needs a published port.
+> Check after every change: `docker ps --format '{{.Names}} {{.Ports}}'` shows
+> `0.0.0.0` only on `clowe-nginx-1`.
 
 ❌ **If `docker compose` says "is not a docker command":** you have the old
 standalone `docker-compose`. This runbook needs Compose v2. Re-run the
