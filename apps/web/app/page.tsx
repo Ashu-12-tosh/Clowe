@@ -18,7 +18,9 @@ export default async function HomePage() {
   const [home, settings] = await Promise.all([serverApi<HomePayload>('/api/home'), serverPublicSettings()]);
   return (
     <>
-      <JsonLd data={[websiteJsonLd(), organizationJsonLd(settings)]} />
+      {/* Two blocks, not one array: every validator reads each on its own. */}
+      <JsonLd data={websiteJsonLd()} />
+      <JsonLd data={organizationJsonLd(settings)} />
       <HomeClient initial={home} />
     </>
   );
