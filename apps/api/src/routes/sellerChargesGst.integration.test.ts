@@ -54,7 +54,7 @@ let order: { orderId: string; itemId: string };
 
 beforeAll(async () => {
   await setSetting('legalEntity', { ...DEFAULT_LEGAL_ENTITY, gstin: CLOWE_GSTIN });
-  const sellerUser = await prisma.user.create({ data: { phone: '9177300001', name: 'GST Seller', role: Role.SELLER, referralCode: 'GST-S' } });
+  const sellerUser = await prisma.user.create({ data: { phone: '9166600001', name: 'GST Seller', role: Role.SELLER, referralCode: 'GST-S' } });
   sellerId = (
     await prisma.sellerProfile.create({
       data: {
@@ -64,7 +64,7 @@ beforeAll(async () => {
     })
   ).id;
   sellerToken = signAccessToken({ sub: sellerUser.id, role: 'SELLER' });
-  const buyer = await prisma.user.create({ data: { phone: '9177300002', name: 'GST Buyer', referralCode: 'GST-B' } });
+  const buyer = await prisma.user.create({ data: { phone: '9166600002', name: 'GST Buyer', referralCode: 'GST-B' } });
   buyerToken = signAccessToken({ sub: buyer.id, role: 'CUSTOMER' });
   addressId = (
     await prisma.address.create({ data: { userId: buyer.id, name: 'GST Buyer', phone: buyer.phone, line1: '1 Road', city: 'Mumbai', state: 'Maharashtra', pincode: '400001', isDefault: true } })
@@ -153,7 +153,7 @@ describe('the order page', () => {
   });
 
   it('is the seller\'s own', async () => {
-    const other = await prisma.user.create({ data: { phone: '9177300009', name: 'Other Seller', role: Role.SELLER, referralCode: 'GST-O' } });
+    const other = await prisma.user.create({ data: { phone: '9166600009', name: 'Other Seller', role: Role.SELLER, referralCode: 'GST-O' } });
     await prisma.sellerProfile.create({ data: { userId: other.id, shopName: 'Other GST Shop', status: SellerStatus.APPROVED, approvedAt: new Date() } });
     expect((await call('GET', `/api/seller/orders/${order.orderId}/charges`, signAccessToken({ sub: other.id, role: 'SELLER' }))).status).toBe(404);
   });
@@ -214,7 +214,7 @@ describe('penalties', () => {
 
 describe('Clowe\'s tax invoice', () => {
   async function sellerWithCharges(n: number, month: Date) {
-    const u = await prisma.user.create({ data: { phone: `91773001${String(n).padStart(2, '0')}`, name: `Invoice Seller ${n}`, role: Role.SELLER, referralCode: `INV-${n}` } });
+    const u = await prisma.user.create({ data: { phone: `91666001${String(n).padStart(2, '0')}`, name: `Invoice Seller ${n}`, role: Role.SELLER, referralCode: `GSTINV-${n}` } });
     const s = await prisma.sellerProfile.create({
       data: { userId: u.id, shopName: `Invoice Shop ${n}`, status: SellerStatus.APPROVED, approvedAt: new Date(), state: n % 2 ? 'Delhi' : 'Karnataka', gstNumber: null },
     });

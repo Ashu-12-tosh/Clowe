@@ -45,7 +45,7 @@ async function parcel(sellerId: string, awb: string, kind: ShipmentKind, status:
   const order = await prisma.order.create({
     data: {
       userId: buyerId, orderNumber: `CLW-2026-44${String(seq).padStart(4, '0')}`, status: 'CONFIRMED', subtotalPaise: 50_000, shippingPaise: 0, totalPaise: 50_000,
-      paymentMethod: 'UPI', shipName: 'Bill Buyer', shipPhone: '9194400002', shipLine1: '1 Test Street', shipCity: 'Mumbai', shipState: 'Maharashtra', shipPincode: '400001',
+      paymentMethod: 'UPI', shipName: 'Bill Buyer', shipPhone: '9144400002', shipLine1: '1 Test Street', shipCity: 'Mumbai', shipState: 'Maharashtra', shipPincode: '400001',
       payment: { create: { provider: 'mock', amountPaise: 50_000, status: 'PAID' } },
       items: { create: [{ productId, variantId, sellerId, title: 'Bill Tee', size: '', color: '', pricePaise: 50_000, quantity: 1, status: 'CONFIRMED' }] },
     },
@@ -94,13 +94,13 @@ beforeAll(async () => {
     });
     return { userId: user.id, sellerId: seller.id };
   };
-  const a = await mk('9194400001', 'Bill Shop A', 'BIL-A');
+  const a = await mk('9144400001', 'Bill Shop A', 'BIL-A');
   sellerA = a.sellerId;
   sellerToken = signAccessToken({ sub: a.userId, role: 'SELLER' });
-  sellerB = (await mk('9194400003', 'Bill Shop B', 'BIL-B')).sellerId;
-  const admin = await prisma.user.create({ data: { phone: '9194400004', name: 'Bill Admin', role: Role.ADMIN, referralCode: 'BIL-ADM' } });
+  sellerB = (await mk('9144400003', 'Bill Shop B', 'BIL-B')).sellerId;
+  const admin = await prisma.user.create({ data: { phone: '9144400004', name: 'Bill Admin', role: Role.ADMIN, referralCode: 'BIL-ADM' } });
   adminToken = signAccessToken({ sub: admin.id, role: 'ADMIN' });
-  buyerId = (await prisma.user.create({ data: { phone: '9194400002', name: 'Bill Buyer', referralCode: 'BIL-BUY' } })).id;
+  buyerId = (await prisma.user.create({ data: { phone: '9144400002', name: 'Bill Buyer', referralCode: 'BIL-BUY' } })).id;
   const category = await prisma.category.create({ data: { name: 'Bill Tees', slug: 'bill-tees', isActive: true } });
   productId = (
     await prisma.product.create({

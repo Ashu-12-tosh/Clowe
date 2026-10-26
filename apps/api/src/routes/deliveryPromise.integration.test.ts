@@ -76,17 +76,17 @@ beforeAll(async () => {
       data: { productId, optionValues: {}, optionsKey: '', label: '', sku: 'SKU-PROMISE', pricePaise: 60_000, stock: 50 },
     })
   ).id;
-  const shopper = await prisma.user.create({ data: { phone: '9199100002', name: 'Promise Shopper', referralCode: 'PRM-C' } });
+  const shopper = await prisma.user.create({ data: { phone: '9155500002', name: 'Promise Shopper', referralCode: 'PRM-C' } });
   shopperId = shopper.id;
   shopperToken = signAccessToken({ sub: shopper.id, role: 'CUSTOMER' });
   addressId = (
     await prisma.address.create({
-      data: { userId: shopper.id, name: 'Promise Shopper', phone: '9199100002', line1: '1 Test Road', city: 'Mumbai', state: 'Maharashtra', pincode: '400050', isDefault: true },
+      data: { userId: shopper.id, name: 'Promise Shopper', phone: '9155500002', line1: '1 Test Road', city: 'Mumbai', state: 'Maharashtra', pincode: '400050', isDefault: true },
     })
   ).id;
   farAddressId = (
     await prisma.address.create({
-      data: { userId: shopper.id, name: 'Promise Shopper', phone: '9199100002', line1: '1 Nowhere', city: 'Nowhere', state: 'Maharashtra', pincode: '999999' },
+      data: { userId: shopper.id, name: 'Promise Shopper', phone: '9155500002', line1: '1 Nowhere', city: 'Nowhere', state: 'Maharashtra', pincode: '999999' },
     })
   ).id;
   server = createApp().listen(0);
