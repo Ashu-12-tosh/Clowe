@@ -7,6 +7,7 @@ import {
   slabDescription,
   slabFor,
   computeListingEconomics,
+  type BreakdownRow,
   type BreakdownRowKind,
   type CategoryRules,
   type SellerDeliveryEstimate,
@@ -69,6 +70,7 @@ export function PricingBreakdown({
   const [rates, setRates] = useState<SellerEconomicsRates | null>(null);
   const [typed, setTyped] = useState<string | null>(null);
   const [delivery, setDelivery] = useState<SellerDeliveryEstimate | null>(null);
+  const [feesOpen, setFeesOpen] = useState(false);
 
   useEffect(() => {
     loadRates().then(setRates).catch(() => {});
@@ -154,7 +156,34 @@ export function PricingBreakdown({
         // One column of figures: every label on the left, every signed amount
         // right-aligned beside it, in the order the money moves.
         <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] tabular-nums" data-breakdown>
-          {breakdownRows(economics).map((row) => {
+          {groupFees(breakdownRows(economics)).map((row) => {
+            if (row.kind === 'fees') {
+              return (
+                <div key="fees" className="contents" data-row="clowe-fees">
+                  <dt className={`${ROW.deduction.cell} ${ROW.deduction.label}`}>
+                    <button
+                      type="button"
+                      onClick={() => setFeesOpen((v) => !v)}
+                      aria-expanded={feesOpen}
+                      className="font-semibold text-gray-700 hover:text-ink-900"
+                      data-fees-toggle
+                    >
+                      {feesOpen ? '▾' : '▸'} Clowe fees
+                    </button>
+                  </dt>
+                  <dd className={`${ROW.deduction.cell} ${ROW.deduction.amount} whitespace-nowrap pl-4 text-right`}>
+                    {signed(row.amountPaise, 'deduction')}
+                  </dd>
+                  {feesOpen &&
+                    row.parts.map((part) => (
+                      <div key={part.key} className="contents" data-row={part.key}>
+                        <dt className="break-words py-0.5 pl-4 text-[11px] text-gray-500">{part.label}</dt>
+                        <dd className="whitespace-nowrap py-0.5 pl-4 text-right text-[11px] text-red-500">{signed(part.amountPaise, 'deduction')}</dd>
+                      </div>
+                    ))}
+                </div>
+              );
+            }
             const style = ROW[row.kind];
             return (
               <div key={row.key} className="contents" data-row={row.key}>
@@ -199,25 +228,9 @@ export function PricingBreakdown({
         {!weightGrams && <p className="mt-1 text-gray-400">Enter the weight below to see what a parcel costs.</p>}
         {weightGrams && !delivery && <p className="mt-1 text-gray-400">Getting Delhivery&rsquo;s estimate…</p>}
         {delivery?.error && <p className="mt-1 text-amber-700">{delivery.error}</p>}
+        {delivery && <ChargeableWeight estimate={delivery} />}
         {delivery && delivery.cases.length > 0 && (
-          <dl className="mt-1.5 grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-4 tabular-nums">
-            <dt className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-              From {delivery.originPincode}, {delivery.slabGrams / 1000} kg
-            </dt>
-            <dd className="text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">Freight</dd>
-            <dd className="text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400">You keep</dd>
-            {delivery.cases.map((c) => (
-              <div key={c.key} className="contents" data-case={c.key}>
-                <dt className="py-0.5 text-gray-600">
-                  {c.label} <span className="text-gray-400">({c.destinationPincode})</span>
-                </dt>
-                <dd className="py-0.5 text-right text-red-600">− {money(c.freightPaise)}</dd>
-                <dd className="py-0.5 text-right font-semibold text-ink-900">
-                  {economics ? signed(economics.sellerKeepsAfterGstPaise - c.freightPaise, 'total') : '—'}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          <DeliveryCasesTable estimate={delivery} keepPaise={economics ? economics.sellerKeepsAfterGstPaise : null} />
         )}
         {delivery?.codFeePaise != null && delivery.codFeePaise > 0 && (
           <p className="mt-1 text-gray-600" data-cod>
@@ -225,10 +238,17 @@ export function PricingBreakdown({
           </p>
         )}
         <p className="mt-1.5 text-[11px] text-gray-500">
-          Delhivery bills every 0.5 kg, on the greater of actual and volumetric weight (L × W × H in cm ÷ 5000).
-          {delivery && ` This product is charged as ${delivery.slabGrams / 1000} kg.`} One estimate per parcel; the final
-          charge is posted when it is delivered.
-          {delivery?.provider === 'mock' && ' Test courier: these are flat test rates, not Delhivery’s.'}
+          All amounts include 18% GST. Forward is charged when the parcel is delivered; RTO only if it comes back
+          undelivered (on top of the forward); return pickup only when you approve a customer return. The final charge is
+          at the weight Delhivery measures.
+          {delivery?.provider === 'mock' && ' Test courier: these are flat test rates, not Delhivery’s.'}{' '}
+          <a href="/pages/delivery-charges" target="_blank" rel="noreferrer" className="font-semibold text-brand-600 hover:underline" data-help-link>
+            Delivery charges explained
+          </a>
+          {' · '}
+          <a href="/seller/shipping-calculator" target="_blank" rel="noreferrer" className="font-semibold text-brand-600 hover:underline">
+            Shipping charges calculator
+          </a>
         </p>
       </div>
 
@@ -236,6 +256,81 @@ export function PricingBreakdown({
         Per unit, at today&rsquo;s rates. Posted to your ledger on delivery with exactly this
         arithmetic. Delivery is free for buyers; the freight above comes off per parcel.
       </p>
+    </div>
+  );
+}
+
+const FEE_KEYS = new Set(['commission', 'gt', 'gateway', 'handling', 'platform', 'closing']);
+
+type GroupedRow = BreakdownRow | { kind: 'fees'; key: 'fees'; amountPaise: number; parts: BreakdownRow[] };
+
+/** Clowe's own fees folded into one "Clowe fees" row (opened on a tap); their GST stays its own line. */
+function groupFees(rows: BreakdownRow[]): GroupedRow[] {
+  const parts = rows.filter((r) => FEE_KEYS.has(r.key) && r.amountPaise !== 0);
+  if (parts.length === 0) return rows.filter((r) => !FEE_KEYS.has(r.key));
+  const out: GroupedRow[] = [];
+  for (const r of rows) {
+    if (FEE_KEYS.has(r.key)) {
+      if (r === parts[0]) out.push({ kind: 'fees', key: 'fees', amountPaise: parts.reduce((sum, p) => sum + p.amountPaise, 0), parts });
+      continue;
+    }
+    out.push(r);
+  }
+  return out;
+}
+
+function kg(grams: number): string {
+  return `${(grams / 1000).toLocaleString('en-IN', { maximumFractionDigits: 2 })} kg`;
+}
+
+/** "Actual 0.8 kg · volumetric 1.2 kg → charged as 1.5 kg". */
+export function ChargeableWeight({ estimate }: { estimate: SellerDeliveryEstimate }) {
+  return (
+    <p className="mt-1 text-[11px] text-gray-600" data-chargeable>
+      Actual {kg(estimate.actualGrams)}
+      {' · '}
+      {estimate.volumetricGrams !== null ? <>volumetric {kg(estimate.volumetricGrams)} (L × W × H in cm ÷ 5000)</> : 'volumetric: add the box size'}
+      {' → '}
+      <span className="font-semibold text-ink-900">charged as {kg(estimate.slabGrams)}</span>
+      <span className="text-gray-400"> (the greater, in 0.5 kg steps)</span>
+    </p>
+  );
+}
+
+/** Forward, RTO and return pickup for each sample place, GST included. */
+export function DeliveryCasesTable({ estimate, keepPaise }: { estimate: SellerDeliveryEstimate; keepPaise: number | null }) {
+  const head = 'text-right text-[10px] font-semibold uppercase tracking-wide text-gray-400';
+  const opt = (p: number | null) => (p === null ? '—' : `− ${money(p)}`);
+  return (
+    <div className="mt-1.5 overflow-x-auto">
+      <table className="w-full min-w-[26rem] tabular-nums" data-delivery-cases>
+        <thead>
+          <tr>
+            <th className="text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">From {estimate.originPincode}</th>
+            <th className={head}>Zone</th>
+            <th className={head}>Forward</th>
+            <th className={head} title="Only if it comes back undelivered, on top of the forward">RTO</th>
+            <th className={head} title="Only for a customer return you approve">Return pickup</th>
+            {keepPaise !== null && <th className={head}>You keep</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {estimate.cases.map((c) => (
+            <tr key={c.key} data-case={c.key}>
+              <td className="py-0.5 text-gray-600">
+                {c.label} <span className="text-gray-400">({c.destinationPincode})</span>
+              </td>
+              <td className="py-0.5 text-right text-gray-500">{c.zone || '—'}</td>
+              <td className="py-0.5 text-right text-red-600">− {money(c.freightPaise)}</td>
+              <td className="py-0.5 text-right text-red-500" data-rto>{opt(c.rtoPaise)}</td>
+              <td className="py-0.5 text-right text-red-500" data-return>{opt(c.returnPaise)}</td>
+              {keepPaise !== null && (
+                <td className="py-0.5 text-right font-semibold text-ink-900">{signed(keepPaise - c.freightPaise, 'total')}</td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

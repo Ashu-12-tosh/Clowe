@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { OrderStatus } from '@prisma/client';
 import {
+  promiseLabel,
   optionValuesFromJson,
   ORDER_FILTERS,
   type OrderFilter,
@@ -55,6 +56,7 @@ import { planSplits } from '../services/easySplit';
 import { buildCartView } from './cart';
 import { deliveryPriceFor, etaWindowFor, isDeliveryMethodAvailable } from '../services/deliveryService';
 import { codRefusal, deliveryRefusal, pincodeServiceability } from '../services/shipping/serviceability';
+import { orderWindow, promisesFor, recordOrderPromises, undeliverableMessage } from '../services/shipping/deliveryPromises';
 import { confirmCodOrder, generateOrderNumber, settlePaymentFailure } from '../services/orderService';
 import { nextRmaNumber } from '../services/returnService';
 import { allocateForDispatch } from '../services/stockService';
@@ -190,11 +192,22 @@ ordersRouter.post('/checkout', async (req, res, next) => {
     const sellerByVariant = new Map(variants.map((v) => [v.id, v.product.sellerId]));
     const variantById = new Map(variants.map((v) => [v.id, v]));
 
+    // Each seller's delivery date from their own pickup pincode, and whether
+    // Delhivery delivers their parcel here at all. Lines it can't deliver are
+    // refused by name; Delhivery not answering refuses nothing.
+    const promises = await promisesFor([...new Set(orderLines.map((l) => sellerByVariant.get(l.variantId)!))], address.pincode);
+    const cannotReach = new Set(promises.filter((p) => p.deliverable === false).map((p) => p.sellerId));
+    const unreachable = undeliverableMessage(
+      address.pincode,
+      orderLines.filter((l) => cannotReach.has(sellerByVariant.get(l.variantId)!)).map((l) => l.title),
+    );
+    if (unreachable) throw ApiError.badRequest(unreachable, 'ITEM_NOT_DELIVERABLE');
+
     const orderNumber = await generateOrderNumber();
     const subtotalPaise = cart.subtotalPaise;
     // Delivery is free on every order: the seller pays the courier.
     const shippingPaise = deliveryPriceFor();
-    const eta = etaWindowFor(deliveryMethod, new Date(), address.pincode);
+    const eta = orderWindow(promises) ?? etaWindowFor(deliveryMethod, new Date(), address.pincode);
 
     // Coupon: re-validated here, so a code that expired between the cart page
     // and payment simply doesn't apply rather than silently under-charging.
@@ -393,6 +406,9 @@ ordersRouter.post('/checkout', async (req, res, next) => {
       });
       return created;
     });
+    await recordOrderPromises(order.id, promises).catch((err) =>
+      console.error(`[clowe-api] ${orderNumber}: delivery promises not recorded:`, err instanceof Error ? err.message : err),
+    );
 
     if (paymentMethod === 'COD') {
       // Nothing to collect now — the order is confirmed and the courier
@@ -711,6 +727,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
                 id: true,
                 etaFrom: true,
                 etaTo: true,
+                courierPromisedAt: true,
                 deliveryAttempts: true,
                 lostFlaggedAt: true,
                 lostChoice: true,
@@ -720,9 +737,17 @@ ordersRouter.get('/:id', async (req, res, next) => {
             replacements: { select: { orderId: true, order: { select: { orderNumber: true } } } },
           },
         },
+        sellerPromises: { include: { seller: { select: { shopName: true } } }, orderBy: { deliveryBy: 'asc' } },
       },
     });
     if (!order || order.userId !== req.auth!.userId) throw ApiError.notFound('Order not found');
+    const promiseBySeller = new Map(order.sellerPromises.map((p) => [p.sellerId, p]));
+    const promiseOf = (sellerId: string) => {
+      const p = promiseBySeller.get(sellerId);
+      return p
+        ? { label: promiseLabel(p), deliveryBy: p.deliveryBy.toISOString(), deliveryByLatest: p.deliveryByLatest?.toISOString() ?? null }
+        : null;
+    };
 
     // Products this shopper has already reviewed — so "Write a review" only
     // shows where it can actually be used.
@@ -809,6 +834,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
       paymentMethod: order.paymentMethod as CheckoutResult['method'],
       etaFrom: order.etaFrom?.toISOString() ?? null,
       etaTo: order.etaTo?.toISOString() ?? null,
+      sellerPromises: order.sellerPromises.map((p) => ({ sellerId: p.sellerId, shopName: p.seller.shopName, ...promiseOf(p.sellerId)! })),
       isGift: order.isGift,
       giftMessage: order.giftMessage,
       earnedCredits,
@@ -872,13 +898,16 @@ ordersRouter.get('/:id', async (req, res, next) => {
         parcel: i.shipment
           ? {
               shipmentId: i.shipment.id,
-              etaFrom: i.shipment.etaFrom?.toISOString() ?? null,
-              etaTo: i.shipment.etaTo?.toISOString() ?? null,
+              // Delhivery's own date, once it has given one, replaces the zone estimate.
+              etaFrom: (i.shipment.courierPromisedAt ?? i.shipment.etaFrom)?.toISOString() ?? null,
+              etaTo: (i.shipment.courierPromisedAt ?? i.shipment.etaTo)?.toISOString() ?? null,
+              courierPromisedAt: i.shipment.courierPromisedAt?.toISOString() ?? null,
               deliveryAttempts: i.shipment.deliveryAttempts,
               lost: !!i.shipment.lostFlaggedAt,
               lostChoice: (i.shipment.lostChoice as LostParcelChoice | null) ?? null,
             }
           : null,
+        deliveryPromise: promiseOf(i.sellerId),
         replacedBy: i.replacements[0] ? { orderId: i.replacements[0].orderId, orderNumber: i.replacements[0].order.orderNumber } : null,
         courierName: i.courierName,
         awbNumber: i.awbNumber,

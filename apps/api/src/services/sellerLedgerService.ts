@@ -432,6 +432,12 @@ export async function penaltiesView(
   ]);
   const itemById = new Map(items.map((i) => [i.id, i]));
   const orderNumberById = new Map(orders.map((o) => [o.id, o.orderNumber]));
+  // The 18% GST posted beside each penalty ("penalty-gst:<entry>").
+  const gstRows = await db.sellerLedgerEntry.findMany({
+    where: { sellerId, type: 'CLOWE_FEE_GST', idempotencyKey: { in: shown.map((p) => `penalty-gst:${p.id}`) } },
+    select: { idempotencyKey: true, amountPaise: true },
+  });
+  const gstByPenalty = new Map(gstRows.map((g) => [g.idempotencyKey!.slice('penalty-gst:'.length), -g.amountPaise]));
 
   const chargedPaise = penalties.reduce((sum, p) => sum - p.amountPaise, 0);
   const waivedPaise = waivers.reduce((sum, w) => sum + w.amountPaise, 0);
@@ -462,6 +468,7 @@ export async function penaltiesView(
         itemTitle: item?.title ?? null,
         chargedAt: p.createdAt.toISOString(),
         amountPaise: -p.amountPaise,
+        gstPaise: gstByPenalty.get(p.id) ?? 0,
         reason: p.note,
         waived: !!waiver,
         waivedAt: waiver ? waiver.createdAt.toISOString() : null,

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../db';
+import { renderSellerInvoicePdf } from '../services/sellerInvoicePdf';
 import { requireAuth } from '../middleware/auth';
 import { invoiceFor, invoiceList } from '../services/sellerInvoice';
 import { walletView } from '../services/wallet';
@@ -129,6 +130,19 @@ sellerBillingRouter.post('/plan/live-products', blockSuspendedWrites, async (req
 sellerBillingRouter.get('/invoices', async (req, res, next) => {
   try {
     res.json({ success: true, data: await invoiceList(req.seller!.id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The month's invoice as a PDF: issued (numbered) for a month that has ended, a marked draft for this one.
+sellerBillingRouter.get('/invoices/:month/pdf', async (req, res, next) => {
+  try {
+    const doc = await invoiceFor(req.seller!.id, req.params.month);
+    const pdf = await renderSellerInvoicePdf(doc);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="clowe-invoice-${(doc.number ?? `draft-${doc.month}`).replace(/\//g, '-')}.pdf"`);
+    res.send(pdf);
   } catch (err) {
     next(err);
   }

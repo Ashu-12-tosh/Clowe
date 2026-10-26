@@ -134,7 +134,10 @@ describe('delivery dated by zone (3.1, 3.2)', () => {
     const co = await call<{ orderId: string }>('POST', '/api/orders/checkout', { addressId: address.id, paymentMethod: 'UPI' });
     expect(co.status, JSON.stringify(co.json)).toBe(200);
     const order = await prisma.order.findUniqueOrThrow({ where: { id: co.json.data.orderId } });
-    expect(istDay(order.etaTo!)).toBe(istDay(orderEtaWindow('781001', order.createdAt).to));
+    // Placed, the order carries its seller's promise: dispatch + Delhivery's TAT from their pickup PIN + a day.
+    const promise = await prisma.orderSellerPromise.findFirstOrThrow({ where: { orderId: order.id } });
+    expect(promise.source).toBe('DELHIVERY_TAT');
+    expect(order.etaTo!.getTime()).toBe(promise.deliveryBy.getTime());
 
     const at = new Date('2026-10-22T06:00:00Z');
     const p = await pickedUp(at);

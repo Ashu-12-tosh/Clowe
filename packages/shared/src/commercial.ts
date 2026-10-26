@@ -218,7 +218,8 @@ export const commercialSettingsSchema = z.object({
   invoice: z.object({
     /** SAC for Clowe's services to sellers — confirm with the CA. */
     sacCode: z.string().trim().min(4).max(8),
-    numberPrefix: z.string().trim().min(1).max(12),
+    /** Up to 4 letters or digits: the whole number ("CLW/2627/000001") stays within GST's 16 characters. */
+    numberPrefix: z.string().trim().regex(/^[A-Z0-9]{1,4}$/, 'Invoice prefix: 1 to 4 capital letters or digits'),
   }),
   tryon: z.object({
     packs: z.array(z.object({ credits: z.number().int().min(1), pricePaise: paise })).min(1),
@@ -319,7 +320,7 @@ export const DEFAULT_COMMERCIAL: CommercialSettings = {
     attributionDays: 7,
   },
   sponsorship: { perClickRangePaise: [50, 150], premiumDiscountPercent: 50 },
-  invoice: { sacCode: '998599', numberPrefix: 'CLW/SI' },
+  invoice: { sacCode: '998599', numberPrefix: 'CLW' },
   tryon: {
     packs: [
       { credits: 100, pricePaise: 150_000 },

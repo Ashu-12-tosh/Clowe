@@ -17,6 +17,7 @@ import {
   type ShippingProvider,
   type TrackingResult,
   type TrackingScan,
+  type TransitEstimate,
   type WarehouseInput,
   type WarehouseResult,
 } from './ShippingProvider';
@@ -32,6 +33,8 @@ import {
 //   by default) — the mock's estimate, not Delhivery's. As with Delhivery, an
 //   RTO quote is the forward and return legs together and a customer return
 //   (DTO) costs 1.2×. COD adds ₹40 or 2 % of the amount, plus 18 % GST.
+// - Transit time: by zone, from MOCK_TAT_DAYS (A 1 day … E 8); 999999 is
+//   not served. A booked parcel's promised date is its booking plus that.
 // - Warehouse names may not contain an underscore (Delhivery refuses them).
 // - Each shipment reference books once; a second booking is refused.
 // - simulate() moves a booked parcel along, as courier scans would.
@@ -56,6 +59,9 @@ export function mockZone(origin: string, destination: string): string {
   if (origin[0] === destination[0]) return 'C';
   return 'D';
 }
+
+/** The mock's transit days by zone, roughly Delhivery's surface times. */
+export const MOCK_TAT_DAYS: Record<string, number> = { A: 1, B: 2, C: 3, D: 5, E: 8 };
 
 /** What simulate() can make happen to a booked parcel. */
 export type MockEvent =
@@ -147,6 +153,11 @@ export class MockShippingProvider implements ShippingProvider {
       taxPaise: freightTotal + codTotal - (request.kind === 'RTO' ? freight * 2 : freight) - codCharge,
       totalPaise: freightTotal + codTotal,
     };
+  }
+
+  async expectedTat(originPincode: string, destinationPincode: string): Promise<TransitEstimate> {
+    if (!(await this.checkPincode(destinationPincode)).serviceable) return { serviceable: false, tatDays: null, expectedDeliveryDate: null };
+    return { serviceable: true, tatDays: MOCK_TAT_DAYS[mockZone(originPincode, destinationPincode)] ?? 5, expectedDeliveryDate: null };
   }
 
   async upsertWarehouse(warehouse: WarehouseInput): Promise<WarehouseResult> {
@@ -248,6 +259,10 @@ export class MockShippingProvider implements ShippingProvider {
           status: shipmentStatusFromScan(last),
           statusText: last.status,
           chargedWeightGrams: parcel.scans.length > 1 ? Math.ceil(parcel.weightGrams / 500) * 500 : null,
+          promisedDeliveryDate:
+            parcel.zone && !parcel.reverse
+              ? new Date(parcel.scans[0]!.at.getTime() + (MOCK_TAT_DAYS[parcel.zone] ?? 5) * 24 * 60 * 60 * 1000)
+              : null,
           scans: [...parcel.scans],
         },
       ];

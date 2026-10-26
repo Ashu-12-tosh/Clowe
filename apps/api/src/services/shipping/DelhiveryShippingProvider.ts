@@ -19,6 +19,7 @@ import {
   type ShippingProvider,
   type TrackingResult,
   type TrackingScan,
+  type TransitEstimate,
   type WarehouseInput,
   type WarehouseResult,
 } from './ShippingProvider';
@@ -28,6 +29,7 @@ import {
 //
 //   Serviceability  GET  /c/api/pin-codes/json/?filter_codes=
 //   Freight         GET  /api/kinko/v1/invoice/charges/.json
+//   Transit time    GET  /api/dc/expected_tat
 //   Warehouse       POST /api/backend/clientwarehouse/create/ (…/edit/)
 //   Book            POST /api/cmu/create.json   (format=json&data=…)
 //   Label           GET  /api/p/packing_slip?wbns=
@@ -140,8 +142,18 @@ export function parseDelhiveryShipment(raw: unknown): TrackingResult | null {
     status: shipmentStatusFromScan(current),
     statusText: str(now.Instructions) || current.status,
     chargedWeightGrams: Number(s.ChargedWeight) || null,
+    promisedDeliveryDate: delhiveryDate(s.PromisedDeliveryDate ?? s.ExpectedDeliveryDate),
     scans,
   };
+}
+
+/** A date field Delhivery may leave empty or fill with "" / null: a Date, or null. */
+function delhiveryDate(v: unknown): Date | null {
+  const text = str(v).trim();
+  if (!text) return null;
+  // A bare day ("2026-11-02") is that day in India.
+  const at = delhiveryTime(/^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T00:00:00` : text);
+  return Number.isNaN(at.getTime()) ? null : at;
 }
 
 export class DelhiveryShippingProvider implements ShippingProvider {
@@ -189,6 +201,33 @@ export class DelhiveryShippingProvider implements ShippingProvider {
       city: str(pc.district) || str(pc.city) || null,
       state: str(pc.state_code) || null,
     };
+  }
+
+  async expectedTat(originPincode: string, destinationPincode: string, pickupDate: Date): Promise<TransitEstimate> {
+    const { date } = istParts(pickupDate);
+    let body: Json;
+    try {
+      body = await this.get('/api/dc/expected_tat', {
+        origin_pin: originPincode,
+        destination_pin: destinationPincode,
+        mot: 'S',
+        pdt: 'B2C',
+        expected_pickup_date: `${date} 11:00`,
+      });
+    } catch (err) {
+      // Live answers an unserved pincode with HTTP 400, "Destination pin not serviceable."
+      if (err instanceof ShippingProviderError && err.code === 'REFUSED' && /not serviceable/i.test(err.message)) {
+        return { serviceable: false, tatDays: null, expectedDeliveryDate: null };
+      }
+      throw err;
+    }
+    const data = (body.data ?? {}) as Json;
+    const tat = Number(data.tat);
+    if (!Number.isFinite(tat) || tat < 0) {
+      throw new ShippingProviderError(`Delhivery gave no transit time: ${remarks(body.msg) || 'no data'}`, 'NO_TAT');
+    }
+    const expected = str(data.expected_delivery_date).trim();
+    return { serviceable: true, tatDays: Math.round(tat), expectedDeliveryDate: /^\d{4}-\d{2}-\d{2}$/.test(expected) ? expected : null };
   }
 
   async quote(request: FreightQuoteRequest): Promise<FreightQuote> {
@@ -488,7 +527,7 @@ export class DelhiveryShippingProvider implements ShippingProvider {
     }
     if (res.status >= 400) {
       throw new ShippingProviderError(
-        `Delhivery refused the request (HTTP ${res.status}): ${remarks((parsed as Json)?.error, (parsed as Json)?.message, (parsed as Json)?.detail) || 'no reason given'}`,
+        `Delhivery refused the request (HTTP ${res.status}): ${remarks((parsed as Json)?.error, (parsed as Json)?.message, (parsed as Json)?.detail, (parsed as Json)?.msg) || 'no reason given'}`,
         'REFUSED',
       );
     }

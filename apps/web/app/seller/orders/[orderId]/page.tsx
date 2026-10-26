@@ -20,6 +20,7 @@ import { BookingConfirm } from '@/components/seller/orders/BookingConfirm';
 import { announceBooking } from '@/components/seller/orders/bookingNotice';
 import { ParcelIssues } from '@/components/seller/orders/ParcelIssues';
 import { ExternalLink } from '@/components/ExternalLink';
+import OrderCharges from '@/components/seller/orders/OrderCharges';
 
 type Action = 'assign' | 'pack' | 'ship' | 'deliver';
 
@@ -505,6 +506,7 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
             </dl>
           </section>
 
+          <OrderCharges orderId={order.orderId} refreshKey={order} />
         </aside>
       </div>
     </div>

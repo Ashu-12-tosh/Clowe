@@ -396,6 +396,7 @@ async function main() {
     if (want(11)) await renewAll().then(flow11Payouts);
     if (want(12)) await renewAll().then(flow12Support);
     if (want(13)) await renewAll().then(flow13Admin);
+    if (want(14)) await renewAll().then(flow14ChargesGst);
   } finally {
     fs.writeFileSync(path.join(OUT, 'api.log'), stack.apiLog.join(''));
     fs.writeFileSync(path.join(OUT, 'web.log'), stack.webLog.join(''));
@@ -1505,13 +1506,59 @@ async function flow8Shopper() {
     await page.getByText(S.editedTitle ?? S.simpleTitle).first().waitFor({ timeout: 120_000 });
   }, { page, needs: ['shopper', 'live'] });
 
-  await step(F, 'cart, with free delivery shown', async () => {
+  await step(F, 'product page: "Delivery by <day, date> · Free delivery" for the default address, "not available" for an unserved PIN', async () => {
+    await goto(page, `/products/${S.simpleSlug}`);
+    // Logged in: the PIN starts from the default address (400050).
+    const card = page.locator('[data-delivery-card]');
+    await card.getByText('400050').waitFor({ timeout: 120_000 });
+    const ok = card.locator('[data-delivery-promise="deliverable"]');
+    await ok.waitFor({ timeout: 60_000 });
+    const text = await ok.innerText();
+    check(/Delivery by (Mon|Tue|Wed|Thu|Fri|Sat), \d{1,2} [A-Z][a-z]{2}/.test(text) && /Free delivery/.test(text), `product page says "${text}"`);
+    await card.getByRole('button', { name: 'Change' }).click();
+    await card.getByLabel('Delivery pincode').fill('999999');
+    await card.getByRole('button', { name: 'Check' }).click();
+    await card.locator('[data-delivery-promise="not-available"]').getByText('Delivery not available at this PIN').waitFor({ timeout: 60_000 });
+    await card.screenshot({ path: path.join(OUT, 'pdp-delivery-not-available.png') }).catch(() => {});
+    // Back to Mumbai: the PIN is kept for the session and follows to the cart.
+    await card.getByRole('button', { name: 'Change' }).click();
+    await card.getByLabel('Delivery pincode').fill('400050');
+    await card.getByRole('button', { name: 'Check' }).click();
+    await ok.waitFor({ timeout: 60_000 });
+    await card.screenshot({ path: path.join(OUT, 'pdp-delivery-by.png') }).catch(() => {});
+    // The same date as the API's, worked out from the seller's pickup PIN (110059) and the mock's TAT.
+    const promise = await apiOk('GET', `/api/delivery/promise?productId=${S.simpleId}&pincode=400050`);
+    check(promise.deliverable && promise.source === 'DELHIVERY_TAT' && text.includes(promise.message.replace(' · Free delivery', '')), `API ${JSON.stringify(promise)}`);
+  }, { page, needs: ['shopper', 'live'] });
+
+  await step(F, 'cart, with free delivery shown and a delivery date per seller', async () => {
     await goto(page, `/products/${S.simpleSlug}`);
     await page.getByRole('button', { name: /^Add to Cart$/ }).first().click({ timeout: 120_000 });
     await goto(page, '/cart');
     await page.getByText(S.editedTitle ?? S.simpleTitle).first().waitFor({ timeout: 120_000 });
     check(await page.getByText(/Free delivery|Delivery\s*FREE|FREE/i).count(), 'free delivery not shown in the cart');
+    const line = page.locator('[data-line-promise="deliverable"]').first();
+    await line.waitFor({ timeout: 60_000 });
+    check(/Delivery by .+· Free delivery/.test(await line.innerText()), `cart line says "${await line.innerText()}"`);
+    await page.screenshot({ path: path.join(OUT, 'cart-delivery-by.png') }).catch(() => {});
   }, { page, needs: ['shopper', 'live'], key: 'cart' });
+
+  await step(F, 'checkout refuses items Delhivery cannot bring to the address, by name', async () => {
+    const far = await apiOk('POST', '/api/addresses', S.shopperToken, { name: 'E2E Shopper', phone: S.shopperPhone, line1: '1 Nowhere Lane', city: 'Nowhere', state: 'Maharashtra', pincode: '999999', isDefault: true });
+    try {
+      const promises = await apiOk('GET', `/api/cart/delivery-promises?addressId=${far.id}`, S.shopperToken);
+      check(promises.blockedMessage && promises.blockedMessage.includes(S.editedTitle ?? S.simpleTitle), `blocked: ${promises.blockedMessage}`);
+      await goto(page, '/checkout');
+      await page.locator('[data-checkout-blocked]').waitFor({ timeout: 120_000 });
+      check(await page.getByRole('button', { name: /Continue to Payment/ }).last().isDisabled(), 'Continue is not disabled for an address nothing can reach');
+      await page.locator('[data-checkout-blocked]').screenshot({ path: path.join(OUT, 'checkout-blocked.png') }).catch(() => {});
+      const refused = await api('POST', '/api/orders/checkout', S.shopperToken, { addressId: far.id, paymentMethod: 'UPI' });
+      check(refused.status === 400, `checkout to 999999: ${refused.status}`);
+    } finally {
+      await apiOk('PUT', `/api/addresses/${S.addressId}`, S.shopperToken, { name: 'E2E Shopper', phone: S.shopperPhone, line1: '22 Linking Road', city: 'Mumbai', state: 'Maharashtra', pincode: '400050', isDefault: true }).catch(() => {});
+      await apiOk('DELETE', `/api/addresses/${far.id}`, S.shopperToken).catch(() => {});
+    }
+  }, { page, needs: ['cart'] });
 
   await step(F, 'prepaid checkout with the mock payment: confirmation, invoice, notification', async () => {
     // No email on the account yet (sign-up's optional email is taken off for
@@ -1536,6 +1583,9 @@ async function flow8Shopper() {
     await page.locator('[data-checkout-email]').screenshot({ path: path.join(OUT, 'checkout-email-error.png') }).catch(() => {});
     S.shopperEmail = `e2e.${S.shopperId.slice(-8)}@example.com`;
     await emailBox.fill(S.shopperEmail);
+    // One date per seller, from their pickup PIN, for the chosen address.
+    await page.locator('[data-checkout-promises] [data-seller-promise="deliverable"]').first().waitFor({ timeout: 60_000 });
+    await page.screenshot({ path: path.join(OUT, 'checkout-delivery-by.png') }).catch(() => {});
     await page.getByRole('button', { name: /Continue to Payment/ }).last().click({ timeout: 120_000 });
     // A business purchase: the buyer's GSTIN, given at checkout, goes on the invoice (Payment Policy).
     S.buyerGstin = gstinFor(randomPan('C'));
@@ -1543,6 +1593,10 @@ async function flow8Shopper() {
     await page.getByRole('button', { name: /Pay ₹[\d,.]+ Securely/ }).click({ timeout: 120_000 });
     await page.getByRole('button', { name: /Simulate successful payment/ }).click({ timeout: 60_000 });
     await page.waitForURL(/confirmation|\/orders\//, { timeout: 120_000 });
+    const confirmed = page.locator('[data-confirmation-promise]');
+    await confirmed.waitFor({ timeout: 60_000 });
+    check(/Delivery by .+Free delivery/.test(await confirmed.innerText()), `confirmation says "${await confirmed.innerText()}"`);
+    await page.screenshot({ path: path.join(OUT, 'confirmation-delivery-by.png') }).catch(() => {});
     const order = await prisma.order.findFirst({ where: { userId: S.shopperId }, orderBy: { createdAt: 'desc' }, include: { items: true, payment: true } });
     check(order && order.paymentMethod !== 'COD', `order ${order?.paymentMethod}`);
     check(order.payment && !/FAIL|PENDING|CREATED/.test(order.payment.status), `payment ${order.payment?.status}`);
@@ -1552,11 +1606,17 @@ async function flow8Shopper() {
     check(inv.status === 200, `invoice ${inv.status}`);
     check(order.buyerGstin === S.buyerGstin, `buyer GSTIN stored ${order.buyerGstin}`);
     check(JSON.stringify(inv.json).includes(S.buyerGstin), 'the buyer GSTIN is not on the invoice');
-    // Mumbai is a metro: processing (1–2) + transit (2–4) working days (Shipping Policy 3).
+    // The seller's promise: dispatch (2 working days) + the mock's TAT from 110059 to 400050 (zone D, 5) + a day.
+    const promise = await prisma.orderSellerPromise.findFirst({ where: { orderId: order.id } });
+    check(promise && promise.source === 'DELHIVERY_TAT' && promise.tatDays === 5 && promise.dispatchDays === 2, `promise ${JSON.stringify(promise)}`);
+    check(+new Date(order.etaTo) === +promise.deliveryBy, `order estimate ${order.etaTo} is not the seller's promise ${promise.deliveryBy}`);
     const etaDays = (new Date(order.etaTo) - new Date(order.createdAt)) / 86_400_000;
-    check(order.etaTo && etaDays >= 3 && etaDays <= 8, `metro estimate ${etaDays.toFixed(1)} days`);
+    check(etaDays >= 7 && etaDays <= 14, `estimate ${etaDays.toFixed(1)} days`);
+    check(promise.freightEstimatePaise > 0, `no freight estimate kept at placement (${promise.freightEstimatePaise})`);
     const notes = await apiOk('GET', '/api/notifications', S.shopperToken);
     check(JSON.stringify(notes).includes(order.orderNumber), 'no notification about the order');
+    // The confirmation message (and its email) carries the date.
+    check(JSON.stringify(notes).includes('Delivery by'), 'the order-confirmed message has no delivery date');
     // The email given at checkout is saved unconfirmed, with a one-time link queued (mock email).
     const buyer = await prisma.user.findUnique({ where: { id: S.shopperId } });
     check(buyer.email === S.shopperEmail && !buyer.emailVerifiedAt, `checkout email ${buyer.email} verified=${!!buyer.emailVerifiedAt}`);
@@ -2296,6 +2356,133 @@ async function prodChecks() {
     check(served === 0 || labelled > 0, `ads are served (${served}) but no labelled slot is shown`);
   }, { page });
   await pb.close();
+}
+
+// ---------------------------------------------------------------------------
+// 14 — What the seller is charged: Delhivery's freight (product form,
+// calculator, order page, payouts, statement) and the GST on Clowe's fees
+// (order page, payouts, statement CSV, the invoice PDF).
+// ---------------------------------------------------------------------------
+async function flow14ChargesGst() {
+  const F = '14 Charges & GST';
+  const page = S.sellerPage;
+  // The month the prepaid line was delivered in (earlier flows shift some dates back).
+  const deliveredAt = (await prisma.orderItem.findUnique({ where: { id: S.prepaidItemId } }))?.deliveredAt ?? new Date();
+  const month = new Date(deliveredAt.getTime() + 5.5 * 3_600_000).toISOString().slice(0, 7);
+
+  await step(F, 'product form: forward, RTO and return pickup per zone, the charged weight, the help link', async () => {
+    await goto(page, `/seller/products/${S.simpleId}/edit`);
+    // The pricing breakdown is on the form's "Inventory & pricing" step.
+    await page.getByRole('button', { name: /Inventory & pricing/ }).click({ timeout: 120_000 });
+    const cases = page.locator('[data-delivery-cases]');
+    await cases.waitFor({ timeout: 120_000 });
+    check((await cases.locator('[data-case]').count()) === 3, 'not three sample places');
+    check(/₹/.test(await cases.locator('[data-case="metro"] [data-rto]').innerText()), 'no RTO charge for the metro');
+    check(/₹/.test(await cases.locator('[data-case="metro"] [data-return]').innerText()), 'no return pickup charge for the metro');
+    check(/charged as \d/.test(await page.locator('[data-chargeable]').innerText()), 'no charged weight');
+    check(await page.locator('[data-delivery] [data-help-link]').count(), 'no "Delivery charges explained" link');
+    await page.locator('[data-fees-toggle]').click();
+    await page.locator('[data-row="commission"]').waitFor({ timeout: 20_000 });
+    check(/GST @18% on Clowe fees/.test(await page.locator('[data-row="feeGst"]').innerText()), 'no separate GST line on Clowe fees');
+    await page.locator('[data-breakdown]').screenshot({ path: path.join(OUT, 'product-form-fees.png') }).catch(() => {});
+    await page.locator('[data-delivery]').screenshot({ path: path.join(OUT, 'product-form-delivery.png') }).catch(() => {});
+  }, { page, needs: ['live'] });
+
+  await step(F, 'COD fee hidden on the estimate while COD is off', async () => {
+    const before = await prisma.platformSetting.findUnique({ where: { key: 'codEnabled' } });
+    await prisma.platformSetting.upsert({ where: { key: 'codEnabled' }, update: { value: false }, create: { key: 'codEnabled', value: false } });
+    try {
+      const est = await apiOk('GET', '/api/seller/pricing-rates/delivery-estimate?weightGrams=500&pricePaise=150000', S.sellerToken);
+      check(est.codFeePaise === null, `COD fee shown while COD is off: ${est.codFeePaise}`);
+    } finally {
+      if (before) await prisma.platformSetting.update({ where: { key: 'codEnabled' }, data: { value: before.value } });
+      else await prisma.platformSetting.delete({ where: { key: 'codEnabled' } });
+    }
+  }, { needs: ['approved'] });
+
+  await step(F, 'shipping charges calculator: a product picked, a PIN of the seller\'s own', async () => {
+    await goto(page, '/seller/shipping-calculator');
+    await page.getByLabel('Product').selectOption(S.simpleId, { timeout: 120_000 });
+    await page.getByLabel('Destination PIN').fill('560001');
+    await page.getByRole('button', { name: 'Calculate' }).click();
+    const result = page.locator('[data-calculator-result]');
+    await result.locator('[data-case="custom"]').waitFor({ timeout: 60_000 });
+    check((await result.locator('[data-case]').count()) === 4, 'not three places and the typed PIN');
+    await result.screenshot({ path: path.join(OUT, 'shipping-calculator.png') }).catch(() => {});
+  }, { page, needs: ['live'] });
+
+  await step(F, 'order page: estimate at placement, at booking, the actual charge, and Clowe fees with their GST', async () => {
+    await goto(page, `/seller/orders/${S.prepaidOrderId}`);
+    const box = page.locator('[data-order-delivery-charges]');
+    await box.waitFor({ timeout: 120_000 });
+    for (const k of ['placement', 'booking', 'actual']) check(/₹/.test(await box.locator(`[data-charge="${k}"]`).first().innerText()), `no ${k} figure`);
+    check(await box.locator('[data-charge-line="FORWARD"]').count(), 'no forward freight line');
+    const fees = page.locator('[data-order-fees]');
+    check(/GST @18% on Clowe fees/.test(await fees.locator('[data-fee="clowe-gst"]').innerText()), 'no GST line on the order page');
+    const charges = await apiOk('GET', `/api/seller/orders/${S.prepaidOrderId}/charges`, S.sellerToken);
+    const f = charges.fees;
+    const sum = f.referralPaise + f.collectionPaise + f.gtPaise + f.handlingPaise + f.otherFeesPaise + f.cloweFeeGstPaise + f.tdsPaise + f.tcsPaise;
+    check(f.grossPaise - sum === f.receivesPaise, `fees do not add up: ${f.grossPaise} − ${sum} ≠ ${f.receivesPaise}`);
+    check(f.cgstPaise + f.sgstPaise + f.igstPaise === f.cloweFeeGstPaise, 'the GST split does not add up');
+    await box.screenshot({ path: path.join(OUT, 'order-delivery-charges.png') }).catch(() => {});
+    await fees.screenshot({ path: path.join(OUT, 'order-fees-gst.png') }).catch(() => {});
+  }, { page, needs: ['delivered'] });
+
+  await step(F, 'order page: RTO and return pickup lines with their date and reason', async () => {
+    const orders = await prisma.shipment.findMany({ where: { sellerId: S.sellerId, OR: [{ status: 'RTO_DELIVERED' }, { kind: 'REVERSE', status: 'DELIVERED' }] }, select: { orderId: true, kind: true } });
+    check(orders.length > 0, 'no RTO or customer return in this run to show');
+    for (const o of orders) {
+      const c = await apiOk('GET', `/api/seller/orders/${o.orderId}/charges`, S.sellerToken);
+      const kind = o.kind === 'REVERSE' ? 'RETURN_PICKUP' : 'RTO';
+      const line = c.lines.find((l) => l.kind === kind);
+      check(line && line.amountPaise > 0 && line.eventAt && line.reason, `${kind} line ${JSON.stringify(line)}`);
+    }
+  }, { needs: ['approved'] });
+
+  await step(F, 'payouts: forward, RTO, return pickup and weight adjustments apart; GST on Clowe fees with its CGST/SGST or IGST; TDS and TCS', async () => {
+    await goto(page, '/seller/payouts');
+    for (const k of ['forward-freight', 'rto-freight', 'return-freight', 'freight-adjustment', 'clowe-gst', 'tds', 'tcs']) {
+      await page.locator(`[data-fee="${k}"]`).first().waitFor({ timeout: 120_000 });
+    }
+    check(/CGST .+SGST|IGST/.test(await page.locator('[data-fee="clowe-gst"]').innerText()), 'no CGST/SGST or IGST on the GST line');
+  }, { page, needs: ['approved'] });
+
+  await step(F, 'statement CSV: every sale row adds up to its net; Delhivery rows carry the AWB; a total row', async () => {
+    const r = await fetch(`${API}/api/seller/payouts/statement?month=${month}`, { headers: { 'x-forwarded-for': SCRIPT_IP, authorization: `Bearer ${S.sellerToken}` } });
+    check(r.ok, `statement ${r.status}`);
+    const csv = await r.text();
+    fs.writeFileSync(path.join(OUT, 'statement.csv'), csv);
+    const rows = csv.trim().split('\n').map((l) => l.match(/("([^"]|"")*"|[^,]*)(,|$)/g).map((c) => c.replace(/,$/, '').replace(/^"|"$/g, '').replace(/""/g, '"')));
+    const head = rows[0];
+    for (const h of ['AWB', 'GST @18% on Clowe fees (INR)', 'of which CGST (INR)', 'of which IGST (INR)', 'TDS (INR)', 'GST TCS (INR)', 'Net (INR)']) check(head.includes(h), `no "${h}" column`);
+    const col = (row, h) => Math.round(Number(row[head.indexOf(h)] || 0) * 100);
+    const sales = rows.filter((x) => x[0] === 'Sale');
+    check(sales.length > 0, 'no sale rows this month');
+    for (const x of sales) {
+      const deductions = ['Referral fee / commission (INR)', 'Collection fee / gateway (INR)', 'GT charge (INR)', 'Handling fee (INR)', 'Other Clowe fees on older orders (INR)', 'GST @18% on Clowe fees (INR)', 'TDS (INR)', 'GST TCS (INR)'].reduce((a, h) => a + col(x, h), 0);
+      check(col(x, 'Gross (INR)') - deductions === col(x, 'Net (INR)'), `sale row ${x[2]} does not add up`);
+      check(col(x, 'of which CGST (INR)') + col(x, 'of which SGST (INR)') + col(x, 'of which IGST (INR)') === col(x, 'GST @18% on Clowe fees (INR)'), `GST split of ${x[2]}`);
+    }
+    const freight = rows.filter((x) => /freight|Delhivery/i.test(x[0]));
+    check(freight.length > 0 && freight.every((x) => x[head.indexOf('AWB')]), 'a Delhivery row without its AWB');
+    check(rows.at(-1)[0] === 'Total', 'no total row');
+  }, { needs: ['delivered'] });
+
+  await step(F, 'Clowe\'s invoice: a PDF to download; issued numbers are CLW/<FY>/<6 digits>, at most 16 characters', async () => {
+    const r = await fetch(`${API}/api/seller/billing/invoices/${month}/pdf`, { headers: { 'x-forwarded-for': SCRIPT_IP, authorization: `Bearer ${S.sellerToken}` } });
+    check(r.ok && /application\/pdf/.test(r.headers.get('content-type') ?? ''), `PDF ${r.status} ${r.headers.get('content-type')}`);
+    const pdf = Buffer.from(await r.arrayBuffer());
+    check(pdf.subarray(0, 5).toString() === '%PDF-', 'not a PDF');
+    fs.writeFileSync(path.join(OUT, `invoice-draft-${month}.pdf`), pdf);
+    const issued = await prisma.sellerTaxInvoice.findMany({ select: { number: true } });
+    for (const i of issued) check(/^[A-Z0-9]{1,4}\/\d{4}\/\d{6}$/.test(i.number) && i.number.length <= 16 || /^CLW\/SI\//.test(i.number), `invoice number ${i.number}`);
+  }, { needs: ['approved'] });
+
+  await step(F, '"Delivery charges explained" help page', async () => {
+    await goto(page, '/pages/delivery-charges');
+    await page.getByRole('heading', { name: 'Delivery Charges Explained' }).waitFor({ timeout: 120_000 });
+    check(await page.getByText(/Hinglish mein/).count(), 'no Hinglish');
+  }, { page });
 }
 
 // ---------------------------------------------------------------------------

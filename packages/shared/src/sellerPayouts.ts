@@ -195,8 +195,19 @@ export interface SellerPayoutOverview {
     gatewayPaise: number;
     /** Platform, closing and GT fees on the month's delivered lines (and the old flat delivery fee, before it ended). */
     fixedFeesPaise: number;
-    /** Delhivery's forward freight on the month's parcels, re-weigh adjustments included. */
+    /** fixedFeesPaise in parts: the GT charge, the handling fee, older orders' platform/closing (and flat delivery) fees, and the GST on Clowe's fees. */
+    gtPaise: number;
+    handlingPaise: number;
+    otherFeesPaise: number;
+    /** GST @18% on Clowe's fees, and how it splits for this seller. */
+    cloweFeeGstPaise: number;
+    cloweFeeGst: { intraState: boolean; cgstPaise: number; sgstPaise: number; igstPaise: number };
+    tdsPaise: number;
+    tcsPaise: number;
+    /** Delhivery's forward freight on the month's parcels. */
     forwardFreightPaise: number;
+    /** Re-weighs and billing-check corrections of freight. */
+    freightAdjustmentPaise: number;
     /** Delhivery's COD fees on the month's delivered COD parcels. */
     codFeePaise: number;
     /** Delhivery's charges for bringing undelivered parcels back. */

@@ -63,6 +63,16 @@ export interface FreightQuote {
   totalPaise: number;
 }
 
+/** Delhivery's expected transit time from a pickup pincode to a delivery one. */
+export interface TransitEstimate {
+  /** False when the courier does not deliver to the destination at all. */
+  serviceable: boolean;
+  /** Transit days from pickup; null when not serviceable. */
+  tatDays: number | null;
+  /** The courier's own date for a pickup on `pickupDate` (YYYY-MM-DD), when it gives one. */
+  expectedDeliveryDate: string | null;
+}
+
 export interface PostalAddress {
   line1: string;
   city: string;
@@ -180,6 +190,8 @@ export interface TrackingResult {
   statusText: string;
   /** The weight the courier measured and bills on, once known. */
   chargedWeightGrams: number | null;
+  /** The courier's promised delivery date, once it has one. */
+  promisedDeliveryDate?: Date | null;
   scans: TrackingScan[];
 }
 
@@ -219,6 +231,8 @@ export interface ShippingProvider {
 
   checkPincode(pincode: string): Promise<PincodeServiceability>;
   quote(request: FreightQuoteRequest): Promise<FreightQuote>;
+  /** Transit time for a pickup on `pickupDate` (India time). Read-only. */
+  expectedTat(originPincode: string, destinationPincode: string, pickupDate: Date): Promise<TransitEstimate>;
   upsertWarehouse(warehouse: WarehouseInput): Promise<WarehouseResult>;
   createShipment(request: CreateShipmentRequest): Promise<CreatedShipment>;
   getLabel(awbNumber: string): Promise<LabelData>;

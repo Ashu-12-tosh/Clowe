@@ -119,9 +119,13 @@ describe('fees on a new order line', () => {
     const col = (name: string) => Number(row[header!.findIndex((h) => h.startsWith(name))]) * 100;
     expect(col('Referral fee')).toBe(2_000);
     expect(col('Collection fee')).toBe(2_000);
-    expect(col('Other Clowe fees')).toBe(1_500 + 1_900 + 1_332);
+    expect(col('GT charge')).toBe(1_500);
+    expect(col('Handling fee')).toBe(1_900);
+    expect(col('Other Clowe fees')).toBe(0);
+    expect(col('GST @18% on Clowe fees')).toBe(1_332);
     expect(col('Net')).toBe(ledgerNet);
-    expect(col('Gross') - col('Referral fee') - col('Collection fee') - col('Other Clowe fees') - col('TDS') - col('GST TCS')).toBe(col('Net'));
+    const fees = ['Referral fee', 'Collection fee', 'GT charge', 'Handling fee', 'Other Clowe fees', 'GST @18% on Clowe fees', 'TDS', 'GST TCS'];
+    expect(fees.reduce((net, name) => net - col(name), col('Gross'))).toBe(col('Net'));
   });
 
   it('use the category’s referral fee and keep it after the category changes', async () => {

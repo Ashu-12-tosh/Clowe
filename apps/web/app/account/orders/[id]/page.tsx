@@ -72,18 +72,22 @@ function etaLabel(from: string | null, to: string | null): string {
 const NOT_ON_THE_WAY = new Set(['DELIVERED', 'CANCELLED', 'RETURNED', 'RETURN_REQUESTED', 'REFUNDED']);
 
 /**
- * The window the header quotes: checkout's estimate for what has not left
- * yet, and each dispatched parcel's own, firmer one (from its dispatch date)
- * for what is on its way — so the page never shows two different windows
- * for the same goods (pre-launch audit L5).
+ * The window the header quotes: Delhivery's own date for a parcel it has
+ * booked, each dispatched parcel's own window (from its dispatch date) for
+ * what is on its way, and the seller's promise from checkout for what has
+ * not left yet — so the page never shows two different windows for the same
+ * goods (pre-launch audit L5).
  */
 function currentEtaWindow(order: OrderDetailView): { from: string | null; to: string | null } {
   const windows: { from: string; to: string }[] = [];
   for (const item of order.items) {
     if (NOT_ON_THE_WAY.has(item.status)) continue;
     const parcel = item.parcel;
-    if (item.status === 'SHIPPED' && parcel?.etaFrom && parcel.etaTo) windows.push({ from: parcel.etaFrom, to: parcel.etaTo });
-    else if (order.etaFrom && order.etaTo) windows.push({ from: order.etaFrom, to: order.etaTo });
+    if (parcel?.courierPromisedAt) windows.push({ from: parcel.courierPromisedAt, to: parcel.courierPromisedAt });
+    else if (item.status === 'SHIPPED' && parcel?.etaFrom && parcel.etaTo) windows.push({ from: parcel.etaFrom, to: parcel.etaTo });
+    else if (item.deliveryPromise) {
+      windows.push({ from: item.deliveryPromise.deliveryBy, to: item.deliveryPromise.deliveryByLatest ?? item.deliveryPromise.deliveryBy });
+    } else if (order.etaFrom && order.etaTo) windows.push({ from: order.etaFrom, to: order.etaTo });
   }
   if (windows.length === 0) return { from: order.etaFrom, to: order.etaTo };
   const from = windows.reduce((a, w) => (w.from < a ? w.from : a), windows[0]!.from);

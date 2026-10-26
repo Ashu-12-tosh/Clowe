@@ -44,6 +44,7 @@ import {
 } from '@/components/cart/CartIcons';
 import PolicyText from '@/components/PolicyText';
 import { usePaymentMethodNames } from '@/lib/paymentMethods';
+import { useCartPromises } from '@/components/cart/DeliveryPromises';
 
 const field =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-600';
@@ -233,6 +234,9 @@ export default function CheckoutPage() {
 
   const lines = useMemo(() => cart?.lines.filter((l) => l.selected) ?? [], [cart]);
   const chosenDelivery = deliveryOptions.find((o) => o.method === deliveryMethod) ?? null;
+  // One date per seller, from their own pickup pincode, for the chosen address.
+  const promises = useCartPromises({ addressId: selectedAddress || null }, cart);
+  const blocked = promises?.blockedMessage ?? null;
   const shippingPaise = chosenDelivery?.pricePaise ?? cart?.shippingPaise ?? 0;
   const itemTotalPaise = cart?.subtotalPaise ?? 0;
   const couponDiscountPaise = cart?.couponDiscountPaise ?? 0;
@@ -504,7 +508,7 @@ export default function CheckoutPage() {
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-bold text-ink-900">{option.label}</span>
                       <span className="block text-xs text-gray-500">
-                        {option.unavailableReason ?? option.etaLabel}
+                        {option.unavailableReason ?? (promises ? 'Dated per seller below' : option.etaLabel)}
                       </span>
                     </span>
                     <span className="flex shrink-0 items-baseline gap-2">
@@ -525,6 +529,24 @@ export default function CheckoutPage() {
                 );
               })}
             </div>
+            {promises && promises.sellers.length > 0 && (
+              <ul className="mt-3 space-y-1.5 rounded-xl border border-gray-100 p-3 text-xs" data-checkout-promises>
+                {promises.sellers.map((p) => (
+                  <li key={p.sellerId} className="flex flex-wrap justify-between gap-2" data-seller-promise={p.deliverable === false ? 'not-available' : 'deliverable'}>
+                    <span className="text-gray-600">From {p.shopName}</span>
+                    <span className={p.deliverable === false ? 'font-semibold text-red-600' : 'font-semibold text-ink-900'}>
+                      {p.label}
+                      {p.deliverable !== false && <span className="text-green-600"> · Free delivery</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {blocked && (
+              <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700" data-checkout-blocked>
+                {blocked}
+              </p>
+            )}
             {chosenDelivery && chosenDelivery.strikePaise !== null && (
               <p className="mt-3 flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-xs font-semibold text-green-700">
                 <LeafIcon className="h-4 w-4 shrink-0" />
@@ -769,9 +791,18 @@ export default function CheckoutPage() {
                   <p>
                     Delivering to: {shipTo.line1}, {shipTo.city}
                   </p>
-                  <p className="mt-0.5 text-gray-500">
-                    Estimated Delivery: {chosenDelivery.etaLabel.replace('Delivered by ', '')}
-                  </p>
+                  {promises && promises.sellers.length > 0 ? (
+                    promises.sellers.map((p) => (
+                      <p key={p.sellerId} className={`mt-0.5 ${p.deliverable === false ? 'font-semibold text-red-600' : 'text-gray-500'}`}>
+                        {promises.sellers.length > 1 ? `${p.shopName}: ` : ''}
+                        {p.label}
+                      </p>
+                    ))
+                  ) : (
+                    <p className="mt-0.5 text-gray-500">
+                      Estimated Delivery: {chosenDelivery.etaLabel.replace('Delivered by ', '')}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -804,7 +835,7 @@ export default function CheckoutPage() {
           <div className="hidden lg:block">
             <button
               onClick={() => void continueToPayment()}
-              disabled={!selectedAddress || ordersOpen === false || savingEmail}
+              disabled={!selectedAddress || ordersOpen === false || savingEmail || !!blocked}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 py-3.5 text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-50"
             >
               <LockIcon className="h-4 w-4" />
@@ -849,7 +880,7 @@ export default function CheckoutPage() {
         </div>
         <button
           onClick={() => void continueToPayment()}
-          disabled={!selectedAddress || ordersOpen === false || savingEmail}
+          disabled={!selectedAddress || ordersOpen === false || savingEmail || !!blocked}
           className="rounded-lg bg-brand-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-brand-700 disabled:opacity-50"
         >
           Continue to Payment

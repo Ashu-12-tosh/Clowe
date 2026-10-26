@@ -26,6 +26,10 @@ apps/api/uploads-private/
 # the example stays tracked.
 .env.production*
 !.env.production.example
+# Downloaded key files ("... apikey.txt", "APIKey.csv"): never committed.
+*[Aa][Pp][Ii][Kk][Ee][Yy]*.txt
+*[Aa][Pp][Ii][Kk][Ee][Yy]*.csv
+*[Aa][Pp][Ii][Kk][Ee][Yy]*.json
 backups/
 
 # TypeScript incremental build info

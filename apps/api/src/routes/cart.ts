@@ -7,6 +7,7 @@ import { type CodAvailability,
   cartSelectAllSchema,
   couponApplySchema,
   type AppliedCoupon,
+  type CartDeliveryPromises,
   type CartView,
   type CouponOffer,
   codPlatformRefusal,
@@ -21,6 +22,7 @@ import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { codRefusal, deliveryRefusal, pincodeServiceability } from '../services/shipping/serviceability';
 import { deliveryOptionsFor, deliveryPriceFor } from '../services/deliveryService';
+import { promisesFor, promiseView, undeliverableMessage } from '../services/shipping/deliveryPromises';
 
 export const cartRouter = Router();
 cartRouter.use(requireAuth);
@@ -508,6 +510,41 @@ cartRouter.get('/delivery-options', async (req, res, next) => {
     const address = addressId ? await prisma.address.findUnique({ where: { id: addressId } }) : null;
     const pincode = address && address.userId === req.auth!.userId ? address.pincode : null;
     res.json({ success: true, data: deliveryOptionsFor(new Date(), pincode) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The delivery date for each seller in the cart, for the chosen address (or
+// a PIN the shopper typed on a product page): the cart, the checkout's
+// review step and the payment page all show it. Lines Delhivery can't bring
+// here are named, the way checkout refuses them.
+cartRouter.get('/delivery-promises', async (req, res, next) => {
+  try {
+    const addressId = typeof req.query.addressId === 'string' ? req.query.addressId : '';
+    const address = addressId ? await prisma.address.findUnique({ where: { id: addressId } }) : null;
+    if (addressId && (!address || address.userId !== req.auth!.userId)) throw ApiError.badRequest('Address not found');
+    const pincode = address?.pincode ?? (typeof req.query.pincode === 'string' ? req.query.pincode.trim() : '');
+    if (!/^\d{6}$/.test(pincode)) throw ApiError.badRequest('Enter a valid 6-digit pincode', 'BAD_PINCODE');
+    const { lines } = await buildCartView(req.auth!.userId);
+    const products = await prisma.product.findMany({
+      where: { id: { in: [...new Set(lines.map((l) => l.productId))] } },
+      select: { id: true, sellerId: true },
+    });
+    const sellerOf = new Map(products.map((p) => [p.id, p.sellerId]));
+    const owned = lines.filter((l) => sellerOf.has(l.productId));
+    const promises = await promisesFor(owned.map((l) => sellerOf.get(l.productId)!), pincode);
+    const cannotReach = new Set(promises.filter((p) => p.deliverable === false).map((p) => p.sellerId));
+    const body: CartDeliveryPromises = {
+      pincode,
+      sellers: promises.map(promiseView),
+      lines: owned.map((l) => ({ variantId: l.variantId, sellerId: sellerOf.get(l.productId)! })),
+      blockedMessage: undeliverableMessage(
+        pincode,
+        owned.filter((l) => l.selected && cannotReach.has(sellerOf.get(l.productId)!)).map((l) => l.title),
+      ),
+    };
+    res.json({ success: true, data: body });
   } catch (err) {
     next(err);
   }

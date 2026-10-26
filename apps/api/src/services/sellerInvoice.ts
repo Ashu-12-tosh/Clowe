@@ -1,5 +1,11 @@
 import {
   CLOWE_CHARGE_TYPES,
+  financialYearOf,
+  gstStateName,
+  isIntraStateSupply,
+  recipientStateCode,
+  sellerInvoiceNumber,
+  splitGst,
   istMonthBounds,
   istMonthOf,
   SELLER_LEDGER_TYPE_LABELS,
@@ -43,7 +49,7 @@ function spread(total: number, weights: number[]): number[] {
 }
 
 /** Penalties carry GST from Batch 2 on; each is its own invoice line. */
-const PENALTY_INVOICE_TYPES = ['LATE_DISPATCH_PENALTY', 'ADMIN_PENALTY'] as const;
+const PENALTY_INVOICE_TYPES = ['LATE_DISPATCH_PENALTY', 'SELLER_CANCEL_PENALTY', 'ADMIN_PENALTY'] as const;
 
 export async function buildMonthlyInvoice(sellerId: string, month: string): Promise<SellerMonthlyInvoice> {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw ApiError.badRequest('Month looks like 2026-10');
@@ -83,25 +89,15 @@ export async function buildMonthlyInvoice(sellerId: string, month: string): Prom
     }
   }
 
-  const supplierState = settings.legalEntity.gstin.slice(0, 2);
-  const recipientState = seller.gstNumber?.slice(0, 2) ?? null;
-  const intraState = !!recipientState && recipientState === supplierState;
+  // Place of supply: a registered seller's GSTIN state, else the state of their address.
+  const intraState = isIntraStateSupply(settings.legalEntity.gstin, seller);
+  const placeCode = recipientStateCode(seller);
+  const supplierCode = settings.legalEntity.gstin.slice(0, 2);
   const rate = c.fees.gstPercent;
   const lines: SellerInvoiceLine[] = [];
   const push = (key: string, label: string, base: number, gst: number) => {
     if (base === 0 && gst === 0) return;
-    const half = Math.floor(gst / 2);
-    lines.push({
-      key,
-      label,
-      sac: c.invoice.sacCode,
-      taxablePaise: base,
-      gstRatePercent: rate,
-      cgstPaise: intraState ? half : 0,
-      sgstPaise: intraState ? gst - half : 0,
-      igstPaise: intraState ? 0 : gst,
-      totalPaise: base + gst,
-    });
+    lines.push({ key, label, sac: c.invoice.sacCode, taxablePaise: base, gstRatePercent: rate, ...splitGst(gst, intraState), totalPaise: base + gst });
   };
   const feeTypes = ORDER_FEE_TYPES.filter((t) => (taxable.get(t) ?? 0) !== 0);
   const feeGst = spread(gstByGroup.get('ORDER_FEES') ?? 0, feeTypes.map((t) => taxable.get(t) ?? 0));
@@ -122,7 +118,7 @@ export async function buildMonthlyInvoice(sellerId: string, month: string): Prom
       name: settings.legalEntity.name,
       gstin: settings.legalEntity.gstin || null,
       address: settings.legalEntity.registeredAddress,
-      state: 'Delhi',
+      state: gstStateName(supplierCode) ?? 'Delhi',
     },
     recipient: {
       name: seller.panName ?? seller.shopName,
@@ -131,6 +127,7 @@ export async function buildMonthlyInvoice(sellerId: string, month: string): Prom
       state: seller.state,
     },
     intraState,
+    placeOfSupply: placeCode ? `${placeCode} ${gstStateName(placeCode) ?? ''}`.trim() : null,
     lines,
     totals: { taxablePaise: sum('taxablePaise'), cgstPaise: sum('cgstPaise'), sgstPaise: sum('sgstPaise'), igstPaise: sum('igstPaise'), totalPaise: sum('totalPaise') },
     notes: [
@@ -139,13 +136,6 @@ export async function buildMonthlyInvoice(sellerId: string, month: string): Prom
       'Fees on orders placed before the current fee schedule carried no GST and are listed at 0% where they appear.',
     ],
   };
-}
-
-/** The financial year (April–March) a month falls in, e.g. "2026-27". */
-function financialYear(month: string): string {
-  const [y, m] = month.split('-').map(Number);
-  const start = m! >= 4 ? y! : y! - 1;
-  return `${start}-${String((start + 1) % 100).padStart(2, '0')}`;
 }
 
 /** Tells the seller (in the app, and by email through the notification bridge) that the invoice is ready. */
@@ -170,26 +160,33 @@ export async function issueMonthlyInvoice(sellerId: string, month: string): Prom
   const existing = await prisma.sellerTaxInvoice.findUnique({ where: { sellerId_month: { sellerId, month } } });
   if (existing) return existing.document as unknown as SellerMonthlyInvoice;
   if (month >= istMonthOf(new Date())) throw ApiError.badRequest('A month is invoiced once it has ended', 'MONTH_NOT_OVER');
-  const doc = await buildMonthlyInvoice(sellerId, month);
-  if (doc.lines.length === 0) return null;
+  const draft = await buildMonthlyInvoice(sellerId, month);
+  if (draft.lines.length === 0) return null;
   const { invoice } = await getCommercial();
-  const fy = financialYear(month);
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const seq = (await prisma.sellerTaxInvoice.count({ where: { number: { startsWith: `${invoice.numberPrefix}/${fy}/` } } })) + 1 + attempt;
-    const number = `${invoice.numberPrefix}/${fy}/${String(seq).padStart(6, '0')}`;
-    const issuedAt = new Date();
-    const document = { ...doc, number, issuedAt: issuedAt.toISOString() };
-    try {
-      await prisma.sellerTaxInvoice.create({ data: { sellerId, month, number, issuedAt, document: document as unknown as object } });
-      await notifyInvoiceReady(sellerId, month, number, doc.totals.totalPaise);
-      return document;
-    } catch (err) {
-      const again = await prisma.sellerTaxInvoice.findUnique({ where: { sellerId_month: { sellerId, month } } });
-      if (again) return again.document as unknown as SellerMonthlyInvoice;
-      if (attempt === 4) throw err;
-    }
+  const fy = financialYearOf(month);
+  const issuedAt = new Date();
+  try {
+    const document = await prisma.$transaction(async (tx) => {
+      // The next number of the series this financial year, under the row's lock:
+      // consecutive, and given back if anything below fails.
+      await tx.$executeRaw`INSERT INTO invoice_sequences (series, "financialYear", "lastNumber") VALUES (${invoice.numberPrefix}, ${fy}, 0) ON CONFLICT DO NOTHING`;
+      const [row] = await tx.$queryRaw<{ lastNumber: number }[]>`
+        UPDATE invoice_sequences SET "lastNumber" = "lastNumber" + 1
+        WHERE series = ${invoice.numberPrefix} AND "financialYear" = ${fy}
+        RETURNING "lastNumber"`;
+      const number = sellerInvoiceNumber(invoice.numberPrefix, fy, row!.lastNumber);
+      const doc = { ...draft, number, issuedAt: issuedAt.toISOString() };
+      await tx.sellerTaxInvoice.create({ data: { sellerId, month, number, issuedAt, document: doc as unknown as object } });
+      return doc;
+    });
+    await notifyInvoiceReady(sellerId, month, document.number!, draft.totals.totalPaise);
+    return document;
+  } catch (err) {
+    // Issued by someone else in the meantime (the unique seller + month): that one stands.
+    const again = await prisma.sellerTaxInvoice.findUnique({ where: { sellerId_month: { sellerId, month } } });
+    if (again) return again.document as unknown as SellerMonthlyInvoice;
+    throw err;
   }
-  return null;
 }
 
 /** Issue last month's invoices for every seller with charges. */

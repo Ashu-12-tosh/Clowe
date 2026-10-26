@@ -26,6 +26,8 @@ Delivery is free for buyers. You pay our courier partner's (Delhivery's) actual 
 - **RTO freight** — if a parcel cannot be delivered and comes back to you.
 - **Return pickup freight** — when you approve a return and the courier brings it back to you.
 
+How each is worked out, with examples: [Delivery Charges Explained](/pages/delivery-charges).
+
 ## Seller plans
 
 Plans renew every month on the same date and are paid from your Seller Wallet first, then from your next payout: {{sellerPlans}}. If a renewal cannot be paid you have {{planGraceDays}}, then the shop moves to Free; products over the Free limit are hidden, never deleted, and you choose which stay live.

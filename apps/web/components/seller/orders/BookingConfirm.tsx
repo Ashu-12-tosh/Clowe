@@ -124,7 +124,10 @@ export function BookingConfirm({
         <p className="mt-1 text-xs text-gray-500">
           Check each parcel&apos;s weight and box size — Delhivery bills every 0.5 kg, on the greater of the weight and
           the box&apos;s volumetric weight (L × W × H in cm ÷ 5000). Delivery is free for the buyer; you pay the
-          freight, posted when the parcel is delivered at the weight Delhivery measures.
+          freight, posted when the parcel is delivered at the weight Delhivery measures.{' '}
+          <a href="/pages/delivery-charges" target="_blank" rel="noreferrer" className="font-semibold text-brand-600 hover:underline" data-help-link>
+            Delivery charges explained
+          </a>
         </p>
 
         {!quote && !error && <div className="mt-4 h-20 animate-pulse rounded-xl bg-gray-100" />}

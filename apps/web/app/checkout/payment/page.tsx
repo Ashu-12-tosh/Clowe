@@ -40,6 +40,7 @@ import {
   TruckIcon,
 } from '@/components/cart/CartIcons';
 import PolicyText from '@/components/PolicyText';
+import { useCartPromises } from '@/components/cart/DeliveryPromises';
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: 'Approved Sellers', text: 'Every shop is reviewed before it sells' },
@@ -86,6 +87,7 @@ function PaymentPageInner() {
   const searchParams = useSearchParams();
 
   const addressId = searchParams.get('addressId') ?? '';
+  const promises = useCartPromises({ addressId: addressId || null });
   const deliveryMethod = (searchParams.get('deliveryMethod') ?? 'STANDARD') as DeliveryMethod;
   const useCredits = searchParams.get('useCredits') === 'true';
   const isGift = searchParams.get('isGift') === 'true';
@@ -838,12 +840,19 @@ function PaymentPageInner() {
                   <p className="t-caption truncate text-gray-600">
                     Delivering to: {shipTo.line1}, {shipTo.city}
                   </p>
-                  {chosenDelivery && (
-                    <p className="t-caption text-gray-500">
-                      Estimated Delivery: {fmtShort(chosenDelivery.etaFrom)} –{' '}
-                      {fmtShort(chosenDelivery.etaTo)}
-                    </p>
-                  )}
+                  {promises && promises.sellers.length > 0
+                    ? promises.sellers.map((p) => (
+                        <p key={p.sellerId} className={`t-caption ${p.deliverable === false ? 'font-semibold text-red-600' : 'text-gray-500'}`}>
+                          {promises.sellers.length > 1 ? `${p.shopName}: ` : ''}
+                          {p.label}
+                        </p>
+                      ))
+                    : chosenDelivery && (
+                        <p className="t-caption text-gray-500">
+                          Estimated Delivery: {fmtShort(chosenDelivery.etaFrom)} –{' '}
+                          {fmtShort(chosenDelivery.etaTo)}
+                        </p>
+                      )}
                 </div>
               </div>
             )}

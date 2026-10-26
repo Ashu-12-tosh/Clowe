@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { creditsEarnedFor, creditsToPaise, newOrderNumber, REFERRAL_REWARD_CREDITS } from '@clowe/shared';
+import { creditsEarnedFor, creditsToPaise, newOrderNumber, promiseLabel, REFERRAL_REWARD_CREDITS } from '@clowe/shared';
 import { prisma } from '../db';
 import { sendMessageSafe, sendToUserSafe } from './messaging';
 import { creditExpiryFrom } from '../routes/credits';
@@ -75,7 +75,7 @@ export async function settlePaymentSuccess(orderId: string, providerPaymentId?: 
         userId: order.userId,
         type: 'ORDER_CONFIRMED',
         title: 'Order confirmed 🎉',
-        body: `Payment received for ${order.orderNumber}. We'll update you when it ships.`,
+        body: `Payment received for ${order.orderNumber}.${await promiseSentence(order.id, tx)} We'll update you when it ships.`,
         linkHref: `/orders/${order.id}/confirmation`,
       },
     });
@@ -291,7 +291,7 @@ export async function confirmCodOrder(orderId: string) {
         userId: order.userId,
         type: 'ORDER_CONFIRMED',
         title: 'Order confirmed 🎉',
-        body: `${order.orderNumber} is confirmed. Keep ₹${(order.totalPaise / 100).toLocaleString('en-IN')} ready for the courier.`,
+        body: `${order.orderNumber} is confirmed.${await promiseSentence(order.id)} Keep ₹${(order.totalPaise / 100).toLocaleString('en-IN')} ready for the courier.`,
         linkHref: `/orders/${order.id}/confirmation`,
       },
     }),
@@ -321,4 +321,21 @@ export async function confirmCodOrder(orderId: string) {
   }
 
   await notifySellersOfNewOrder(order, true);
+}
+
+/**
+ * " Delivery by Thu, 29 Oct." — or one per shop, " Delivery by Thu, 29 Oct
+ * (Shop A); by Mon, 2 Nov (Shop B)." — for the order-confirmed message and
+ * its email. Empty when the order kept no promise (placed before them).
+ */
+async function promiseSentence(orderId: string, db: Pick<typeof prisma, 'orderSellerPromise'> = prisma): Promise<string> {
+  const promises = await db.orderSellerPromise.findMany({
+    where: { orderId },
+    include: { seller: { select: { shopName: true } } },
+    orderBy: { deliveryBy: 'asc' },
+  });
+  if (promises.length === 0) return '';
+  if (promises.length === 1) return ` ${promiseLabel(promises[0]!)}.`;
+  const parts = promises.map((p, i) => `${i === 0 ? promiseLabel(p) : promiseLabel(p).replace(/^Delivery /, '')} (${p.seller.shopName})`);
+  return ` ${parts.join('; ')}.`;
 }

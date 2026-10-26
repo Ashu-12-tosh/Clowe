@@ -1,53 +1,57 @@
 'use client';
 
-import { setFunctional } from '@/lib/cookieConsent';
 import { useCallback, useEffect, useState } from 'react';
-import type { DeliveryMethod, DeliveryQuote } from '@clowe/shared';
-import { api } from '@/lib/api';
-import { formatPaise } from '@/lib/format';
+import type { ProductDeliveryPromise } from '@clowe/shared';
+import { api, ApiRequestError } from '@/lib/api';
+import { rememberPin, startingPin } from '@/lib/deliveryPin';
 import { MapPinIcon } from '@/components/cart/CartIcons';
 
-const PINCODE_KEY = 'clowe.pincode';
-
 interface Props {
-  /** Item price; delivery is free at any price, the API ignores it. */
-  subtotalPaise: number;
+  productId: string;
 }
 
 /**
- * "Delivering to <pincode>" with the speeds available there. The pincode is
- * remembered locally so it follows the shopper between products.
+ * "Delivery by Thu, 29 Oct · Free delivery" for the shopper's PIN, from this
+ * product's seller: their dispatch promise and Delhivery's transit time from
+ * their pickup pincode. The PIN is kept for the session (and starts from a
+ * logged-in buyer's default address), so it follows them to other products
+ * and the cart.
  */
-export default function DeliveryCard({ subtotalPaise }: Props) {
+export default function DeliveryCard({ productId }: Props) {
   const [pincode, setPincode] = useState('');
   const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState(false);
-  const [quote, setQuote] = useState<DeliveryQuote | null>(null);
-  const [method, setMethod] = useState<DeliveryMethod>('STANDARD');
+  const [promise, setPromise] = useState<ProductDeliveryPromise | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem(PINCODE_KEY) ?? '';
-    setPincode(saved);
-    setDraft(saved);
-    setEditing(!saved);
+    let live = true;
+    void startingPin().then((pin) => {
+      if (!live) return;
+      setPincode(pin);
+      setDraft(pin);
+      setEditing(!pin);
+    });
+    return () => {
+      live = false;
+    };
   }, []);
 
   const load = useCallback(
     (pin: string) => {
+      if (!pin) return;
       setLoading(true);
-      const query = new URLSearchParams({ subtotalPaise: String(subtotalPaise) });
-      if (pin) query.set('pincode', pin);
-      api<DeliveryQuote>(`/api/delivery/options?${query.toString()}`)
-        .then((q) => {
-          setQuote(q);
-          // Keep the current pick only while it is still offered.
-          setMethod((m) => (q.options.find((o) => o.method === m)?.available ? m : 'STANDARD'));
+      setError(null);
+      api<ProductDeliveryPromise>(`/api/delivery/promise?${new URLSearchParams({ productId, pincode: pin }).toString()}`)
+        .then(setPromise)
+        .catch((err) => {
+          setPromise(null);
+          setError(err instanceof ApiRequestError ? err.message : 'Could not check delivery just now');
         })
-        .catch(() => setQuote(null))
         .finally(() => setLoading(false));
     },
-    [subtotalPaise],
+    [productId],
   );
 
   useEffect(() => {
@@ -57,16 +61,17 @@ export default function DeliveryCard({ subtotalPaise }: Props) {
   function apply() {
     const pin = draft.trim();
     if (!/^\d{6}$/.test(pin)) {
-      setQuote({ pincode: pin, serviceable: false, message: 'Enter a valid 6-digit pincode', options: [] });
+      setPromise(null);
+      setError('Enter a valid 6-digit pincode');
       return;
     }
-    setFunctional(PINCODE_KEY, pin);
+    rememberPin(pin);
     setPincode(pin);
     setEditing(false);
   }
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-white p-4">
+    <div className="rounded-2xl border border-gray-100 bg-white p-4" data-delivery-card>
       <div className="flex items-center gap-2">
         <MapPinIcon className="h-4 w-4 text-gray-500" />
         <p className="text-sm font-bold text-ink-900">Delivery</p>
@@ -108,48 +113,23 @@ export default function DeliveryCard({ subtotalPaise }: Props) {
         </div>
       )}
 
-      {quote && !quote.serviceable && quote.message && (
-        <p className="mt-2 text-xs font-medium text-red-600">{quote.message}</p>
-      )}
+      {error && <p className="mt-2 text-xs font-medium text-red-600">{error}</p>}
+      {loading && !promise && <p className="mt-3 text-xs text-gray-400">Checking…</p>}
 
-      {loading && !quote && <p className="mt-3 text-xs text-gray-400">Checking…</p>}
-
-      {quote?.serviceable && (
-        <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
-          {quote.options.map((option) => (
-            <label
-              key={option.method}
-              className={`flex items-start gap-2.5 ${
-                option.available ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
-              }`}
-            >
-              <input
-                type="radio"
-                name="pdp-delivery"
-                checked={method === option.method}
-                disabled={!option.available}
-                onChange={() => setMethod(option.method)}
-                className="mt-0.5 h-4 w-4 accent-ink-900"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold text-ink-900">{option.label}</span>
-                <span className="block text-xs text-gray-500">
-                  {option.unavailableReason ?? option.etaLabel}
-                </span>
-              </span>
-              <span
-                className={`shrink-0 text-sm font-bold ${
-                  option.pricePaise === 0 ? 'text-green-600' : 'text-ink-900'
-                }`}
-              >
-                {option.pricePaise === 0 ? 'FREE' : formatPaise(option.pricePaise)}
-              </span>
-            </label>
-          ))}
-          <p className="pt-1 text-[11px] text-gray-400">
-            Pick your final speed at checkout — prices shown are for this order value.
-          </p>
-        </div>
+      {promise && !editing && (
+        <p
+          className={`mt-3 border-t border-gray-100 pt-3 text-sm font-semibold ${promise.deliverable ? 'text-ink-900' : 'text-red-600'}`}
+          data-delivery-promise={promise.deliverable ? 'deliverable' : 'not-available'}
+        >
+          {promise.deliverable ? (
+            <>
+              {promise.message.replace(' · Free delivery', '')}
+              <span className="font-bold text-green-600"> · Free delivery</span>
+            </>
+          ) : (
+            promise.message
+          )}
+        </p>
       )}
     </div>
   );

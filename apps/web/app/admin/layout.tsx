@@ -25,6 +25,7 @@ const NAV: DashNavItem[] = [
   { href: '/admin/shipments', label: 'Parcels', icon: '🚚' },
   { href: '/admin/payments', label: 'Payments', icon: '💳' },
   { href: '/admin/cod-remittance', label: 'COD remittance', icon: '₹' },
+  { href: '/admin/delhivery-billing', label: 'Delhivery billing', icon: '🧾' },
   { href: '/admin/returns', label: 'Returns', icon: '↩' },
   { href: '/admin/cod-refunds', label: 'COD refunds to pay', icon: '🏦' },
   { href: '/admin/payouts', label: 'Payout approvals', icon: '💸' },

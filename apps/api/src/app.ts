@@ -51,6 +51,7 @@ import { adminInventoryRouter } from './routes/adminInventory';
 import { adminOrdersRouter } from './routes/adminOrders';
 import { adminPaymentsRouter } from './routes/adminPayments';
 import { adminCodRemittanceRouter } from './routes/adminCodRemittance';
+import { adminDelhiveryBillingRouter } from './routes/adminDelhiveryBilling';
 import { adminShipmentsRouter } from './routes/adminShipments';
 import { adminReturnsRouter } from './routes/adminReturns';
 import { adminCodRefundsRouter } from './routes/adminCodRefunds';
@@ -184,6 +185,7 @@ export function createApp() {
   app.use('/api/admin/payments', adminPaymentsRouter);
   app.use('/api/admin/payouts', adminPayoutsRouter);
   app.use('/api/admin/cod-remittances', adminCodRemittanceRouter);
+  app.use('/api/admin/delhivery-billing', adminDelhiveryBillingRouter);
   app.use('/api/admin/shipments', adminShipmentsRouter);
   app.use('/api/admin/returns', adminReturnsRouter);
   app.use('/api/admin/cod-refunds', adminCodRefundsRouter);

@@ -554,7 +554,7 @@ export default function ProductDetailPage({ params: paramsPromise }: { params: P
             </div>
           )}
 
-          <DeliveryCard subtotalPaise={selected?.pricePaise ?? 0} />
+          <DeliveryCard productId={product.id} />
 
           {product.highlights.length > 0 && (
             <div className="rounded-2xl border border-gray-100 bg-white p-4">

@@ -340,9 +340,9 @@ model User {
   ordersPlacedForOthers Order[]           @relation("OrderPlacedByAdmin")
   refundsIssued         Refund[]          @relation("RefundIssuedByAdmin")
   payoutsReviewed       Payout[]          @relation("PayoutReviewedBy")
+  assets                Asset[]
 
   @@map("users")
-  assets      Asset[]
 }
 
 // Audit trail for shopping credits (positive = earned, negative = spent).
@@ -618,6 +618,7 @@ model SellerProfile {
 
   products          Product[]
   orderItems        OrderItem[]
+  orderPromises            OrderSellerPromise[]
   shipments         Shipment[]
   ads               Ad[]
   referralsGiven    SellerReferral[] @relation("SellerReferrer")
@@ -1180,6 +1181,7 @@ model Product {
   ads           Ad[]
   views         ProductView[]
   dealItems     DealItem[]
+  revision      ProductRevision?
 
   @@index([status, categoryId])
   @@index([sellerId])
@@ -1187,7 +1189,6 @@ model Product {
   // Containment lookups by the filter facets on the spec sheet ("attributes" @> '[{"key": "fabric", "value": "Cotton"}]').
   @@index([attributes(ops: JsonbPathOps)], type: Gin)
   @@map("products")
-  revision    ProductRevision?
 }
 
 // One row per storefront product-detail view — powers "Trending Now"
@@ -1501,6 +1502,7 @@ model Order {
 
   items      OrderItem[]
   shipments  Shipment[]
+  sellerPromises       OrderSellerPromise[]
   payment    Payment?
   complaints Complaint[]
   refunds    Refund[]
@@ -1677,6 +1679,10 @@ model Shipment {
   codFeePaise           Int?
   finalFreightPaise     Int?
   rtoFreightPaise       Int?
+  /// Delhivery's own delivery date for the parcel, from tracking once booked.
+  courierPromisedAt     DateTime?
+  /// Why it went back (RTO): the courier's words on the first return scan, kept once.
+  rtoReason             String?
   /// COD lines are payable only once the courier's remittance for this AWB is matched.
   codRemittedAt     DateTime?
   codRemittanceRef  String?
@@ -2022,6 +2028,91 @@ model SellerSubscription {
 /// charge in the month — fees, plan, advertising, sponsorship, try-on
 /// credits — with GST, from CLOWE PARTNERS LLP. Issued once a month ends;
 /// the number and figures are fixed when issued.
+/// What an order promised, per seller, when it was placed: the delivery date
+/// the buyer was shown (dispatch promise + Delhivery's transit time + a day)
+/// and the freight estimate the seller was shown for the parcel.
+model OrderSellerPromise {
+  id                   String        @id @default(cuid())
+  orderId              String
+  order                Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sellerId             String
+  seller               SellerProfile @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  originPincode        String?
+  destinationPincode   String
+  /// The day promised to the buyer (midnight India time of that day).
+  deliveryBy           DateTime
+  /// The zone range's last day when the estimate fell back to it.
+  deliveryByLatest     DateTime?
+  /// DELHIVERY_TAT, or ZONE when Delhivery could not be asked.
+  source               String
+  tatDays              Int?
+  dispatchDays         Int
+  /// Forward freight estimate at placement, GST included; null when Delhivery could not be asked.
+  freightEstimatePaise Int?
+  freightZone          String?
+  chargeableGrams      Int?
+  createdAt            DateTime      @default(now())
+
+  @@unique([orderId, sellerId])
+  @@index([sellerId])
+  @@map("order_seller_promises")
+}
+
+/// The last number issued in an invoice series for a financial year: numbers
+/// are taken under a row lock, so they run 1, 2, 3 … with no gaps.
+model InvoiceSequence {
+  series        String
+  financialYear String
+  lastNumber    Int    @default(0)
+
+  @@id([series, financialYear])
+  @@map("invoice_sequences")
+}
+
+/// One upload of Delhivery's billing export for a month, checked against the ledger.
+model DelhiveryBillingCheck {
+  id           String                 @id @default(cuid())
+  month        String
+  fileName     String
+  uploadedById String
+  /// The column mapping the file was read with.
+  columns      Json
+  rowCount     Int
+  createdAt    DateTime               @default(now())
+  lines        DelhiveryBillingLine[]
+
+  @@index([month])
+  @@map("delhivery_billing_checks")
+}
+
+/// One charge in the billing export (an AWB's forward, RTO or return trip), and what our ledger has for it.
+model DelhiveryBillingLine {
+  id                String                @id @default(cuid())
+  checkId           String
+  check             DelhiveryBillingCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  awbNumber         String
+  /// FORWARD | RTO | DTO
+  kind              String
+  shipmentId        String?
+  sellerId          String?
+  orderId           String?
+  billedPaise       Int
+  billedWeightGrams Int?
+  ledgerPaise       Int?
+  ledgerWeightGrams Int?
+  /// billed − ledger: what the seller still owes (+) or is owed back (−).
+  differencePaise   Int
+  /// MATCHED | MISMATCH | NOT_ON_LEDGER | UNKNOWN_AWB
+  status            String
+  adjustmentEntryId String?
+  adjustedAt        DateTime?
+  adjustedById      String?
+
+  @@index([checkId, status])
+  @@index([awbNumber])
+  @@map("delhivery_billing_lines")
+}
+
 model SellerTaxInvoice {
   id        String        @id @default(cuid())
   sellerId  String

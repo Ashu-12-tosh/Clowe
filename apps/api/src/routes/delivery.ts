@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { deliveryOptionsFor } from '../services/deliveryService';
 import { deliveryRefusal, pincodeServiceability } from '../services/shipping/serviceability';
+import { DELIVERY_NOT_AVAILABLE, type ProductDeliveryPromise } from '@clowe/shared';
+import { prisma } from '../db';
+import { ApiError } from '../utils/ApiError';
+import { promisesFor, promiseView } from '../services/shipping/deliveryPromises';
 
 export const deliveryRouter = Router();
 
@@ -55,6 +59,41 @@ deliveryRouter.get('/options', async (req, res, next) => {
         codAvailable: check ? check.cod : null,
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const promiseQuery = z.object({
+  productId: z.string().min(1).max(64),
+  pincode: z.string().trim().regex(/^\d{6}$/, 'Enter a valid 6-digit pincode'),
+});
+
+/**
+ * The product page's PIN check: the day this product arrives there from its
+ * seller's pickup pincode, or that it can't. Public. Delhivery's answers are
+ * cached for a day; when it can't be asked the zone range is shown instead,
+ * and the product counts as deliverable (checkout asks again).
+ */
+deliveryRouter.get('/promise', async (req, res, next) => {
+  try {
+    const parsed = promiseQuery.safeParse(req.query);
+    if (!parsed.success) throw ApiError.badRequest(parsed.error.issues[0]!.message, 'BAD_PINCODE');
+    const { productId, pincode } = parsed.data;
+    const product = await prisma.product.findUnique({ where: { id: productId }, select: { sellerId: true } });
+    if (!product) throw ApiError.notFound('Product not found');
+    const [promise] = await promisesFor([product.sellerId], pincode);
+    const view = promise ? promiseView(promise) : null;
+    const deliverable = view?.deliverable !== false;
+    const body: ProductDeliveryPromise = {
+      pincode,
+      deliverable,
+      message: deliverable && view ? `${view.label} · Free delivery` : DELIVERY_NOT_AVAILABLE,
+      deliveryBy: view?.deliveryBy ?? null,
+      deliveryByLatest: view?.deliveryByLatest ?? null,
+      source: view?.source ?? null,
+    };
+    res.json({ success: true, data: body });
   } catch (err) {
     next(err);
   }

@@ -1,53 +1,49 @@
-import type { SellerDeliveryEstimate } from '@clowe/shared';
+import { volumetricWeightGrams, type SellerDeliveryEstimate, type SellerDeliveryEstimateCase } from '@clowe/shared';
 import { prisma } from '../../db';
+import { getSettings } from '../settingsService';
 import { shippingProvider } from './index';
-import { chargeableGrams, codFeePaise, type ParcelRoute } from './freight';
+import { cachedQuote, clearCourierCache, slabOf } from './courierCache';
+import { chargeableGrams, type ParcelRoute } from './freight';
 import { pickupAddress } from './shipments';
 
 // ---------------------------------------------------------------------------
-// The pricing calculator's delivery estimate: what a parcel of this product
-// costs the seller to send, from their pickup pincode to three kinds of
-// destination, and what COD adds. Delhivery bills per 0.5 kg slab on the
-// greater of actual and volumetric weight, so answers are cached per route
-// and slab: a seller typing a weight doesn't call Delhivery on every key.
+// The seller's delivery estimate, for the product form and the shipping
+// charges calculator: what a parcel of this size costs them to send from
+// their pickup pincode to three kinds of destination (and a PIN they type),
+// what it adds if it comes back undelivered (RTO) and what a customer
+// return's pickup costs — all GST included, at Delhivery's live rates. Delhivery
+// bills per 0.5 kg slab on the greater of actual and volumetric weight, so
+// answers are cached for a day per route and slab (courierCache): a seller
+// typing a weight doesn't call Delhivery on every key.
 // ---------------------------------------------------------------------------
 
-const SLAB_GRAMS = 500;
-const TTL_MS = 6 * 60 * 60 * 1000;
 /** Three destinations: their own city, a metro far from it, and a remote one. */
 const METRO = '400001';
 const METRO_ALT = '110001';
 const FAR = '190001';
 
-const cache = new Map<string, { at: number; value: Promise<{ zone: string; totalPaise: number }> }>();
-
-function cached<T extends { zone: string; totalPaise: number }>(key: string, load: () => Promise<T>): Promise<T> {
-  // The mock is free and follows the admin's test rate at once: never cached.
-  if (shippingProvider.name === 'mock') return load();
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.value as Promise<T>;
-  const value = load();
-  cache.set(key, { at: Date.now(), value });
-  // A failure is not remembered: the next look tries again.
-  value.catch(() => cache.delete(key));
-  return value;
-}
-
 /** For tests: forget every cached answer. */
 export function clearDeliveryEstimateCache(): void {
-  cache.clear();
+  clearCourierCache();
 }
 
 export async function deliveryEstimate(
   sellerId: string,
   parcel: { weightGrams: number; lengthMm: number | null; widthMm: number | null; heightMm: number | null },
   buyerPricePaise: number,
+  opts: { destinationPincode?: string | null } = {},
 ): Promise<SellerDeliveryEstimate> {
-  const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: sellerId } });
+  const [seller, settings] = await Promise.all([prisma.sellerProfile.findUniqueOrThrow({ where: { id: sellerId } }), getSettings()]);
   const origin = pickupAddress(seller).pincode;
   const chargeable = chargeableGrams(parcel);
-  const slabGrams = Math.max(1, Math.ceil(chargeable / SLAB_GRAMS)) * SLAB_GRAMS;
-  const base = { chargeableGrams: chargeable, slabGrams, provider: shippingProvider.name };
+  const slabGrams = slabOf(chargeable);
+  const base = {
+    actualGrams: parcel.weightGrams,
+    volumetricGrams: volumetricWeightGrams(parcel.lengthMm, parcel.widthMm, parcel.heightMm),
+    chargeableGrams: chargeable,
+    slabGrams,
+    provider: shippingProvider.name,
+  };
   if (!origin) {
     return { ...base, originPincode: null, cases: [], codFeePaise: null, error: 'Add your pickup pincode in Store Settings to see delivery estimates' };
   }
@@ -57,31 +53,41 @@ export async function deliveryEstimate(
     { key: 'local', label: 'Same city', pincode: origin },
     { key: 'metro', label: 'Metro', pincode: metro },
     { key: 'far', label: 'Far (J&K)', pincode: FAR },
+    ...(opts.destinationPincode ? [{ key: 'custom', label: 'Your PIN', pincode: opts.destinationPincode }] : []),
   ];
-  const route = (destination: string): ParcelRoute => ({
-    originPincode: origin,
-    destinationPincode: destination,
-    mode: 'SURFACE',
-    weightGrams: slabGrams,
-  });
+  const route = (destination: string): ParcelRoute => ({ originPincode: origin, destinationPincode: destination, mode: 'SURFACE', weightGrams: slabGrams });
+  // A leg Delhivery won't price (a remote return, say) is shown as such; the forward one is the estimate.
+  const optional = (p: Promise<number>) => p.then((v): number | null => v).catch((): number | null => null);
 
   try {
     const cases = await Promise.all(
-      destinations.map(async (d) => {
-        const q = await cached(`${shippingProvider.name}:${shippingProvider.environment}:${origin}:${d.pincode}:${slabGrams}`, () =>
-          shippingProvider.quote({ ...route(d.pincode), kind: 'DELIVERED', payment: 'PREPAID' }),
-        );
-        return { key: d.key, label: d.label, destinationPincode: d.pincode, zone: q.zone, freightPaise: q.totalPaise };
+      destinations.map(async (d): Promise<SellerDeliveryEstimateCase> => {
+        const forward = await cachedQuote({ ...route(d.pincode), kind: 'DELIVERED', payment: 'PREPAID' });
+        const [rto, back] = await Promise.all([
+          // Delhivery's RTO quote is the forward and return legs together.
+          optional(cachedQuote({ ...route(d.pincode), kind: 'RTO', payment: 'PREPAID' }).then((q) => Math.max(0, q.totalPaise - forward.totalPaise))),
+          // A customer return travels from the buyer back to the seller.
+          optional(
+            cachedQuote({ originPincode: d.pincode, destinationPincode: origin, mode: 'SURFACE', weightGrams: slabGrams, kind: 'DTO', payment: 'PREPAID' }).then(
+              (q) => q.totalPaise,
+            ),
+          ),
+        ]);
+        return { key: d.key, label: d.label, destinationPincode: d.pincode, zone: forward.zone, freightPaise: forward.totalPaise, rtoPaise: rto, returnPaise: back };
       }),
     );
+    // COD isn't offered (Clowe-wide, or by this seller): no COD fee to show.
+    const codOn = settings.codEnabled && seller.codEnabled;
     const cod =
-      buyerPricePaise > 0
-        ? await cached(`${shippingProvider.name}:${shippingProvider.environment}:cod:${origin}:${slabGrams}:${buyerPricePaise}`, async () => ({
-            zone: '',
-            totalPaise: await codFeePaise(route(origin), buyerPricePaise),
-          }))
+      codOn && buyerPricePaise > 0
+        ? await optional(
+            Promise.all([
+              cachedQuote({ ...route(origin), kind: 'DELIVERED', payment: 'PREPAID' }),
+              cachedQuote({ ...route(origin), kind: 'DELIVERED', payment: 'COD', codAmountPaise: buyerPricePaise }),
+            ]).then(([prepaid, withCod]) => Math.max(0, withCod.totalPaise - prepaid.totalPaise)),
+          )
         : null;
-    return { ...base, originPincode: origin, cases, codFeePaise: cod?.totalPaise ?? null, error: null };
+    return { ...base, originPincode: origin, cases, codFeePaise: cod, error: null };
   } catch (err) {
     return {
       ...base,

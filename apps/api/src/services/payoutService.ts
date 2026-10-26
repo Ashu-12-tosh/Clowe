@@ -53,6 +53,11 @@ export interface FeeBreakdown {
   gatewayPaise: number;
   /** Everything else Clowe charges: platform, closing and GT fees, the handling fee, and the GST on Clowe's fees. */
   fixedFeesPaise: number;
+  /** fixedFeesPaise in its parts: the GT charge, the handling fee, the older platform and closing fees, and the GST on all of Clowe's fees. */
+  gtPaise: number;
+  handlingPaise: number;
+  legacyFeesPaise: number;
+  cloweFeeGstPaise: number;
   feesPaise: number; // commission + gateway + fixed fees
   tdsPaise: number;
   /** GST TCS (s.52). In netPaise, not in feesPaise: like TDS, it is tax. */
@@ -90,6 +95,10 @@ const EMPTY_FEES: FeeBreakdown = {
   commissionPaise: 0,
   gatewayPaise: 0,
   fixedFeesPaise: 0,
+  gtPaise: 0,
+  handlingPaise: 0,
+  legacyFeesPaise: 0,
+  cloweFeeGstPaise: 0,
   feesPaise: 0,
   tdsPaise: 0,
   tcsPaise: 0,
@@ -120,6 +129,10 @@ export function feesFor(line: FeeLine, settings: PlatformSettings, rules: TaxRul
     commissionPaise: e.commissionPaise,
     gatewayPaise: e.gatewayFeePaise,
     fixedFeesPaise,
+    gtPaise: e.gtChargePaise,
+    handlingPaise: e.handlingFeePaise,
+    legacyFeesPaise: e.platformFeePaise + e.closingFeePaise,
+    cloweFeeGstPaise: e.cloweFeeGstPaise,
     feesPaise: e.commissionPaise + e.gatewayFeePaise + fixedFeesPaise,
     tdsPaise: e.tdsPaise,
     tcsPaise: e.tcsPaise,
@@ -135,6 +148,10 @@ export function sumFees(items: FeeLine[], settings: PlatformSettings, rules: Tax
       commissionPaise: acc.commissionPaise + line.commissionPaise,
       gatewayPaise: acc.gatewayPaise + line.gatewayPaise,
       fixedFeesPaise: acc.fixedFeesPaise + line.fixedFeesPaise,
+      gtPaise: acc.gtPaise + line.gtPaise,
+      handlingPaise: acc.handlingPaise + line.handlingPaise,
+      legacyFeesPaise: acc.legacyFeesPaise + line.legacyFeesPaise,
+      cloweFeeGstPaise: acc.cloweFeeGstPaise + line.cloweFeeGstPaise,
       feesPaise: acc.feesPaise + line.feesPaise,
       tdsPaise: acc.tdsPaise + line.tdsPaise,
       tcsPaise: acc.tcsPaise + line.tcsPaise,

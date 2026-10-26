@@ -222,11 +222,21 @@ export default function OrderConfirmationPage({ params: paramsPromise }: { param
             ))}
           </dl>
 
-          {eta && !cancelled && (
-            <div className="mt-4 flex items-start gap-3 rounded-xl bg-green-50 px-4 py-3">
+          {(eta || order.sellerPromises.length > 0) && !cancelled && (
+            <div className="mt-4 flex items-start gap-3 rounded-xl bg-green-50 px-4 py-3" data-confirmation-promise>
               <TruckIcon className="mt-0.5 h-5 w-5 shrink-0 text-green-700" />
               <div>
-                <p className="t-card-label text-ink-900">Estimated Delivery: {eta}</p>
+                {order.sellerPromises.length > 0 ? (
+                  order.sellerPromises.map((p) => (
+                    <p key={p.sellerId} className="t-card-label text-ink-900">
+                      {p.label}
+                      {order.sellerPromises.length > 1 && <span className="font-normal text-gray-600"> · {p.shopName}</span>}
+                      <span className="font-semibold text-green-700"> · Free delivery</span>
+                    </p>
+                  ))
+                ) : (
+                  <p className="t-card-label text-ink-900">Estimated Delivery: {eta}</p>
+                )}
                 <p className="t-caption text-gray-600">
                   We will notify you once your items are shipped.
                 </p>

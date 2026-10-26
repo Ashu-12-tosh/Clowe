@@ -683,15 +683,38 @@ export default function SellerPayoutsPage() {
                     <dd className="font-semibold" data-fee="collection">{money(overview.fees.gatewayPaise)}</dd>
                   </div>
                   <div className="flex justify-between">
+                    <dt className="text-gray-500">GT charge ({overview.rates.fees.gtPercent}% of the selling price)</dt>
+                    <dd className="font-semibold" data-fee="gt">{money(overview.fees.gtPaise)}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-gray-500">Handling fee (per unit, by price)</dt>
+                    <dd className="font-semibold" data-fee="handling">{money(overview.fees.handlingPaise)}</dd>
+                  </div>
+                  {overview.fees.otherFeesPaise > 0 && (
+                    <div className="flex justify-between">
+                      <dt className="text-gray-500">Older orders&apos; platform, closing and delivery fees</dt>
+                      <dd className="font-semibold" data-fee="other">{money(overview.fees.otherFeesPaise)}</dd>
+                    </div>
+                  )}
+                  <div className="flex justify-between" data-fee="clowe-gst">
                     <dt className="text-gray-500">
-                      GT charge ({overview.rates.fees.gtPercent}%), handling fee and {overview.rates.fees.gstPercent}% GST on
-                      Clowe&apos;s fees
+                      GST @{overview.rates.fees.gstPercent}% on Clowe fees
+                      <span className="block text-[11px] text-gray-400">
+                        {overview.fees.cloweFeeGst.intraState
+                          ? `CGST ${money(overview.fees.cloweFeeGst.cgstPaise)} + SGST ${money(overview.fees.cloweFeeGst.sgstPaise)}`
+                          : `IGST ${money(overview.fees.cloweFeeGst.igstPaise)}`}{' '}
+                        · on Clowe&apos;s monthly tax invoice
+                      </span>
                     </dt>
-                    <dd className="font-semibold" data-fee="other">{money(overview.fees.fixedFeesPaise)}</dd>
+                    <dd className="font-semibold">{money(overview.fees.cloweFeeGstPaise)}</dd>
                   </div>
                   <div className="flex justify-between" data-fee="forward-freight">
-                    <dt className="text-gray-500">Delhivery freight (per parcel, at the charged weight)</dt>
+                    <dt className="text-gray-500">Delhivery forward freight (per parcel, at the charged weight)</dt>
                     <dd className="font-semibold">{money(overview.fees.forwardFreightPaise)}</dd>
+                  </div>
+                  <div className="flex justify-between" data-fee="freight-adjustment">
+                    <dt className="text-gray-500">Weight adjustments (Delhivery re-weighed or re-billed)</dt>
+                    <dd className="font-semibold">{money(overview.fees.freightAdjustmentPaise)}</dd>
                   </div>
                   <div className="flex justify-between" data-fee="cod-fee">
                     <dt className="text-gray-500">COD fees (Delhivery: ₹40 or 2%, plus GST)</dt>
@@ -712,6 +735,14 @@ export default function SellerPayoutsPage() {
                   <div className="flex justify-between border-t border-gray-100 pt-2 text-sm font-bold text-ink-900">
                     <dt>Total fees</dt>
                     <dd>{money(overview.fees.totalPaise)}</dd>
+                  </div>
+                  <div className="flex justify-between pt-1" data-fee="tds">
+                    <dt className="text-gray-500">TDS withheld (s.194-O, tax — not a fee)</dt>
+                    <dd className="font-semibold">{money(overview.fees.tdsPaise)}</dd>
+                  </div>
+                  <div className="flex justify-between" data-fee="tcs">
+                    <dt className="text-gray-500">GST TCS collected (s.52, tax — not a fee)</dt>
+                    <dd className="font-semibold">{money(overview.fees.tcsPaise)}</dd>
                   </div>
                 </dl>
               </Panel>

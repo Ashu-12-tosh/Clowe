@@ -515,3 +515,62 @@ export const COURIER_DELIVERS_MESSAGE =
 
 export const PACKING_VIDEO_REQUIRED_MESSAGE =
   'Record the packing video for this order before you pack or ship it: it shows what went into the box if a return is disputed.';
+
+/**
+ * GET /api/seller/orders/:orderId/charges — what this order costs the
+ * seller: Delhivery's charges (the estimate when the order was placed, at
+ * booking, and what was charged — with RTO and return lines, their date and
+ * reason) and Clowe's fees on their lines with the GST on them, adding up to
+ * what they are paid.
+ */
+export interface SellerOrderCharges {
+  placement: {
+    freightEstimatePaise: number | null;
+    zone: string | null;
+    chargeableGrams: number | null;
+    destinationPincode: string;
+    at: string;
+  } | null;
+  parcels: {
+    shipmentId: string;
+    kind: 'FORWARD' | 'REVERSE';
+    awbNumber: string | null;
+    status: string;
+    bookedAt: string;
+    /** Delhivery's estimate when it was booked. */
+    bookingEstimatePaise: number | null;
+    /** What was charged once delivered (forward) or back with the seller (return pickup). */
+    chargedPaise: number | null;
+    chargedWeightGrams: number | null;
+  }[];
+  /** Every Delhivery charge on the ledger for this order, newest last. Amounts are what the seller pays (positive) or gets back (negative). */
+  lines: {
+    kind: 'FORWARD' | 'WEIGHT_ADJUSTMENT' | 'COD_FEE' | 'RTO' | 'RETURN_PICKUP';
+    label: string;
+    amountPaise: number;
+    at: string;
+    awbNumber: string | null;
+    /** RTO: the courier's reason; return pickup: the buyer's return reason. */
+    reason: string | null;
+    /** RTO: when it reached the seller; return pickup: when the return was delivered to them. */
+    eventAt: string | null;
+  }[];
+  fees: {
+    grossPaise: number;
+    referralPaise: number;
+    collectionPaise: number;
+    gtPaise: number;
+    handlingPaise: number;
+    otherFeesPaise: number;
+    gstPercent: number;
+    cloweFeeGstPaise: number;
+    intraState: boolean;
+    cgstPaise: number;
+    sgstPaise: number;
+    igstPaise: number;
+    tdsPaise: number;
+    tcsPaise: number;
+    /** gross − every fee − the GST on them − TDS − TCS: what the seller is paid for the goods (before Delhivery's charges). */
+    receivesPaise: number;
+  };
+}

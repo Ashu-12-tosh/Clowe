@@ -20,6 +20,7 @@ const NAV: DashNavItem[] = [
   { href: '/seller/returns', label: 'Returns', icon: '↩' },
   { href: '/seller/customer-complaints', label: 'Customer complaints', icon: '📢' },
   { href: '/seller/payouts', label: 'Payouts', icon: '₹' },
+  { href: '/seller/shipping-calculator', label: 'Shipping charges', icon: '🚚' },
   { href: '/seller/plans', label: 'Plans', icon: '★' },
   { href: '/seller/billing', label: 'Billing & Wallet', icon: '🧾' },
   { href: '/seller/penalties', label: 'Penalties', icon: '⚠' },

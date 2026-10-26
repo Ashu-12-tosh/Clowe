@@ -3,11 +3,11 @@
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { invoiceMonthLabel, type SellerMonthlyInvoice } from '@clowe/shared';
-import { api, ApiRequestError } from '@/lib/api';
+import { api, ApiRequestError, downloadFile } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import BrandLogo from '@/components/BrandLogo';
 
-/** Clowe's tax invoice to the seller for one month — print or save as PDF from the browser. */
+/** Clowe's tax invoice to the seller for one month — download it as a PDF, or print it. */
 export default function SellerInvoicePage({ params }: { params: Promise<{ month: string }> }) {
   const { month } = use(params);
   const [doc, setDoc] = useState<SellerMonthlyInvoice | null>(null);
@@ -29,9 +29,18 @@ export default function SellerInvoicePage({ params }: { params: Promise<{ month:
         <Link href="/seller/billing" className="text-sm font-semibold text-brand-600 hover:underline">
           ← Billing
         </Link>
-        <button onClick={() => window.print()} className="rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold text-white">
-          Download / print
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => void downloadFile(`/api/seller/billing/invoices/${month}/pdf`, `clowe-invoice-${(doc.number ?? `draft-${doc.month}`).replace(/\//g, '-')}.pdf`).catch(() => setError('Could not download the PDF'))}
+            className="rounded-lg bg-ink-900 px-4 py-2 text-xs font-bold text-white"
+            data-invoice-pdf
+          >
+            Download PDF
+          </button>
+          <button onClick={() => window.print()} className="rounded-lg border border-gray-300 px-4 py-2 text-xs font-bold text-ink-900">
+            Print
+          </button>
+        </div>
       </div>
       <article className="rounded-2xl border border-gray-200 bg-white p-6 text-sm" data-seller-invoice>
         {/* Clowe issues this one: its wordmark heads the page. */}
@@ -55,6 +64,7 @@ export default function SellerInvoicePage({ params }: { params: Promise<{ month:
           <p className="font-bold text-ink-900">{doc.recipient.name}</p>
           <p>{doc.recipient.address}</p>
           {doc.recipient.gstin && <p>GSTIN {doc.recipient.gstin}</p>}
+          {doc.placeOfSupply && <p className="mt-1">Place of supply: {doc.placeOfSupply}</p>}
           <p className="mt-1 text-gray-500">{doc.intraState ? 'Intra-state supply: CGST + SGST' : 'Inter-state supply: IGST'}</p>
         </div>
         <div className="mt-4 overflow-x-auto">

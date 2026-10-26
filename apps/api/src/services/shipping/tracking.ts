@@ -113,6 +113,8 @@ export async function applyTracking(result: TrackingResult, source: TrackingSour
       statusText: result.statusText || shipment.statusText,
       lastScanAt,
       ...(weightChanged ? { chargedWeightGrams: result.chargedWeightGrams } : {}),
+      // Delhivery's own date, once booked: what tracking shows from then on.
+      ...(result.promisedDeliveryDate ? { courierPromisedAt: result.promisedDeliveryDate } : {}),
       ...(moves && next !== 'DELIVERED' && next !== 'RTO_DELIVERED' ? { status: next } : {}),
       ...(moves && next === 'CANCELLED' ? { cancelledAt: new Date() } : {}),
     },
@@ -164,6 +166,10 @@ export async function applyTracking(result: TrackingResult, source: TrackingSour
       });
       await notifyFailedAttempt(shipment, result.statusText || 'Delivery attempt failed', deliveryAttempts);
     }
+    if ((next === 'RTO_IN_TRANSIT' || next === 'RTO_DELIVERED') && !shipment.rtoReason) {
+      // Why it is coming back, as the seller's order page shows it: kept once.
+      await prisma.shipment.update({ where: { id: shipment.id }, data: { rtoReason: rtoReasonOf(result, shipment.statusText) } });
+    }
     if ((next === 'RTO_IN_TRANSIT' || next === 'RTO_DELIVERED') && live.length === 0) {
       // Every line was cancelled after pickup (an admin's cancellation): the
       // buyer was refunded and the stock put back then, so there is nothing to
@@ -207,6 +213,19 @@ export async function applyTracking(result: TrackingResult, source: TrackingSour
 
   const after = await prisma.shipment.findUniqueOrThrow({ where: { id: shipment.id }, select: { status: true } });
   return { awbNumber: result.awbNumber, known: true, newScans, status: after.status };
+}
+
+/**
+ * Why a parcel is going back: the courier's words on its first return scan,
+ * else on the last failed attempt before it, else the last status we had.
+ */
+export function rtoReasonOf(result: TrackingResult, previousStatusText: string | null): string {
+  const byTime = [...result.scans].sort((a, b) => a.at.getTime() - b.at.getTime());
+  const firstReturn = byTime.findIndex((s) => s.statusType === 'RT');
+  const before = firstReturn >= 0 ? byTime.slice(0, firstReturn) : byTime;
+  const words = (s: (typeof byTime)[number] | undefined) => (s ? s.instructions || '' : '').trim();
+  const lastFailed = [...before].reverse().find((s) => /^EOD-/.test(s.code) && s.statusType === 'UD');
+  return (words(byTime[firstReturn]) || words(lastFailed) || previousStatusText || result.statusText || 'Returned by the courier').slice(0, 300);
 }
 
 /** Ask the courier about these parcels (30 at a time) and apply what it says. */

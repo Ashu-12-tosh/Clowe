@@ -606,7 +606,11 @@ export interface OrderDetailItem {
     deliveryAttempts: number;
     lost: boolean;
     lostChoice: import('./deliveryZone').LostParcelChoice | null;
+    /** Delhivery's own date once booked; etaFrom/etaTo then carry it too. */
+    courierPromisedAt: string | null;
   } | null;
+  /** The day this line's seller promised at checkout (dispatch + Delhivery's TAT + a day). */
+  deliveryPromise: { label: string; deliveryBy: string; deliveryByLatest: string | null } | null;
   /** The free replacement sent for this line, if any. */
   replacedBy: { orderId: string; orderNumber: string } | null;
   courierName: string | null;
@@ -651,6 +655,8 @@ export interface OrderDetailView {
   paymentMethod: PaymentMethod;
   etaFrom: string | null;
   etaTo: string | null;
+  /** One promised date per seller on the order, as checkout showed them. */
+  sellerPromises: { sellerId: string; shopName: string; label: string; deliveryBy: string; deliveryByLatest: string | null }[];
   isGift: boolean;
   giftMessage: string | null;
   /** Credits this order earned, once it was paid for. */

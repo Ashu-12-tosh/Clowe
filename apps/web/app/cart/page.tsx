@@ -26,6 +26,7 @@ import PolicyText from '@/components/PolicyText';
 import { imageAt, STORE_CLOSED_MESSAGE } from '@clowe/shared';
 import { LaunchingSoon, useOrdersOpen } from '@/lib/ordersOpen';
 import { usePaymentMethodNames } from '@/lib/paymentMethods';
+import { CartPinBar, LinePromise, promiseForLine, useCartPromises } from '@/components/cart/DeliveryPromises';
 
 const MAX_QTY = 10;
 
@@ -52,6 +53,9 @@ export default function CartPage() {
   const [busyLines, setBusyLines] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [showDiscountBreakup, setShowDiscountBreakup] = useState(false);
+  const [pin, setPin] = useState('');
+  // Refetched whenever the cart changes (a line added, removed or ticked).
+  const promises = useCartPromises({ pincode: pin }, cart);
   // Before launch: the cart works, checkout says "Orders open soon" (as /checkout does).
   const ordersOpen = useOrdersOpen();
 
@@ -293,6 +297,12 @@ export default function CartPage() {
               </span>
             </label>
 
+            <CartPinBar onPin={setPin} />
+            {promises?.blockedMessage && (
+              <p className="border-b border-red-100 bg-red-50 px-4 py-2 text-xs font-semibold text-red-700" data-cart-blocked>
+                {promises.blockedMessage}
+              </p>
+            )}
             <ul className="divide-y divide-gray-100">
               {lines.map((line) => {
                 const off = discountPercent(line.pricePaise, line.mrpPaise);
@@ -407,6 +417,7 @@ export default function CartPage() {
                         ) : (
                           <p className="mt-0.5 text-xs font-medium text-green-600">In Stock</p>
                         )}
+                        <LinePromise promise={promiseForLine(promises, line.variantId)} />
                       </div>
 
                       {/* Actions */}

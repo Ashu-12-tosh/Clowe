@@ -67,12 +67,17 @@ describe('the delivery estimate', () => {
       slabGrams: 2_500,
       provider: 'mock',
       error: null,
+      actualGrams: 300,
+      volumetricGrams: 2_400,
+      // The mock's RTO quote is both legs (the trip back adds one more), a return pickup 1.2×.
       cases: [
-        { key: 'local', label: 'Same city', destinationPincode: '110053', freightPaise: TEST_RATE },
-        { key: 'metro', label: 'Metro', destinationPincode: '400001', freightPaise: TEST_RATE },
-        { key: 'far', label: 'Far (J&K)', destinationPincode: '190001', freightPaise: TEST_RATE },
+        { key: 'local', label: 'Same city', destinationPincode: '110053', freightPaise: TEST_RATE, rtoPaise: TEST_RATE, returnPaise: 8_400 },
+        { key: 'metro', label: 'Metro', destinationPincode: '400001', freightPaise: TEST_RATE, rtoPaise: TEST_RATE, returnPaise: 8_400 },
+        { key: 'far', label: 'Far (J&K)', destinationPincode: '190001', freightPaise: TEST_RATE, rtoPaise: TEST_RATE, returnPaise: 8_400 },
       ],
     });
+    // The return pickup is priced the way it travels: from the buyer back to the seller.
+    expect(quote).toHaveBeenCalledWith(expect.objectContaining({ originPincode: '400001', destinationPincode: '110053', kind: 'DTO' }));
     expect(quote).toHaveBeenCalledWith(expect.objectContaining({ originPincode: '110053', weightGrams: 2_500, kind: 'DELIVERED', payment: 'PREPAID', mode: 'SURFACE' }));
     quote.mockRestore();
   });
@@ -99,15 +104,47 @@ describe('the delivery estimate', () => {
     Object.defineProperty(shippingProvider, 'name', { value: 'delhivery', configurable: true, writable: true });
     const quote = vi.spyOn(shippingProvider, 'quote');
     try {
+      // Forward, RTO and return pickup to each of the three places.
       await estimate(token, 'weightGrams=2100');
       await estimate(token, 'weightGrams=2300'); // same 2.5 kg slab
-      expect(quote).toHaveBeenCalledTimes(3);
+      expect(quote).toHaveBeenCalledTimes(9);
       await estimate(token, 'weightGrams=2600'); // the next slab: asked again
-      expect(quote).toHaveBeenCalledTimes(6);
+      expect(quote).toHaveBeenCalledTimes(18);
     } finally {
       Object.defineProperty(shippingProvider, 'name', { value: 'mock', configurable: true, writable: true });
       quote.mockRestore();
       clearDeliveryEstimateCache();
+    }
+  });
+
+  it('prices a PIN the seller types as a fourth place', async () => {
+    const token = await seller('110053');
+    const cases = (await estimate(token, 'weightGrams=500&destinationPincode=560001')).data.cases as { key: string; destinationPincode: string }[];
+    expect(cases.map((c) => [c.key, c.destinationPincode])).toEqual([['local', '110053'], ['metro', '400001'], ['far', '190001'], ['custom', '560001']]);
+    expect((await estimate(token, 'weightGrams=500&destinationPincode=12345')).status).toBe(400);
+  });
+
+  it("prices one of the seller's own products by its saved weight and box, and no one else's", async () => {
+    const token = await seller('110053');
+    const sellerId = (await prisma.sellerProfile.findFirstOrThrow({ where: { shopName: `Estimate Shop ${seq}` } })).id;
+    const category = await prisma.category.upsert({ where: { slug: 'estimate-cat' }, update: {}, create: { name: 'Estimate Cat', slug: 'estimate-cat' } });
+    const product = await prisma.product.create({
+      data: { sellerId, categoryId: category.id, title: 'Boxed lamp', slug: `boxed-lamp-${seq}`, description: 'A lamp', basePricePaise: 50_000, weightGrams: 800, lengthMm: 300, widthMm: 300, heightMm: 300 },
+    });
+    const r = await estimate(token, `productId=${product.id}`);
+    // 30 cm cube: 5.4 kg volumetric, over the 0.8 kg actual.
+    expect(r.data).toMatchObject({ actualGrams: 800, volumetricGrams: 5_400, slabGrams: 5_500 });
+    const other = await seller('110053');
+    expect((await estimate(other, `productId=${product.id}`)).status).toBe(404);
+  });
+
+  it('shows no COD fee while Cash on Delivery is off', async () => {
+    const token = await seller('110053');
+    await setSetting('codEnabled', false);
+    try {
+      expect((await estimate(token, 'weightGrams=500&pricePaise=50000')).data.codFeePaise).toBeNull();
+    } finally {
+      await setSetting('codEnabled', true);
     }
   });
 });

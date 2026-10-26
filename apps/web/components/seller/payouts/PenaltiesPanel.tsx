@@ -143,6 +143,11 @@ export function PenaltiesPanel({ refreshKey = 0 }: { refreshKey?: number }) {
                 <p className={`font-semibold ${row.waived ? 'text-gray-400 line-through' : 'text-red-600'}`}>
                   − {formatPaise(row.amountPaise)}
                 </p>
+                {row.gstPaise > 0 && (
+                  <p className={`text-[11px] ${row.waived ? 'text-gray-400 line-through' : 'text-red-500'}`} data-penalty-gst>
+                    + {formatPaise(row.gstPaise)} GST @18%
+                  </p>
+                )}
                 <span
                   className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
                     row.waived ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'

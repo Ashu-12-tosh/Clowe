@@ -287,7 +287,7 @@ function feesV2(input: {
       amountPaise: -handlingFeePaise,
       ledgerType: 'HANDLING_FEE',
     },
-    { key: 'feeGst', label: `GST on Clowe's fees (${v2.gstPercent}%)`, amountPaise: -cloweFeeGstPaise, ledgerType: 'CLOWE_FEE_GST' },
+    { key: 'feeGst', label: `GST @${v2.gstPercent}% on Clowe fees`, amountPaise: -cloweFeeGstPaise, ledgerType: 'CLOWE_FEE_GST' },
     { key: 'tds', label: `TDS (${rates.tdsPercent}% of your price)`, amountPaise: -tdsPaise, ledgerType: 'TDS' },
     { key: 'tcs', label: `TCS (${rates.tcsPercent}% of your price)`, amountPaise: -tcsPaise, ledgerType: 'GST_TCS' },
   ];
@@ -320,17 +320,38 @@ function feesV2(input: {
  */
 export interface SellerDeliveryEstimate {
   originPincode: string | null;
+  /** The weight as entered. */
+  actualGrams: number;
+  /** L × W × H in cm ÷ 5000, in grams; null without all three sides. */
+  volumetricGrams: number | null;
   /** The greater of actual and volumetric weight. */
   chargeableGrams: number;
   /** Rounded up to Delhivery's 0.5 kg slab: what is priced. */
   slabGrams: number;
-  /** Same city, a metro, somewhere far: the freight for each, GST included. */
-  cases: { key: string; label: string; destinationPincode: string; zone: string; freightPaise: number }[];
-  /** What a COD order adds: Delhivery's COD fee at this price, GST included. */
+  /**
+   * Same city, a metro, somewhere far (and a PIN the seller typed): for each,
+   * GST included, the forward freight, what an undelivered parcel's trip back
+   * adds (RTO, on top of the forward), and a customer return's pickup.
+   */
+  cases: SellerDeliveryEstimateCase[];
+  /** What a COD order adds: Delhivery's COD fee at this price, GST included. Null while COD is off. */
   codFeePaise: number | null;
   /** 'mock' while the test courier is in use. */
   provider: string;
   error: string | null;
+}
+
+export interface SellerDeliveryEstimateCase {
+  key: string;
+  label: string;
+  destinationPincode: string;
+  zone: string;
+  /** Forward freight, delivered. */
+  freightPaise: number;
+  /** The return leg when it comes back undelivered (RTO), on top of the forward; null if Delhivery didn't price it. */
+  rtoPaise: number | null;
+  /** A customer return collected from this PIN back to the seller (DTO); null if Delhivery didn't price it. */
+  returnPaise: number | null;
 }
 
 /** How a breakdown row reads: where the money starts, what comes off it, what is left. */

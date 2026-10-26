@@ -2,7 +2,7 @@ import { NOT_A_SALE_STATUSES, type SellerOrderCancelResult } from '@clowe/shared
 import { prisma } from '../db';
 import { ApiError } from '../utils/ApiError';
 import { cancelOrderLines } from './lineCancellation';
-import { cancelPenaltyKey, postEntry } from './sellerLedgerService';
+import { cancelPenaltyKey, postEntry, postPenaltyGst } from './sellerLedgerService';
 import { getSettings } from './settingsService';
 
 // ---------------------------------------------------------------------------
@@ -46,6 +46,11 @@ export async function chargeSellerCancelPenalty(
     idempotencyKey: cancelPenaltyKey(orderId, sellerId),
     note: `Cancelled by seller: ${reason}`,
   });
+  // 18% GST on it, like every Clowe charge (owner, 26 Oct): its own entry, on the monthly tax invoice.
+  if (posted) {
+    const entry = await prisma.sellerLedgerEntry.findUnique({ where: { idempotencyKey: cancelPenaltyKey(orderId, sellerId) }, select: { id: true } });
+    if (entry) await postPenaltyGst(entry.id);
+  }
   return posted ? settings.sellerCancelPenaltyPaise : 0;
 }
 

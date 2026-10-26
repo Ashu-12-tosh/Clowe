@@ -116,7 +116,9 @@ describe('the monthly tax invoice', () => {
     const month = istMonthOf(lastMonth);
     expect(await issueMonthlyInvoice(s.id, istMonthOf(new Date())).catch((e: Error) => e.message)).toMatch(/once it has ended/);
     const first = (await issueMonthlyInvoice(s.id, month))!;
-    expect(first.number).toMatch(/^CLW\/SI\/\d{4}-\d{2}\/\d{6}$/);
+    // "CLW/2627/000001": GST's 16 characters at most.
+    expect(first.number).toMatch(/^CLW\/\d{4}\/\d{6}$/);
+    expect(first.number!.length).toBeLessThanOrEqual(16);
     const again = (await issueMonthlyInvoice(s.id, month))!;
     expect(again.number).toBe(first.number);
     const res = await fetch(`${base}/api/seller/billing/invoices/${month}`, { headers: { authorization: `Bearer ${s.token}` } });

@@ -30,7 +30,17 @@ import {
   type SellerBookingQuote,
   isNotASale,
   type CreditNote,
+  isIntraStateSupply,
+  RETURN_REASON_LABELS,
+  type ReturnReasonValue,
+  SELLER_LEDGER_TYPE_LABELS,
+  splitGst,
+  type SellerLedgerTypeValue,
+  type SellerOrderCharges,
 } from '@clowe/shared';
+import { getSettings } from '../services/settingsService';
+import { getCommercial } from '../services/commercial';
+import { sumFees, taxRulesFor } from '../services/payoutService';
 import QRCode from 'qrcode';
 import { prisma } from '../db';
 import { creditNotesFor } from '../services/creditNotes';
@@ -45,7 +55,8 @@ import { separateReturnAddress } from '../services/shipping/warehouses';
 import { markLineDelivered, markLineShipped } from '../services/shipping/lineTransitions';
 import { requestPickup } from '../services/shipping/pickups';
 import { receiveRto, requestNdrAction } from '../services/shipping/rto';
-import { chargeableGrams, codFeePaise, forwardFreightPaise } from '../services/shipping/freight';
+import { chargeableGrams, codFeePaise } from '../services/shipping/freight';
+import { cachedQuote } from '../services/shipping/courierCache';
 import { valueOfLines } from '../services/shipping/codAmount';
 import { checkSellerReferralReward } from '../services/sellerReferralService';
 import { blockSuspendedWrites, requireSeller } from './seller';
@@ -826,7 +837,8 @@ async function bookingQuote(
       else {
         try {
           const route = { originPincode: origin, destinationPincode: order.shipPincode, mode: plan.mode, weightGrams: chargeable };
-          forward = await forwardFreightPaise(route);
+          // The day's cached rate for this route and slab: an estimate, re-asked on every key would be wasteful.
+          forward = (await cachedQuote({ ...route, kind: 'DELIVERED', payment: 'PREPAID' })).totalPaise;
           if (plan.isCod) codFee = await codFeePaise(route, plan.codAmountPaise);
         } catch (err) {
           error = `No estimate from Delhivery right now${err instanceof Error ? ` (${err.message})` : ''}`;
@@ -1066,6 +1078,132 @@ sellerOrdersRouter.get('/export', async (req, res, next) => {
 // ---------------------------------------------------------------------------
 // Single order (detail page)
 // ---------------------------------------------------------------------------
+
+const FREIGHT_LINE: Record<string, SellerOrderCharges['lines'][number]['kind']> = {
+  FORWARD_FREIGHT: 'FORWARD',
+  FREIGHT_ADJUSTMENT: 'WEIGHT_ADJUSTMENT',
+  COD_FEE: 'COD_FEE',
+  RTO_FREIGHT: 'RTO',
+  RETURN_FREIGHT: 'RETURN_PICKUP',
+};
+
+// What the order costs the seller: Delhivery's charges, from the estimate when
+// it was placed to what the ledger holds, and Clowe's fees with their GST.
+sellerOrdersRouter.get('/:orderId/charges', async (req, res, next) => {
+  try {
+    const sellerId = req.seller!.id;
+    const orderId = req.params.orderId;
+    const [items, promise, shipments, entries, settings, seller] = await Promise.all([
+      prisma.orderItem.findMany({
+        where: { orderId, sellerId },
+        select: {
+          id: true,
+          pricePaise: true,
+          quantity: true,
+          gstRatePercent: true,
+          feeModel: true,
+          feeRates: true,
+          status: true,
+          product: { select: { categoryId: true } },
+        },
+      }),
+      prisma.orderSellerPromise.findUnique({ where: { orderId_sellerId: { orderId, sellerId } } }),
+      prisma.shipment.findMany({
+        where: { orderId, sellerId },
+        orderBy: { createdAt: 'asc' },
+        include: { return: { select: { reason: true, reasonCategory: true } } },
+      }),
+      prisma.sellerLedgerEntry.findMany({
+        where: { orderId, sellerId, type: { in: Object.keys(FREIGHT_LINE) as SellerLedgerTypeValue[] } },
+        orderBy: { createdAt: 'asc' },
+      }),
+      getSettings(),
+      prisma.sellerProfile.findUniqueOrThrow({ where: { id: sellerId }, select: { gstNumber: true, state: true } }),
+    ]);
+    if (items.length === 0) throw ApiError.notFound('Order not found');
+
+    // Which parcel each ledger entry is for, from its key ("rto-freight:<shipment>" …).
+    const byId = new Map(shipments.map((x) => [x.id, x]));
+    const billing = await prisma.delhiveryBillingLine.findMany({
+      where: { id: { in: entries.flatMap((e) => (e.idempotencyKey?.startsWith('billing-check:') ? [e.idempotencyKey.split(':')[1]!] : [])) } },
+      select: { id: true, shipmentId: true },
+    });
+    const billingShipment = new Map(billing.map((b) => [b.id, b.shipmentId]));
+    const shipmentOf = (key: string | null) => {
+      const [kind, id] = (key ?? '').split(':');
+      return byId.get((kind === 'billing-check' ? billingShipment.get(id ?? '') : id) ?? '') ?? null;
+    };
+
+    const rules = await taxRulesFor(items);
+    const fees = sumFees(items.filter((i) => i.status !== 'CANCELLED'), settings, rules);
+    const intraState = isIntraStateSupply(settings.legalEntity.gstin, seller);
+    const split = splitGst(fees.cloweFeeGstPaise, intraState);
+    const { fees: commercialFees } = await getCommercial();
+
+    const body: SellerOrderCharges = {
+      placement: promise
+        ? {
+            freightEstimatePaise: promise.freightEstimatePaise,
+            zone: promise.freightZone,
+            chargeableGrams: promise.chargeableGrams,
+            destinationPincode: promise.destinationPincode,
+            at: promise.createdAt.toISOString(),
+          }
+        : null,
+      parcels: shipments.map((x) => ({
+        shipmentId: x.id,
+        kind: x.kind,
+        awbNumber: x.awbNumber,
+        status: x.status,
+        bookedAt: x.createdAt.toISOString(),
+        bookingEstimatePaise: x.estimatedFreightPaise,
+        chargedPaise: x.finalFreightPaise,
+        chargedWeightGrams: x.freightWeightGrams ?? x.chargedWeightGrams,
+      })),
+      lines: entries.map((e) => {
+        const kind = FREIGHT_LINE[e.type]!;
+        const parcel = shipmentOf(e.idempotencyKey);
+        return {
+          kind,
+          label: SELLER_LEDGER_TYPE_LABELS[e.type as SellerLedgerTypeValue] ?? e.type,
+          amountPaise: -e.amountPaise,
+          at: e.createdAt.toISOString(),
+          awbNumber: parcel?.awbNumber ?? null,
+          reason:
+            kind === 'RTO'
+              ? (parcel?.rtoReason ?? parcel?.statusText ?? null)
+              : kind === 'RETURN_PICKUP' && parcel?.return
+                ? parcel.return.reason.trim() || RETURN_REASON_LABELS[parcel.return.reasonCategory as ReturnReasonValue] || null
+                : null,
+          eventAt:
+            kind === 'RTO'
+              ? (parcel?.rtoDeliveredAt ?? parcel?.rtoInitiatedAt)?.toISOString() ?? null
+              : kind === 'RETURN_PICKUP'
+                ? parcel?.deliveredAt?.toISOString() ?? null
+                : null,
+        };
+      }),
+      fees: {
+        grossPaise: fees.grossPaise,
+        referralPaise: fees.commissionPaise,
+        collectionPaise: fees.gatewayPaise,
+        gtPaise: fees.gtPaise,
+        handlingPaise: fees.handlingPaise,
+        otherFeesPaise: fees.legacyFeesPaise,
+        gstPercent: commercialFees.gstPercent,
+        cloweFeeGstPaise: fees.cloweFeeGstPaise,
+        intraState,
+        ...split,
+        tdsPaise: fees.tdsPaise,
+        tcsPaise: fees.tcsPaise,
+        receivesPaise: fees.netPaise,
+      },
+    };
+    res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
 
 sellerOrdersRouter.get('/:orderId', async (req, res, next) => {
   try {

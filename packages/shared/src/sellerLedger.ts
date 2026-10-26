@@ -189,6 +189,8 @@ export interface SellerPenaltyRow {
   chargedAt: string;
   /** What was charged, as a positive number. */
   amountPaise: number;
+  /** The 18% GST charged on it (0 on penalties from before GST applied to them). */
+  gstPaise: number;
   /** Why: the dispatch arithmetic, or the seller's cancellation reason. */
   reason: string | null;
   waived: boolean;

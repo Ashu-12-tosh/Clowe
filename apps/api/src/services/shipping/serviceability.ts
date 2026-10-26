@@ -5,13 +5,13 @@ import type { PincodeServiceability } from './ShippingProvider';
 // Does Delhivery deliver here, and will it collect cash here?
 //
 // Asked by the product page's pincode check, the payment step and checkout.
-// Answers are cached per pincode for a few hours (they change rarely, and a
+// Answers are cached per pincode for a day (they change rarely, and a
 // product page is viewed far more often than Delhivery should be asked). If
 // Delhivery can't be reached the answer is "unknown" and nothing is refused
 // on its account: the booking checks again before anything ships.
 // ---------------------------------------------------------------------------
 
-const TTL_MS = 6 * 60 * 60 * 1000;
+const TTL_MS = 24 * 60 * 60 * 1000;
 const cache = new Map<string, { at: number; value: PincodeServiceability }>();
 
 /** For tests: forget every cached answer. */

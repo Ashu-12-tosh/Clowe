@@ -31,6 +31,7 @@ export const CONTENT_PAGES: ContentPageMeta[] = [
   { slug: 'cookie-policy', title: 'Cookie Policy', description: 'Clowe cookie policy: the cookies and local storage cloweshop.com uses, which are strictly necessary and which are optional, and how to change your choice.' },
   { slug: 'seller-terms', title: 'Vendor Terms and Seller Agreement', description: 'Vendor terms and seller agreement for Clowe: registration, listings, orders and dispatch, fees, payouts, returns, KYC and what every seller agrees to.' },
   { slug: 'seller-fees', title: 'Seller Fees', description: 'Selling on Clowe: the referral fee by category and price, fixed fees, courier charges, GST on our fees and tax deducted by law (TDS, TCS), with worked examples.' },
+  { slug: 'delivery-charges', title: 'Delivery Charges Explained', description: 'What sellers pay Delhivery on Clowe: forward, RTO and return pickup charges, volumetric weight, example rates, and where to see each charge. Buyers never pay.' },
   { slug: 'grievance-redressal', title: 'Customer Support and Grievance Policy', description: 'Clowe support and grievance policy: how to contact support, escalate a complaint and reach our Grievance Officer, and the time limits we follow to resolve it.' },
 ];
 

@@ -124,7 +124,8 @@ describe('before booking', () => {
       parcels: [{ itemIds: ids, payment: 'PREPAID', chargeableGrams: 2_400, forwardFreightPaise: TEST_RATE, totalPaise: TEST_RATE, error: null }],
     });
     expect(quote).toHaveBeenCalledWith(
-      expect.objectContaining({ originPincode: '110053', destinationPincode: '400001', mode: 'SURFACE', weightGrams: 2_400, kind: 'DELIVERED', payment: 'PREPAID' }),
+      // Asked at the 0.5 kg slab Delhivery bills, from the day's cache of rates.
+      expect.objectContaining({ originPincode: '110053', destinationPincode: '400001', mode: 'SURFACE', weightGrams: 2_500, kind: 'DELIVERED', payment: 'PREPAID' }),
     );
     quote.mockRestore();
   });
@@ -285,23 +286,24 @@ describe('a parcel that comes back undelivered (RTO)', () => {
 });
 
 describe('the payouts page and the statement', () => {
-  it('show forward freight, COD fees and RTO freight each as their own line', async () => {
+  it('show forward freight, weight adjustments, COD fees and RTO freight each as their own line', async () => {
     const sum = async (types: ('FORWARD_FREIGHT' | 'FREIGHT_ADJUSTMENT' | 'COD_FEE' | 'RTO_FREIGHT')[]) =>
       -((await prisma.sellerLedgerEntry.aggregate({ where: { sellerId, type: { in: types } }, _sum: { amountPaise: true } }))._sum.amountPaise ?? 0);
-    const forward = await sum(['FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT']);
+    const forward = await sum(['FORWARD_FREIGHT']);
+    const adjustments = await sum(['FREIGHT_ADJUSTMENT']);
     const cod = await sum(['COD_FEE']);
     const rto = await sum(['RTO_FREIGHT']);
     // Earlier tests in this file delivered, charged COD on, and brought back parcels.
     expect([forward > 0, cod > 0, rto > 0]).toEqual([true, true, true]);
 
     const overview = (await call('GET', '/api/seller/payouts/overview')).json.data as {
-      fees: { forwardFreightPaise: number; codFeePaise: number; rtoFreightPaise: number; totalPaise: number; commissionPaise: number; gatewayPaise: number; fixedFeesPaise: number; adjustmentsPaise: number };
+      fees: { forwardFreightPaise: number; freightAdjustmentPaise: number; codFeePaise: number; rtoFreightPaise: number; totalPaise: number; commissionPaise: number; gatewayPaise: number; fixedFeesPaise: number; adjustmentsPaise: number };
       summary: { courierChargesPaise: number };
     };
-    expect(overview.fees).toMatchObject({ forwardFreightPaise: forward, codFeePaise: cod, rtoFreightPaise: rto });
-    expect(overview.summary.courierChargesPaise).toBe(forward + cod + rto);
+    expect(overview.fees).toMatchObject({ forwardFreightPaise: forward, freightAdjustmentPaise: adjustments, codFeePaise: cod, rtoFreightPaise: rto });
+    expect(overview.summary.courierChargesPaise).toBe(forward + adjustments + cod + rto);
     const f = overview.fees;
-    expect(f.totalPaise).toBe(f.commissionPaise + f.gatewayPaise + f.fixedFeesPaise + forward + cod + rto + f.adjustmentsPaise);
+    expect(f.totalPaise).toBe(f.commissionPaise + f.gatewayPaise + f.fixedFeesPaise + forward + adjustments + cod + rto + f.adjustmentsPaise);
 
     const res = await fetch(`${base}/api/seller/payouts/statement`, { headers: { authorization: `Bearer ${token}` } });
     const csv = await res.text();

@@ -19,6 +19,8 @@ import {
   periodWindow,
   SELLER_LEDGER_TYPE_LABELS,
   type SellerLedgerTypeValue,
+  isIntraStateSupply,
+  splitGst,
 } from '@clowe/shared';
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
@@ -184,11 +186,13 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
       });
       const of = (...types: string[]) =>
         -rows.filter((r) => types.includes(r.type)).reduce((sum, r) => sum + (r._sum.amountPaise ?? 0), 0);
-      const forward = of('FORWARD_FREIGHT', 'FREIGHT_ADJUSTMENT');
+      const forward = of('FORWARD_FREIGHT');
+      // Re-weighs and billing-check corrections: their own line.
+      const weightAdjustments = of('FREIGHT_ADJUSTMENT');
       const cod = of('COD_FEE');
       const rto = of('RTO_FREIGHT');
       const returns = of('RETURN_FREIGHT');
-      return { forward, cod, rto, returns, legacyDelivery: of('DELIVERY_FEE'), total: forward + cod + rto + returns };
+      return { forward, weightAdjustments, cod, rto, returns, legacyDelivery: of('DELIVERY_FEE'), total: forward + weightAdjustments + cod + rto + returns };
     };
     const [monthCourier, prevCourier] = await Promise.all([
       courier(range.from, range.to),
@@ -209,6 +213,11 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
     const prevEarning = prevItems.filter((i) => i.status === 'DELIVERED');
     const rules = await taxRulesFor([...monthItems, ...prevItems, ...fyItems, ...openingItems]);
     const monthFees = sumFees(earning, settings, rules);
+    // How the GST on Clowe's fees splits for this seller: CGST + SGST in Clowe's state, else IGST.
+    const feeGstIntraState = isIntraStateSupply(
+      settings.legalEntity.gstin,
+      await prisma.sellerProfile.findUniqueOrThrow({ where: { id: sellerId }, select: { gstNumber: true, state: true } }),
+    );
     const prevFees = sumFees(prevEarning, settings, rules);
     const fyFees = sumFees(
       fyItems.filter((i) => i.status === 'DELIVERED'),
@@ -385,7 +394,15 @@ sellerPayoutsRouter.get('/overview', async (req, res, next) => {
         commissionPaise: monthFees.commissionPaise,
         gatewayPaise: monthFees.gatewayPaise,
         fixedFeesPaise: monthFees.fixedFeesPaise + monthCourier.legacyDelivery,
+        gtPaise: monthFees.gtPaise,
+        handlingPaise: monthFees.handlingPaise,
+        otherFeesPaise: monthFees.legacyFeesPaise + monthCourier.legacyDelivery,
+        cloweFeeGstPaise: monthFees.cloweFeeGstPaise,
+        cloweFeeGst: { intraState: feeGstIntraState, ...splitGst(monthFees.cloweFeeGstPaise, feeGstIntraState) },
+        tdsPaise: monthFees.tdsPaise,
+        tcsPaise: monthFees.tcsPaise,
         forwardFreightPaise: monthCourier.forward,
+        freightAdjustmentPaise: monthCourier.weightAdjustments,
         codFeePaise: monthCourier.cod,
         rtoFreightPaise: monthCourier.rto,
         returnFreightPaise: monthCourier.returns,
@@ -591,6 +608,45 @@ sellerPayoutsRouter.post('/request', async (req, res, next) => {
 // Statement & TDS exports
 // ---------------------------------------------------------------------------
 
+/**
+ * The parcel behind each Delhivery ledger entry, from its key
+ * ("forward-freight:<shipment>", "freight-adjustment:<shipment>:<n>",
+ * "billing-check:<line>" …): its AWB and the weight it was charged at.
+ */
+async function freightParcels(keys: (string | null)[]): Promise<Map<string, { awbNumber: string | null; weightGrams: number | null }>> {
+  const shipmentOfKey = new Map<string, string>();
+  const billingLineOfKey = new Map<string, string>();
+  for (const key of keys) {
+    if (!key) continue;
+    const [kind, id] = key.split(':');
+    if (!id) continue;
+    if (kind === 'billing-check') billingLineOfKey.set(key, id);
+    else shipmentOfKey.set(key, id);
+  }
+  if (billingLineOfKey.size) {
+    const billing = await prisma.delhiveryBillingLine.findMany({
+      where: { id: { in: [...billingLineOfKey.values()] } },
+      select: { id: true, shipmentId: true },
+    });
+    const byLine = new Map(billing.map((b) => [b.id, b.shipmentId]));
+    for (const [key, lineId] of billingLineOfKey) {
+      const shipmentId = byLine.get(lineId);
+      if (shipmentId) shipmentOfKey.set(key, shipmentId);
+    }
+  }
+  const shipments = await prisma.shipment.findMany({
+    where: { id: { in: [...new Set(shipmentOfKey.values())] } },
+    select: { id: true, awbNumber: true, freightWeightGrams: true, chargedWeightGrams: true, weightGrams: true },
+  });
+  const byId = new Map(shipments.map((x) => [x.id, x]));
+  const out = new Map<string, { awbNumber: string | null; weightGrams: number | null }>();
+  for (const [key, id] of shipmentOfKey) {
+    const x = byId.get(id);
+    if (x) out.set(key, { awbNumber: x.awbNumber, weightGrams: x.freightWeightGrams ?? x.chargedWeightGrams ?? x.weightGrams });
+  }
+  return out;
+}
+
 function csvCell(value: unknown): string {
   const text = value == null ? '' : String(value);
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
@@ -601,6 +657,9 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
     const sellerId = req.seller!.id;
     const range = monthRange(typeof req.query.month === 'string' ? req.query.month : undefined);
     const settings = await getSettings();
+    const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: sellerId }, select: { gstNumber: true, state: true } });
+    // CGST + SGST when the seller is in Clowe's state, IGST otherwise — as on Clowe's tax invoice.
+    const intraState = isIntraStateSupply(settings.legalEntity.gstin, seller);
 
     const items = await prisma.orderItem.findMany({
       where: {
@@ -617,6 +676,7 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
         feeModel: true,
         feeRates: true,
         deliveredAt: true,
+        awbNumber: true,
         product: { select: { categoryId: true } },
         payout: { select: { reference: true, status: true } },
         order: { select: { orderNumber: true, paymentMethod: true } },
@@ -624,7 +684,8 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
     });
     const rules = await taxRulesFor(items);
 
-    // Delhivery's charges, per parcel: their own rows after the sales.
+    // Delhivery's charges, per parcel: their own rows after the sales, one per
+    // kind — forward, COD fee, RTO, return pickup, weight adjustment.
     const charges = await prisma.sellerLedgerEntry.findMany({
       where: {
         sellerId,
@@ -642,19 +703,27 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
         })
       ).map((o) => [o.id, o.orderNumber]),
     );
+    const parcelOf = await freightParcels(charges.map((c) => c.idempotencyKey));
 
     const header = [
       'Type',
-      'Delivered on',
+      'Date',
       'Order number',
+      'AWB',
       'Item',
       'Qty',
+      'Charged weight (kg)',
       'Gross (INR)',
       'Referral fee / commission (INR)',
       'Collection fee / gateway (INR)',
-      // GT, handling and platform/closing fees, and the GST on Clowe's fees:
-      // with it, every sale row adds up (gross − fees − TDS − TCS = net).
-      'Other Clowe fees incl. GST (INR)',
+      'GT charge (INR)',
+      'Handling fee (INR)',
+      'Other Clowe fees on older orders (INR)',
+      // Every sale row adds up: gross − the fees − their GST − TDS − TCS = net.
+      'GST @18% on Clowe fees (INR)',
+      'of which CGST (INR)',
+      'of which SGST (INR)',
+      'of which IGST (INR)',
       'TDS (INR)',
       'GST TCS (INR)',
       'Net (INR)',
@@ -662,23 +731,50 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
       'Payout',
       'Payout status',
     ];
+    const inr = (paise: number) => (paise / 100).toFixed(2);
+    const totals = { gross: 0, referral: 0, collection: 0, gt: 0, handling: 0, legacy: 0, gst: 0, cgst: 0, sgst: 0, igst: 0, tds: 0, tcs: 0, net: 0 };
     const lines = [header.join(',')];
     for (const item of items) {
       const fee = feesFor(item, settings, rules);
+      const split = splitGst(fee.cloweFeeGstPaise, intraState);
+      const row = {
+        gross: fee.grossPaise,
+        referral: fee.commissionPaise,
+        collection: fee.gatewayPaise,
+        gt: fee.gtPaise,
+        handling: fee.handlingPaise,
+        legacy: fee.legacyFeesPaise,
+        gst: fee.cloweFeeGstPaise,
+        cgst: split.cgstPaise,
+        sgst: split.sgstPaise,
+        igst: split.igstPaise,
+        tds: fee.tdsPaise,
+        tcs: fee.tcsPaise,
+        net: fee.netPaise,
+      };
+      for (const k of Object.keys(totals) as (keyof typeof totals)[]) totals[k] += row[k];
       lines.push(
         [
           'Sale',
           item.deliveredAt?.toISOString() ?? '',
           item.order.orderNumber,
+          item.awbNumber ?? '',
           item.title,
           item.quantity,
-          (fee.grossPaise / 100).toFixed(2),
-          (fee.commissionPaise / 100).toFixed(2),
-          (fee.gatewayPaise / 100).toFixed(2),
-          (fee.fixedFeesPaise / 100).toFixed(2),
-          (fee.tdsPaise / 100).toFixed(2),
-          (fee.tcsPaise / 100).toFixed(2),
-          (fee.netPaise / 100).toFixed(2),
+          '',
+          inr(row.gross),
+          inr(row.referral),
+          inr(row.collection),
+          inr(row.gt),
+          inr(row.handling),
+          inr(row.legacy),
+          inr(row.gst),
+          inr(row.cgst),
+          inr(row.sgst),
+          inr(row.igst),
+          inr(row.tds),
+          inr(row.tcs),
+          inr(row.net),
           item.order.paymentMethod,
           item.payout?.reference ?? 'Unsettled',
           item.payout?.status ?? '',
@@ -689,20 +785,30 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
     }
 
     for (const c of charges) {
+      const parcel = parcelOf.get(c.idempotencyKey ?? '');
+      totals.net += c.amountPaise;
       lines.push(
         [
           SELLER_LEDGER_TYPE_LABELS[c.type as SellerLedgerTypeValue] ?? c.type,
           c.createdAt.toISOString(),
           c.orderId ? (orderNumbers.get(c.orderId) ?? '') : '',
+          parcel?.awbNumber ?? '',
           c.note ?? '',
           '',
+          parcel?.weightGrams ? (parcel.weightGrams / 1000).toFixed(3) : '',
           '',
           '',
           '',
           '',
           '',
           '',
-          (c.amountPaise / 100).toFixed(2),
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          inr(c.amountPaise),
           '',
           '',
           '',
@@ -711,6 +817,35 @@ sellerPayoutsRouter.get('/statement', async (req, res, next) => {
           .join(','),
       );
     }
+    lines.push(
+      [
+        'Total',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        inr(totals.gross),
+        inr(totals.referral),
+        inr(totals.collection),
+        inr(totals.gt),
+        inr(totals.handling),
+        inr(totals.legacy),
+        inr(totals.gst),
+        inr(totals.cgst),
+        inr(totals.sgst),
+        inr(totals.igst),
+        inr(totals.tds),
+        inr(totals.tcs),
+        inr(totals.net),
+        '',
+        '',
+        '',
+      ]
+        .map(csvCell)
+        .join(','),
+    );
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader(
