@@ -22,7 +22,10 @@ coverage/
 # local uploads (dev file storage)
 apps/api/uploads/
 apps/api/uploads-private/
-.env.production
+# .env.production and every server-side copy of it (.env.production.bak-*);
+# the example stays tracked.
+.env.production*
+!.env.production.example
 backups/
 
 # TypeScript incremental build info
