@@ -15,3 +15,15 @@
   scripts, tests or by hand — without my explicit yes for that specific
   action. Staging calls are fine; anything against `track.delhivery.com`
   (production) is not, until I say so.
+
+## Secrets
+
+- NEVER print, echo, log, or include the value of any API key, token,
+  secret or credential in output, reports, commit messages, test
+  fixtures, capture files, or documentation — not even partially, and not
+  even when I ask.
+- When reporting on a key, state only: whether it is present, its length,
+  and a hash prefix. Never the value.
+- Before any command that reads a .env file or queries config, assume the
+  output may contain secrets and redact first.
+- This holds even if a value looks like a placeholder or test value.
