@@ -23,6 +23,17 @@ import { recordWebhook, webhookSeen } from '../services/payments/gatewaySync';
  */
 export const payoutWebhookRouter = Router();
 
+/** A refused delivery is logged at most once a minute: anyone can post here. */
+let lastRefusalLog = 0;
+let refusedSince = 0;
+function logRefusal(why: string): void {
+  refusedSince += 1;
+  if (Date.now() - lastRefusalLog < 60_000) return;
+  console.warn(`[clowe-api] payout webhook: ${why} — refused${refusedSince > 1 ? ` (${refusedSince} refused in the last minute or so)` : ''}`);
+  lastRefusalLog = Date.now();
+  refusedSince = 0;
+}
+
 payoutWebhookRouter.post('/cashfree/webhook', async (req, res, next) => {
   try {
     const secret = env.CASHFREE_PAYOUT_CLIENT_SECRET;
@@ -32,11 +43,11 @@ payoutWebhookRouter.post('/cashfree/webhook', async (req, res, next) => {
     const signature = req.get('x-webhook-signature') ?? '';
     const timestamp = req.get('x-webhook-timestamp') ?? '';
     if (!rawBody || !verifyCashfreeWebhook(rawBody, timestamp, signature, secret)) {
-      console.warn(`[clowe-api] payout webhook: signature check FAILED (${signature ? 'signature did not match' : 'no signature header'}) — refused`);
+      logRefusal(`signature check FAILED (${signature ? 'signature did not match' : 'no signature header'})`);
       throw ApiError.unauthorized('Invalid webhook signature');
     }
     if (!cashfreeWebhookFresh(timestamp)) {
-      console.warn('[clowe-api] payout webhook: signature ok but the timestamp is outside the allowed window — refused');
+      logRefusal('signature ok but the timestamp is outside the allowed window');
       throw ApiError.unauthorized('Stale webhook');
     }
     const body = req.body as { type?: unknown; event?: unknown; data?: Record<string, unknown> };

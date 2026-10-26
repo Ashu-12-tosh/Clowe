@@ -655,9 +655,8 @@ adminSellersRouter.post('/:id/kyc-checks', kycAdminRunLimiter, async (req, res, 
     const { check } = z.object({ check: z.enum(KYC_CHECK_TYPES) }).parse(req.body ?? {});
     const exists = await prisma.sellerProfile.findUnique({ where: { id: req.params.id }, select: { id: true, shopName: true } });
     if (!exists) throw ApiError.notFound('Seller not found');
-    const { summary: kyc, called } = await runProviderCheck(exists.id, check);
-    const view = check === 'PAN' ? kyc.pan : check === 'GSTIN' ? kyc.gstin : kyc.bank;
-    if (called) {
+    const { summary: kyc, called, answer } = await runProviderCheck(exists.id, check);
+    if (answer) {
       auditSafe({
         actorId: req.auth!.userId,
         actorRole: 'ADMIN',
@@ -665,8 +664,8 @@ adminSellersRouter.post('/:id/kyc-checks', kycAdminRunLimiter, async (req, res, 
         action: `KYC ${check} checked with the provider`,
         entityType: 'SellerProfile',
         entityId: exists.id,
-        summary: `${exists.shopName}: ${check === 'BANK' ? 'bank account' : check} checked with ${view.providerCheck?.provider ?? 'the provider'} — ${view.providerCheck?.outcome ?? 'no answer'}${view.providerCheck?.referenceId ? ` (ref ${view.providerCheck.referenceId})` : ''}`,
-        metadata: { check, outcome: view.providerCheck?.outcome ?? null, reason: view.providerCheck?.reason ?? null, nameScore: view.providerCheck?.nameScore ?? null, referenceId: view.providerCheck?.referenceId ?? null },
+        summary: `${exists.shopName}: ${check === 'BANK' ? 'bank account' : check} checked with the verification provider — ${answer.outcome}${answer.reason ? ` (${answer.reason})` : ''}${answer.providerRef ? `, ref ${answer.providerRef}` : ''}`,
+        metadata: { check, outcome: answer.outcome, reason: answer.reason, nameScore: answer.nameScore, referenceId: answer.providerRef },
         ipAddress: ipFrom(req),
       });
     }

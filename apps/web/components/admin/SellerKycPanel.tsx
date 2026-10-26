@@ -168,8 +168,15 @@ export default function SellerKycPanel({ sellerId, onChanged }: { sellerId: stri
     setBusy(`${check}:RUN`);
     setError('');
     try {
-      const res = await api<{ called: boolean }>(`/api/admin/sellers/${sellerId}/kyc-checks`, { method: 'POST', body: { check }, auth: true });
-      setNotice(res.called ? `${KYC_CHECK_LABELS[check]} checked with Cashfree` : `${KYC_CHECK_LABELS[check]}: Cashfree's stored answer for these details — no new check made`);
+      const res = await api<{ called: boolean; kyc: SellerKycSummary }>(`/api/admin/sellers/${sellerId}/kyc-checks`, { method: 'POST', body: { check }, auth: true });
+      const after = check === 'PAN' ? res.kyc.pan : check === 'GSTIN' ? res.kyc.gstin : res.kyc.bank;
+      setNotice(
+        res.called
+          ? `${KYC_CHECK_LABELS[check]} checked with Cashfree`
+          : after.providerCheck
+            ? `${KYC_CHECK_LABELS[check]}: Cashfree's stored answer for these details — no new check made`
+            : `${KYC_CHECK_LABELS[check]}: nothing was sent — ${after.verifyBlockedReason ?? 'there is nothing to check'}`,
+      );
       await load();
       await onChanged();
     } catch (err) {

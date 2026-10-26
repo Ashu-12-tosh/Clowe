@@ -185,26 +185,26 @@ export function reviewSubjectFor(kind: KycCheckType, seller: KycFields): string 
   }
 }
 
-/** The latest answer (VERIFIED or FAILED) and the latest error, for one subject. */
-function historyFor(kind: KycCheckType, subject: string, rows: SellerKycCheck[]) {
+/**
+ * The latest answer and the latest error for these details. A FAILED answer
+ * is about the document itself (no such PAN, the account is closed), so it
+ * stands whatever name was sent. A VERIFIED one counts only for the name it
+ * was matched against: a corrected name — or a name where there was none — is
+ * new evidence to pay for, never an old score carried over.
+ */
+function historyFor(kind: KycCheckType, target: { subject: string; nameSubject: string | null }, rows: SellerKycCheck[]) {
   // rows arrive newest first
-  const mine = rows.filter((r) => r.kind === kind && r.subject === subject);
+  const mine = rows.filter((r) => r.kind === kind && r.subject === target.subject);
+  const sameName = (r: SellerKycCheck) => r.nameSubject === target.nameSubject;
   return {
-    answer: mine.find((r) => r.outcome !== 'ERROR') ?? null,
-    lastError: mine.find((r) => r.outcome === 'ERROR') ?? null,
+    answer: mine.find((r) => r.outcome === 'FAILED' || (r.outcome === 'VERIFIED' && sameName(r))) ?? null,
+    lastError: mine.find((r) => r.outcome === 'ERROR' && sameName(r)) ?? null,
   };
 }
 
-/** Whether this check needs a provider call now. */
+/** Whether this check needs a provider call now: no answer yet for these details and this name. */
 function needsCall(kind: KycCheckType, target: Checkable, rows: SellerKycCheck[]): boolean {
-  const { answer } = historyFor(kind, target.subject, rows);
-  if (!answer) return true; // never answered, or only errors so far
-  // A bank account checked without a name, now that there is one: the match
-  // is what proves the account is the seller's, so it is worth paying for.
-  if (kind === 'BANK' && answer.outcome === 'VERIFIED' && answer.nameScore === null && target.name) {
-    return true;
-  }
-  return false;
+  return !historyFor(kind, target, rows).answer;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,6 +252,8 @@ export interface ProviderCheckRun {
   summary: SellerKycSummary;
   /** A billed call was made. False when a stored answer was reused, or nothing could be sent. */
   called: boolean;
+  /** What this press's call answered (the row it wrote); null when no call was made. */
+  answer: Pick<SellerKycCheck, 'outcome' | 'reason' | 'nameScore' | 'providerRef'> | null;
 }
 
 /**
@@ -270,6 +272,7 @@ export async function runProviderCheck(sellerId: string, kind: KycCheckType): Pr
   }
   if (!(await claim(sellerId))) throw new KycCheckRunningError();
   let called = false;
+  let answer: ProviderCheckRun['answer'] = null;
   try {
     const seller = await loadSeller(sellerId);
     const rows = await loadChecks(sellerId);
@@ -285,7 +288,7 @@ export async function runProviderCheck(sellerId: string, kind: KycCheckType): Pr
       called = true;
       try {
         const result = await target.call();
-        await prisma.sellerKycCheck.create({
+        answer = await prisma.sellerKycCheck.create({
           data: {
             ...base,
             outcome: result.status,
@@ -297,7 +300,7 @@ export async function runProviderCheck(sellerId: string, kind: KycCheckType): Pr
         });
       } catch (err) {
         const reason = err instanceof KycProviderError ? err.reason : 'PROVIDER_UNAVAILABLE';
-        await prisma.sellerKycCheck.create({ data: { ...base, outcome: 'ERROR', reason } });
+        answer = await prisma.sellerKycCheck.create({ data: { ...base, outcome: 'ERROR', reason } });
         // Status and error code only: request fields are PANs and account numbers.
         const detail = err instanceof KycProviderError ? err.detail : err instanceof Error ? err.name : 'unknown';
         console.error(`[clowe-api] KYC ${kind} check for seller ${sellerId} did not complete: ${reason} (${detail})`);
@@ -306,7 +309,7 @@ export async function runProviderCheck(sellerId: string, kind: KycCheckType): Pr
   } finally {
     await release(sellerId);
   }
-  return { summary: await getSellerKycSummary(sellerId), called };
+  return { summary: await getSellerKycSummary(sellerId), called, answer };
 }
 
 // ---------------------------------------------------------------------------
@@ -383,7 +386,7 @@ export function summarize(
     }
 
     // The provider's latest answer for these details, or its latest "no answer".
-    const history = isCheckable(target) ? historyFor(kind, target.subject, real) : { answer: null, lastError: null };
+    const history = isCheckable(target) ? historyFor(kind, target, real) : { answer: null, lastError: null };
     const latest = history.answer ?? history.lastError;
     const providerCheck: KycProviderEvidence | null = latest
       ? {
@@ -407,7 +410,12 @@ export function summarize(
     };
     const blocked = mode === 'MANUAL' ? null : verifyBlockedBy(kind, providerCheck, threshold, isCheckable(target) ? null : target.reason);
 
-    const review = reviews.find((r) => r.kind === kind && r.subject === subject) ?? null;
+    const found = reviews.find((r) => r.kind === kind && r.subject === subject) ?? null;
+    // With a real provider connected, a "verified" stands only while the
+    // provider's answer for these details and this name still passes: a later
+    // FAILED, or a changed name, sends it back. (Without one, the admin's
+    // decision against the documents is all there is.)
+    const review = found && !(found.status === 'VERIFIED' && blocked) ? found : null;
     if (review) {
       return {
         ...empty,
@@ -426,7 +434,8 @@ export function summarize(
     return {
       ...empty,
       ...evidence,
-      state: 'PENDING_REVIEW',
+      // The provider's definitive no shows as such; anything else waits for the admin.
+      state: providerCheck?.outcome === 'FAILED' ? 'FAILED' : 'PENDING_REVIEW',
       checkedAt: providerCheck?.checkedAt ?? null,
       canMarkVerified: !blocked,
       verifyBlockedReason: blocked,
@@ -547,7 +556,7 @@ export async function reviewSellerKyc(input: {
     // With a real provider connected, never verified on an admin's word alone.
     const current = await getSellerKycSummary(seller.id);
     const view = input.check === 'PAN' ? current.pan : input.check === 'GSTIN' ? current.gstin : current.bank;
-    if (!view.canMarkVerified) {
+    if (view.state !== 'VERIFIED' && !view.canMarkVerified) {
       throw ApiError.badRequest(view.verifyBlockedReason ?? 'This check cannot be marked verified yet', 'KYC_PROVIDER_CHECK_REQUIRED');
     }
   }

@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { createApp } from '../../app';
 import { seedFixture } from '../../test/fixture';
 import { signAccessToken } from '../../utils/jwt';
-import { kycProvider } from './index';
+import { KycProviderError, kycProvider } from './index';
 import { sellerDocument } from '../../test/sellerApplication';
 
 /**
@@ -149,6 +149,19 @@ describe('only an admin’s press calls the provider', () => {
     expect(callCounts(calls)).toEqual([0, 0, 0]);
   });
 
+  it('audits what this press’s call answered', async () => {
+    const s = await makeSeller({ bankAccountName: '' });
+    await providerCheck(s, 'BANK'); // VERIFIED, no name
+    // Same account, a name now: the check with it gets no answer.
+    await prisma.sellerProfile.update({ where: { id: s.id }, data: { bankAccountName: 'Rahul Sharma' } });
+    vi.spyOn(kycProvider, 'verifyBank').mockRejectedValueOnce(new KycProviderError('BANK_UNAVAILABLE', 'test'));
+    await providerCheck(s, 'BANK');
+    await vi.waitFor(async () => {
+      const audits = await prisma.auditLog.findMany({ where: { entityId: s.id, action: 'KYC BANK checked with the provider' }, orderBy: { createdAt: 'asc' } });
+      expect(audits.map((a) => (a.metadata as { outcome: string }).outcome)).toEqual(['VERIFIED', 'ERROR']);
+    });
+  });
+
   it('keeps the provider’s reference id, and shows it with the name match', async () => {
     const s = await makeSeller();
     vi.spyOn(kycProvider, 'verifyPAN').mockResolvedValueOnce({ status: 'VERIFIED', reason: null, nameMatch: { score: 92, band: 'GOOD_PARTIAL_MATCH' }, referenceId: '881234' });
@@ -168,9 +181,11 @@ describe('only an admin’s press calls the provider', () => {
     expect(await prisma.sellerKycCheck.count({ where: { sellerId: s.id } })).toBe(0);
   });
 
-  it('never from the seller’s own edits: a new bank account or PAN is left for the admin', async () => {
+  it('never from the seller’s own edits: a new bank account, PAN or GSTIN is left for the admin', async () => {
     const s = await makeSeller();
     const calls = spies();
+    const business = await http('PUT', '/api/seller/store/business', s.token, { panName: 'Rahul K Sharma', businessType: 'Proprietorship' });
+    expect(business.status).toBe(200);
     const bank = await http('PUT', '/api/seller/store/bank', s.token, {
       accountName: 'Rahul Sharma',
       accountNumber: '9988776655',
@@ -212,12 +227,26 @@ describe('never paying twice', () => {
     expect(callCounts(calls)).toEqual([0, 0, 0]);
   });
 
-  it('a PAN that passed is not checked again, even after the name on file changes', async () => {
-    const s = await makeSeller();
+  it('a corrected name is new evidence: the old score stops counting, and the next press checks the new name', async () => {
+    const s = await makeSeller({ panName: 'Rahul MOCK MODERATE' }); // scores 70
+    await providerCheck(s, 'PAN');
+    expect((await detail(s)).kyc.pan.canMarkVerified).toBe(false);
+    await prisma.sellerProfile.update({ where: { id: s.id }, data: { panName: 'Rahul Sharma' } });
+    // Not the old 70 under the new name — no evidence for it yet.
+    expect((await detail(s)).kyc.pan).toMatchObject({ providerCheck: null, canMarkVerified: false, verifyBlockedReason: 'Verify the PAN with Cashfree first.' });
+    const calls = spies();
+    const again = await providerCheck(s, 'PAN');
+    expect(again.json.data.called).toBe(true);
+    expect(calls.pan).toHaveBeenCalledWith('ABCDE1234F', 'Rahul Sharma');
+    expect(again.json.data.kyc.pan).toMatchObject({ nameScore: 100, canMarkVerified: true });
+  });
+
+  it('a "no" about the document stands whatever name is sent: not bought again', async () => {
+    const s = await makeSeller({ panNumber: 'ZZZZZ1234F', gstNumber: '' });
     await providerCheck(s, 'PAN');
     await prisma.sellerProfile.update({ where: { id: s.id }, data: { panName: 'Rahul K Sharma' } });
     const calls = spies();
-    await providerCheck(s, 'PAN');
+    expect((await providerCheck(s, 'PAN')).json.data.called).toBe(false);
     expect(calls.pan).not.toHaveBeenCalled();
   });
 
@@ -249,6 +278,15 @@ describe('never paying twice', () => {
     expect(json.data.kyc.pan.state).toBe('INVALID_FORMAT');
     await providerCheck(s, 'GSTIN');
     expect(callCounts(calls)).toEqual([0, 0, 0]);
+  });
+
+  it('says nothing was sent — not that a stored answer was used — when there is nothing to check', async () => {
+    const s = await makeSeller({ panName: '' });
+    const { json } = await providerCheck(s, 'PAN');
+    expect(json.data.called).toBe(false);
+    expect(json.data.kyc.pan.providerCheck).toBeNull();
+    await new Promise((r) => setTimeout(r, 200));
+    expect(await prisma.auditLog.count({ where: { entityId: s.id, action: 'KYC PAN checked with the provider' } })).toBe(0);
   });
 
   it('a PAN with no name to match against is not paid for', async () => {
@@ -298,7 +336,8 @@ describe('an answer verifies nothing by itself', () => {
 
   it('a document the provider did not verify can only be rejected', async () => {
     const s = await makeSeller({ panNumber: 'ZZZZZ1234F' });
-    await providerCheck(s, 'PAN');
+    expect((await providerCheck(s, 'PAN')).json.data.kyc.pan.state).toBe('FAILED');
+    expect((await sellerView(s)).pan.state).toBe('FAILED');
     const refused = await decide(s, 'PAN', 'VERIFY');
     expect(refused.status).toBe(400);
     expect(refused.json.error?.message).toBe('Cashfree did not verify this PAN — it can only be rejected.');
@@ -320,6 +359,25 @@ describe('an answer verifies nothing by itself', () => {
     const nameless = await makeSeller({ bankAccountName: '' });
     await providerCheck(nameless, 'BANK');
     expect((await decide(nameless, 'BANK', 'VERIFY')).json.error?.code).toBe('KYC_PROVIDER_CHECK_REQUIRED');
+  });
+
+  it('a verified check lapses when the name on it changes, or when a later answer says no', async () => {
+    const s = await makeSeller();
+    await verifyAll(s);
+    expect((await detail(s)).kyc.bank.state).toBe('VERIFIED');
+
+    // Same account, new holder name: the old match proves nothing about it.
+    await prisma.sellerProfile.update({ where: { id: s.id }, data: { bankAccountName: 'Somebody Else' } });
+    expect((await detail(s)).kyc.bank).toMatchObject({ state: 'PENDING_REVIEW', canMarkVerified: false });
+    await prisma.sellerProfile.update({ where: { id: s.id }, data: { bankAccountName: 'Rahul Sharma' } });
+    expect((await detail(s)).kyc.bank.state).toBe('VERIFIED');
+
+    // The provider later says the PAN is no good: the admin's "verified" does not outlive it.
+    const row = await prisma.sellerKycCheck.findFirstOrThrow({ where: { sellerId: s.id, kind: 'PAN' } });
+    await prisma.sellerKycCheck.create({
+      data: { sellerId: s.id, kind: 'PAN', provider: row.provider, subject: row.subject, nameSubject: row.nameSubject, outcome: 'FAILED', reason: 'PAN_INACTIVE', createdAt: new Date(Date.now() + 1000) },
+    });
+    expect((await detail(s)).kyc.pan).toMatchObject({ state: 'FAILED', reason: 'PAN_INACTIVE', canMarkVerified: false });
   });
 
   it('the shop is VERIFIED only once the admin has marked all three, each after it passed', async () => {

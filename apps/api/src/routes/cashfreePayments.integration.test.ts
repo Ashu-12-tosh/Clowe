@@ -421,14 +421,14 @@ describe('Cashfree refunds', () => {
   });
 
   it('that the bank turns down are FAILED, the admins are told, and an admin retry is a new gateway refund', async () => {
-    await prisma.user.upsert({ where: { phone: '9219999999' }, update: {}, create: { phone: '9219999999', name: 'CF Admin', role: 'ADMIN', referralCode: 'CF-ADMIN' } });
+    const admin = await prisma.user.upsert({ where: { phone: '9219999999' }, update: {}, create: { phone: '9219999999', name: 'CF Admin', role: 'ADMIN', referralCode: 'CF-ADMIN' } });
     const { refund, checkout } = await cancelledPaid(['PENDING']);
     cf.settleRefund(refund.id, 'FAILED');
     await prisma.refund.update({ where: { id: refund.id }, data: { lastCheckedAt: null } });
     await pollProcessingRefunds();
     expect((await prisma.refund.findUniqueOrThrow({ where: { id: refund.id } })).status).toBe('FAILED');
     await vi.waitFor(async () =>
-      expect(await prisma.notification.count({ where: { type: 'ADMIN_REFUND_FAILED', title: `Refund failed: ${checkout.orderNumber}` } })).toBeGreaterThan(0),
+      expect(await prisma.notification.count({ where: { userId: admin.id, type: 'ADMIN_REFUND_FAILED', title: `Refund failed: ${checkout.orderNumber}` } })).toBe(1),
     );
 
     cf.nextRefund = ['SUCCESS'];

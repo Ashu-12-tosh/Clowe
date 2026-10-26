@@ -318,29 +318,29 @@ export function payoutPanBlock(pan: { state: KycCheckState; reason: KycReason | 
     case 'NOT_PROVIDED':
       return block(
         'There is no PAN on file.',
-        `Add your PAN and the name printed on it in ${WHERE}, then press Verify.`,
+        `Add your PAN and the name printed on it in ${WHERE}; Clowe then verifies it.`,
       );
     case 'INVALID_FORMAT':
       return block(
         'The PAN on file is not a valid PAN (it looks like ABCDE1234F).',
-        `Correct it in ${WHERE}, then press Verify.`,
+        `Correct it in ${WHERE}; Clowe then verifies it.`,
       );
     case 'NOT_RUN':
       return pan.reason === 'NAME_MISSING'
         ? block(
             'Your PAN cannot be verified without the name printed on it.',
-            `Add the name exactly as on your PAN card in ${WHERE}, then press Verify.`,
+            `Add the name exactly as on your PAN card in ${WHERE}; Clowe then verifies it.`,
           )
-        : block('Your PAN has not been verified yet.', `Press Verify in ${WHERE}.`);
+        : block('Your PAN has not been verified yet.', 'Nothing to do — Clowe verifies it, and payouts start once it is.');
     case 'ERROR':
       return block(
         `The PAN check could not complete${why ? ` (${why})` : ''}.`,
-        `Press Verify again in ${WHERE}. If it keeps failing, contact seller support.`,
+        'Nothing to do — Clowe will check it again. If it stays stuck, contact seller support.',
       );
     case 'FAILED':
       return block(
         `Your PAN could not be verified${why ? `: ${why}` : ''}.`,
-        `Check the PAN and name in ${WHERE}, correct them and verify again, or contact seller support.`,
+        `Check the PAN and name in ${WHERE} and correct them — Clowe checks it again — or contact seller support.`,
       );
     case 'PENDING_REVIEW':
       return block('Your PAN is waiting for Clowe to verify it.', 'Nothing to do — payouts start once it is verified.');
