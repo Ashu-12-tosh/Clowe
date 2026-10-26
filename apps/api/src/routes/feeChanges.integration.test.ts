@@ -31,9 +31,9 @@ async function call<T = Record<string, unknown>>(method: string, path: string, t
 }
 
 beforeAll(async () => {
-  const a = await prisma.user.create({ data: { phone: '9198800001', name: 'Fee Admin', role: Role.ADMIN, referralCode: 'FEE-A-1' } });
+  const a = await prisma.user.create({ data: { phone: '9198810001', name: 'Fee Admin', role: Role.ADMIN, referralCode: 'FEE-A-1' } });
   admin = signAccessToken({ sub: a.id, role: 'ADMIN' });
-  const u = await prisma.user.create({ data: { phone: '9198800002', name: 'Fee Seller', role: Role.SELLER, referralCode: 'FEE-S-1' } });
+  const u = await prisma.user.create({ data: { phone: '9198810002', name: 'Fee Seller', role: Role.SELLER, referralCode: 'FEE-S-1' } });
   await prisma.sellerProfile.create({ data: { userId: u.id, shopName: 'Fee Shop', status: SellerStatus.APPROVED, approvedAt: new Date() } });
   sellerUserId = u.id;
   sellerToken = signAccessToken({ sub: u.id, role: 'SELLER' });
