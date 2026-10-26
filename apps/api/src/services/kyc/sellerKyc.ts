@@ -4,7 +4,6 @@ import {
   BANK_ACCOUNT_PATTERN,
   GSTIN_PATTERN,
   IFSC_PATTERN,
-  KYC_CHECK_TYPES,
   PAN_PATTERN,
   normalizeTaxId,
   panFromGstin,
