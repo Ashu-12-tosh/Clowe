@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { env } from '../env';
 import { ApiError } from '../utils/ApiError';
 import { cashfreeWebhookFresh, verifyCashfreeWebhook } from '../services/cashfree/client';
@@ -23,15 +23,33 @@ import { recordWebhook, webhookSeen } from '../services/payments/gatewaySync';
  */
 export const payoutWebhookRouter = Router();
 
-/** A refused delivery is logged at most once a minute: anyone can post here. */
+/**
+ * A refused delivery is logged at most once a minute (anyone can post here),
+ * with what it carried: the header NAMES, the content type and the body size —
+ * never a header value or the body, which hold the signature and the payload.
+ */
 let lastRefusalLog = 0;
 let refusedSince = 0;
-function logRefusal(why: string): void {
+function logRefusal(why: string, req: Request): void {
   refusedSince += 1;
   if (Date.now() - lastRefusalLog < 60_000) return;
-  console.warn(`[clowe-api] payout webhook: ${why} — refused${refusedSince > 1 ? ` (${refusedSince} refused in the last minute or so)` : ''}`);
+  const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
+  const names = Object.keys(req.headers).sort().join(',');
+  const contentType = (req.get('content-type') ?? '').split(';')[0]!.trim().slice(0, 60) || 'none';
+  console.warn(
+    `[clowe-api] payout webhook: ${why} — refused${refusedSince > 1 ? ` (${refusedSince} refused in the last minute or so)` : ''}` +
+      ` [headers: ${names}; content-type: ${contentType}; raw body: ${rawBody ? `${rawBody.length} bytes` : 'not captured'}]`,
+  );
   lastRefusalLog = Date.now();
   refusedSince = 0;
+}
+
+/** Why a delivery failed the signature check, in our words. */
+function refusalReason(rawBody: Buffer | undefined, signature: string, timestamp: string): string {
+  if (!signature) return 'no signature header';
+  if (!timestamp) return 'no timestamp header';
+  if (!rawBody) return 'body not captured (not JSON?)';
+  return 'signature did not match';
 }
 
 payoutWebhookRouter.post('/cashfree/webhook', async (req, res, next) => {
@@ -43,11 +61,11 @@ payoutWebhookRouter.post('/cashfree/webhook', async (req, res, next) => {
     const signature = req.get('x-webhook-signature') ?? '';
     const timestamp = req.get('x-webhook-timestamp') ?? '';
     if (!rawBody || !verifyCashfreeWebhook(rawBody, timestamp, signature, secret)) {
-      logRefusal(`signature check FAILED (${signature ? 'signature did not match' : 'no signature header'})`);
+      logRefusal(`signature check FAILED (${refusalReason(rawBody, signature, timestamp)})`, req);
       throw ApiError.unauthorized('Invalid webhook signature');
     }
     if (!cashfreeWebhookFresh(timestamp)) {
-      logRefusal('signature ok but the timestamp is outside the allowed window');
+      logRefusal('signature ok but the timestamp is outside the allowed window', req);
       throw ApiError.unauthorized('Stale webhook');
     }
     const body = req.body as { type?: unknown; event?: unknown; data?: Record<string, unknown> };

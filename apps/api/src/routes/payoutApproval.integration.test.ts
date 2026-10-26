@@ -412,6 +412,29 @@ describe('the payout webhook before Cashfree sends (PAYOUT_PROVIDER still the mo
     expect(await prisma.gatewayWebhookEvent.count({ where: { provider: 'cashfree-payouts', reference: test.data.transfer_id, type: 'TRANSFER_SUCCESS' } })).toBe(1);
   });
 
+  it('logs what a refused delivery carried — header names, content type, body size — never a value or the body', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    // Past the once-a-minute throttle left by earlier refusals in this file.
+    const now = Date.now() + 10 * 60_000;
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      const res = await call('POST', '/api/payouts/cashfree/webhook', null, JSON.stringify({ type: 'LOW_BALANCE_ALERT', data: { note: 'BODY-SECRET-TEXT' } }), {
+        'x-mystery-signature': 'HEADER-SECRET-VALUE',
+      });
+      expect(res.status).toBe(401);
+      const line = warn.mock.calls.map((c) => String(c[0])).find((l) => l.includes('payout webhook')) ?? '';
+      expect(line).toContain('signature check FAILED (no signature header)');
+      expect(line).toContain('x-mystery-signature');
+      expect(line).toContain('content-type: application/json');
+      expect(line).toMatch(/raw body: \d+ bytes/);
+      expect(line).not.toContain('HEADER-SECRET-VALUE');
+      expect(line).not.toContain('BODY-SECRET-TEXT');
+    } finally {
+      clock.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
   it('acts on nothing: a payout of ours on its way, named in it, is left as it is', async () => {
     // A provider that would answer "reversed" if it were asked — under the mock's name.
     const asked: string[] = [];
