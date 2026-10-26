@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { invoiceMonthLabel, type SellerMonthlyInvoice } from '@clowe/shared';
+import { invoiceMonthLabel, rupeesInWords, type SellerMonthlyInvoice } from '@clowe/shared';
 import { api, ApiRequestError, downloadFile } from '@/lib/api';
 import { formatPaise } from '@/lib/format';
 import BrandLogo from '@/components/BrandLogo';
@@ -101,6 +101,9 @@ export default function SellerInvoicePage({ params }: { params: Promise<{ month:
             </tbody>
           </table>
         </div>
+        <p className="mt-3 text-right text-xs text-gray-700" data-invoice-words>
+          Amount in words: {rupeesInWords(doc.totals.totalPaise)}
+        </p>
         <ul className="mt-4 list-disc pl-4 text-[11px] text-gray-500">
           {doc.notes.map((n) => (
             <li key={n}>{n}</li>

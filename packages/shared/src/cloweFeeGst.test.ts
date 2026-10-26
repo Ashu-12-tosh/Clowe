@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_COMMERCIAL } from './commercial';
 import { computeListingEconomics, type SellerEconomicsRates } from './sellerEconomics';
 import { gstStateCodeOf, isIntraStateSupply, recipientStateCode, splitGst } from './gstPlace';
-import { financialYearOf, sellerInvoiceNumber } from './sellerInvoice';
+import { financialYearOf, rupeesInWords, sellerInvoiceNumber } from './sellerInvoice';
 import type { ReferralFeeSlab } from './referralFees';
 
 // The owner's rule (26 Oct): every Clowe charge carries 18% GST, SAC 998599;
@@ -159,5 +159,16 @@ describe('invoice numbers', () => {
     expect(sellerInvoiceNumber('CLWS', '2026-27', 999_999)).toHaveLength(16);
     expect(() => sellerInvoiceNumber('CLOWE', '2026-27', 1)).toThrow(/16 characters/);
     expect(() => sellerInvoiceNumber('CLWS', '2026-27', 1_000_000)).toThrow(/16 characters/);
+  });
+});
+
+describe('the total in words', () => {
+  it('reads rupees and paise the Indian way: thousand, lakh, crore', () => {
+    expect(rupeesInWords(953_322)).toBe('Rupees Nine Thousand Five Hundred Thirty-Three and Twenty-Two Paise Only');
+    expect(rupeesInWords(100)).toBe('Rupees One Only');
+    expect(rupeesInWords(0)).toBe('Rupees Zero Only');
+    expect(rupeesInWords(1_234_567_89)).toBe('Rupees Twelve Lakh Thirty-Four Thousand Five Hundred Sixty-Seven and Eighty-Nine Paise Only');
+    expect(rupeesInWords(25_00_00_000_00)).toBe('Rupees Twenty-Five Crore Only');
+    expect(rupeesInWords(1_00_00_011_05)).toBe('Rupees One Crore Eleven and Five Paise Only');
   });
 });

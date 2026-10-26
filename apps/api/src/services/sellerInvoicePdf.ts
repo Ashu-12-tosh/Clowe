@@ -1,12 +1,15 @@
 import PDFDocument from 'pdfkit';
-import { invoiceMonthLabel, type SellerMonthlyInvoice } from '@clowe/shared';
+import { invoiceMonthLabel, rupeesInWords, type SellerMonthlyInvoice } from '@clowe/shared';
 
 // ---------------------------------------------------------------------------
 // Clowe's monthly tax invoice to a seller, as a PDF (owner, 26 Oct): what the
 // Billing page shows, with what CGST Rules rule 46 asks of a tax invoice —
-// both parties and their GSTINs, a number of at most 16 characters, the
-// date, the place of supply, each charge with its SAC, taxable value, rate
-// and tax, and the totals. A month still running is marked a draft.
+// both parties' names, full addresses and GSTINs (Clowe's registered
+// address is printed here even though the website keeps it off its pages),
+// a number of at most 16 characters, the date, the place of supply, each
+// charge with its SAC, taxable value, rate and tax, the total in figures and
+// in words, and the authorised signatory. A month still running is marked a
+// draft.
 //
 // The built-in Helvetica has no rupee sign, so amounts are in INR figures.
 // ---------------------------------------------------------------------------
@@ -106,10 +109,18 @@ export function renderSellerInvoicePdf(doc: SellerMonthlyInvoice): Promise<Buffe
   row(['Total', '', inr(t.taxablePaise), '', ...(doc.intraState ? [inr(t.cgstPaise), inr(t.sgstPaise)] : [inr(t.igstPaise)]), inr(t.totalPaise)], true);
 
   pdf.moveDown(0.8).font('Helvetica-Bold').fontSize(10).text(`Amount payable: INR ${inr(t.totalPaise)}`, MARGIN, pdf.y, { width: WIDTH, align: 'right' });
+  pdf.font('Helvetica').fontSize(9).text(`Amount in words: ${rupeesInWords(t.totalPaise)}`, MARGIN, pdf.y + 2, { width: WIDTH, align: 'right' });
   pdf.moveDown(1).font('Helvetica').fontSize(8).fillColor('#444');
   for (const n of doc.notes) pdf.text(`• ${n}`, MARGIN, pdf.y, { width: WIDTH });
-  pdf.moveDown(1).text('This is a computer-generated invoice and needs no signature.', MARGIN, pdf.y, { width: WIDTH });
-  pdf.text(`For ${doc.supplier.name} — authorised signatory`, MARGIN, pdf.y, { width: WIDTH });
+
+  // The authorised signatory, bottom right.
+  pdf.fillColor('#000').moveDown(2);
+  const signX = MARGIN + WIDTH - 200;
+  pdf.font('Helvetica-Bold').fontSize(9).text(`For ${doc.supplier.name}`, signX, pdf.y, { width: 200, align: 'center' });
+  const lineY = pdf.y + 36;
+  pdf.moveTo(signX + 10, lineY).lineTo(signX + 190, lineY).strokeColor('#000').lineWidth(0.7).stroke();
+  pdf.font('Helvetica').fontSize(9).text('Authorised Signatory', signX, lineY + 4, { width: 200, align: 'center' });
+  pdf.moveDown(1.5).fontSize(7.5).fillColor('#555').text('This is a computer-generated invoice.', MARGIN, pdf.y, { width: WIDTH });
   pdf.end();
   return done;
 }
