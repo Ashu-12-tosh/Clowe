@@ -22,6 +22,8 @@ export interface KycResult {
   reason: KycFailureReason | null;
   /** null when no name was checked, or the check offers no name match (GSTIN). */
   nameMatch: NameMatch | null;
+  /** The provider's id for this verification (Cashfree's reference_id), when it gives one. */
+  referenceId?: string | null;
 }
 
 /**

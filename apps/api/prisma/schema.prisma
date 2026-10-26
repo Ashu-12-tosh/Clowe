@@ -782,6 +782,9 @@ model SellerKycCheck {
   subject     String
   /// HMAC of the name sent for matching; null when none was sent.
   nameSubject String?
+  /// The provider's own id for this verification (Cashfree's reference_id),
+  /// to look it up in their dashboard. Null on a mock answer or an error.
+  providerRef String?
   createdAt   DateTime        @default(now())
 
   @@index([sellerId, kind, createdAt])

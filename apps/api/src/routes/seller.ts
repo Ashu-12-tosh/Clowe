@@ -35,7 +35,6 @@ import {
 } from '@clowe/shared';
 import { bookReversePickup } from '../services/shipping/reversePickup';
 import { prisma } from '../db';
-import { autoVerifySellerKyc } from '../services/kyc/sellerKyc';
 import { isHiddenCategory } from '../services/shopperVisibility';
 import { categoryRulesFor, categoryRulesMap } from '../services/categoryRules';
 import { gstSettings } from '../services/economicsRates';
@@ -258,8 +257,8 @@ sellerRouter.post('/register', async (req, res, next) => {
       },
     });
     await announceApplication(profile.id, req.auth!.userId, 'received');
-    // PAN, GSTIN and bank account checked straight away (real provider only).
-    autoVerifySellerKyc(profile.id);
+    // No verification call here: each one is billed, so an admin runs them
+    // from the KYC review, one document at a time.
     if (referrer) {
       await prisma.sellerReferral.create({
         data: { referrerId: referrer.id, referredId: profile.id },

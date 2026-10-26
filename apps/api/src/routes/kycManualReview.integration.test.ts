@@ -79,8 +79,8 @@ describe('the mock provider', () => {
     expect(ran.json.data.bank.state).toBe('NOT_PROVIDED');
     const status = (await call<SellerKycStatus>('GET', '/api/seller/kyc', seller.token)).json.data;
     expect(status).toMatchObject({ reviewMode: 'MANUAL', canVerify: false });
-    // The mock's own answers are kept, and count for nothing.
-    expect(await prisma.sellerKycCheck.count({ where: { sellerId: seller.id, provider: 'mock', outcome: 'VERIFIED' } })).toBeGreaterThan(0);
+    // The seller's button runs nothing at all: every check is an admin's.
+    expect(await prisma.sellerKycCheck.count({ where: { sellerId: seller.id } })).toBe(0);
   });
 
   it('never verifies a payout account either', async () => {

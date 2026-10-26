@@ -173,11 +173,13 @@ paymentsRouter.post('/cashfree/webhook', async (req, res, next) => {
 
     let reference: string | null = null;
     if (type.startsWith('PAYMENT_')) {
-      reference = pick(body, ['data', 'order', 'order_id']);
+      // data.order.order_id in every version seen so far; the flatter shapes
+      // are read too so a newer webhook version cannot slip past unread.
+      reference = pick(body, ['data', 'order', 'order_id'], ['data', 'order_id'], ['data', 'payment', 'order_id']);
       const target = reference ? await targetByProviderOrderId(reference) : null;
       if (target) await syncGatewayPayment(target);
     } else if (type.includes('REFUND')) {
-      reference = pick(body, ['data', 'refund', 'refund_id']);
+      reference = pick(body, ['data', 'refund', 'refund_id'], ['data', 'refund_id']);
       const refundId = reference ? await refundByGatewayId(reference) : null;
       if (refundId) await syncGatewayRefund(refundId);
     } else if (type.startsWith('VENDOR_SETTLEMENT')) {

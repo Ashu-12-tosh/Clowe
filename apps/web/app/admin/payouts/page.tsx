@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { PAYOUT_STATUS_LABELS, payoutRejectSchema, type AdminPayoutRow, type PayoutStatusValue } from '@clowe/shared';
+import { PAYOUT_STATUS_LABELS, payoutRejectSchema, type AdminPayoutAccount, type AdminPayoutRow, type PayoutStatusValue } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
@@ -22,8 +22,8 @@ const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString('en-IN'
  * Payout approvals. Every payout a seller requests waits here until an admin
  * approves it (it is sent at once, through Cashfree Payouts) or rejects it
  * with a reason (the amount goes back to the seller's balance). Both are in
- * the audit log. Sending without approval is a setting, off until payouts
- * have run unattended for a while.
+ * the audit log. With Cashfree sending, nothing goes out without an approval,
+ * and an approval the Payouts balance cannot cover is refused.
  */
 export default function AdminPayoutsPage() {
   const [tab, setTab] = useState<PayoutStatusValue>('PENDING');
@@ -33,6 +33,7 @@ export default function AdminPayoutsPage() {
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState('');
+  const [account, setAccount] = useState<AdminPayoutAccount | null>(null);
 
   const load = useCallback(() => {
     setData(null);
@@ -42,6 +43,12 @@ export default function AdminPayoutsPage() {
       .catch((err) => setError(err instanceof ApiRequestError ? err.message : 'Could not load'));
   }, [tab]);
   useEffect(load, [load]);
+  const loadAccount = useCallback(() => {
+    api<AdminPayoutAccount>('/api/admin/payouts/account', { auth: true })
+      .then(setAccount)
+      .catch(() => setAccount(null));
+  }, []);
+  useEffect(loadAccount, [loadAccount]);
 
   async function approve(row: AdminPayoutRow) {
     if (busy) return;
@@ -55,6 +62,7 @@ export default function AdminPayoutsPage() {
       });
       if (after.status === 'FAILED') setError(`${row.reference} could not be sent: ${after.failureReason ?? 'transfer failed'}`);
       load();
+      loadAccount();
     } catch {
       // Reported by the API client.
     } finally {
@@ -113,6 +121,24 @@ export default function AdminPayoutsPage() {
           </Link>
           .
         </p>
+        {account && (
+          <p className="mt-2 text-xs text-gray-600" data-payout-account>
+            {account.sending === 'cashfree' ? (
+              <span className="font-semibold text-ink-900">Sending through Cashfree Payouts — real money.</span>
+            ) : (
+              <span className="font-semibold text-amber-700">Sending is on the mock — approvals move no money.</span>
+            )}{' '}
+            {account.configured &&
+              (account.availablePaise !== null && account.balancePaise !== null ? (
+                <>
+                  Cashfree Payouts ({account.environment}): {formatPaise(account.availablePaise)} available
+                  {account.availablePaise !== account.balancePaise && <> of {formatPaise(account.balancePaise)}</>}.
+                </>
+              ) : (
+                <span className="text-red-700">Cashfree Payouts balance unavailable: {account.error}</span>
+              ))}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">

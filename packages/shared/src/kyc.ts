@@ -179,6 +179,22 @@ export const KYC_CHECK_STATE_LABELS: Record<KycCheckState, string> = {
 /** How a check was decided: an admin against the documents, or a real verification provider. */
 export type KycDecisionMethod = 'MANUAL' | 'PROVIDER';
 
+/**
+ * What a real verification provider (Cashfree Secure ID) last said about the
+ * document on file: evidence for the admin, never the decision itself.
+ */
+export interface KycProviderEvidence {
+  outcome: 'VERIFIED' | 'FAILED' | 'ERROR';
+  reason: KycReason | null;
+  nameScore: number | null;
+  nameBand: NameMatchBand | null;
+  nameMeetsThreshold: boolean | null;
+  provider: string;
+  /** The provider's id for the verification (Cashfree reference_id), to find it in their dashboard. */
+  referenceId: string | null;
+  checkedAt: string;
+}
+
 /** One check as the admin sees it: everything stored, nothing raw. */
 export interface KycCheckView {
   check: KycCheckType;
@@ -195,6 +211,16 @@ export interface KycCheckView {
   method: KycDecisionMethod | null;
   decidedBy: string | null;
   rejectReason: string | null;
+  /** The real provider's latest answer for this document; null with no provider, or before its check. */
+  providerCheck: KycProviderEvidence | null;
+  /**
+   * Whether an admin may mark it verified now. With a real provider connected,
+   * only once the provider verified this very document — and, for PAN and bank,
+   * with a name match at or above the threshold. Without one, against the documents.
+   */
+  canMarkVerified: boolean;
+  /** Why not, in a sentence for the admin; null when canMarkVerified. */
+  verifyBlockedReason: string | null;
 }
 
 export interface SellerKycSummary {
@@ -209,7 +235,11 @@ export interface SellerKycSummary {
   /** The provider flagged the bank account as fraudulent. */
   fraudAccount: boolean;
   nameMatchThreshold: number;
-  /** MANUAL while the verification provider is the mock: an admin decides every check. */
+  /**
+   * An admin decides every check either way. MANUAL: no verification provider,
+   * so against the documents. PROVIDER: a real provider is connected, and an
+   * admin runs its check per document and decides on its answer.
+   */
   reviewMode: 'MANUAL' | 'PROVIDER';
 }
 
@@ -230,7 +260,7 @@ export interface SellerKycStatus {
   gstin: SellerKycCheckView;
   bank: SellerKycCheckView;
   panGstinMismatch: boolean;
-  /** Something is waiting to be checked by a real provider or can be retried. */
+  /** Always false: only Clowe runs verification checks (each one is billed). Kept for older clients. */
   canVerify: boolean;
   reviewMode: 'MANUAL' | 'PROVIDER';
 }
@@ -246,14 +276,13 @@ export function toSellerKycStatus(summary: SellerKycSummary): SellerKycStatus {
     method: c.method,
     rejectReason: c.rejectReason,
   });
-  const checks = [summary.pan, summary.gstin, summary.bank];
   return {
     pan: view(summary.pan),
     gstin: view(summary.gstin),
     bank: view(summary.bank),
     panGstinMismatch: summary.panGstinMismatch,
-    // With manual review there is nothing for the seller to run: an admin checks the documents.
-    canVerify: summary.reviewMode === 'PROVIDER' && checks.some((c) => c.state === 'NOT_RUN' || c.state === 'ERROR' || c.state === 'PENDING_REVIEW'),
+    // Nothing for the seller to run: an admin runs every (billed) check.
+    canVerify: false,
     reviewMode: summary.reviewMode,
   };
 }
@@ -313,9 +342,33 @@ export function kycApprovalWarnings(summary: SellerKycSummary): string[] {
             : `${label} has not been verified yet.`,
         );
         break;
-      case 'PENDING_REVIEW':
-        out.push(`${label} is waiting for manual review against the documents.`);
+      case 'PENDING_REVIEW': {
+        const ev = view.providerCheck;
+        if (summary.reviewMode === 'MANUAL') {
+          out.push(`${label} is waiting for manual review against the documents.`);
+        } else if (!ev) {
+          out.push(
+            view.reason === 'NAME_MISSING'
+              ? `${label} has not been verified: ${why}.`
+              : `${label} has not been checked with the verification provider yet.`,
+          );
+        } else if (ev.outcome === 'FAILED') {
+          // The fraud flag already has its own line above.
+          if (ev.reason !== 'FRAUD_ACCOUNT') out.push(`${label} verification failed: ${why ?? 'no reason given'}.`);
+        } else if (ev.outcome === 'ERROR') {
+          out.push(`${label} check could not complete (${why ?? 'unknown error'}) — run it again before relying on it.`);
+        } else if (ev.nameMeetsThreshold === false && ev.nameScore !== null && ev.nameBand) {
+          out.push(
+            `${label} name match is ${ev.nameScore} (${NAME_MATCH_BAND_LABELS[ev.nameBand]}), ` +
+              `below the threshold of ${summary.nameMatchThreshold}.`,
+          );
+        } else if (view.check === 'BANK' && ev.nameScore === null) {
+          out.push('Bank account is valid, but the account holder name was not checked.');
+        } else {
+          out.push(`${label} passed the provider check and is waiting for an admin to mark it verified.`);
+        }
         break;
+      }
       case 'REJECTED':
         out.push(`${label} was rejected${view.rejectReason ? `: ${view.rejectReason}` : ''}.`);
         break;

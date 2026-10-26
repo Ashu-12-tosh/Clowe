@@ -88,12 +88,19 @@ describe('PAN', () => {
   it('passes on the verdict and the score, and nothing else it was told', async () => {
     const { fetchImpl } = stub(200, ok);
     const result = await provider(fetchImpl).verifyPAN('ABCDE1234F', 'Rahul Sharma');
-    expect(result).toEqual({ status: 'VERIFIED', reason: null, nameMatch: { score: 100, band: 'DIRECT_MATCH' } });
+    expect(result).toEqual({ status: 'VERIFIED', reason: null, nameMatch: { score: 100, band: 'DIRECT_MATCH' }, referenceId: null });
     // Registered name, Aadhaar seeding — none of it leaves the provider class.
     const text = JSON.stringify(result);
     expect(text).not.toContain('RAHUL');
     expect(text).not.toContain('aadhaar');
     expect(text).not.toContain('"Y"');
+  });
+
+  it('keeps the reference_id Cashfree gives, so the verification can be found in its dashboard', async () => {
+    const { fetchImpl } = stub(200, { ...ok, reference_id: 12345 });
+    expect((await provider(fetchImpl).verifyPAN('ABCDE1234F', 'Rahul Sharma')).referenceId).toBe('12345');
+    const bank = stub(200, { account_status: 'INVALID', account_status_code: 'ACCOUNT_BLOCKED', reference_id: 'ref_77' });
+    expect((await provider(bank.fetchImpl).verifyBank('1234567890', 'HDFC0001234', null)).referenceId).toBe('ref_77');
   });
 
   it('reads the score from the string Cashfree sends, without recomputing it', async () => {
@@ -116,6 +123,7 @@ describe('PAN', () => {
         status: 'FAILED',
         reason: 'PAN_INACTIVE',
         nameMatch: null,
+        referenceId: null,
       });
     }
   });
@@ -147,6 +155,7 @@ describe('GSTIN', () => {
       status: 'VERIFIED',
       reason: null,
       nameMatch: null,
+      referenceId: null,
     });
   });
 
@@ -175,7 +184,7 @@ describe('bank account', () => {
     const result = await provider(fetchImpl).verifyBank('1234567890', 'HDFC0001234', null);
     expect(calls[0]!.url).toBe('https://sandbox.cashfree.com/verification/bank-account/sync');
     expect(sent(calls[0]!)).toEqual({ bank_account: '1234567890', ifsc: 'HDFC0001234' });
-    expect(result).toEqual({ status: 'VERIFIED', reason: null, nameMatch: null });
+    expect(result).toEqual({ status: 'VERIFIED', reason: null, nameMatch: null, referenceId: null });
   });
 
   it('sends the name, and reports the match, when asked', async () => {
@@ -205,6 +214,7 @@ describe('bank account', () => {
       status: 'FAILED',
       reason: 'FRAUD_ACCOUNT',
       nameMatch: null,
+      referenceId: null,
     });
   });
 

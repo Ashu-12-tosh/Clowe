@@ -4,11 +4,12 @@ import {
   cashfreeSignature,
   idempotencyKey,
   ipv4Fetch,
+  paiseFromRupees,
   rupeesFromPaise,
   type CashfreeEnvironment,
 } from '../cashfree/client';
 import { GatewayError } from '../payments/PaymentProvider';
-import type { PayoutBeneficiary, PayoutProvider, PayoutTransfer, PayoutTransferRequest, PayoutVerification } from './PayoutProvider';
+import type { PayoutBalance, PayoutBeneficiary, PayoutProvider, PayoutTransfer, PayoutTransferRequest, PayoutVerification } from './PayoutProvider';
 
 /** Payouts v2. */
 export const CASHFREE_PAYOUT_API_VERSION = '2024-01-01';
@@ -20,8 +21,15 @@ export interface CashfreePayoutConfig {
   /** PEM, for signature 2FA. Leave out when the server's IP is allowlisted. */
   publicKeyPem?: string;
   baseUrl?: string;
+  /** The v1 host (the balance lives only there) — tests only. */
+  v1BaseUrl?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+}
+
+/** The v1 API's own hosts: the account balance has no v2 endpoint. */
+function payoutV1Host(environment: CashfreeEnvironment): string {
+  return environment === 'production' ? 'https://payout-api.cashfree.com' : 'https://payout-gamma.cashfree.com';
 }
 
 /** Cashfree's transfer_id and beneficiary_id: letters, digits, underscore. */
@@ -44,6 +52,7 @@ interface TransferBody {
  *   POST /payout/beneficiary              save where money goes (once per account)
  *   POST /payout/transfers                send; transfer_id is ours, fixed per payout
  *   GET  /payout/transfers?transfer_id=…  where it is now
+ *   v1:  POST /payout/v1/authorize, GET /payout/v1/getBalance   the account balance (read-only)
  *
  * Production refuses calls from an IP not on the account's allowlist (IPv4
  * only), so every call goes out over IPv4; a server without a fixed IP signs
@@ -58,11 +67,13 @@ interface TransferBody {
 export class CashfreePayoutProvider implements PayoutProvider {
   readonly name = 'cashfree';
   private readonly baseUrl: string;
+  private readonly v1BaseUrl: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
 
   constructor(private readonly config: CashfreePayoutConfig) {
     this.baseUrl = `${config.baseUrl ?? cashfreeHost(config.environment)}/payout`;
+    this.v1BaseUrl = `${config.v1BaseUrl ?? payoutV1Host(config.environment)}/payout/v1`;
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.fetchImpl = config.fetchImpl ?? ipv4Fetch;
   }
@@ -148,12 +159,57 @@ export class CashfreePayoutProvider implements PayoutProvider {
     throw this.error('get transfer', reply);
   }
 
+  /**
+   * The account balance, read-only: a v1 bearer token (valid a few minutes,
+   * fetched per call — this is asked rarely), then getBalance. Proves the keys
+   * and the IP allowlist work without moving any money. Amounts in paise.
+   */
+  async getBalance(): Promise<PayoutBalance> {
+    const auth = await this.v1('POST', '/authorize', {
+      'x-client-id': this.config.clientId,
+      'x-client-secret': this.config.clientSecret,
+      ...(this.config.publicKeyPem ? { 'x-cf-signature': cashfreeSignature(this.config.clientId, this.config.publicKeyPem) } : {}),
+    });
+    const token = (auth.data as { token?: unknown } | undefined)?.token;
+    if (typeof token !== 'string' || !token) throw new GatewayError('Cashfree Payouts authorize returned no token', 502, 'no_token');
+    const reply = await this.v1('GET', '/getBalance', { authorization: `Bearer ${token}` });
+    const data = (reply.data ?? {}) as { balance?: unknown; availableBalance?: unknown };
+    const balancePaise = paiseFromRupees(data.balance);
+    const availablePaise = paiseFromRupees(data.availableBalance);
+    if (!Number.isFinite(balancePaise) || !Number.isFinite(availablePaise)) throw new GatewayError('Cashfree Payouts balance without amounts', 502, 'malformed');
+    return { balancePaise, availablePaise };
+  }
+
   /** Accounts are verified by Secure ID in the KYC flow, not here. */
   async verifyMethod(): Promise<PayoutVerification> {
     return { verified: false, reason: 'Verified through seller KYC' };
   }
 
   // -------------------------------------------------------------------------
+
+  /**
+   * A v1 call. v1 answers HTTP 200 with status "ERROR" (and the real code in
+   * subCode) as often as it uses an HTTP error, so both are read.
+   */
+  private async v1(method: string, path: string, headers: Record<string, string>): Promise<{ data?: unknown }> {
+    let res: Response;
+    try {
+      res = await this.fetchImpl(`${this.v1BaseUrl}${path}`, {
+        method,
+        headers: { accept: 'application/json', 'content-type': 'application/json', ...headers },
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch (err) {
+      const kind = err instanceof Error && err.name === 'TimeoutError' ? 'timed out' : 'unreachable';
+      throw new GatewayError(`Cashfree Payouts ${method} v1${path}: ${kind}`, 0, 'network');
+    }
+    const body = ((await res.json().catch(() => null)) ?? {}) as { status?: unknown; subCode?: unknown; message?: unknown; data?: unknown };
+    const ok = res.ok && (typeof body.status !== 'string' || body.status.toUpperCase() === 'SUCCESS');
+    if (ok) return { data: body.data };
+    const sub = typeof body.subCode === 'string' && /^\d{3}$/.test(body.subCode) ? Number(body.subCode) : res.status;
+    const message = typeof body.message === 'string' ? body.message.slice(0, 200) : '';
+    throw new GatewayError(`Cashfree Payouts v1${path} failed (HTTP ${res.status}, subCode ${sub})${message ? `: ${message}` : ''}`, sub, `v1_${sub}`);
+  }
 
   private async call(
     method: string,

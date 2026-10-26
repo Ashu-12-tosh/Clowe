@@ -21,7 +21,7 @@ import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { assertOwnAssets } from '../services/assets';
 import { encryptBankAccount } from '../services/bankAccountCrypto';
-import { autoVerifySellerKyc, getSellerKycSummary, refreshOverallKycStatus } from '../services/kyc/sellerKyc';
+import { getSellerKycSummary, refreshOverallKycStatus } from '../services/kyc/sellerKyc';
 import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerStoreRouter = Router();
@@ -364,13 +364,9 @@ sellerStoreRouter.put('/business', async (req, res, next) => {
       },
     });
     // New details wait for review: the overall status follows the checks.
+    // Nothing is sent to the verification provider from here — an admin runs
+    // each (billed) check from the KYC review.
     if (seller.kycStatus !== 'PENDING_DOCS') await refreshOverallKycStatus(seller.id);
-    // A PAN or GSTIN that changed is verified on its own (unchanged ones are cached, never re-billed).
-    const panChanged = !panLocked && (input.panNumber !== undefined || input.panName !== undefined);
-    const gstChanged = !gstLocked && input.gstNumber !== undefined;
-    if (panChanged || gstChanged) {
-      autoVerifySellerKyc(seller.id, [...(panChanged ? (['PAN'] as const) : []), ...(gstChanged ? (['GSTIN'] as const) : [])]);
-    }
     await respond(seller.id, res);
   } catch (err) {
     next(err);
@@ -404,9 +400,8 @@ sellerStoreRouter.put('/bank', async (req, res, next) => {
       },
     });
     if (seller.kycStatus !== 'PENDING_DOCS') await refreshOverallKycStatus(seller.id);
-    // The new account is verified by the bank (penny drop) on its own; the
-    // cheque review below stays the fallback when that cannot answer.
-    autoVerifySellerKyc(seller.id, ['BANK']);
+    // The admins are told; one of them checks it with the bank (Verify with
+    // Cashfree) and against the cheque before it can take a payout.
     const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
     await prisma.notification.createMany({
       data: admins.map((a) => ({

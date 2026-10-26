@@ -2,8 +2,8 @@ import { createHmac } from 'node:crypto';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus, Role, SellerStatus } from '@prisma/client';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import type { AdminPayoutRow } from '@clowe/shared';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AdminPayoutAccount, AdminPayoutRow } from '@clowe/shared';
 import { createApp } from '../app';
 import { env } from '../env';
 import { seedFixture } from '../test/fixture';
@@ -14,7 +14,7 @@ import { postDeliveryEntries, settlementPosition } from '../services/sellerLedge
 import { eligibleItems, pollProcessingPayouts } from '../services/payoutService';
 import { setPayoutProviderForTests } from '../services/payouts';
 import { GatewayError } from '../services/payments/PaymentProvider';
-import type { PayoutBeneficiary, PayoutProvider, PayoutTransfer, PayoutTransferRequest } from '../services/payouts/PayoutProvider';
+import type { PayoutBalance, PayoutBeneficiary, PayoutProvider, PayoutTransfer, PayoutTransferRequest } from '../services/payouts/PayoutProvider';
 
 /**
  * Payouts move real money, so at first every one waits for an admin: approve
@@ -31,6 +31,12 @@ class FakePayouts implements PayoutProvider {
   /** Answers to transfer() in order (default PROCESSING); getTransfer reads `state`. */
   nextTransfer: Array<PayoutTransfer['status'] | 'THROW_UNCERTAIN'> = [];
   state = new Map<string, PayoutTransfer>();
+  /** What the Payouts account holds; 'THROW' when the balance cannot be read. */
+  availablePaise: number | 'THROW' = 100_000_000;
+  async getBalance(): Promise<PayoutBalance> {
+    if (this.availablePaise === 'THROW') throw new GatewayError('Cashfree Payouts v1/getBalance: timed out', 0, 'network');
+    return { balancePaise: this.availablePaise, availablePaise: this.availablePaise };
+  }
   async ensureBeneficiary(b: PayoutBeneficiary): Promise<string> {
     this.beneficiaries.push(b);
     return b.id;
@@ -216,6 +222,7 @@ describe('Cashfree payouts', () => {
   });
   beforeEach(() => {
     fake.nextTransfer = [];
+    fake.availablePaise = 100_000_000;
   });
 
   const webhook = (transferId: string, type = 'TRANSFER_SUCCESS', signedAt = Date.now()) => {
@@ -232,6 +239,45 @@ describe('Cashfree payouts', () => {
     const row = await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } });
     return { ...s, payout: row, approvedRow: res.json.data };
   }
+
+  it('never sends one by itself: with Cashfree sending, auto-approve is ignored and every payout waits for an admin', async () => {
+    await setSetting('payoutAutoApprove', true);
+    const s = await payableSeller();
+    const sent = fake.transfers.length;
+    const res = await request(s.token);
+    expect(res.json.data.status).toBe('PENDING');
+    expect(fake.transfers.length).toBe(sent);
+  });
+
+  it('an approval the Payouts balance cannot cover sends nothing: the payout stays PENDING and the admins are told', async () => {
+    const s = await payableSeller();
+    const payout = (await request(s.token)).json.data;
+    fake.availablePaise = payout.netPaise - 1;
+    const sent = fake.transfers.length;
+    const res = await call('POST', `/api/admin/payouts/${payout.id}/approve`, adminToken);
+    expect(res.status).toBe(409);
+    expect(res.json.error?.code).toBe('PAYOUT_BALANCE_LOW');
+    expect(fake.transfers.length).toBe(sent);
+    expect(await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } })).toMatchObject({ status: 'PENDING', reviewedAt: null });
+    await vi.waitFor(async () => expect(await prisma.notification.count({ where: { type: 'ADMIN_PAYOUT_BALANCE_LOW', body: { contains: payout.reference } } })).toBeGreaterThan(0));
+
+    // Topped up: the same approval goes through.
+    fake.availablePaise = payout.netPaise;
+    expect((await call<AdminPayoutRow>('POST', `/api/admin/payouts/${payout.id}/approve`, adminToken)).json.data.status).toBe('PROCESSING');
+    expect(fake.transfers.length).toBe(sent + 1);
+  });
+
+  it('an approval sends nothing when the balance cannot be read', async () => {
+    const s = await payableSeller();
+    const payout = (await request(s.token)).json.data;
+    fake.availablePaise = 'THROW';
+    const sent = fake.transfers.length;
+    const res = await call('POST', `/api/admin/payouts/${payout.id}/approve`, adminToken);
+    expect(res.status).toBe(502);
+    expect(res.json.error?.code).toBe('PAYOUT_BALANCE_UNKNOWN');
+    expect(fake.transfers.length).toBe(sent);
+    expect((await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } })).status).toBe('PENDING');
+  });
 
   it('saves the verified bank account as a beneficiary once, and sends under the fixed transfer id', async () => {
     const { payout, methodId } = await approved({ method: 'BANK' });
@@ -291,6 +337,16 @@ describe('Cashfree payouts', () => {
     expect(await prisma.auditLog.count({ where: { action: 'Payout reversed', entityId: payout.id } })).toBe(1);
   });
 
+  it('a failed or reversed payout is put in front of the admins, not only in the audit log', async () => {
+    fake.nextTransfer = ['FAILED'];
+    const failed = await approved();
+    await vi.waitFor(async () => expect(await prisma.notification.count({ where: { type: 'ADMIN_PAYOUT_FAILED', title: { contains: failed.payout.reference } } })).toBeGreaterThan(0));
+    const reversed = await approved();
+    fake.settle(reversed.payout.transferId!, 'REVERSED');
+    await webhook(reversed.payout.transferId!, 'TRANSFER_REVERSED');
+    await vi.waitFor(async () => expect(await prisma.notification.count({ where: { type: 'ADMIN_PAYOUT_REVERSED', title: { contains: reversed.payout.reference } } })).toBeGreaterThan(0));
+  });
+
   it('a transfer Cashfree refuses is FAILED and gives the money back', async () => {
     fake.nextTransfer = ['FAILED'];
     const { payout, sellerId } = await approved();
@@ -308,6 +364,47 @@ describe('Cashfree payouts', () => {
     expect(after.status).toBe('PAID');
     const sent = fake.transfers.filter((t) => t.transferId === payout.transferId);
     expect(sent).toHaveLength(2);
+  });
+});
+
+describe('the payout webhook before Cashfree sends (PAYOUT_PROVIDER still the mock)', () => {
+  beforeAll(() => {
+    (env as { CASHFREE_PAYOUT_CLIENT_SECRET?: string }).CASHFREE_PAYOUT_CLIENT_SECRET = PAYOUT_SECRET;
+  });
+  afterAll(() => {
+    (env as { CASHFREE_PAYOUT_CLIENT_SECRET?: string }).CASHFREE_PAYOUT_CLIENT_SECRET = undefined;
+  });
+  const post = (body: unknown, secret = PAYOUT_SECRET) => {
+    const raw = JSON.stringify(body);
+    const ts = String(Date.now());
+    const sig = createHmac('sha256', secret).update(ts).update(raw).digest('base64');
+    return call<{ received: boolean }>('POST', '/api/payouts/cashfree/webhook', null, raw, { 'x-webhook-timestamp': ts, 'x-webhook-signature': sig });
+  };
+
+  it('still checks the signature, so the dashboard test proves the secret: a good one is recorded, a bad one refused', async () => {
+    const test = { type: 'TRANSFER_SUCCESS', event_time: new Date().toISOString(), data: { transfer_id: `dashboard_test_${Date.now()}`, status: 'SUCCESS' } };
+    expect((await post(test, 'some-other-secret')).status).toBe(401);
+    expect(await prisma.gatewayWebhookEvent.count({ where: { provider: 'cashfree-payouts', reference: test.data.transfer_id } })).toBe(0);
+    const ok = await post(test);
+    expect(ok.status).toBe(200);
+    expect(await prisma.gatewayWebhookEvent.count({ where: { provider: 'cashfree-payouts', reference: test.data.transfer_id, type: 'TRANSFER_SUCCESS' } })).toBe(1);
+  });
+
+  it('acts on nothing: a payout of ours named in it is left as it is', async () => {
+    const s = await payableSeller();
+    const payout = (await request(s.token)).json.data;
+    const transferId = (await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } })).transferId!;
+    expect((await post({ type: 'TRANSFER_REVERSED', data: { transfer_id: transferId } })).status).toBe(200);
+    expect((await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } })).status).toBe('PENDING');
+  });
+});
+
+describe('the Payouts account on the admin page', () => {
+  it('says who sends, and reads no balance without Payouts keys', async () => {
+    const res = await call<AdminPayoutAccount>('GET', '/api/admin/payouts/account', adminToken);
+    expect(res.json.data).toMatchObject({ sending: 'mock', configured: false, balancePaise: null });
+    const s = await payableSeller();
+    expect((await call('GET', '/api/admin/payouts/account', s.token)).status).toBe(403);
   });
 });
 

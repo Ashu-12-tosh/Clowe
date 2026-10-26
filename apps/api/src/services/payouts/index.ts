@@ -32,6 +32,23 @@ function createPayoutProvider(): PayoutProvider {
   });
 }
 
+/**
+ * The Cashfree Payouts account itself, whenever its keys are set — even while
+ * PAYOUT_PROVIDER is still the mock — for the read-only things: the balance on
+ * the admin's payouts page and the live check. Never used to send money:
+ * transfers go only through `payoutProvider`.
+ */
+export function cashfreePayoutAccount(): CashfreePayoutProvider | null {
+  if (payoutProvider instanceof CashfreePayoutProvider) return payoutProvider;
+  if (!env.CASHFREE_PAYOUT_CLIENT_ID || !env.CASHFREE_PAYOUT_CLIENT_SECRET) return null;
+  return new CashfreePayoutProvider({
+    clientId: env.CASHFREE_PAYOUT_CLIENT_ID,
+    clientSecret: env.CASHFREE_PAYOUT_CLIENT_SECRET,
+    environment: env.CASHFREE_PAYOUT_ENV,
+    publicKeyPem: env.CASHFREE_PAYOUT_PUBLIC_KEY ? pemFromEnv(env.CASHFREE_PAYOUT_PUBLIC_KEY) : undefined,
+  });
+}
+
 /** `let` only so a test can stand a fake Cashfree in; nothing else reassigns it. */
 export let payoutProvider: PayoutProvider = createPayoutProvider();
 

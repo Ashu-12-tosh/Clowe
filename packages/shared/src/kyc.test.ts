@@ -57,6 +57,9 @@ function view(check: KycCheckView['check'], over: Partial<KycCheckView> = {}): K
     method: 'PROVIDER',
     decidedBy: null,
     rejectReason: null,
+    providerCheck: null,
+    canMarkVerified: false,
+    verifyBlockedReason: null,
     ...over,
   };
 }
@@ -77,6 +80,21 @@ function summary(over: Partial<SellerKycSummary> = {}): SellerKycSummary {
 }
 
 describe('approval warnings', () => {
+  it('read a pending check from what the provider said about it', () => {
+    const ev = (over: Partial<NonNullable<KycCheckView['providerCheck']>>) => ({
+      outcome: 'VERIFIED' as const, reason: null, nameScore: 100, nameBand: 'DIRECT_MATCH' as const, nameMeetsThreshold: true,
+      provider: 'cashfree', referenceId: '1', checkedAt: '2026-10-27T10:00:00.000Z', ...over,
+    });
+    const pending = (check: KycCheckView['check'], providerCheck: KycCheckView['providerCheck'], reason: KycCheckView['reason'] = null) =>
+      kycApprovalWarnings(summary({ [check === 'BANK' ? 'bank' : check === 'PAN' ? 'pan' : 'gstin']: view(check, { state: 'PENDING_REVIEW', method: null, reason, providerCheck }) }));
+    expect(pending('PAN', null)).toEqual(['PAN has not been checked with the verification provider yet.']);
+    expect(pending('PAN', ev({}))).toEqual(['PAN passed the provider check and is waiting for an admin to mark it verified.']);
+    expect(pending('PAN', ev({ outcome: 'FAILED', reason: 'PAN_INVALID' }), 'PAN_INVALID')).toEqual(['PAN verification failed: PAN does not exist.']);
+    expect(pending('BANK', ev({ outcome: 'ERROR', reason: 'BANK_UNAVAILABLE' }), 'BANK_UNAVAILABLE')[0]).toMatch(/could not complete \(the bank could not be reached\)/);
+    expect(pending('PAN', ev({ nameScore: 70, nameBand: 'MODERATE_PARTIAL_MATCH', nameMeetsThreshold: false }))[0]).toMatch(/name match is 70.*below the threshold of 85/);
+    expect(pending('BANK', ev({ nameScore: null, nameBand: null, nameMeetsThreshold: null }))).toEqual(['Bank account is valid, but the account holder name was not checked.']);
+  });
+
   it('are empty when every check passed', () => {
     expect(kycApprovalWarnings(summary())).toEqual([]);
   });
@@ -154,10 +172,10 @@ describe("the seller's own view", () => {
     expect(status.pan.nameNeedsReview).toBe(true);
   });
 
-  it('offers verification while something is unchecked or errored', () => {
+  it('never offers the seller a check to run — every check is billed, and an admin runs it', () => {
     expect(toSellerKycStatus(summary()).canVerify).toBe(false);
-    expect(toSellerKycStatus(summary({ bank: view('BANK', { state: 'ERROR' }) })).canVerify).toBe(true);
-    expect(toSellerKycStatus(summary({ pan: view('PAN', { state: 'NOT_RUN' }) })).canVerify).toBe(true);
+    expect(toSellerKycStatus(summary({ bank: view('BANK', { state: 'ERROR' }) })).canVerify).toBe(false);
+    expect(toSellerKycStatus(summary({ pan: view('PAN', { state: 'PENDING_REVIEW' }) })).canVerify).toBe(false);
   });
 
   it('offers nothing to run under manual review — an admin checks the documents', () => {

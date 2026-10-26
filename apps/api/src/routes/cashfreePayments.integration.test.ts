@@ -2,7 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { PrismaClient, ProductStatus } from '@prisma/client';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CheckoutResult, CreditPurchaseResult, PaymentConfirmResult, PromotionCreditPurchaseResult } from '@clowe/shared';
 import { createApp } from '../app';
 import { env } from '../env';
@@ -265,6 +265,41 @@ describe('the Cashfree webhook', () => {
     expect((await prisma.payment.findUniqueOrThrow({ where: { orderId: checkout.orderId } })).status).toBe('PAID');
   });
 
+  it('settles once when both webhooks tell of the same payment — the order’s notify_url (2023-08-01) and the dashboard endpoint (2026-01-01), each with its own body', async () => {
+    const { user, checkout } = await placed();
+    const sellerUserId = (await prisma.sellerProfile.findUniqueOrThrow({ where: { slug: 'fixture-store' } })).userId;
+    const stock = await stockOf();
+    cf.attempt(checkout.orderNumber, 'SUCCESS');
+    const amount = checkout.amountPaise / 100;
+    const v2023 = signed({
+      type: 'PAYMENT_SUCCESS_WEBHOOK',
+      event_time: new Date().toISOString(),
+      data: { order: { order_id: checkout.orderNumber, order_amount: amount, order_currency: 'INR' }, payment: { cf_payment_id: 'cfpay_x', payment_status: 'SUCCESS', payment_amount: amount } },
+    });
+    const v2026 = signed({
+      type: 'PAYMENT_SUCCESS_WEBHOOK',
+      event_time: new Date().toISOString(),
+      data: {
+        order: { order_id: checkout.orderNumber, order_amount: amount, order_currency: 'INR', order_tags: null },
+        payment: { cf_payment_id: 'cfpay_x', payment_status: 'SUCCESS', payment_amount: amount, payment_group: 'upi' },
+        customer_details: { customer_id: user.id },
+        payment_gateway_details: { gateway_name: 'CASHFREE' },
+      },
+    });
+    const hook = (h: ReturnType<typeof signed>) => call('POST', '/api/payments/cashfree/webhook', null, h.raw, h.headers);
+    // Together, then each again (Cashfree retries until it hears 200).
+    expect((await Promise.all([hook(v2023), hook(v2026)])).map((r) => r.status)).toEqual([200, 200]);
+    expect((await Promise.all([hook(v2023), hook(v2026)])).map((r) => r.status)).toEqual([200, 200]);
+
+    expect((await prisma.payment.findUniqueOrThrow({ where: { orderId: checkout.orderId } })).status).toBe('PAID');
+    expect(await stockOf()).toBe(stock);
+    expect(await prisma.creditLedger.count({ where: { userId: user.id, reason: 'EARN_PURCHASE' } })).toBe(1);
+    expect(await prisma.notification.count({ where: { userId: user.id, type: 'ORDER_CONFIRMED' } })).toBe(1);
+    expect(await prisma.notification.count({ where: { userId: sellerUserId, type: 'NEW_ORDER', body: { contains: checkout.orderNumber } } })).toBe(1);
+    // Both deliveries were read and recorded, each once.
+    expect(await prisma.gatewayWebhookEvent.count({ where: { provider: 'cashfree-pg', reference: checkout.orderNumber } })).toBe(2);
+  });
+
   it('turns away a correctly signed event signed over an hour ago, or too far ahead', async () => {
     const { checkout } = await placed();
     cf.attempt(checkout.orderNumber, 'SUCCESS');
@@ -385,12 +420,16 @@ describe('Cashfree refunds', () => {
     expect((await prisma.payment.findUniqueOrThrow({ where: { orderId: checkout.orderId } })).status).toBe('REFUNDED');
   });
 
-  it('that the bank turns down are FAILED, and an admin retry is a new gateway refund', async () => {
-    const { refund } = await cancelledPaid(['PENDING']);
+  it('that the bank turns down are FAILED, the admins are told, and an admin retry is a new gateway refund', async () => {
+    await prisma.user.upsert({ where: { phone: '9219999999' }, update: {}, create: { phone: '9219999999', name: 'CF Admin', role: 'ADMIN', referralCode: 'CF-ADMIN' } });
+    const { refund, checkout } = await cancelledPaid(['PENDING']);
     cf.settleRefund(refund.id, 'FAILED');
     await prisma.refund.update({ where: { id: refund.id }, data: { lastCheckedAt: null } });
     await pollProcessingRefunds();
     expect((await prisma.refund.findUniqueOrThrow({ where: { id: refund.id } })).status).toBe('FAILED');
+    await vi.waitFor(async () =>
+      expect(await prisma.notification.count({ where: { type: 'ADMIN_REFUND_FAILED', title: `Refund failed: ${checkout.orderNumber}` } })).toBeGreaterThan(0),
+    );
 
     cf.nextRefund = ['SUCCESS'];
     const after = await retryRefund(refund.id);

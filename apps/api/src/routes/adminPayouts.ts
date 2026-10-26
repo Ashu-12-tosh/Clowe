@@ -1,18 +1,20 @@
 import { Router, type Request } from 'express';
-import { payoutRejectSchema, type AdminPayoutRow, type PayoutStatusValue } from '@clowe/shared';
+import { payoutRejectSchema, type AdminPayoutAccount, type AdminPayoutRow, type PayoutStatusValue } from '@clowe/shared';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { deviceFromUserAgent, ipFrom, recordAudit } from '../services/auditService';
 import { approvePayout, rejectPayout, syncPayout } from '../services/payoutService';
+import { cashfreePayoutAccount, payoutProvider } from '../services/payouts';
+import { env } from '../env';
 import { ApiError } from '../utils/ApiError';
 
 /**
  * Payout approvals. Every payout a seller requests waits here (PENDING) until
  * an admin approves it — then it is sent — or rejects it, which puts the
  * amount back in the seller's balance. Each decision is in the audit log.
- * Turned off with the payoutAutoApprove setting once payouts can go
- * unattended.
+ * With a real payout provider there is no unattended sending: the
+ * payoutAutoApprove setting only applies to the mock.
  */
 export const adminPayoutsRouter = Router();
 adminPayoutsRouter.use(requireAuth, requireRole('ADMIN'));
@@ -88,6 +90,33 @@ adminPayoutsRouter.get('/', async (req, res, next) => {
         counts: Object.fromEntries(STATUSES.map((s) => [s, counts.find((c) => c.status === s)?._count._all ?? 0])),
       },
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/admin/payouts/account — which provider sends, and the Payouts balance (read-only).
+adminPayoutsRouter.get('/account', async (_req, res, next) => {
+  try {
+    const account = cashfreePayoutAccount();
+    const body: AdminPayoutAccount = {
+      sending: payoutProvider.name,
+      configured: !!account,
+      environment: account ? env.CASHFREE_PAYOUT_ENV : null,
+      balancePaise: null,
+      availablePaise: null,
+      error: null,
+    };
+    if (account) {
+      try {
+        const balance = await account.getBalance();
+        body.balancePaise = balance.balancePaise;
+        body.availablePaise = balance.availablePaise;
+      } catch (err) {
+        body.error = err instanceof Error ? err.message.slice(0, 200) : 'Could not read the balance';
+      }
+    }
+    res.json({ success: true, data: body });
   } catch (err) {
     next(err);
   }

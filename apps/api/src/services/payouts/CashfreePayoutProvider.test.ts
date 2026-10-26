@@ -145,3 +145,45 @@ describe('CashfreePayoutProvider', () => {
     expect(sent).toHaveLength(0);
   });
 });
+
+describe('CashfreePayoutProvider.getBalance', () => {
+  it('reads the balance through a v1 token on the v1 host, in paise, sending no money', async () => {
+    const { sent, impl } = fakeFetch([
+      { status: 200, body: { status: 'SUCCESS', subCode: '200', message: 'Token generated', data: { token: 'tok_1', expiry: 1 } } },
+      { status: 200, body: { status: 'SUCCESS', subCode: '200', data: { balance: '2147.50', availableBalance: '1739.80' } } },
+    ]);
+    expect(await make(impl).getBalance()).toEqual({ balancePaise: 214750, availablePaise: 173980 });
+    expect(sent.map((r) => `${r.method} ${r.url}`)).toEqual([
+      'POST https://payout-gamma.cashfree.com/payout/v1/authorize',
+      'GET https://payout-gamma.cashfree.com/payout/v1/getBalance',
+    ]);
+    expect(sent[0]!.headers).toMatchObject({ 'x-client-id': 'pid', 'x-client-secret': 'psecret' });
+    expect(sent[1]!.headers.authorization).toBe('Bearer tok_1');
+    expect(sent[1]!.headers['x-client-secret']).toBeUndefined();
+  });
+
+  it('uses the production v1 host in production', async () => {
+    const { sent, impl } = fakeFetch([
+      { status: 200, body: { status: 'SUCCESS', data: { token: 't' } } },
+      { status: 200, body: { status: 'SUCCESS', data: { balance: 1, availableBalance: 1 } } },
+    ]);
+    await new CashfreePayoutProvider({ clientId: 'a', clientSecret: 'b', environment: 'production', fetchImpl: impl }).getBalance();
+    expect(sent[0]!.url).toBe('https://payout-api.cashfree.com/payout/v1/authorize');
+  });
+
+  it('treats a v1 "ERROR" answered with HTTP 200 as the failure it is, never as a zero balance', async () => {
+    const { impl } = fakeFetch([{ status: 200, body: { status: 'ERROR', subCode: '403', message: 'IP not whitelisted' } }]);
+    const err = await make(impl).getBalance().catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(GatewayError);
+    expect((err as GatewayError).message).toContain('subCode 403');
+    expect((err as GatewayError).message).toContain('IP not whitelisted');
+  });
+
+  it('refuses an answer without amounts', async () => {
+    const { impl } = fakeFetch([
+      { status: 200, body: { status: 'SUCCESS', data: { token: 't' } } },
+      { status: 200, body: { status: 'SUCCESS', data: {} } },
+    ]);
+    await expect(make(impl).getBalance()).rejects.toThrow('without amounts');
+  });
+});

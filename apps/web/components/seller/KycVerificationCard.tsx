@@ -9,8 +9,6 @@ import {
   type SellerKycStatus,
 } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
-import { toast } from '@/lib/toast';
-import Spinner from '@/components/Spinner';
 
 const STATE_STYLES: Record<KycCheckState, string> = {
   VERIFIED: 'bg-green-100 text-green-700',
@@ -57,13 +55,11 @@ function guidance(view: SellerKycCheckView): string | null {
 }
 
 /**
- * The seller's side of KYC: where each check stands and a way to run the
- * ones that are waiting. Each check is a paid call, so there is no automatic
- * retry here — the button is the retry, and the server rate-limits it.
+ * The seller's side of KYC: where each check stands. Read-only — every
+ * verification is a billed call, so Clowe's team runs them, never the seller.
  */
 export default function KycVerificationCard({ refresh }: { refresh: unknown }) {
   const [status, setStatus] = useState<SellerKycStatus | null>(null);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -79,32 +75,11 @@ export default function KycVerificationCard({ refresh }: { refresh: unknown }) {
     void load();
   }, [load, refresh]);
 
-  async function verify() {
-    if (busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      const next = await api<SellerKycStatus>('/api/seller/kyc/verify', { method: 'POST', auth: true });
-      setStatus(next);
-      const states = [next.pan, next.gstin, next.bank].map((c) => c.state);
-      if (states.some((s) => s === 'FAILED' || s === 'ERROR' || s === 'INVALID_FORMAT')) {
-        toast.error('Verification ran — some details did not pass; see below');
-      } else {
-        toast.success('Verification done — see the results below');
-      }
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : 'Could not run verification');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (!status) {
     return error ? <p className="text-xs text-red-600">{error}</p> : null;
   }
 
   const checks = [status.pan, status.gstin, status.bank];
-  const hasError = checks.some((c) => c.state === 'ERROR');
 
   return (
     <section className="rounded-2xl border border-gray-100 bg-white p-4">
@@ -114,18 +89,9 @@ export default function KycVerificationCard({ refresh }: { refresh: unknown }) {
           <p className="text-[11px] text-gray-400">
             {status.reviewMode === 'MANUAL'
               ? 'Clowe checks your PAN, GSTIN and bank account against your documents. "Verified" shows only once that is done.'
-              : 'We check your PAN, GSTIN and bank account with the issuing records.'}
+              : 'Clowe checks your PAN, GSTIN and bank account with the issuing records and against your documents. "Verified" shows only once that is done.'}
           </p>
         </div>
-        {status.canVerify && (
-          <button
-            onClick={() => void verify()}
-            disabled={busy}
-            className="shrink-0 rounded-lg bg-ink-900 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white hover:bg-ink-800 disabled:opacity-50"
-          >
-            {busy ? <><Spinner className="mr-1" />Checking…</> : hasError ? 'Try again' : 'Verify now'}
-          </button>
-        )}
       </div>
 
       {status.panGstinMismatch && (

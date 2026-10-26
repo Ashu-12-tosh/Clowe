@@ -4,7 +4,7 @@ import {
   type KycFailureReason,
   type NameMatchBand,
 } from '@clowe/shared';
-import { cashfreeHost, cashfreeSignature, type CashfreeEnvironment } from '../cashfree/client';
+import { cashfreeHost, cashfreeSignature, ipv4Fetch, type CashfreeEnvironment } from '../cashfree/client';
 import { KycProviderError, type KycProvider, type KycResult, type NameMatch } from './KycProvider';
 
 export interface CashfreeKycConfig {
@@ -30,16 +30,19 @@ export interface CashfreeKycConfig {
  * verdict, a reason and a score.
  */
 interface PanReply {
+  reference_id?: unknown;
   valid?: unknown;
   pan_status?: unknown;
   name_match_score?: unknown;
   name_match_result?: unknown;
 }
 interface GstinReply {
+  reference_id?: unknown;
   valid?: unknown;
   gst_in_status?: unknown;
 }
 interface BankReply {
+  reference_id?: unknown;
   account_status?: unknown;
   account_status_code?: unknown;
   name_match_score?: unknown;
@@ -80,9 +83,9 @@ const DEFAULT_TIMEOUT_MS = 15_000;
  * twice for one answer. Failures surface as KycProviderError and whoever holds
  * the history decides whether to ask again.
  *
- * There is no credential check at startup, unlike try-on: Cashfree has no
- * free endpoint to probe with, and a wrong key shows up as PROVIDER_AUTH on
- * the first real check anyway.
+ * There is no credential check at startup, unlike try-on: every probe is a
+ * call to Cashfree, and a wrong key shows up as PROVIDER_AUTH on the first
+ * real check anyway. checkAuth() exists for a person to run by hand.
  */
 export class CashfreeKycProvider implements KycProvider {
   readonly name = 'cashfree';
@@ -94,7 +97,8 @@ export class CashfreeKycProvider implements KycProvider {
   constructor(private readonly config: CashfreeKycConfig) {
     this.baseUrl = `${cashfreeHost(config.environment)}/verification`;
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.fetchImpl = config.fetchImpl ?? fetch;
+    // Over IPv4: the production allowlist takes IPv4 addresses only.
+    this.fetchImpl = config.fetchImpl ?? ipv4Fetch;
   }
 
   async verifyPAN(pan: string, name: string): Promise<KycResult> {
@@ -106,10 +110,11 @@ export class CashfreeKycProvider implements KycProvider {
 
     const { valid, pan_status } = reply.body;
     if (typeof valid !== 'boolean') throw this.malformed(path);
+    const ref = referenceIdFrom(reply.body);
     const status = typeof pan_status === 'string' ? pan_status.toUpperCase() : '';
-    if (status === 'DELETED' || status === 'DEACTIVATED') return failed('PAN_INACTIVE');
-    if (!valid || (status !== '' && status !== 'VALID')) return failed('PAN_INVALID');
-    return { status: 'VERIFIED', reason: null, nameMatch: nameMatchFrom(reply.body) };
+    if (status === 'DELETED' || status === 'DEACTIVATED') return failed('PAN_INACTIVE', ref);
+    if (!valid || (status !== '' && status !== 'VALID')) return failed('PAN_INVALID', ref);
+    return { status: 'VERIFIED', reason: null, nameMatch: nameMatchFrom(reply.body), referenceId: ref };
   }
 
   async verifyGSTIN(gstin: string): Promise<KycResult> {
@@ -121,9 +126,10 @@ export class CashfreeKycProvider implements KycProvider {
 
     const { valid, gst_in_status } = reply.body;
     if (typeof valid !== 'boolean') throw this.malformed(path);
-    if (!valid) return failed('GSTIN_NOT_FOUND');
+    const ref = referenceIdFrom(reply.body);
+    if (!valid) return failed('GSTIN_NOT_FOUND', ref);
     const active = typeof gst_in_status === 'string' && gst_in_status.trim().toLowerCase() === 'active';
-    return active ? { status: 'VERIFIED', reason: null, nameMatch: null } : failed('GSTIN_INACTIVE');
+    return active ? { status: 'VERIFIED', reason: null, nameMatch: null, referenceId: ref } : failed('GSTIN_INACTIVE', ref);
   }
 
   async verifyBank(accountNumber: string, ifsc: string, name: string | null): Promise<KycResult> {
@@ -143,31 +149,60 @@ export class CashfreeKycProvider implements KycProvider {
 
     const { account_status, account_status_code } = reply.body;
     if (typeof account_status !== 'string') throw this.malformed(path);
+    const ref = referenceIdFrom(reply.body);
     if (account_status.toUpperCase() === 'VALID') {
       return {
         status: 'VERIFIED',
         reason: null,
         nameMatch: name === null ? null : nameMatchFrom(reply.body),
+        referenceId: ref,
       };
     }
     const code = typeof account_status_code === 'string' ? account_status_code.toUpperCase() : '';
-    if (code === 'ACCOUNT_BLOCKED') return failed('ACCOUNT_BLOCKED');
-    if (code === 'INVALID_IFSC_FAIL') return failed('IFSC_INVALID');
-    if (code === 'NRE_ACCOUNT_FAIL') return failed('NRE_ACCOUNT');
-    return failed('ACCOUNT_INVALID');
+    if (code === 'ACCOUNT_BLOCKED') return failed('ACCOUNT_BLOCKED', ref);
+    if (code === 'INVALID_IFSC_FAIL') return failed('IFSC_INVALID', ref);
+    if (code === 'NRE_ACCOUNT_FAIL') return failed('NRE_ACCOUNT', ref);
+    return failed('ACCOUNT_INVALID', ref);
+  }
+
+  /**
+   * Are the keys (and this server's IP) accepted? Asks the status of a bank
+   * verification that cannot exist (reference_id 0): no PAN, GSTIN or account
+   * is sent and nothing is verified. 401/403 is a no; any other answer — the
+   * expected "not found" — means the credentials got through. For a person to
+   * run by hand (scripts/cashfreeLiveCheck.ts), never at boot or on a timer.
+   */
+  async checkAuth(): Promise<{ ok: boolean; status: number; code: string }> {
+    let res: Response;
+    try {
+      res = await this.fetchImpl(`${this.baseUrl}/bank-account?reference_id=0`, {
+        method: 'GET',
+        headers: this.headers(),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      });
+    } catch {
+      return { ok: false, status: 0, code: 'unreachable' };
+    }
+    const body = (await res.json().catch(() => ({}))) as { code?: unknown };
+    const code = typeof body.code === 'string' ? body.code : '';
+    return { ok: res.status !== 401 && res.status !== 403 && res.status < 500, status: res.status, code };
   }
 
   // -------------------------------------------------------------------------
 
-  private async post<T>(path: string, payload: Record<string, string>): Promise<Reply<T>> {
+  private headers(): Record<string, string> {
     const headers: Record<string, string> = {
-      'content-type': 'application/json',
       'x-client-id': this.config.clientId,
       'x-client-secret': this.config.clientSecret,
     };
     if (this.config.publicKeyPem) {
       headers['x-cf-signature'] = cashfreeSignature(this.config.clientId, this.config.publicKeyPem);
     }
+    return headers;
+  }
+
+  private async post<T>(path: string, payload: Record<string, string>): Promise<Reply<T>> {
+    const headers = { 'content-type': 'application/json', ...this.headers() };
 
     let res: Response;
     try {
@@ -215,8 +250,16 @@ export class CashfreeKycProvider implements KycProvider {
   }
 }
 
-function failed(reason: KycFailureReason): KycResult {
-  return { status: 'FAILED', reason, nameMatch: null };
+function failed(reason: KycFailureReason, referenceId: string | null = null): KycResult {
+  return { status: 'FAILED', reason, nameMatch: null, referenceId };
+}
+
+/** Cashfree's reference_id (a number on some APIs, a string on others), or null. */
+function referenceIdFrom(body: { reference_id?: unknown }): string | null {
+  const raw = body.reference_id;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return String(raw);
+  if (typeof raw === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(raw.trim())) return raw.trim();
+  return null;
 }
 
 const BANDS = new Set<string>(NAME_MATCH_BANDS);

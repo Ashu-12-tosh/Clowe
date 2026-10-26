@@ -3,6 +3,7 @@ import { GatewayError, providerFor } from './payments';
 import type { GatewayRefund } from './payments/PaymentProvider';
 import { sendToUserSafe } from './messaging';
 import { recordAudit } from './auditService';
+import { alertAdminsSafe } from './adminAlerts';
 import { noteSplitRefund, refundSplitsFor } from './easySplit';
 
 /**
@@ -205,6 +206,14 @@ async function failRefund(refundId: string, reason: string, providerStatus?: str
     summary: `Refund ${refundId} failed: ${reason.slice(0, 200)}`,
     severity: 'HIGH',
     status: 'FAILED',
+  });
+  // The buyer is still owed the money: someone has to retry it or pay it by hand.
+  const refund = await prisma.refund.findUnique({ where: { id: refundId }, select: { amountPaise: true, order: { select: { orderNumber: true } } } });
+  alertAdminsSafe({
+    type: 'ADMIN_REFUND_FAILED',
+    title: `Refund failed${refund ? `: ${refund.order.orderNumber}` : ''}`,
+    body: `${refund ? `₹${(refund.amountPaise / 100).toLocaleString('en-IN')} was not refunded` : 'A refund was not made'}: ${reason.slice(0, 200)}. Retry it from Admin → Payments, or refund it by hand.`,
+    linkHref: '/admin/payments',
   });
 }
 

@@ -61,14 +61,29 @@ function when(iso: string): string {
 }
 
 function NameMatch({ view, threshold }: { view: KycCheckView; threshold: number }) {
-  if (view.check === 'GSTIN' || view.state !== 'VERIFIED') return null;
+  if (view.check === 'GSTIN' || view.providerCheck?.outcome !== 'VERIFIED') return null;
   if (view.nameScore === null || view.nameBand === null) {
     return <p className="mt-0.5 text-amber-700">Holder name not checked</p>;
   }
   return (
-    <p className={`mt-0.5 ${view.nameMeetsThreshold ? 'text-green-700' : 'font-semibold text-red-700'}`}>
+    <p className={`mt-0.5 ${view.nameMeetsThreshold ? 'text-green-700' : 'font-semibold text-red-700'}`} data-kyc-name-match>
       Name match {view.nameScore} · {NAME_MATCH_BAND_LABELS[view.nameBand]}
       {!view.nameMeetsThreshold && <> — below {threshold}</>}
+    </p>
+  );
+}
+
+const OUTCOME_LABELS = { VERIFIED: 'verified', FAILED: 'not verified', ERROR: 'no answer' } as const;
+
+/** What the verification provider said about this document: evidence, not the decision. */
+function ProviderEvidence({ view }: { view: KycCheckView }) {
+  const ev = view.providerCheck;
+  if (!ev) return null;
+  const tone = ev.outcome === 'VERIFIED' ? 'text-green-700' : ev.outcome === 'FAILED' ? 'text-red-700' : 'text-amber-700';
+  return (
+    <p className={`mt-0.5 text-[11px] ${tone}`} data-kyc-provider={ev.outcome}>
+      Cashfree: {OUTCOME_LABELS[ev.outcome]} · {when(ev.checkedAt)}
+      {ev.referenceId && <span className="text-gray-400"> · ref {ev.referenceId}</span>}
     </p>
   );
 }
@@ -95,15 +110,18 @@ export async function openSellerDocument(path: string): Promise<void> {
 }
 
 /**
- * Manual KYC review: PAN, GSTIN and bank account, each with the values as
- * entered beside the documents, and Mark verified / Reject. Every decision is
- * recorded with who made it, when and how (by hand, or by a real provider).
- * Until then the seller sees "Pending review" — a mock check never verifies.
+ * KYC review: PAN, GSTIN and bank account, each with the values as entered
+ * beside the documents, and Mark verified / Reject. With Cashfree connected,
+ * "Verify with Cashfree" runs one (billed) check per press and shows its
+ * answer; Mark verified opens only once that document passed. Every decision
+ * is recorded with who made it and when. Until then the seller sees
+ * "Pending review" — a mock check never verifies.
  */
 export default function SellerKycPanel({ sellerId, onChanged }: { sellerId: string; onChanged: () => Promise<void> | void }) {
   const [review, setReview] = useState<AdminKycReviewView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -126,6 +144,7 @@ export default function SellerKycPanel({ sellerId, onChanged }: { sellerId: stri
     }
     setBusy(`${check}:${decision}`);
     setError('');
+    setNotice('');
     try {
       await api(`/api/admin/sellers/${sellerId}/kyc-review`, {
         method: 'POST',
@@ -142,11 +161,15 @@ export default function SellerKycPanel({ sellerId, onChanged }: { sellerId: stri
     }
   }
 
-  async function rerun(check: KycCheckView['check']) {
+  async function verifyWithProvider(check: KycCheckView['check']) {
+    if (!window.confirm(`Verify the ${KYC_CHECK_LABELS[check]} with Cashfree? This uses one Secure ID credit (a stored answer for the same details is reused for free).`)) {
+      return;
+    }
     setBusy(`${check}:RUN`);
     setError('');
     try {
-      await api(`/api/admin/sellers/${sellerId}/kyc-checks`, { method: 'POST', body: { check }, auth: true, success: `${KYC_CHECK_LABELS[check]} check done` });
+      const res = await api<{ called: boolean }>(`/api/admin/sellers/${sellerId}/kyc-checks`, { method: 'POST', body: { check }, auth: true });
+      setNotice(res.called ? `${KYC_CHECK_LABELS[check]} checked with Cashfree` : `${KYC_CHECK_LABELS[check]}: Cashfree's stored answer for these details — no new check made`);
       await load();
       await onChanged();
     } catch (err) {
@@ -194,10 +217,11 @@ export default function SellerKycPanel({ sellerId, onChanged }: { sellerId: stri
         <p className="text-[11px] text-gray-400">
           {kyc.reviewMode === 'MANUAL'
             ? 'Manual review — no verification provider is connected'
-            : `Provider checks · name match threshold ${kyc.nameMatchThreshold}`}
+            : `Cashfree checks, then your decision · name match threshold ${kyc.nameMatchThreshold}`}
         </p>
       </div>
       {error && <p className="mt-2 rounded-lg bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700">{error}</p>}
+      {notice && <p className="mt-2 rounded-lg bg-green-50 px-2.5 py-1.5 text-[11px] text-green-700" data-kyc-notice>{notice}</p>}
 
       <ul className="mt-2 divide-y divide-gray-50 text-xs">
         {checks.map((view) => (
@@ -218,11 +242,15 @@ export default function SellerKycPanel({ sellerId, onChanged }: { sellerId: stri
                     Check {v.gstin} on the GST portal ↗
                   </ExternalLink>
                 )}
+                <ProviderEvidence view={view} />
                 {view.reason && (
-                  <p className={view.state === 'ERROR' ? 'mt-0.5 text-amber-700' : 'mt-0.5 text-red-700'}>{KYC_REASON_LABELS[view.reason]}</p>
+                  <p className={view.providerCheck?.outcome === 'ERROR' || view.state === 'ERROR' ? 'mt-0.5 text-amber-700' : 'mt-0.5 text-red-700'}>{KYC_REASON_LABELS[view.reason]}</p>
                 )}
                 {view.rejectReason && <p className="mt-0.5 text-red-700">Rejected: {view.rejectReason}</p>}
                 <NameMatch view={view} threshold={kyc.nameMatchThreshold} />
+                {hasValue(view) && view.state !== 'VERIFIED' && !view.canMarkVerified && view.verifyBlockedReason && (
+                  <p className="mt-0.5 text-[11px] text-gray-500" data-kyc-blocked>{view.verifyBlockedReason}</p>
+                )}
                 {view.checkedAt && (view.state === 'VERIFIED' || view.state === 'REJECTED' || view.state === 'FAILED') && (
                   <p className="mt-0.5 text-[11px] text-gray-400" data-kyc-decided>
                     {view.method === 'MANUAL' ? `By hand · ${view.decidedBy ?? 'an admin'}` : `By ${view.provider}`} · {when(view.checkedAt)}
@@ -236,7 +264,8 @@ export default function SellerKycPanel({ sellerId, onChanged }: { sellerId: stri
                 {hasValue(view) && view.state !== 'VERIFIED' && (
                   <button
                     onClick={() => void decide(view.check, 'VERIFY')}
-                    disabled={busy !== null}
+                    disabled={busy !== null || !view.canMarkVerified}
+                    title={view.canMarkVerified ? undefined : (view.verifyBlockedReason ?? undefined)}
                     data-kyc-verify={view.check}
                     className="rounded-lg bg-green-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-green-700 disabled:opacity-50"
                   >
@@ -255,13 +284,19 @@ export default function SellerKycPanel({ sellerId, onChanged }: { sellerId: stri
                   </button>
                 )}
                 {kyc.reviewMode === 'PROVIDER' &&
-                  (view.state === 'ERROR' || view.state === 'PENDING_REVIEW' || (view.state === 'NOT_RUN' && view.reason !== 'NAME_MISSING')) && (
+                  hasValue(view) &&
+                  view.state !== 'VERIFIED' &&
+                  view.reason !== 'NAME_MISSING' &&
+                  (!view.providerCheck ||
+                    view.providerCheck.outcome === 'ERROR' ||
+                    (view.check === 'BANK' && view.providerCheck.outcome === 'VERIFIED' && view.providerCheck.nameScore === null)) && (
                     <button
-                      onClick={() => void rerun(view.check)}
+                      onClick={() => void verifyWithProvider(view.check)}
                       disabled={busy !== null}
+                      data-kyc-provider-run={view.check}
                       className="rounded-lg border border-gray-300 px-2 py-0.5 text-[11px] font-semibold hover:bg-gray-50 disabled:opacity-50"
                     >
-                      {busy === `${view.check}:RUN` ? 'Checking…' : 'Run provider check'}
+                      {busy === `${view.check}:RUN` ? 'Checking…' : view.providerCheck ? 'Check with Cashfree again' : 'Verify with Cashfree'}
                     </button>
                   )}
               </div>

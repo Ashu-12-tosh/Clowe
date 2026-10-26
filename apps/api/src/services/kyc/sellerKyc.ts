@@ -11,6 +11,7 @@ import {
   panGstinMismatch,
   type KycCheckType,
   type KycCheckView,
+  type KycProviderEvidence,
   type KycReason,
   type SellerKycSummary,
 } from '@clowe/shared';
@@ -35,7 +36,9 @@ import { KycProviderError, type KycResult } from './KycProvider';
  *   A bank account is re-verified only when the account on file changes (or
  *     when a name has appeared for one that was checked without one).
  *   ERROR — no answer — caches nothing, and nothing retries it on its own.
- *     The seller or an admin presses the button again.
+ *     An admin presses the button again.
+ *   Nothing calls the provider but an admin's press, one document at a time:
+ *     not the seller, not an edit, not a timer.
  *
  * "The same details" is decided by fingerprint: an HMAC of the PAN, GSTIN, or
  * account number + IFSC, so the verification rows never hold a second copy of
@@ -244,24 +247,34 @@ async function release(sellerId: string): Promise<void> {
   await prisma.sellerProfile.update({ where: { id: sellerId }, data: { kycCheckStartedAt: null } });
 }
 
+/** What an admin's "Verify with Cashfree" press did. */
+export interface ProviderCheckRun {
+  summary: SellerKycSummary;
+  /** A billed call was made. False when a stored answer was reused, or nothing could be sent. */
+  called: boolean;
+}
+
 /**
- * Verify whatever is unsettled, and nothing else. `only` narrows it to named
- * checks — the admin's "re-run this one".
+ * One document, checked with the real provider — only ever on an admin's
+ * press, one document per press, and never more than one request: the
+ * provider makes exactly one call and nothing here retries it.
  *
- * Checks run one after another, not in parallel, and an account-level error
- * (bad credentials, no balance) stops the run: the rest would fail the same way.
+ * A stored answer for the same details (by fingerprint) is reused instead of
+ * calling again. Only "no answer" (ERROR) is ever asked again, and only when
+ * an admin presses again. An answer verifies nothing by itself: the admin
+ * still marks the check verified (reviewSellerKyc), and only after it passed.
  */
-export async function runSellerKyc(sellerId: string, only?: KycCheckType[]): Promise<SellerKycSummary> {
+export async function runProviderCheck(sellerId: string, kind: KycCheckType): Promise<ProviderCheckRun> {
+  if (reviewMode() !== 'PROVIDER') {
+    throw ApiError.badRequest('No verification provider is connected — check the documents by hand', 'NO_VERIFICATION_PROVIDER');
+  }
   if (!(await claim(sellerId))) throw new KycCheckRunningError();
+  let called = false;
   try {
     const seller = await loadSeller(sellerId);
     const rows = await loadChecks(sellerId);
-
-    for (const kind of KYC_CHECK_TYPES) {
-      if (only && !only.includes(kind)) continue;
-      const target = checkableFor(kind, seller);
-      if (!isCheckable(target) || !needsCall(kind, target, rows)) continue;
-
+    const target = checkableFor(kind, seller);
+    if (isCheckable(target) && needsCall(kind, target, rows)) {
       const base = {
         sellerId,
         kind,
@@ -269,6 +282,7 @@ export async function runSellerKyc(sellerId: string, only?: KycCheckType[]): Pro
         subject: target.subject,
         nameSubject: target.nameSubject,
       };
+      called = true;
       try {
         const result = await target.call();
         await prisma.sellerKycCheck.create({
@@ -278,6 +292,7 @@ export async function runSellerKyc(sellerId: string, only?: KycCheckType[]): Pro
             reason: result.reason,
             nameScore: result.nameMatch?.score ?? null,
             nameBand: result.nameMatch?.band ?? null,
+            providerRef: result.referenceId ?? null,
           },
         });
       } catch (err) {
@@ -286,43 +301,12 @@ export async function runSellerKyc(sellerId: string, only?: KycCheckType[]): Pro
         // Status and error code only: request fields are PANs and account numbers.
         const detail = err instanceof KycProviderError ? err.detail : err instanceof Error ? err.name : 'unknown';
         console.error(`[clowe-api] KYC ${kind} check for seller ${sellerId} did not complete: ${reason} (${detail})`);
-        if (reason === 'PROVIDER_AUTH' || reason === 'PROVIDER_BALANCE') break;
       }
     }
   } finally {
     await release(sellerId);
   }
-  return getSellerKycSummary(sellerId);
-}
-
-/** Provider checks a seller's own edits may start in a day; past it, the Verify button and admins still can. */
-export const AUTO_KYC_DAILY_CHECKS = 6;
-
-/**
- * Verify a seller's details on their own, without anyone pressing a button:
- * when they apply, and when they change their PAN, GSTIN or bank account.
- * Only with a real provider (with the mock an admin decides every check), in
- * the background (the seller's request never waits on Cashfree), and within
- * a daily allowance — each changed detail is a new paid check, so a seller
- * re-typing an account number over and over must not run up the bill. What
- * was verified before is never paid for again (the fingerprint cache), and
- * whatever cannot be verified stays with the admin review as before.
- */
-export function autoVerifySellerKyc(sellerId: string, only?: KycCheckType[]): void {
-  if (reviewMode() !== 'PROVIDER') return;
-  void (async () => {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const today = await prisma.sellerKycCheck.count({ where: { sellerId, provider: kycProvider.name, createdAt: { gte: since } } });
-    if (today >= AUTO_KYC_DAILY_CHECKS) {
-      console.warn(`[clowe-api] KYC: automatic checks for seller ${sellerId} paused for today (${today} already)`);
-      return;
-    }
-    await runSellerKyc(sellerId, only);
-    await refreshOverallKycStatus(sellerId);
-  })().catch((err) => {
-    if (err instanceof KycCheckRunningError) return; // another run has it
-    console.error(`[clowe-api] KYC: automatic verification for seller ${sellerId} failed:`, err instanceof Error ? err.message : err);
-  });
+  return { summary: await getSellerKycSummary(sellerId), called };
 }
 
 // ---------------------------------------------------------------------------
@@ -358,9 +342,10 @@ export async function getSellerKycSummary(sellerId: string): Promise<SellerKycSu
  * Where each check stands. Judged against the threshold at read time, so
  * moving it needs no re-verification.
  *
- * What decides, for the details on file now: the latest of an admin's review
- * and a real provider's answer. A mock provider's answer never decides — with
- * no real provider every check waits for an admin ("Pending review").
+ * An admin's decision, for the details on file now, is the only thing that
+ * makes a check VERIFIED or REJECTED. A real provider's answer is shown beside
+ * it as evidence (providerCheck) and, while one is connected, is what allows
+ * the admin to mark it verified at all. A mock answer is never evidence.
  */
 export function summarize(
   seller: KycFields,
@@ -369,9 +354,8 @@ export function summarize(
   reviews: ReviewRow[] = [],
   mode: 'MANUAL' | 'PROVIDER' = reviewMode(),
 ): SellerKycSummary {
-  // Real answers only. With a real provider live, only its own answers count
-  // (answers from one provider never stand for another); with none, any real
-  // answer given earlier still does.
+  // Real answers only, and with a real provider live only its own (answers
+  // from one provider never stand for another).
   const real = rows.filter((r) => r.provider !== MOCK && (mode === 'MANUAL' || r.provider === kycProvider.name));
   const view = (kind: KycCheckType): KycCheckView => {
     const empty: KycCheckView = {
@@ -386,49 +370,67 @@ export function summarize(
       method: null,
       decidedBy: null,
       rejectReason: null,
+      providerCheck: null,
+      canMarkVerified: false,
+      verifyBlockedReason: null,
     };
     const target = checkableFor(kind, seller);
     const subject = reviewSubjectFor(kind, seller);
     if (!subject) {
       // Nothing valid on file: NOT_PROVIDED or INVALID_FORMAT.
-      return isCheckable(target) ? empty : { ...empty, state: target.state, reason: target.reason };
+      const state = isCheckable(target) ? empty : { ...empty, state: target.state, reason: target.reason };
+      return { ...state, verifyBlockedReason: 'There is nothing valid on file to verify.' };
     }
 
-    const review = reviews.find((r) => r.kind === kind && r.subject === subject) ?? null;
+    // The provider's latest answer for these details, or its latest "no answer".
     const history = isCheckable(target) ? historyFor(kind, target.subject, real) : { answer: null, lastError: null };
-    const answer = history.answer;
-    // The later of the admin's decision and the provider's answer stands.
-    if (review && (!answer || review.createdAt >= answer.createdAt)) {
+    const latest = history.answer ?? history.lastError;
+    const providerCheck: KycProviderEvidence | null = latest
+      ? {
+          outcome: latest.outcome,
+          reason: (latest.reason as KycReason | null) ?? null,
+          nameScore: latest.nameScore,
+          nameBand: latest.nameBand,
+          nameMeetsThreshold: latest.nameScore === null ? null : latest.nameScore >= threshold,
+          provider: latest.provider,
+          referenceId: latest.providerRef,
+          checkedAt: latest.createdAt.toISOString(),
+        }
+      : null;
+    const evidence = {
+      providerCheck,
+      reason: providerCheck?.reason ?? (isCheckable(target) ? null : target.reason),
+      nameScore: providerCheck?.nameScore ?? null,
+      nameBand: providerCheck?.nameBand ?? null,
+      nameMeetsThreshold: providerCheck?.nameMeetsThreshold ?? null,
+      provider: providerCheck?.provider ?? null,
+    };
+    const blocked = mode === 'MANUAL' ? null : verifyBlockedBy(kind, providerCheck, threshold, isCheckable(target) ? null : target.reason);
+
+    const review = reviews.find((r) => r.kind === kind && r.subject === subject) ?? null;
+    if (review) {
       return {
         ...empty,
+        ...evidence,
+        // A rejection's reason is the admin's, not the provider's.
+        reason: review.status === 'REJECTED' ? null : evidence.reason,
         state: review.status === 'VERIFIED' ? 'VERIFIED' : 'REJECTED',
-        provider: 'manual',
         checkedAt: review.createdAt.toISOString(),
         method: 'MANUAL',
         decidedBy: review.reviewerName,
         rejectReason: review.status === 'REJECTED' ? review.reason : null,
+        canMarkVerified: review.status !== 'VERIFIED' && !blocked,
+        verifyBlockedReason: review.status === 'VERIFIED' ? null : blocked,
       };
     }
-    if (answer) {
-      return {
-        ...empty,
-        state: answer.outcome,
-        reason: (answer.reason as KycReason | null) ?? null,
-        nameScore: answer.nameScore,
-        nameBand: answer.nameBand,
-        nameMeetsThreshold: answer.nameScore === null ? null : answer.nameScore >= threshold,
-        provider: answer.provider,
-        checkedAt: answer.createdAt.toISOString(),
-        method: 'PROVIDER',
-      };
-    }
-    if (mode === 'MANUAL') return { ...empty, state: 'PENDING_REVIEW' };
-    if (!isCheckable(target)) return { ...empty, state: target.state, reason: target.reason };
-    if (history.lastError) {
-      const e = history.lastError;
-      return { ...empty, state: 'ERROR', reason: (e.reason as KycReason | null) ?? null, provider: e.provider, checkedAt: e.createdAt.toISOString() };
-    }
-    return empty;
+    return {
+      ...empty,
+      ...evidence,
+      state: 'PENDING_REVIEW',
+      checkedAt: providerCheck?.checkedAt ?? null,
+      canMarkVerified: !blocked,
+      verifyBlockedReason: blocked,
+    };
   };
 
   const pan = seller.panNumber ? normalizeTaxId(seller.panNumber) : null;
@@ -446,6 +448,31 @@ export function summarize(
     nameMatchThreshold: threshold,
     reviewMode: mode,
   };
+}
+
+/**
+ * With a real provider connected, why an admin may not mark this check
+ * verified yet — or null when they may. Never verified without a real,
+ * successful verification of these very details.
+ */
+function verifyBlockedBy(
+  kind: KycCheckType,
+  check: KycProviderEvidence | null,
+  threshold: number,
+  localReason: KycReason | null,
+): string | null {
+  const label = kind === 'BANK' ? 'bank account' : kind;
+  if (!check) {
+    return localReason === 'NAME_MISSING'
+      ? `The name on the ${label} is missing, so it cannot be checked.`
+      : `Verify the ${label} with Cashfree first.`;
+  }
+  if (check.outcome === 'ERROR') return `The ${label} check did not complete — run it again.`;
+  if (check.outcome === 'FAILED') return `Cashfree did not verify this ${label} — it can only be rejected.`;
+  if (kind === 'GSTIN') return null;
+  if (check.nameScore === null) return `The ${label} was checked without the holder's name — add the name on file and check it again.`;
+  if (check.nameScore < threshold) return `The name match is ${check.nameScore}, below the threshold of ${threshold}.`;
+  return null;
 }
 
 /**
@@ -516,6 +543,14 @@ export async function reviewSellerKyc(input: {
     throw ApiError.badRequest(`There is no valid ${input.check === 'BANK' ? 'bank account' : input.check} on file to review`, 'NOTHING_TO_REVIEW');
   }
   const verified = input.decision === 'VERIFY';
+  if (verified) {
+    // With a real provider connected, never verified on an admin's word alone.
+    const current = await getSellerKycSummary(seller.id);
+    const view = input.check === 'PAN' ? current.pan : input.check === 'GSTIN' ? current.gstin : current.bank;
+    if (!view.canMarkVerified) {
+      throw ApiError.badRequest(view.verifyBlockedReason ?? 'This check cannot be marked verified yet', 'KYC_PROVIDER_CHECK_REQUIRED');
+    }
+  }
   await prisma.sellerKycReview.create({
     data: {
       sellerId: seller.id,

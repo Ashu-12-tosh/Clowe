@@ -34,6 +34,14 @@ export interface PayoutTransfer {
   failureReason?: string;
 }
 
+/** The Payouts account's money, in paise. */
+export interface PayoutBalance {
+  /** Everything in the account. */
+  balancePaise: number;
+  /** What can be sent now: the balance less transfers still in flight. */
+  availablePaise: number;
+}
+
 export interface PayoutVerification {
   verified: boolean;
   /** Name the bank returned for the account, when the check supports it. */
@@ -52,6 +60,8 @@ export interface PayoutProvider {
   transfer(request: PayoutTransferRequest): Promise<PayoutTransfer>;
   /** A transfer's current state by our transfer id; null if the provider never received it. */
   getTransfer?(transferId: string): Promise<PayoutTransfer | null>;
+  /** The account's balance (read-only). Absent on providers with no account to fund (the mock). */
+  getBalance?(): Promise<PayoutBalance>;
   /** Penny-drop style check before money is ever sent to a new account. */
   verifyMethod(input: { accountLast4?: string | null; ifsc?: string | null; upiId?: string | null }): Promise<PayoutVerification>;
 }

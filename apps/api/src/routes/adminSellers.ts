@@ -64,7 +64,7 @@ import {
   KycCheckRunningError,
   getSellerKycSummary,
   reviewSellerKyc,
-  runSellerKyc,
+  runProviderCheck,
   sellersWithFraudFlag,
 } from '../services/kyc/sellerKyc';
 
@@ -645,17 +645,32 @@ adminSellersRouter.patch('/:id/kyc', async (req, res, next) => {
 
 /** Internal note — admin-only, never shown to the seller. */
 /**
- * Re-run KYC checks for a seller: an admin retrying after an ERROR.
- * Still only calls the provider for checks with no answer: re-running a
- * verified PAN costs nothing because it does not happen.
+ * "Verify with Cashfree": one document, on an admin's press. One billed call
+ * at most; a stored answer for the same details is returned instead of
+ * calling again (called: false). The answer is evidence — the admin still
+ * marks the check verified, and only once it passed.
  */
 adminSellersRouter.post('/:id/kyc-checks', kycAdminRunLimiter, async (req, res, next) => {
   try {
-    const { check } = z.object({ check: z.enum(KYC_CHECK_TYPES).optional() }).parse(req.body ?? {});
-    const exists = await prisma.sellerProfile.findUnique({ where: { id: req.params.id }, select: { id: true } });
+    const { check } = z.object({ check: z.enum(KYC_CHECK_TYPES) }).parse(req.body ?? {});
+    const exists = await prisma.sellerProfile.findUnique({ where: { id: req.params.id }, select: { id: true, shopName: true } });
     if (!exists) throw ApiError.notFound('Seller not found');
-    const kyc = await runSellerKyc(exists.id, check ? [check] : undefined);
-    res.json({ success: true, data: { kyc, kycApprovalWarnings: kycApprovalWarnings(kyc) } });
+    const { summary: kyc, called } = await runProviderCheck(exists.id, check);
+    const view = check === 'PAN' ? kyc.pan : check === 'GSTIN' ? kyc.gstin : kyc.bank;
+    if (called) {
+      auditSafe({
+        actorId: req.auth!.userId,
+        actorRole: 'ADMIN',
+        module: 'SELLERS',
+        action: `KYC ${check} checked with the provider`,
+        entityType: 'SellerProfile',
+        entityId: exists.id,
+        summary: `${exists.shopName}: ${check === 'BANK' ? 'bank account' : check} checked with ${view.providerCheck?.provider ?? 'the provider'} — ${view.providerCheck?.outcome ?? 'no answer'}${view.providerCheck?.referenceId ? ` (ref ${view.providerCheck.referenceId})` : ''}`,
+        metadata: { check, outcome: view.providerCheck?.outcome ?? null, reason: view.providerCheck?.reason ?? null, nameScore: view.providerCheck?.nameScore ?? null, referenceId: view.providerCheck?.referenceId ?? null },
+        ipAddress: ipFrom(req),
+      });
+    }
+    res.json({ success: true, data: { kyc, called, kycApprovalWarnings: kycApprovalWarnings(kyc) } });
   } catch (err) {
     if (err instanceof KycCheckRunningError) {
       next(new ApiError(409, 'KYC_CHECK_RUNNING', 'Verification is already running for this seller.'));

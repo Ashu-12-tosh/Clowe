@@ -15,6 +15,7 @@ import {
 import { prisma } from '../db';
 import type { Prisma } from '@prisma/client';
 import { ApiError } from '../utils/ApiError';
+import { alertAdminsSafe } from './adminAlerts';
 import { recordAudit } from './auditService';
 import { bankAccountNumberOf } from './bankAccountCrypto';
 import { GatewayError } from './payments/PaymentProvider';
@@ -502,7 +503,10 @@ export async function requestPayout(sellerId: string, methodId?: string) {
   });
 
   const userId = (await prisma.sellerProfile.findUniqueOrThrow({ where: { id: sellerId } })).userId;
-  if (!settings.payoutAutoApprove) {
+  // Real money is never sent unattended: with a real payout provider every
+  // payout waits for an admin, whatever payoutAutoApprove says. The setting
+  // only lets the mock settle on its own (dev, demos).
+  if (!settings.payoutAutoApprove || payoutProvider.name !== 'mock') {
     await prisma.notification.create({
       data: {
         userId,
@@ -702,6 +706,12 @@ async function failPayout(payoutId: string, reason: string, providerStatus?: str
     severity: 'HIGH',
     status: 'FAILED',
   });
+  alertAdminsSafe({
+    type: 'ADMIN_PAYOUT_FAILED',
+    title: `Payout failed: ${payout.reference}`,
+    body: `₹${(payout.netPaise / 100).toLocaleString('en-IN')} was not sent: ${reason.slice(0, 200)}. The amount is back in the seller's balance.`,
+    linkHref: '/admin/payouts',
+  });
 }
 
 /** The bank sent a paid (or in-flight) transfer back. */
@@ -736,6 +746,12 @@ async function reversePayout(payoutId: string, reason: string, providerStatus?: 
     summary: `${payout.reference} (₹${(payout.netPaise / 100).toFixed(2)}) reversed by the bank: ${reason.slice(0, 200)}`,
     severity: 'CRITICAL',
   });
+  alertAdminsSafe({
+    type: 'ADMIN_PAYOUT_REVERSED',
+    title: `Payout returned by the bank: ${payout.reference}`,
+    body: `₹${(payout.netPaise / 100).toLocaleString('en-IN')} came back: ${reason.slice(0, 200)}. The amount is back in the seller's balance — check their bank account before paying again.`,
+    linkHref: '/admin/payouts',
+  });
 }
 
 /** An admin approves a PENDING payout: it is sent now. */
@@ -749,6 +765,7 @@ export async function approvePayout(payoutId: string, adminId: string) {
   if (seller.status !== 'APPROVED') throw ApiError.badRequest('The seller is not active — reject this payout instead', 'SELLER_NOT_PAYABLE');
   const block = (await panBlockFor(payout.sellerId)) ?? (await bankBlockFor(payout.sellerId)) ?? (await gstinBlockFor(payout.sellerId));
   if (block) throw ApiError.badRequest(`Not payable now: ${block.reason}`, block.code);
+  await assertPayoutBalanceCovers(payoutId);
   // Only the first approval marks it (not yet reviewed): approvals arriving
   // together used to all pass here — one transfer, but each admin told
   // "approved" and the audit log written once per click.
@@ -758,6 +775,37 @@ export async function approvePayout(payoutId: string, adminId: string) {
   });
   if (marked.count === 0) throw ApiError.badRequest('This payout was just handled by someone else', 'PAYOUT_NOT_PENDING');
   return sendPayout(payoutId);
+}
+
+/**
+ * Before an approval sends money: the Payouts account must hold enough for
+ * this payout on top of everything already on its way. Asked of the provider
+ * (read-only); if it cannot answer, nothing is sent. Short, the payout stays
+ * PENDING, untouched, and the admins are told to top up.
+ */
+async function assertPayoutBalanceCovers(payoutId: string): Promise<void> {
+  if (!payoutProvider.getBalance) return;
+  const payout = await prisma.payout.findUniqueOrThrow({ where: { id: payoutId }, select: { reference: true, netPaise: true } });
+  let availablePaise: number;
+  try {
+    availablePaise = (await payoutProvider.getBalance()).availablePaise;
+  } catch (err) {
+    console.error(`[clowe-api] payout ${payout.reference}: balance check failed:`, err instanceof Error ? err.message : err);
+    throw new ApiError(502, 'PAYOUT_BALANCE_UNKNOWN', 'Could not check the Payouts balance just now, so nothing was sent. Try again in a minute.');
+  }
+  if (availablePaise >= payout.netPaise) return;
+  const rupees = (p: number) => `₹${(p / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  alertAdminsSafe({
+    type: 'ADMIN_PAYOUT_BALANCE_LOW',
+    title: 'Payouts balance too low',
+    body: `${payout.reference} needs ${rupees(payout.netPaise)}; the Cashfree Payouts account has ${rupees(availablePaise)} available. Top it up, then approve again.`,
+    linkHref: '/admin/payouts',
+  });
+  throw new ApiError(
+    409,
+    'PAYOUT_BALANCE_LOW',
+    `The Payouts account has ${rupees(availablePaise)} available, less than this payout (${rupees(payout.netPaise)}). Nothing was sent — top up the Cashfree Payouts account, then approve again.`,
+  );
 }
 
 /** An admin rejects a PENDING payout: nothing is sent and the money is back in the seller's balance. */

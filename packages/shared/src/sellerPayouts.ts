@@ -22,6 +22,20 @@ export const PAYOUT_STATUS_LABELS: Record<PayoutStatusValue, string> = {
 };
 
 /** A payout waiting for (or past) an admin's decision, as the approvals screen lists it. */
+/** GET /api/admin/payouts/account — the Cashfree Payouts account, read-only. */
+export interface AdminPayoutAccount {
+  /** Who sends approved payouts: 'cashfree' moves real money; 'mock' moves none. */
+  sending: string;
+  /** Payouts keys are set, so the account can be read. */
+  configured: boolean;
+  environment: 'sandbox' | 'production' | null;
+  balancePaise: number | null;
+  /** The balance less transfers still on their way: what an approval can send. */
+  availablePaise: number | null;
+  /** Why the balance could not be read, when it could not. */
+  error: string | null;
+}
+
 export interface AdminPayoutRow {
   id: string;
   reference: string;

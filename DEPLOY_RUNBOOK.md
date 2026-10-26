@@ -1169,6 +1169,57 @@ dc exec api npx tsx prisma/replaceLoremflickr.ts
 dc exec api npx tsx prisma/replaceLoremflickr.ts --apply
 ```
 
+### Cashfree: payments, payouts and Secure ID
+
+Three products, each with its own keys and its own `*_ENV` in
+`.env.production`. Keys go in through stdin over SSH, never pasted into a
+terminal or a file that is kept. After any change: `dc up -d api`.
+
+| Product | Keys | Live when |
+|---|---|---|
+| Payment Gateway | `CASHFREE_PG_CLIENT_ID` / `_SECRET`, `CASHFREE_PG_ENV=production` | `PAYMENT_PROVIDER=cashfree` |
+| Payouts | `CASHFREE_PAYOUT_CLIENT_ID` / `_SECRET`, `CASHFREE_PAYOUT_ENV=production` | `PAYOUT_PROVIDER=cashfree` — the keys alone send nothing |
+| Secure ID (KYC) | `CASHFREE_VERIFICATION_CLIENT_ID` / `_SECRET`, `CASHFREE_VERIFICATION_ENV=production` | both keys set (`KYC_PROVIDER=auto`) |
+
+Payouts and Secure ID production refuse any IP not allowlisted in their
+dashboards (IPv4 only); the API always calls out over IPv4.
+
+**Read-only live check** (no money moves, nothing is verified, no key printed):
+
+```sh
+dc exec api npx tsx prisma/cashfreeLiveCheck.ts
+```
+
+✅ `Payouts auth: OK; balance ₹…, available ₹…` and `Secure ID auth: OK`.
+❌ `subCode 403` / `HTTP 401`: keys wrong, or this server's IP is not allowlisted.
+
+**Webhooks.**
+
+- Payments: `https://cloweshop.com/api/payments/cashfree/webhook` — both the
+  order's own notify_url and the dashboard endpoint may send the same payment;
+  it is settled once either way. Signed with the PG secret.
+- Payouts: the same host, `/api/payouts/cashfree/webhook`, **version V2**
+  (V1 posts a form with a different signature and is refused). Signed with
+  the Payouts secret, which is checked as soon as the keys are set — so the
+  dashboard's "Test & Add Webhook" proves it before any money moves. Each
+  delivery logs one line: `dc logs api | grep 'payout webhook'` shows
+  `signature ok` or `signature check FAILED`.
+- Refunds have no webhook event in the dashboard: PROCESSING refunds are asked
+  about every 15 minutes (Get Refund), and a FAILED one alerts every admin.
+
+**Payouts, once `PAYOUT_PROVIDER=cashfree`:** every payout waits for an
+admin's approval (the `payoutAutoApprove` setting only applies to the mock).
+An approval is refused, and nothing sent, when the Payouts balance cannot
+cover it — top up, then approve again. The balance is on Admin → Payouts.
+Failed and reversed payouts alert every admin; the amount is back in the
+seller's balance.
+
+**Secure ID:** Admin → Sellers → the seller → KYC review → "Verify with
+Cashfree", one document per press. One billed call at most; the same details
+again reuse the stored answer for free. "Mark verified" opens only once
+Cashfree passed that document (PAN and bank: name match at or above the
+threshold in Settings). Sellers, their edits and timers never call it.
+
 ### Turning on Delhivery (shipping)
 
 Delhivery is the only courier. Until it is switched on, the API uses a mock
