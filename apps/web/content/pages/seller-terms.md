@@ -18,7 +18,15 @@ These Vendor Terms govern the registration of a Vendor on the Platform and the l
 
 ## 2. Registration and Documentation
 
-2.1 The Vendor shall furnish and keep current: (a) constitution documents (certificate of incorporation, partnership deed, LLP agreement or proprietorship declaration); (b) PAN; (c) GSTIN, where registration is required under the Central Goods and Services Tax Act, 2017; (d) principal place of business and pickup addresses; (e) bank account particulars with a cancelled cheque; (f) KYC of authorised signatories; (g) trade mark registrations, brand authorisation letters or reseller authorisations for branded merchandise; and (h) such other documents as the Company may require.
+2.1 The Vendor shall furnish and keep current:
+(a) constitution documents (certificate of incorporation, partnership deed, LLP agreement or proprietorship declaration);
+(b) PAN;
+(c) GSTIN, where registration is required under the Central Goods and Services Tax Act, 2017;
+(d) principal place of business and pickup addresses;
+(e) bank account particulars with a cancelled cheque;
+(f) KYC of authorised signatories;
+(g) trade mark registrations, brand authorisation letters or reseller authorisations for branded merchandise; and
+(h) such other documents as the Company may require.
 
 2.2 The Vendor authorises the Company to verify all documents with issuing authorities and third-party verification agencies.
 
@@ -46,7 +54,11 @@ These Vendor Terms govern the registration of a Vendor on the Platform and the l
 
 4.1 The Vendor is solely responsible for creating and maintaining accurate listings, including title, description, fabric composition, size chart, measurements, care instructions, MRP, selling price, applicable taxes, HSN code, country of origin and warranty terms.
 
-4.2 The Vendor grants the Company a non-exclusive, royalty-free, worldwide, sub-licensable licence, for the term of its registration and a reasonable period thereafter, to host, store, reproduce, adapt, resize, watermark, translate, display and use the Vendor’s content, brand names, trade marks and logos: (a) on the Platform; (b) in marketing and promotional material in any medium; (c) for generating renderings through the AI Try-On; and (d) for search, cataloguing, indexing and machine processing on the Platform.
+4.2 The Vendor grants the Company a non-exclusive, royalty-free, worldwide, sub-licensable licence, for the term of its registration and a reasonable period thereafter, to host, store, reproduce, adapt, resize, watermark, translate, display and use the Vendor’s content, brand names, trade marks and logos:
+(a) on the Platform;
+(b) in marketing and promotional material in any medium;
+(c) for generating renderings through the AI Try-On; and
+(d) for search, cataloguing, indexing and machine processing on the Platform.
 
 4.3 The Vendor warrants that it holds all rights necessary to grant the licence in Clause 4.2 and that the Company’s exploitation thereof will infringe no third-party right. The Vendor shall supply product imagery, garment dimensions and fabric data in the technical specification required for the AI Try-On, and warrants the accuracy thereof.
 
@@ -110,7 +122,12 @@ These Vendor Terms govern the registration of a Vendor on the Platform and the l
 
 ## 9. Indemnity and Liability
 
-9.1 The Vendor shall indemnify, defend and hold harmless the Company, its affiliates, directors, officers, employees and agents against all claims, demands, actions, proceedings, losses, damages, liabilities, costs and expenses (including advocate’s fees on a full-indemnity basis) arising from: (a) breach of these Vendor Terms; (b) violation of Applicable Law or of any third-party right; (c) any Product sold, including product liability, defect, deficiency, infringement, counterfeiting, mis-declaration or statutory non-compliance; (d) any content uploaded by the Vendor; and (e) any proceeding before a Consumer Commission, Legal Metrology authority, tax authority or other authority in respect of the foregoing.
+9.1 The Vendor shall indemnify, defend and hold harmless the Company, its affiliates, directors, officers, employees and agents against all claims, demands, actions, proceedings, losses, damages, liabilities, costs and expenses (including advocate’s fees on a full-indemnity basis) arising from:
+(a) breach of these Vendor Terms;
+(b) violation of Applicable Law or of any third-party right;
+(c) any Product sold, including product liability, defect, deficiency, infringement, counterfeiting, mis-declaration or statutory non-compliance;
+(d) any content uploaded by the Vendor; and
+(e) any proceeding before a Consumer Commission, Legal Metrology authority, tax authority or other authority in respect of the foregoing.
 
 9.2 The indemnity is in addition to the Company’s right of set-off under Clause 6.5 and survives termination.
 

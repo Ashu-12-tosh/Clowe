@@ -103,6 +103,15 @@ export default function SellLandingPage() {
             </Link>
             <span className="text-sm opacity-80">Free to register · No listing fees</span>
           </div>
+          <p className="mt-4 text-sm opacity-90" data-sell-legal-links>
+            <Link href="/pages/seller-terms" className="font-semibold underline underline-offset-2 hover:opacity-80">
+              Seller Terms
+            </Link>
+            <span className="mx-2 opacity-70">·</span>
+            <Link href="/pages/seller-fees" className="font-semibold underline underline-offset-2 hover:opacity-80">
+              Seller Fees
+            </Link>
+          </p>
         </div>
       </section>
 
@@ -150,6 +159,17 @@ export default function SellLandingPage() {
         >
           Register your shop →
         </Link>
+        <p className="mt-4 text-xs text-gray-500">
+          Before you register, read the{' '}
+          <Link href="/pages/seller-terms" className="font-semibold text-brand-600 hover:underline">
+            Seller Terms
+          </Link>{' '}
+          and the{' '}
+          <Link href="/pages/seller-fees" className="font-semibold text-brand-600 hover:underline">
+            Seller Fees
+          </Link>
+          .
+        </p>
       </section>
     </main>
   );

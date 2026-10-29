@@ -72,6 +72,10 @@ export function VendorTermsModal({
         <div className="border-t border-gray-100 p-4">
           <p className="text-xs text-gray-500">
             Also read:{' '}
+            <a href="/pages/seller-terms" target="_blank" className="font-semibold text-brand-600 hover:underline">
+              Seller Terms
+            </a>
+            {' · '}
             <a href="/pages/terms-conditions" target="_blank" className="font-semibold text-brand-600 hover:underline">
               Terms &amp; Conditions
             </a>

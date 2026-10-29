@@ -86,7 +86,13 @@ By accessing, browsing, registering on or transacting through the Platform, You 
 
 7.1 You are granted a limited, personal, non-exclusive, non-transferable, revocable licence to use the Platform for lawful purposes.
 
-7.2 You shall not: (a) copy, resell, frame, mirror or exploit the Platform; (b) use any robot, spider, scraper or automated means to access or extract content; (c) reverse engineer or attempt to derive the source code, models, weights or algorithms of the Platform or the AI Try-On; (d) circumvent any security or access control; (e) use the Platform or its content to train or develop any artificial intelligence system; or (f) impair the functioning of the Platform.
+7.2 You shall not:
+(a) copy, resell, frame, mirror or exploit the Platform;
+(b) use any robot, spider, scraper or automated means to access or extract content;
+(c) reverse engineer or attempt to derive the source code, models, weights or algorithms of the Platform or the AI Try-On;
+(d) circumvent any security or access control;
+(e) use the Platform or its content to train or develop any artificial intelligence system; or
+(f) impair the functioning of the Platform.
 
 ## 8. Prohibited Conduct
 

@@ -112,19 +112,32 @@ function renderTable(rows: string[][]): string {
   );
 }
 
+/** A clause's lettered item on a line of its own: "(a) …", "(b) …". */
+const CLAUSE_ITEM = /^\s*(\([a-z]{1,2}\))\s+(.*)$/;
+
 /**
- * Tiny markdown → HTML renderer (headings, lists, blockquote, paragraphs and
- * pipe tables). Content is our own repo files plus settings an admin types:
- * everything is escaped, and links are limited to safe targets (safeHref).
+ * Tiny markdown → HTML renderer (headings, lists, blockquote, paragraphs,
+ * lettered clause items and pipe tables). Content is our own repo files plus
+ * settings an admin types: everything is escaped, and links are limited to
+ * safe targets (safeHref).
  */
 export function renderMarkdown(md: string): string {
   const out: string[] = [];
   let list: string[] = [];
+  let items: string[] = [];
   let table: string[][] = [];
   const flushList = () => {
     if (list.length) {
       out.push(`<ul class="mt-3 list-disc space-y-1.5 pl-6 text-gray-700">${list.join('')}</ul>`);
       list = [];
+    }
+  };
+  // A clause's (a), (b), … items, indented under it, each label hanging to the
+  // left of its text so a wrapped line lines up with the text, not the label.
+  const flushItems = () => {
+    if (items.length) {
+      out.push(`<ul class="mt-2 space-y-1.5 pl-4 leading-relaxed text-gray-700 sm:pl-8">${items.join('')}</ul>`);
+      items = [];
     }
   };
   const flushTable = () => {
@@ -133,6 +146,14 @@ export function renderMarkdown(md: string): string {
   };
   for (const raw of md.split('\n')) {
     const line = raw.trimEnd();
+    const item = CLAUSE_ITEM.exec(line);
+    if (item) {
+      flushList();
+      flushTable();
+      items.push(`<li class="flex gap-2"><span class="shrink-0">${inline(item[1]!)}</span><span class="min-w-0">${inline(item[2]!)}</span></li>`);
+      continue;
+    }
+    flushItems();
     const cells = tableCells(line);
     if (cells) {
       flushList();
@@ -168,6 +189,7 @@ export function renderMarkdown(md: string): string {
       out.push(`<p class="mt-3 leading-relaxed text-gray-700">${inline(line)}</p>`);
     }
   }
+  flushItems();
   flushTable();
   flushList();
   return out.join('\n');

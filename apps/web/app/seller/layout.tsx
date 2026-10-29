@@ -32,6 +32,9 @@ const NAV: DashNavItem[] = [
   { href: '/seller/tryon', label: 'AI Try-On', icon: '✨' },
   { href: '/seller/settings', label: 'Store Settings', icon: '⚙' },
   { href: '/seller/support', label: 'Support', icon: '💬' },
+  // Not in the public footer: a seller finds the agreement and the fees here.
+  { href: '/pages/seller-terms', label: 'Seller Terms', icon: '📄' },
+  { href: '/pages/seller-fees', label: 'Seller Fees', icon: '％' },
 ];
 
 /** Minimal chrome for the public seller pages (login / register). */

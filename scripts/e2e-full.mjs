@@ -518,7 +518,7 @@ async function flow2Seller() {
     const finalSubmit = terms.getByRole('button', { name: 'Final Submit' });
     check(!(await terms.locator('input[name=acceptVendorTerms]').isChecked()), 'the acceptance box started ticked');
     check(await finalSubmit.isDisabled(), 'Final Submit was enabled before the box was ticked');
-    for (const link of ['Terms & Conditions', 'Privacy Policy', 'Seller Fees']) {
+    for (const link of ['Seller Terms', 'Terms & Conditions', 'Privacy Policy', 'Seller Fees']) {
       check(await terms.getByRole('link', { name: link }).count(), `the terms window has no link to ${link}`);
     }
     await terms.locator('input[name=acceptVendorTerms]').check();
@@ -2132,6 +2132,19 @@ async function flow12Support() {
     await page.locator('[data-action=submit-ticket]').click();
     await toast(page, /Ticket raised/);
   }, { page: S.sellerPage, needs: ['seller'], key: 'ticket' });
+
+  await step(F, 'Seller Terms and Seller Fees: in the seller menu, not in the public footer, and open without logging in', async () => {
+    const page = S.sellerPage;
+    for (const [name, href] of [['Seller Terms', '/pages/seller-terms'], ['Seller Fees', '/pages/seller-fees']]) {
+      check(await page.locator(`a[href="${href}"]`).filter({ hasText: name }).count(), `the seller menu has no ${name} link`);
+      const r = await fetch(`${WEB}${href}`, { redirect: 'manual' });
+      check(r.status === 200, `${href} logged out → ${r.status}`);
+    }
+    const home = await (await fetch(`${WEB}/`)).text();
+    const footer = home.slice(home.lastIndexOf('<footer'));
+    check(footer.includes('href="/sell"'), 'the footer lost Become a Seller');
+    check(!/href="\/pages\/seller-(terms|fees)"/.test(footer), 'the public footer still links Seller Terms or Seller Fees');
+  }, { page: S.sellerPage, needs: ['seller'] });
 
   await step(F, 'admin replies from the inbox; the seller is notified within seconds', async () => {
     const admin = S.adminPage;

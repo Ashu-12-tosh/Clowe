@@ -39,9 +39,9 @@ const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
     links: [
       { label: 'About CLOWE', href: '/pages/about' },
       { label: 'Careers', href: '/pages/careers' },
+      // Seller Terms and Seller Fees are linked from Become a Seller, the
+      // seller dashboard and the registration terms instead (still public URLs).
       { label: 'Become a Seller', href: '/sell' },
-      { label: 'Seller Terms', href: '/pages/seller-terms' },
-      { label: 'Seller Fees', href: '/pages/seller-fees' },
     ],
   },
   {

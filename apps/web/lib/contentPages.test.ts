@@ -155,3 +155,31 @@ describe('the grievance contact channels', () => {
     expect(html).not.toContain('Channel — Details — Hours');
   });
 });
+
+describe('lettered clause items', () => {
+  it('each sit on a line of their own under the clause, label and exact text kept', () => {
+    const html = renderMarkdown(read('seller-terms'));
+    const at = html.indexOf('2.1 The Vendor shall furnish and keep current:');
+    expect(at).toBeGreaterThan(-1);
+    const list = html.slice(at, html.indexOf('</ul>', at));
+    const items = [...list.matchAll(/<li class="flex gap-2"><span class="shrink-0">\(([a-z])\)<\/span><span class="min-w-0">([^<]*)<\/span><\/li>/g)];
+    expect(items.map((m) => m[1])).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+    expect(items[1]![2]).toBe('PAN;');
+    expect(items[6]![2]).toBe('trade mark registrations, brand authorisation letters or reseller authorisations for branded merchandise; and');
+    expect(items[7]![2]).toBe('such other documents as the Company may require.');
+  });
+
+  it('are escaped like any text, and their links kept to safe targets', () => {
+    const html = renderMarkdown(['1.1 Lead:', '(a) <b>x</b>;', '(b) [ok](/pages/faq) [bad](javascript:alert(1)).'].join('\n'));
+    expect(html).toContain('&lt;b&gt;x&lt;/b&gt;;');
+    expect(html).toContain('<a href="/pages/faq"');
+    expect(html).not.toContain('javascript:');
+  });
+
+  it('no legal page still runs (a), (b), … together on one line', () => {
+    for (const slug of POLICY_PAGES) {
+      const inlineLists = read(slug).split('\n').filter((l) => /\(a\) .*\(b\) /.test(l));
+      expect(inlineLists, slug).toEqual([]);
+    }
+  });
+});
