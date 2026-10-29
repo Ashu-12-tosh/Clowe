@@ -1037,6 +1037,20 @@ origin` (must be `git@github.com:…`) and `git config --get core.sshCommand`,
 then section 0.3. A private repo cannot be pulled over `https://` without
 credentials, which is what broke the 13 Oct 2026 deploy.
 
+### Backups of `.env.production`
+
+Before an edit to `.env.production`, copy it to
+`.env.production.bak-<YYYYMMDD-HHMMSS>-<what>` (`cp -p`, so it stays
+root-only). Only the 5 newest copies are kept — after making one:
+
+```sh
+./scripts/prune-env-backups.sh           # lists what would be deleted (names only)
+./scripts/prune-env-backups.sh --apply   # deletes it; the 5 newest stay, chmod 600
+```
+
+The copies are gitignored (`.env.production*`) and hold live keys: never
+print one.
+
 ### Private files in R2
 
 Return photos, try-on photos and results, and packing videos are private:
