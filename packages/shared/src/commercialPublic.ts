@@ -59,6 +59,21 @@ export function handlingFeesText(slabs: CommercialSettings['fees']['handlingSlab
 }
 
 /**
+ * The same slabs one per line, for a schedule table: "Below ₹500: ₹9",
+ * "₹500 – ₹999: ₹14", …, "₹20,000 and above: ₹40".
+ */
+export function handlingFeeLines(slabs: CommercialSettings['fees']['handlingSlabs']): string[] {
+  const sorted = [...slabs].sort((a, b) => a.fromPaise - b.fromPaise);
+  return sorted.map((s, i) => {
+    const next = sorted[i + 1];
+    if (i === 0 && !next) return rupees(s.feePaise);
+    if (i === 0) return `Below ${rupees(next!.fromPaise)}: ${rupees(s.feePaise)}`;
+    if (next) return `${rupees(s.fromPaise)} – ${rupees(next.fromPaise - 100)}: ${rupees(s.feePaise)}`;
+    return `${rupees(s.fromPaise)} and above: ${rupees(s.feePaise)}`;
+  });
+}
+
+/**
  * The worked examples: with a referral fee schedule in force, one per example
  * it carries (a shirt at ₹1,000 and at ₹1,500); otherwise a ₹1,000 sale at the
  * flat rate.

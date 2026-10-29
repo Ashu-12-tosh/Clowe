@@ -54,22 +54,90 @@ function inline(md: string): string {
     });
 }
 
+/** A pipe-table row ("| a | b |") as its cells, or null for any other line. */
+function tableCells(line: string): string[] | null {
+  const t = line.trim();
+  if (!t.startsWith('|') || !t.endsWith('|') || t.length < 2) return null;
+  return t.slice(1, -1).split('|').map((c) => c.trim());
+}
+
+/** A cell's lines ("<br>" between them), each escaped and inline-formatted. */
+function cellLines(cell: string): string {
+  return cell
+    .split(/\s*<br\s*\/?>\s*/i)
+    .filter((l) => l !== '')
+    .map((l) => `<span class="block">${inline(l)}</span>`)
+    .join('');
+}
+
 /**
- * Tiny markdown → HTML renderer (headings, lists, blockquote, paragraphs).
- * Content is our own repo files plus settings an admin types: everything is
- * escaped, and links are limited to safe targets (safeHref).
+ * A table that reads on any screen: a plain table from `sm` up; below it,
+ * each row stacks as a block — the number (when the first column is one, like
+ * "Sl. No.") and the first named column in bold on one line, then every other
+ * column on its own line under its header ("Basis: …", "Rate: …"). Nothing
+ * scrolls sideways.
+ */
+function renderTable(rows: string[][]): string {
+  const [head, ...body] = rows;
+  const numbered = /^(sl\.?\s*no\.?|no\.?|#)$/i.test(head[0] ?? '');
+  const titleCol = numbered ? 1 : 0;
+  const desktop = 'sm:table-cell sm:border-b sm:border-gray-100 sm:px-3 sm:py-2.5 sm:align-top';
+  const th = head
+    .map((h) => `<th scope="col" class="border-b border-gray-200 px-3 py-2 text-left align-bottom text-xs font-bold uppercase tracking-wide text-gray-500">${inline(h)}</th>`)
+    .join('');
+  const tr = body
+    .map((cells) => {
+      const tds = head
+        .map((h, i) => {
+          const value = cells[i] ?? '';
+          if (numbered && i === 0) {
+            return `<td class="inline pr-1.5 font-bold text-ink-900 ${desktop}">${inline(value)}<span class="sm:hidden">.</span></td>`;
+          }
+          if (i === titleCol) {
+            return `<td class="inline font-bold text-ink-900 ${desktop}">${inline(value)}</td>`;
+          }
+          return `<td class="mt-1 block ${desktop}"><span class="font-semibold text-gray-500 sm:hidden">${inline(h)}:</span>${cellLines(value)}</td>`;
+        })
+        .join('');
+      return `<tr class="block border-b border-gray-100 py-3 sm:table-row sm:py-0">${tds}</tr>`;
+    })
+    .join('');
+  return (
+    `<table class="mt-4 block w-full text-sm leading-relaxed text-gray-700 sm:table sm:border-collapse">` +
+    `<thead class="hidden sm:table-header-group"><tr>${th}</tr></thead>` +
+    `<tbody class="block sm:table-row-group">${tr}</tbody></table>`
+  );
+}
+
+/**
+ * Tiny markdown → HTML renderer (headings, lists, blockquote, paragraphs and
+ * pipe tables). Content is our own repo files plus settings an admin types:
+ * everything is escaped, and links are limited to safe targets (safeHref).
  */
 export function renderMarkdown(md: string): string {
   const out: string[] = [];
   let list: string[] = [];
+  let table: string[][] = [];
   const flushList = () => {
     if (list.length) {
       out.push(`<ul class="mt-3 list-disc space-y-1.5 pl-6 text-gray-700">${list.join('')}</ul>`);
       list = [];
     }
   };
+  const flushTable = () => {
+    if (table.length > 1) out.push(renderTable(table));
+    table = [];
+  };
   for (const raw of md.split('\n')) {
     const line = raw.trimEnd();
+    const cells = tableCells(line);
+    if (cells) {
+      flushList();
+      // The "| --- | --- |" line under the header only marks it as one.
+      if (!cells.every((c) => /^:?-{3,}:?$/.test(c))) table.push(cells);
+      continue;
+    }
+    flushTable();
     if (/^\s*-\s+/.test(line)) {
       list.push(`<li>${inline(line.replace(/^\s*-\s+/, ''))}</li>`);
       continue;
@@ -97,6 +165,7 @@ export function renderMarkdown(md: string): string {
       out.push(`<p class="mt-3 leading-relaxed text-gray-700">${inline(line)}</p>`);
     }
   }
+  flushTable();
   flushList();
   return out.join('\n');
 }

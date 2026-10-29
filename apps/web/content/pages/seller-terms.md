@@ -158,22 +158,22 @@ These Vendor Terms govern the registration of a Vendor on the Platform and the l
 - Any other goods prohibited or restricted under Applicable Law or notified by the Company.
 ## SCHEDULE II — FEES AND CHARGES
 
-**Sl. No. — Head of Charge — Basis — Rate**
-
-- 1 — Referral fee — Per unit, % of the whole selling price (GST included) — {{referralFee}}
-- 2 — GT (goods transfer) charge — Per unit, % of the selling price — {{gtFee}}
-- 3 — Payment collection fee — Per unit, % of the selling price — {{collectionFee}}
-- 4 — Handling fee — Per unit, by the unit's selling price — {{handlingFees}}; nil on the Premium plan
-- 5 — Shipping / logistics fee — Per shipment, by weight and zone — The courier's actual charge
-- 6 — Cash on Delivery fee — Per COD shipment — The courier's actual charge
-- 7 — Return-to-origin and reverse pickup freight — Per shipment — The courier's actual charge
-- 8 — Storage / fulfilment fee (if opted) — Per unit per month — 100 Per Unit
-- 9 — Seller plan — Per month, renewing on the same date — {{sellerPlans}}
-- 10 — Advertising and sponsorship — As per campaign — As per the rate card on the Advertising and Sponsorship pages of the Vendor dashboard
-- 11 — AI Try-On credits — Per pack, one credit per successful try-on image — {{tryonPacks}}; above the largest pack {{tryonExtraCredit}} per credit
-- 12 — Penalty — late dispatch — Per order — {{penaltyAmount}}
-- 13 — Penalty — counterfeit or non-compliant listing — Per instance — {{counterfeitPenalty}}
-- 14 — Penalty — inaccurate product data supplied for AI Try-On — Per instance — {{tryonDataPenalty}}
+| Sl. No. | Head of Charge | Basis | Rate |
+| --- | --- | --- | --- |
+| 1 | Referral fee | Per unit, % of the whole selling price (GST included) | {{referralFee}} |
+| 2 | GT (goods transfer) charge | Per unit, % of the selling price | {{gtFee}} |
+| 3 | Payment collection fee | Per unit, % of the selling price | {{collectionFee}} |
+| 4 | Handling fee | Per unit, by the unit's selling price | {{handlingFeeLines}}<br>Premium plan: Nil |
+| 5 | Shipping / logistics fee | Per shipment, by weight and zone | The courier's actual charge |
+| 6 | Cash on Delivery fee | Per COD shipment | The courier's actual charge |
+| 7 | Return-to-origin and reverse pickup freight | Per shipment | The courier's actual charge |
+| 8 | Storage / fulfilment fee (if opted) | Per unit per month | 100 Per Unit |
+| 9 | Seller plan | Per month, renewing on the same date | {{sellerPlanLines}} |
+| 10 | Advertising and sponsorship | As per campaign | As per the rate card on the Advertising and Sponsorship pages of the Vendor dashboard |
+| 11 | AI Try-On credits | Per pack, one credit per successful try-on image | {{tryonPackLines}}<br>above the largest pack {{tryonExtraCredit}} per credit |
+| 12 | Penalty — late dispatch | Per order | {{penaltyAmount}} |
+| 13 | Penalty — counterfeit or non-compliant listing | Per instance | {{counterfeitPenalty}} |
+| 14 | Penalty — inaccurate product data supplied for AI Try-On | Per instance | {{tryonDataPenalty}} |
 
 All charges are exclusive of GST, payable additionally. GST on the Company's charges is levied at {{cloweGst}} and shown on the Company's monthly tax invoice to the Vendor.
 

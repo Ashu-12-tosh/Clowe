@@ -10,12 +10,12 @@ This Policy is published under Rule 3(2) of the Information Technology (Intermed
 
 ## 1. How to Reach Us
 
-**Channel — Details — Hours**
-
-- Help Centre — “Help” / “My Orders” on www.cloweshop.com and the app — 24x7
-- E-mail — support@cloweshop.com — 24x7 (responses in working hours)
-- Telephone — 8929316316, 8929314314 — 24x7 (responses in working hours)
-- WhatsApp — 8929316316 — 24x7 (responses in working hours)
+| Channel | Details | Hours |
+| --- | --- | --- |
+| Help Centre | “Help” / “My Orders” on www.cloweshop.com and the app | 24x7 |
+| E-mail | support@cloweshop.com | 24x7 (responses in working hours) |
+| Telephone | 8929316316, 8929314314 | 24x7 (responses in working hours) |
+| WhatsApp | 8929316316 | 24x7 (responses in working hours) |
 
 1.1 Please keep Your order number ready. For AI Try-On and data-related queries, please state the registered mobile number or e-mail address.
 

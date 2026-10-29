@@ -1,4 +1,4 @@
-import { feeExamplesMarkdown, handlingFeesText, type CommercialPublic } from './commercialPublic';
+import { feeExamplesMarkdown, handlingFeeLines, handlingFeesText, type CommercialPublic } from './commercialPublic';
 import { fillReturnWindow } from './returnWindow';
 import { PACKING_VIDEO_RETENTION_DAYS } from './sellerOrders';
 import type { SellerFeeSchedule } from './settings';
@@ -104,6 +104,10 @@ function tokens(v: PolicyValues): Record<string, string> {
     '{{counterfeitPenalty}}': c ? rupees(c.penalties.counterfeitListingPaise) : 'a fixed penalty',
     '{{tryonDataPenalty}}': c ? rupees(c.penalties.inaccurateTryOnDataPaise) : 'a fixed penalty',
     '{{sellerPlans}}': [plan('FREE', 'Free'), plan('GROWTH', 'Growth'), plan('PRO', 'Pro'), plan('PREMIUM', 'Premium')].join('; '),
+    // The same values one per line, for a schedule table cell ("<br>" between lines).
+    '{{handlingFeeLines}}': c ? handlingFeeLines(c.fees.handlingSlabs).join('<br>') : 'the per-unit amount on the Seller Fees page',
+    '{{sellerPlanLines}}': [plan('FREE', 'Free'), plan('GROWTH', 'Growth'), plan('PRO', 'Pro'), plan('PREMIUM', 'Premium')].join('<br>'),
+    '{{tryonPackLines}}': c ? c.tryon.packs.map((p) => `${p.credits} credits ${rupees(p.pricePaise)}`).join('<br>') : 'the packs on your AI Try-On page',
     '{{planGraceDays}}': c ? days(c.plans.graceDays) : 'a few days',
     '{{welcomeAdCredit}}': c ? rupees(c.ads.welcomeCreditPaise) : 'a welcome advertising credit',
     '{{tryonPacks}}': c ? c.tryon.packs.map((p) => `${p.credits} credits ${rupees(p.pricePaise)}`).join('; ') : 'the packs on your AI Try-On page',

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_COMMERCIAL, handlingFeeFor, mergeCommercial, placementPriceProblems } from './commercial';
 import { computeListingEconomics, type SellerEconomicsRates } from './sellerEconomics';
-import { feeExampleMarkdown, handlingFeesText, publicCommercial } from './commercialPublic';
+import { feeExampleMarkdown, handlingFeeLines, handlingFeesText, publicCommercial } from './commercialPublic';
+import { fillPolicyText } from './policyText';
 
 // The owner's Batch 2 fees on a line, with the live statutory rates (TDS 0.1%, TCS 0.5%) and GST 18%.
 const f = DEFAULT_COMMERCIAL.fees;
@@ -94,6 +95,22 @@ describe('what the Seller Fees page and Schedule II publish', () => {
     expect(handlingFeesText(DEFAULT_COMMERCIAL.fees.handlingSlabs)).toBe(
       '₹9 below ₹500; ₹14 from ₹500 to ₹999; ₹19 from ₹1,000 to ₹4,999; ₹25 from ₹5,000 to ₹19,999; ₹40 from ₹20,000',
     );
+  });
+
+  it('states the same slabs one per line for a schedule table, and the plans and packs one per line', () => {
+    expect(handlingFeeLines(DEFAULT_COMMERCIAL.fees.handlingSlabs)).toEqual([
+      'Below ₹500: ₹9',
+      '₹500 – ₹999: ₹14',
+      '₹1,000 – ₹4,999: ₹19',
+      '₹5,000 – ₹19,999: ₹25',
+      '₹20,000 and above: ₹40',
+    ]);
+    const commercial = publicCommercial(DEFAULT_COMMERCIAL);
+    const fill = (t: string) => fillPolicyText(t, { commercial });
+    // The per-line tokens carry exactly the words of the one-line ones, only broken into lines.
+    expect(fill('{{sellerPlanLines}}').split('<br>')).toEqual(fill('{{sellerPlans}}').split('; '));
+    expect(fill('{{tryonPackLines}}').split('<br>')).toEqual(fill('{{tryonPacks}}').split('; '));
+    expect(fill('{{handlingFeeLines}}').split('<br>')).toHaveLength(fill('{{handlingFees}}').split('; ').length);
   });
 
   it('never publishes Clowe’s own cost of a try-on credit', () => {

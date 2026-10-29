@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { POLICY_TOKENS } from '@clowe/shared';
+import { DEFAULT_COMMERCIAL, POLICY_TOKENS, fillPolicyText, publicCommercial } from '@clowe/shared';
 import { CONTENT_PAGES } from './contentPageList';
 import { renderMarkdown } from './contentPages';
 import { FAQ_ENTRIES } from './support/faq-content';
@@ -92,5 +92,65 @@ describe('renderMarkdown links', () => {
     const html = renderMarkdown('[x](https://a.example/" onmouseover="alert(1))');
     expect(html).not.toMatch(/onmouseover="/);
     expect(html).toContain('&quot;');
+  });
+});
+
+describe('renderMarkdown tables', () => {
+  const md = ['| Sl. No. | Head of Charge | Basis | Rate |', '| --- | --- | --- | --- |', '| 4 | Handling fee | Per unit | Below ₹500: ₹9<br>Premium plan: Nil |'].join('\n');
+
+  it('render a real table from sm up, with its header row', () => {
+    const html = renderMarkdown(md);
+    expect(html).toContain('<table');
+    expect(html).toContain('<thead class="hidden sm:table-header-group">');
+    expect(html).toMatch(/<th scope="col"[^>]*>Head of Charge<\/th>/);
+    expect(html).not.toContain('---');
+  });
+
+  it('stack on a phone: number and head in bold, then each column under its own label, each line on its own', () => {
+    const html = renderMarkdown(md);
+    expect(html).toMatch(/<td class="inline pr-1\.5 font-bold[^"]*">4<span class="sm:hidden">\.<\/span><\/td>/);
+    expect(html).toMatch(/<td class="inline font-bold[^"]*">Handling fee<\/td>/);
+    expect(html).toContain('<span class="font-semibold text-gray-500 sm:hidden">Basis:</span><span class="block">Per unit</span>');
+    expect(html).toContain('<span class="font-semibold text-gray-500 sm:hidden">Rate:</span><span class="block">Below ₹500: ₹9</span><span class="block">Premium plan: Nil</span>');
+  });
+
+  it('escape a cell like any other text: only <br> breaks a line, links stay limited to safe targets', () => {
+    const html = renderMarkdown(['| A | B |', '| --- | --- |', '| <script>x</script> | [ok](/pages/referral-fee-schedule) [bad](javascript:alert(1)) |'].join('\n'));
+    expect(html).toContain('&lt;script&gt;x&lt;/script&gt;');
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('<a href="/pages/referral-fee-schedule"');
+    expect(html).not.toContain('javascript:');
+  });
+});
+
+describe('Schedule II of the Seller Terms', () => {
+  // With a referral fee schedule in force, as on production: the Rate cell links to it.
+  const commercial = { ...publicCommercial(DEFAULT_COMMERCIAL), referral: { examples: [] } as unknown as ReturnType<typeof publicCommercial>['referral'] };
+  const html = renderMarkdown(fillPolicyText(read('seller-terms'), { commercial, lateDispatchPenaltyPaise: 8000 }));
+  const schedule = html.slice(html.indexOf('SCHEDULE II'));
+
+  it('is a table of its 14 charges, with no "—" separators between the columns', () => {
+    expect(schedule.match(/<tr class="block/g)).toHaveLength(14);
+    for (const head of ['Referral fee', 'GT (goods transfer) charge', 'Handling fee', 'Seller plan', 'AI Try-On credits', 'Penalty — inaccurate product data supplied for AI Try-On']) {
+      expect(schedule).toContain(`>${head}</td>`);
+    }
+    expect(schedule).not.toMatch(/Sl\. No\. — Head of Charge/);
+  });
+
+  it('puts each handling slab, plan and try-on pack on its own line, and keeps the Referral Fee Schedule link', () => {
+    for (const line of ['Below ₹500: ₹9', '₹20,000 and above: ₹40', 'Premium plan: Nil', '100 credits ₹1,500']) {
+      expect(schedule).toContain(`<span class="block">${line}</span>`);
+    }
+    expect(schedule.match(/<span class="block">(Free|Growth|Pro|Premium) (free|₹)/g)).toHaveLength(4);
+    expect(schedule).toContain('<a href="/pages/referral-fee-schedule" class="font-semibold text-brand-600 hover:underline">Referral Fee Schedule</a>');
+  });
+});
+
+describe('the grievance contact channels', () => {
+  it('are a table: channel, details, hours', () => {
+    const html = renderMarkdown(read('grievance-redressal'));
+    expect(html.match(/<tr class="block/g)).toHaveLength(4);
+    expect(html).toContain('<span class="font-semibold text-gray-500 sm:hidden">Details:</span><span class="block">support@cloweshop.com</span>');
+    expect(html).not.toContain('Channel — Details — Hours');
   });
 });
