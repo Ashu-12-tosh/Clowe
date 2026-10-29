@@ -1606,12 +1606,12 @@ async function flow8Shopper() {
     check(inv.status === 200, `invoice ${inv.status}`);
     check(order.buyerGstin === S.buyerGstin, `buyer GSTIN stored ${order.buyerGstin}`);
     check(JSON.stringify(inv.json).includes(S.buyerGstin), 'the buyer GSTIN is not on the invoice');
-    // The seller's promise: dispatch (2 working days) + the mock's TAT from 110059 to 400050 (zone D, 5) + a day.
+    // The seller's promise: dispatched the day processing starts, picked up the next working day, + the mock's TAT from 110059 to 400050 (zone D, 5) + a day.
     const promise = await prisma.orderSellerPromise.findFirst({ where: { orderId: order.id } });
-    check(promise && promise.source === 'DELHIVERY_TAT' && promise.tatDays === 5 && promise.dispatchDays === 2, `promise ${JSON.stringify(promise)}`);
+    check(promise && promise.source === 'DELHIVERY_TAT' && promise.tatDays === 5 && promise.dispatchDays === 0, `promise ${JSON.stringify(promise)}`);
     check(+new Date(order.etaTo) === +promise.deliveryBy, `order estimate ${order.etaTo} is not the seller's promise ${promise.deliveryBy}`);
     const etaDays = (new Date(order.etaTo) - new Date(order.createdAt)) / 86_400_000;
-    check(etaDays >= 7 && etaDays <= 14, `estimate ${etaDays.toFixed(1)} days`);
+    check(etaDays >= 6 && etaDays <= 12, `estimate ${etaDays.toFixed(1)} days`);
     check(promise.freightEstimatePaise > 0, `no freight estimate kept at placement (${promise.freightEstimatePaise})`);
     const notes = await apiOk('GET', '/api/notifications', S.shopperToken);
     check(JSON.stringify(notes).includes(order.orderNumber), 'no notification about the order');

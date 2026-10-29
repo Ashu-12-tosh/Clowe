@@ -105,8 +105,8 @@ describe('the delivery promise', () => {
   it('product page: dispatch promise + Delhivery TAT from the seller\'s pickup PIN + a day, free', async () => {
     const r = await call<ProductDeliveryPromise>('GET', `/api/delivery/promise?productId=${productId}&pincode=400050`, null);
     expect(r.status).toBe(200);
-    // Delhi (110053) → Mumbai is the mock's zone D: 5 days; the fixture seller dispatches in 2.
-    const expected = deliveryPromise({ now: new Date(), dispatchDays: 2, tatDays: 5, destinationPincode: '400050' });
+    // Delhi (110053) → Mumbai is the mock's zone D: 5 days, from a pickup the working day after dispatch.
+    const expected = deliveryPromise({ now: new Date(), tatDays: 5, destinationPincode: '400050' });
     expect(r.data).toMatchObject({ pincode: '400050', deliverable: true, source: 'DELHIVERY_TAT', deliveryByLatest: null });
     expect(day(r.data.deliveryBy!)).toBe(day(expected.deliveryBy));
     expect(r.data.message).toMatch(/^Delivery by (Mon|Tue|Wed|Thu|Fri|Sat), \d{1,2} [A-Z][a-z]{2} · Free delivery$/);
@@ -196,7 +196,7 @@ describe('the delivery promise', () => {
     expect(r.status).toBe(200);
     const order = await prisma.order.findUniqueOrThrow({ where: { id: r.data.orderId } });
     const kept = await prisma.orderSellerPromise.findFirstOrThrow({ where: { orderId: order.id } });
-    expect(kept).toMatchObject({ source: 'DELHIVERY_TAT', tatDays: 5, dispatchDays: 2, originPincode: '110053', destinationPincode: '400050' });
+    expect(kept).toMatchObject({ source: 'DELHIVERY_TAT', tatDays: 5, dispatchDays: 0, originPincode: '110053', destinationPincode: '400050' });
     // The mock's flat test rate, GST included, for the parcel's slab.
     expect(kept.freightEstimatePaise).toBe(DEFAULT_SETTINGS.deliveryFeePaise);
     expect(kept.chargeableGrams).toBeGreaterThan(0);

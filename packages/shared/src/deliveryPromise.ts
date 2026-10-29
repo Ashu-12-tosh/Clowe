@@ -1,16 +1,16 @@
 import { DELIVERY_ZONE_META, deliveryZoneFor } from './deliveryZone';
 
 // ---------------------------------------------------------------------------
-// The delivery date a buyer is promised, one per seller (owner, 26 Oct):
+// The delivery date a buyer is promised, one per seller (owner, 29 Oct):
 //
-//   start     today in India, or the next working day when the order comes
-//             after the cut-off (14:00 IST, Delhivery's same-day pickup
-//             cut-off) or on a Sunday;
-//   dispatch  the seller's dispatch promise, in working days from the start;
-//   transit   Delhivery's TAT from the seller's pickup pincode, in working days;
-//   buffer    one more working day.
+//   processing  starts today in India, or the next working day when the
+//               order comes after the cut-off (14:00 IST) or on a Sunday;
+//   dispatch    the same day: the 18-hour dispatch promise;
+//   pickup      the next working day (pickups are requested, not standing);
+//   transit     Delhivery's TAT from the seller's pickup pincode, in working days;
+//   buffer      one more working day.
 //
-// Working days leave out Sundays. When Delhivery can't be asked (slow, down)
+// Working days leave out Sundays only. When Delhivery can't be asked (slow, down)
 // the Shipping Policy's zone range stands in for its TAT, and the buyer sees
 // a range instead of one day. Every date here is a day in India, carried as
 // midnight IST.
@@ -45,7 +45,7 @@ export function addIstWorkingDays(day: Date, n: number): Date {
   return at;
 }
 
-/** The day the dispatch clock starts: today before the cut-off, else the next working day. */
+/** The day processing starts (and the parcel is dispatched): today before the cut-off, else the next working day. */
 export function promiseStartDay(now: Date): Date {
   const today = istMidnightOf(now);
   const hour = Math.floor((now.getTime() - today.getTime()) / (60 * 60 * 1000));
@@ -53,10 +53,11 @@ export function promiseStartDay(now: Date): Date {
   return today;
 }
 
+/** Working days from dispatch to Delhivery's pickup. */
+export const PICKUP_AFTER_DISPATCH_DAYS = 1;
+
 export interface DeliveryPromiseInput {
   now: Date;
-  /** The seller's dispatch promise, in working days. */
-  dispatchDays: number;
   /** Delhivery's transit days from the seller's pickup pincode; null to use the zone range. */
   tatDays: number | null;
   /** The delivery pincode, for the zone range when there is no TAT. */
@@ -69,18 +70,31 @@ export interface DeliveryPromise {
   /** The zone range's last day; null when Delhivery's TAT gave one day. */
   deliveryByLatest: Date | null;
   source: 'DELHIVERY_TAT' | 'ZONE';
+  /** The day processing starts and the parcel is dispatched. */
+  dispatchDay: Date;
+  /** The day Delhivery collects it. */
+  pickupDay: Date;
 }
 
 export function deliveryPromise(input: DeliveryPromiseInput): DeliveryPromise {
-  const dispatch = addIstWorkingDays(promiseStartDay(input.now), Math.max(0, input.dispatchDays));
+  const dispatchDay = promiseStartDay(input.now);
+  const pickupDay = addIstWorkingDays(dispatchDay, PICKUP_AFTER_DISPATCH_DAYS);
   if (input.tatDays !== null && input.tatDays >= 0) {
-    return { deliveryBy: addIstWorkingDays(dispatch, input.tatDays + DELIVERY_BUFFER_DAYS), deliveryByLatest: null, source: 'DELHIVERY_TAT' };
+    return {
+      deliveryBy: addIstWorkingDays(pickupDay, input.tatDays + DELIVERY_BUFFER_DAYS),
+      deliveryByLatest: null,
+      source: 'DELHIVERY_TAT',
+      dispatchDay,
+      pickupDay,
+    };
   }
   const [min, max] = DELIVERY_ZONE_META[deliveryZoneFor(input.destinationPincode)].transitDays;
   return {
-    deliveryBy: addIstWorkingDays(dispatch, min + DELIVERY_BUFFER_DAYS),
-    deliveryByLatest: addIstWorkingDays(dispatch, max + DELIVERY_BUFFER_DAYS),
+    deliveryBy: addIstWorkingDays(pickupDay, min + DELIVERY_BUFFER_DAYS),
+    deliveryByLatest: addIstWorkingDays(pickupDay, max + DELIVERY_BUFFER_DAYS),
     source: 'ZONE',
+    dispatchDay,
+    pickupDay,
   };
 }
 

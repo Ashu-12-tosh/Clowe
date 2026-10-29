@@ -26,7 +26,6 @@ const WAIT_MS = 2_500;
 const SELLER_SELECT = {
   id: true,
   shopName: true,
-  dispatchDays: true,
   pickupSameAsBusiness: true,
   addressLine1: true,
   city: true,
@@ -38,7 +37,7 @@ const SELLER_SELECT = {
   pickupPincode: true,
 } as const;
 
-type PromiseSeller = { id: string; shopName: string; dispatchDays: number } & Parameters<typeof pickupAddress>[0];
+type PromiseSeller = { id: string; shopName: string } & Parameters<typeof pickupAddress>[0];
 
 export interface SellerPromise extends DeliveryPromise {
   sellerId: string;
@@ -47,6 +46,7 @@ export interface SellerPromise extends DeliveryPromise {
   /** False: Delhivery doesn't deliver here. Null: it couldn't be asked (treated as deliverable). */
   deliverable: boolean | null;
   tatDays: number | null;
+  /** Working days from processing to dispatch: 0, the 18-hour promise ships the same day. */
   dispatchDays: number;
 }
 
@@ -60,8 +60,8 @@ export async function promiseFor(seller: PromiseSeller, destinationPincode: stri
   const refused = (check && !check.serviceable) || (transit && !transit.serviceable);
   const deliverable = refused ? false : check || transit ? true : null;
   const tatDays = transit?.serviceable ? transit.tatDays : null;
-  const p = deliveryPromise({ now, dispatchDays: seller.dispatchDays, tatDays, destinationPincode });
-  return { ...p, sellerId: seller.id, shopName: seller.shopName, originPincode: origin ?? null, deliverable, tatDays, dispatchDays: seller.dispatchDays };
+  const p = deliveryPromise({ now, tatDays, destinationPincode });
+  return { ...p, sellerId: seller.id, shopName: seller.shopName, originPincode: origin ?? null, deliverable, tatDays, dispatchDays: 0 };
 }
 
 /** Promises for several sellers at once, in the order given. */
