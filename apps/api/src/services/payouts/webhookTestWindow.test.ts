@@ -1,5 +1,15 @@
-import { describe, expect, it } from 'vitest';
-import { WINDOW_MAX_MS, testWindowClosesAt } from './webhookTestWindow';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import type * as Window from './webhookTestWindow';
+
+// The module reads env.ts, which checks the process environment as it loads:
+// give it a valid one first (as cashfreeEnv.test.ts does), then load it.
+let WINDOW_MAX_MS: typeof Window.WINDOW_MAX_MS;
+let testWindowClosesAt: typeof Window.testWindowClosesAt;
+beforeAll(async () => {
+  for (const [k, v] of Object.entries({ DATABASE_URL: 'postgres://x', JWT_ACCESS_SECRET: 'test-secret-0123456789', NODE_ENV: 'development' })) vi.stubEnv(k, v);
+  ({ WINDOW_MAX_MS, testWindowClosesAt } = await import('./webhookTestWindow'));
+}, 60_000);
+afterAll(() => vi.unstubAllEnvs());
 
 const opened = Date.parse('2026-10-29T18:00:00.000Z');
 const at = (min: number) => opened + min * 60_000;
