@@ -4,6 +4,7 @@ import { env } from '../env';
 import { ApiError } from '../utils/ApiError';
 import { cashfreeWebhookFresh, verifyCashfreeWebhook } from '../services/cashfree/client';
 import { payoutProvider } from '../services/payouts';
+import { TEST_EVENT_TYPE, testWindowClosesAt } from '../services/payouts/webhookTestWindow';
 import { payoutByTransferId, syncPayout } from '../services/payoutService';
 import { recordWebhook, webhookSeen } from '../services/payments/gatewaySync';
 
@@ -60,6 +61,15 @@ payoutWebhookRouter.post('/cashfree/webhook', async (req, res, next) => {
     const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
     const signature = req.get('x-webhook-signature') ?? '';
     const timestamp = req.get('x-webhook-timestamp') ?? '';
+    // The dashboard's unsigned test event, inside the owner's short window
+    // only: answered 200, recorded nowhere, acted on never (webhookTestWindow.ts).
+    if (!signature && !timestamp && rawBody && (req.body as { type?: unknown } | undefined)?.type === TEST_EVENT_TYPE) {
+      const closes = testWindowClosesAt();
+      if (closes) {
+        console.warn(`[clowe-api] payout webhook: unsigned ${TEST_EVENT_TYPE} (the dashboard test) answered 200 inside the test window (closes ${closes.toISOString()}) — not recorded, not acted on`);
+        return res.status(200).json({ received: true });
+      }
+    }
     if (!rawBody || !verifyCashfreeWebhook(rawBody, timestamp, signature, secret)) {
       logRefusal(`signature check FAILED (${refusalReason(rawBody, signature, timestamp)})`, req);
       throw ApiError.unauthorized('Invalid webhook signature');

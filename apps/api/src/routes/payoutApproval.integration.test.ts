@@ -457,6 +457,69 @@ describe('the payout webhook before Cashfree sends (PAYOUT_PROVIDER still the mo
   });
 });
 
+describe('the dashboard-test window (PAYOUT_WEBHOOK_TEST_UNTIL)', () => {
+  type WindowEnv = { CASHFREE_PAYOUT_CLIENT_SECRET?: string; PAYOUT_WEBHOOK_TEST_UNTIL?: string };
+  const setUntil = (v: string | undefined) => ((env as WindowEnv).PAYOUT_WEBHOOK_TEST_UNTIL = v);
+  beforeAll(() => {
+    (env as WindowEnv).CASHFREE_PAYOUT_CLIENT_SECRET = PAYOUT_SECRET;
+  });
+  afterAll(() => {
+    (env as WindowEnv).CASHFREE_PAYOUT_CLIENT_SECRET = undefined;
+    setUntil(undefined);
+  });
+  // Cashfree's "Test & Add Webhook" as it arrives: no signature, no timestamp.
+  const dashboardTest = () => ({ type: 'LOW_BALANCE_ALERT', event_time: new Date().toISOString(), data: { current_balance: 10, fundsource_id: `FS_${Date.now()}` } });
+  const unsigned = (body: unknown, headers: Record<string, string> = {}) =>
+    call<{ received: boolean }>('POST', '/api/payouts/cashfree/webhook', null, JSON.stringify(body), headers);
+  const recorded = () => prisma.gatewayWebhookEvent.count({ where: { provider: 'cashfree-payouts', type: 'LOW_BALANCE_ALERT' } });
+
+  it('closed (unset): the unsigned dashboard test is refused', async () => {
+    setUntil(undefined);
+    expect((await unsigned(dashboardTest())).status).toBe(401);
+  });
+
+  it('open: the unsigned dashboard test gets 200 — recorded nowhere, acted on never', async () => {
+    setUntil(new Date(Date.now() + 10 * 60_000).toISOString());
+    const before = await recorded();
+    const res = await unsigned(dashboardTest());
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({ received: true });
+    expect(await recorded()).toBe(before);
+  });
+
+  it('open: an unsigned transfer event is still refused, even with Cashfree sending, and its payout is left alone', async () => {
+    setUntil(new Date(Date.now() + 10 * 60_000).toISOString());
+    const fake = new FakePayouts();
+    const restore = setPayoutProviderForTests(fake);
+    try {
+      const s = await payableSeller();
+      const payout = (await request(s.token)).json.data;
+      const row = await prisma.payout.update({ where: { id: payout.id }, data: { status: 'PROCESSING' } });
+      fake.state.set(row.transferId!, { status: 'REVERSED', providerStatus: 'REVERSED', failureReason: 'Account closed' });
+      for (const type of ['TRANSFER_REVERSED', 'TRANSFER_SUCCESS']) {
+        expect((await unsigned({ type, data: { transfer_id: row.transferId } })).status).toBe(401);
+      }
+      expect((await prisma.payout.findUniqueOrThrow({ where: { id: payout.id } })).status).toBe('PROCESSING');
+    } finally {
+      restore();
+    }
+  });
+
+  it('open: a test event carrying a signature is verified as always — a wrong one, or a timestamp alone, is refused', async () => {
+    setUntil(new Date(Date.now() + 10 * 60_000).toISOString());
+    const raw = JSON.stringify(dashboardTest());
+    const ts = String(Date.now());
+    const wrong = createHmac('sha256', 'not-our-secret').update(ts).update(raw).digest('base64');
+    expect((await call('POST', '/api/payouts/cashfree/webhook', null, raw, { 'x-webhook-timestamp': ts, 'x-webhook-signature': wrong })).status).toBe(401);
+    expect((await unsigned(dashboardTest(), { 'x-webhook-timestamp': ts })).status).toBe(401);
+  });
+
+  it('past its time: the unsigned dashboard test is refused again', async () => {
+    setUntil(new Date(Date.now() - 60_000).toISOString());
+    expect((await unsigned(dashboardTest())).status).toBe(401);
+  });
+});
+
 describe('the Payouts account on the admin page', () => {
   it('says who sends, and reads no balance without Payouts keys', async () => {
     const res = await call<AdminPayoutAccount>('GET', '/api/admin/payouts/account', adminToken);

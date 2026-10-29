@@ -87,6 +87,10 @@ const envSchema = z.object({
   // Only when the server's IP is not allowlisted: the PEM public key Cashfree
   // issues for signature 2FA, on one line with literal \n for line breaks.
   CASHFREE_PAYOUT_PUBLIC_KEY: optionalSecret,
+  // A short window for the Payouts dashboard's unsigned "Test & Add Webhook"
+  // event (services/payouts/webhookTestWindow.ts): an ISO time, at most 30
+  // minutes after the API starts. Unset (the default): closed.
+  PAYOUT_WEBHOOK_TEST_UNTIL: blankAsUnset(z.string().trim().optional()),
 
   // --- Returns ---
   // Customers can request a return up to this many days after delivery.

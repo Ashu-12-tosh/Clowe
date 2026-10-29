@@ -4,6 +4,7 @@ import { pemFromEnv } from '../cashfree/client';
 import type { PayoutProvider } from './PayoutProvider';
 import { MockPayoutProvider } from './MockPayoutProvider';
 import { CashfreePayoutProvider } from './CashfreePayoutProvider';
+import { testWindowStatus } from './webhookTestWindow';
 
 /**
  * PAYOUT_PROVIDER=mock (the default) settles instantly with a fake UTR;
@@ -63,6 +64,8 @@ export function setPayoutProviderForTests(provider: PayoutProvider): () => void 
 }
 
 export function logPayoutProviderStatus(): void {
+  const window = testWindowStatus();
+  if (window) console.warn(`[clowe-api] ${window}`);
   if (payoutProvider.name === 'cashfree') {
     const twoFa = env.CASHFREE_PAYOUT_PUBLIC_KEY ? 'signature 2FA' : 'IP allowlist 2FA, IPv4';
     console.log(`[clowe-api] Payouts: Cashfree (${env.CASHFREE_PAYOUT_ENV}, ${twoFa})`);
