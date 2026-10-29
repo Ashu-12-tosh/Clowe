@@ -61,13 +61,16 @@ function tableCells(line: string): string[] | null {
   return t.slice(1, -1).split('|').map((c) => c.trim());
 }
 
-/** A cell's lines ("<br>" between them), each escaped and inline-formatted. */
-function cellLines(cell: string): string {
-  return cell
-    .split(/\s*<br\s*\/?>\s*/i)
-    .filter((l) => l !== '')
-    .map((l) => `<span class="block">${inline(l)}</span>`)
-    .join('');
+/**
+ * A cell's lines ("<br>" between them), each escaped and inline-formatted,
+ * under its column label on a phone: a one-line value beside the label
+ * ("Basis: Per unit"), several lines under it, one each.
+ */
+function labelledCell(label: string, cell: string): string {
+  const lines = cell.split(/\s*<br\s*\/?>\s*/i).filter((l) => l !== '');
+  const tag = `<span class="font-semibold text-gray-500 sm:hidden">${inline(label)}:</span>`;
+  if (lines.length === 1) return `${tag} <span class="sm:block">${inline(lines[0]!)}</span>`;
+  return `${tag}${lines.map((l) => `<span class="block">${inline(l)}</span>`).join('')}`;
 }
 
 /**
@@ -83,7 +86,7 @@ function renderTable(rows: string[][]): string {
   const titleCol = numbered ? 1 : 0;
   const desktop = 'sm:table-cell sm:border-b sm:border-gray-100 sm:px-3 sm:py-2.5 sm:align-top';
   const th = head
-    .map((h) => `<th scope="col" class="border-b border-gray-200 px-3 py-2 text-left align-bottom text-xs font-bold uppercase tracking-wide text-gray-500">${inline(h)}</th>`)
+    .map((h) => `<th scope="col" class="whitespace-nowrap border-b border-gray-200 px-3 py-2 text-left align-bottom text-xs font-bold uppercase tracking-wide text-gray-500">${inline(h)}</th>`)
     .join('');
   const tr = body
     .map((cells) => {
@@ -96,7 +99,7 @@ function renderTable(rows: string[][]): string {
           if (i === titleCol) {
             return `<td class="inline font-bold text-ink-900 ${desktop}">${inline(value)}</td>`;
           }
-          return `<td class="mt-1 block ${desktop}"><span class="font-semibold text-gray-500 sm:hidden">${inline(h)}:</span>${cellLines(value)}</td>`;
+          return `<td class="mt-1 block ${desktop}">${labelledCell(h, value)}</td>`;
         })
         .join('');
       return `<tr class="block border-b border-gray-100 py-3 sm:table-row sm:py-0">${tds}</tr>`;

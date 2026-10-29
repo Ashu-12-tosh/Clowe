@@ -110,7 +110,8 @@ describe('renderMarkdown tables', () => {
     const html = renderMarkdown(md);
     expect(html).toMatch(/<td class="inline pr-1\.5 font-bold[^"]*">4<span class="sm:hidden">\.<\/span><\/td>/);
     expect(html).toMatch(/<td class="inline font-bold[^"]*">Handling fee<\/td>/);
-    expect(html).toContain('<span class="font-semibold text-gray-500 sm:hidden">Basis:</span><span class="block">Per unit</span>');
+    // A one-line value beside its label; several lines under it, one each.
+    expect(html).toContain('<span class="font-semibold text-gray-500 sm:hidden">Basis:</span> <span class="sm:block">Per unit</span>');
     expect(html).toContain('<span class="font-semibold text-gray-500 sm:hidden">Rate:</span><span class="block">Below ₹500: ₹9</span><span class="block">Premium plan: Nil</span>');
   });
 
@@ -150,7 +151,7 @@ describe('the grievance contact channels', () => {
   it('are a table: channel, details, hours', () => {
     const html = renderMarkdown(read('grievance-redressal'));
     expect(html.match(/<tr class="block/g)).toHaveLength(4);
-    expect(html).toContain('<span class="font-semibold text-gray-500 sm:hidden">Details:</span><span class="block">support@cloweshop.com</span>');
+    expect(html).toContain('<span class="font-semibold text-gray-500 sm:hidden">Details:</span> <span class="sm:block">support@cloweshop.com</span>');
     expect(html).not.toContain('Channel — Details — Hours');
   });
 });
