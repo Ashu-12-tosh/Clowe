@@ -427,8 +427,24 @@ describe('the payout webhook before Cashfree sends (PAYOUT_PROVIDER still the mo
       expect(line).toContain('x-mystery-signature');
       expect(line).toContain('content-type: application/json');
       expect(line).toMatch(/raw body: \d+ bytes/);
+      expect(line).toContain('body keys: data,type; event: type=LOW_BALANCE_ALERT]');
       expect(line).not.toContain('HEADER-SECRET-VALUE');
       expect(line).not.toContain('BODY-SECRET-TEXT');
+    } finally {
+      clock.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
+  it('logs an event name only when it looks like one — never another value from the body', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 20 * 60_000);
+    try {
+      await call('POST', '/api/payouts/cashfree/webhook', null, JSON.stringify({ type: 'secret value <x>', amount: 'SECRET-AMOUNT' }), {});
+      const line = warn.mock.calls.map((c) => String(c[0])).find((l) => l.includes('payout webhook')) ?? '';
+      expect(line).toContain('body keys: amount,type; event: type=(not an event name)]');
+      expect(line).not.toContain('secret value');
+      expect(line).not.toContain('SECRET-AMOUNT');
     } finally {
       clock.mockRestore();
       warn.mockRestore();
@@ -485,6 +501,16 @@ describe('the dashboard-test window (PAYOUT_WEBHOOK_TEST_UNTIL)', () => {
     expect(res.status).toBe(200);
     expect(res.json).toMatchObject({ received: true });
     expect(await recorded()).toBe(before);
+  });
+
+  it('open: the test event is recognised under "event" or "event_type" too — that one name only', async () => {
+    setUntil(new Date(Date.now() + 10 * 60_000).toISOString());
+    const { type: _type, ...rest } = dashboardTest();
+    expect((await unsigned({ ...rest, event: 'LOW_BALANCE_ALERT' })).status).toBe(200);
+    expect((await unsigned({ ...rest, event_type: 'LOW_BALANCE_ALERT' })).status).toBe(200);
+    // A transfer named in "type" is never let through by a test name elsewhere in the body.
+    expect((await unsigned({ type: 'TRANSFER_SUCCESS', event: 'LOW_BALANCE_ALERT', data: { transfer_id: 'X1' } })).status).toBe(401);
+    expect((await unsigned({ ...rest, type: 'low_balance_alert' })).status).toBe(401);
   });
 
   it('open: an unsigned transfer event is still refused, even with Cashfree sending, and its payout is left alone', async () => {

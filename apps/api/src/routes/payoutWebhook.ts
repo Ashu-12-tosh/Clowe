@@ -24,10 +24,26 @@ import { recordWebhook, webhookSeen } from '../services/payments/gatewaySync';
  */
 export const payoutWebhookRouter = Router();
 
+/** The fields a Cashfree event names itself in (V2 uses "type"). */
+const EVENT_FIELDS = ['type', 'event', 'event_type'] as const;
+/** What an event name looks like; anything else is never printed. */
+const EVENT_NAME = /^[A-Za-z0-9_.-]{1,64}$/;
+
+/** The event name a body carries, and the field it is in, or null. */
+function eventNameOf(body: unknown): { field: string; name: string } | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  for (const field of EVENT_FIELDS) {
+    const v = (body as Record<string, unknown>)[field];
+    if (typeof v === 'string') return { field, name: v };
+  }
+  return null;
+}
+
 /**
  * A refused delivery is logged at most once a minute (anyone can post here),
- * with what it carried: the header NAMES, the content type and the body size —
- * never a header value or the body, which hold the signature and the payload.
+ * with what it carried: the header NAMES, the content type, the body size, the
+ * body's top-level key NAMES and its event name — never a header value or any
+ * other part of the body, which hold the signature and the payload.
  */
 let lastRefusalLog = 0;
 let refusedSince = 0;
@@ -37,9 +53,22 @@ function logRefusal(why: string, req: Request): void {
   const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
   const names = Object.keys(req.headers).sort().join(',');
   const contentType = (req.get('content-type') ?? '').split(';')[0]!.trim().slice(0, 60) || 'none';
+  const body = req.body as unknown;
+  const keys =
+    body && typeof body === 'object' && !Array.isArray(body)
+      ? Object.keys(body)
+          .filter((k) => EVENT_NAME.test(k))
+          .sort()
+          .slice(0, 20)
+          .join(',') || 'none'
+      : Array.isArray(body)
+        ? 'an array'
+        : 'not an object';
+  const event = eventNameOf(body);
+  const eventText = event ? (EVENT_NAME.test(event.name) ? `${event.field}=${event.name}` : `${event.field}=(not an event name)`) : 'none';
   console.warn(
     `[clowe-api] payout webhook: ${why} — refused${refusedSince > 1 ? ` (${refusedSince} refused in the last minute or so)` : ''}` +
-      ` [headers: ${names}; content-type: ${contentType}; raw body: ${rawBody ? `${rawBody.length} bytes` : 'not captured'}]`,
+      ` [headers: ${names}; content-type: ${contentType}; raw body: ${rawBody ? `${rawBody.length} bytes` : 'not captured'}; body keys: ${keys}; event: ${eventText}]`,
   );
   lastRefusalLog = Date.now();
   refusedSince = 0;
@@ -63,7 +92,8 @@ payoutWebhookRouter.post('/cashfree/webhook', async (req, res, next) => {
     const timestamp = req.get('x-webhook-timestamp') ?? '';
     // The dashboard's unsigned test event, inside the owner's short window
     // only: answered 200, recorded nowhere, acted on never (webhookTestWindow.ts).
-    if (!signature && !timestamp && rawBody && (req.body as { type?: unknown } | undefined)?.type === TEST_EVENT_TYPE) {
+    // Its name may sit in "type", "event" or "event_type"; only this one name passes.
+    if (!signature && !timestamp && rawBody && eventNameOf(req.body)?.name === TEST_EVENT_TYPE) {
       const closes = testWindowClosesAt();
       if (closes) {
         console.warn(`[clowe-api] payout webhook: unsigned ${TEST_EVENT_TYPE} (the dashboard test) answered 200 inside the test window (closes ${closes.toISOString()}) — not recorded, not acted on`);
