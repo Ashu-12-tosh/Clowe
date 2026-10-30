@@ -505,7 +505,8 @@ describe('the dashboard-test window (PAYOUT_WEBHOOK_TEST_UNTIL)', () => {
 
   it('open: the test event is recognised under "event" or "event_type" too — that one name only', async () => {
     setUntil(new Date(Date.now() + 10 * 60_000).toISOString());
-    const { type: _type, ...rest } = dashboardTest();
+    const rest: Record<string, unknown> = { ...dashboardTest() };
+    delete rest.type;
     expect((await unsigned({ ...rest, event: 'LOW_BALANCE_ALERT' })).status).toBe(200);
     expect((await unsigned({ ...rest, event_type: 'LOW_BALANCE_ALERT' })).status).toBe(200);
     // A transfer named in "type" is never let through by a test name elsewhere in the body.
