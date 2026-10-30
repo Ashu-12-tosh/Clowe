@@ -184,7 +184,10 @@ export const EMAIL_NOTIFICATIONS: Record<string, string> = {
   // Shoppers
   ORDER_CONFIRMED: 'View your order',
   ITEM_SHIPPED: 'Track your order',
+  ORDER_OUT_FOR_DELIVERY: 'Track your order',
   ITEM_DELIVERED: 'View your order',
+  ORDER_NDR: 'Track your order',
+  ORDER_RTO: 'View your order',
   ORDER_CANCELLED: 'View your order',
   REFUND_INITIATED: 'View your order',
   REFUND_PROCESSED: 'View your order',

@@ -21,6 +21,7 @@ import {
   TruckIcon,
 } from '@/components/cart/CartIcons';
 import PolicyText from '@/components/PolicyText';
+import { TrackingChip } from '@/components/orders/TrackingBar';
 
 const PAGE_SIZE = 10;
 
@@ -428,16 +429,27 @@ export default function OrdersPage() {
 
                   {/* Status + actions */}
                   <div className="min-w-48 shrink-0">
-                    <p className={`t-card-label flex items-center gap-1.5 ${look.tint}`}>
-                      {look.icon} {statusLabel(order.status)}
-                    </p>
-                    <p className="t-caption mt-0.5 text-gray-500">{statusDetail(order)}</p>
+                    {order.tracking ? (
+                      <>
+                        <TrackingChip summary={order.tracking} />
+                        <p className="t-card-label mt-1 text-ink-900" data-order-headline>
+                          {order.tracking.headline}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className={`t-card-label flex items-center gap-1.5 ${look.tint}`}>
+                          {look.icon} {statusLabel(order.status)}
+                        </p>
+                        <p className="t-caption mt-0.5 text-gray-500">{statusDetail(order)}</p>
+                      </>
+                    )}
                     <div className="mt-2.5 flex flex-wrap gap-2">
                       {(order.status === 'SHIPPED' ||
                         order.status === 'CONFIRMED' ||
                         order.status === 'PACKED') && (
                         <Link
-                          href={`/track?orderNumber=${encodeURIComponent(order.orderNumber)}`}
+                          href={`/account/orders/${order.id}#tracking`}
                           className="t-caption rounded-lg border border-brand-600 px-4 py-2 font-bold text-brand-700 transition hover:bg-brand-50"
                         >
                           Track Order

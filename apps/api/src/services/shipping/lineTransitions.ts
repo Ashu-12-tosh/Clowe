@@ -1,6 +1,7 @@
 import { dispatchedEtaWindow } from '@clowe/shared';
 import { prisma } from '../../db';
 import { sendMessageSafe } from '../messaging';
+import { sendOrderSms } from '../messaging/orderSms';
 import { chargeLateDispatchIfDue } from '../lateDispatch';
 import { settleCodIfDelivered, syncOrderStatus } from '../orderStatusService';
 import { postDeliveryEntries } from '../sellerLedgerService';
@@ -51,6 +52,7 @@ export async function markLineShipped(itemId: string, at: Date = new Date()): Pr
     to: `+91${item.order.user.phone}`,
     body: `Your Clowe item "${item.title}" has shipped via ${item.courierName ?? 'Delhivery'} (AWB ${item.awbNumber ?? '—'}). Track: /track 🚚`,
   });
+  sendOrderSms('SHIPPED', item.order.shipPhone, { orderNumber: item.order.orderNumber, awb: item.awbNumber ?? '' });
   await syncShipmentsFromLines([item.shipmentId]);
   await syncOrderStatus(item.orderId);
   // Shipped after the penalty deadline? Charged here if the sweep has not
@@ -77,6 +79,7 @@ export async function markLineDelivered(itemId: string, at: Date = new Date()): 
       linkHref: `/account/orders/${item.orderId}`,
     },
   });
+  sendOrderSms('DELIVERED', item.order.shipPhone, { orderNumber: item.order.orderNumber });
   await syncShipmentsFromLines([item.shipmentId]);
   await syncOrderStatus(item.orderId);
   await settleCodIfDelivered(item.orderId);

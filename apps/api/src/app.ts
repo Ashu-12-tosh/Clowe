@@ -75,7 +75,7 @@ import { sellerKycRouter } from './routes/sellerKyc';
 import { storesRouter } from './routes/stores';
 import { adminSupportRouter } from './routes/adminSupport';
 import { errorHandler } from './middleware/error';
-import { catalogReadLimiter, globalLimiter, trackLimiter } from './middleware/rateLimits';
+import { catalogReadLimiter, globalLimiter } from './middleware/rateLimits';
 import { auditLogger } from './middleware/audit';
 import { stockPhotoGuard } from './middleware/stockPhotos';
 
@@ -204,7 +204,8 @@ export function createApp() {
   app.use('/api/ai', aiRouter);
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/referrals', referralsRouter);
-  app.use('/api/track', trackLimiter, trackRouter);
+  // Each Track Order route carries its own limit (code requests, codes, views).
+  app.use('/api/track', trackRouter);
   app.use('/api/complaints', complaintsRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/referral-fees', referralFeesRouter);

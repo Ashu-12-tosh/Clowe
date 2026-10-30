@@ -1,34 +1,23 @@
 'use client';
 
-import { ScanTimeline } from '@/components/orders/ScanTimeline';
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type {
-  DeliveryMethod,
-  OrderDetailItem,
-  OrderDetailView,
-  ProductListItem,
-} from '@clowe/shared';
+import { summarizeOrderTracking, type OrderDetailItem, type OrderDetailView, type ParcelTracking, type ProductListItem } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise, istDay, paymentMethodLabel } from '@/lib/format';
 import { BADGES_EVENT } from '@/components/Header';
 import { SUPPORT_CHAT_EVENT } from '@/components/SupportChat';
 import { Scroller } from '@/components/home/HomeBits';
 import ProductCard from '@/components/ProductCard';
-import { ReturnModal, ReturnTimeline } from '@/components/orders/ReturnBits';
+import { ReturnModal } from '@/components/orders/ReturnBits';
+import { OrderTracking, refreshNote } from '@/components/orders/TrackingBar';
 import { ParcelStatus } from '@/components/orders/ParcelBits';
 import { ClaimModal } from '@/components/orders/ClaimModal';
 import ReviewModal from '@/components/orders/ReviewModal';
 import ReturnRule from '@/components/ReturnRule';
 import NonCancellable from '@/components/NonCancellable';
 import { CheckIcon, HeadsetIcon, MapPinIcon, ReturnIcon } from '@/components/cart/CartIcons';
-
-const DELIVERY_LABEL: Record<DeliveryMethod, string> = {
-  STANDARD: 'Standard Delivery',
-  EXPRESS: 'Express Delivery',
-  SAME_DAY: 'Same Day Delivery',
-};
 
 const STATUS_STYLES: Record<string, string> = {
   PLACED: 'bg-blue-50 text-blue-700',
@@ -114,6 +103,8 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [trackNote, setTrackNote] = useState('');
 
   const load = useCallback(() => {
     api<OrderDetailView>(`/api/orders/${params.id}`, { auth: true })
@@ -192,6 +183,24 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
     }
   }
 
+  async function refreshTracking() {
+    if (!order) return;
+    setRefreshing(true);
+    setTrackNote('');
+    try {
+      const r = await api<{ asked: number; cached: number; nextRefreshAt: string | null; tracking: ParcelTracking[] }>(
+        `/api/orders/${order.id}/tracking/refresh`,
+        { method: 'POST', auth: true, quiet: true },
+      );
+      setOrder((o) => (o ? { ...o, tracking: r.tracking } : o));
+      setTrackNote(refreshNote(r));
+    } catch (err) {
+      setTrackNote(err instanceof ApiRequestError ? err.message : 'Could not check with the courier — try again in a minute.');
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function copyId() {
     if (!order) return;
     try {
@@ -233,15 +242,7 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
   const etaWindow = currentEtaWindow(order);
   const eta = etaLabel(etaWindow.from, etaWindow.to);
   const cancelled = order.status === 'CANCELLED';
-
-  // Real stamps where we have them; the quoted ETA for what is still ahead.
-  const steps = [
-    { label: 'Order Placed', at: order.timeline.placedAt, expected: null as string | null },
-    { label: 'Order Confirmed', at: order.timeline.confirmedAt, expected: null },
-    { label: 'Shipped', at: order.timeline.shippedAt, expected: order.etaFrom },
-    { label: 'Out for Delivery', at: null, expected: order.etaTo },
-    { label: 'Delivered', at: order.timeline.deliveredAt, expected: order.etaTo },
-  ];
+  const tracking = summarizeOrderTracking(order.tracking);
 
   return (
     <div className="space-y-4">
@@ -313,7 +314,9 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
                 {statusLabel(order.status)}
               </p>
               <p className="t-caption mt-1 text-gray-500">
-                {order.timeline.deliveredAt
+                {tracking
+                  ? tracking.headline
+                  : order.timeline.deliveredAt
                   ? `Delivered on ${fmtDate(order.timeline.deliveredAt)}`
                   : cancelled
                     ? 'This order was cancelled'
@@ -343,6 +346,14 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
                 </p>
               )}
             </div>
+          </section>
+
+          {/* Where each parcel is */}
+          <section id="tracking" aria-labelledby="tracking-heading" className="scroll-mt-24 space-y-3">
+            <h2 id="tracking-heading" className="t-sub-heading text-ink-900">
+              Track your order
+            </h2>
+            <OrderTracking parcels={order.tracking} onRefresh={() => void refreshTracking()} refreshing={refreshing} note={trackNote} />
           </section>
 
           {/* Items */}
@@ -399,8 +410,11 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
                     )}
                     {item.status !== 'CANCELLED' && <ReturnRule returnable={item.returnable} className="mt-1" />}
                     <ParcelStatus orderId={order.id} item={item} onChanged={load} />
-                    <ScanTimeline scans={item.scans} />
-                    {item.returnInfo && <ReturnTimeline info={item.returnInfo} />}
+                    {item.returnInfo?.refund?.arn && (
+                      <p className="t-caption mt-1 text-gray-500">
+                        Refund bank reference: <span className="font-mono">{item.returnInfo.refund.arn}</span>
+                      </p>
+                    )}
                   </div>
 
                   <div className="shrink-0 text-right">
@@ -537,56 +551,6 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
               View / Manage Address
             </Link>
           </div>
-
-          {!cancelled && (
-            <div className="rounded-2xl border border-gray-100 bg-white p-4">
-              <p className="t-card-label text-ink-900">Order Timeline</p>
-              <p className="t-caption mt-0.5 text-gray-500">
-                {DELIVERY_LABEL[order.deliveryMethod]}
-              </p>
-              <ol className="mt-3 space-y-4">
-                {steps.map((step, i) => {
-                  const done = step.at !== null;
-                  return (
-                    <li key={step.label} className="relative flex gap-3">
-                      {i < steps.length - 1 && (
-                        <span
-                          className={`absolute left-[0.6875rem] top-6 h-full w-0.5 ${
-                            done ? 'bg-green-600' : 'bg-gray-200'
-                          }`}
-                        />
-                      )}
-                      <span
-                        className={`relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-[10px] ${
-                          done
-                            ? 'border-green-600 bg-green-600 text-white'
-                            : 'border-gray-200 bg-white text-gray-300'
-                        }`}
-                      >
-                        {done ? <CheckIcon className="h-3 w-3" /> : '○'}
-                      </span>
-                      <span className="min-w-0 pb-1">
-                        <span
-                          className={`t-caption block font-bold ${
-                            done ? 'text-ink-900' : 'text-gray-400'
-                          }`}
-                        >
-                          {step.label}
-                        </span>
-                        <span className="t-caption block text-gray-400">
-                          {step.at
-                            ? fmtDateTime(step.at)
-                            : step.expected
-                              ? `Expected by ${fmtShort(step.expected)}`
-                              : 'Pending'}
-                        </span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ol>
-            </div>
-          )}
 
           <div className="rounded-2xl border border-gray-100 bg-white p-4">
             <p className="t-card-label text-ink-900">Need Help?</p>

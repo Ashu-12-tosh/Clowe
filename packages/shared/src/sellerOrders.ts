@@ -147,6 +147,8 @@ export interface SellerOrderRow {
   dispatch: SellerDispatchClock | null;
   /** This order's parcels with Delhivery, for the seller's actions on them. */
   parcels: SellerParcelView[];
+  /** The order page only: each parcel's bar and Delhivery's scans, as the buyer sees them. */
+  tracking?: import('./tracking').ParcelTracking[];
   /** How many of this buyer's parcels came back undelivered before (shown, never blocking). */
   buyerRtoCount: number;
 }

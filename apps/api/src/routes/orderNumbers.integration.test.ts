@@ -17,6 +17,7 @@ let server: Server;
 let base: string;
 let adminToken: string;
 let sellerToken: string;
+let buyerToken: string;
 const PHONE = '9195000001';
 const OLD_NUMBER = 'CLW-2025-123456';
 let newNumber: string;
@@ -40,6 +41,7 @@ beforeAll(async () => {
   });
   const variant = await prisma.productVariant.create({ data: { productId: product.id, optionValues: {}, sku: 'ONUM-1', pricePaise: 50_000, stock: 5 } });
   const buyer = await prisma.user.create({ data: { phone: PHONE, name: 'Number Buyer', referralCode: 'ONUM-U' } });
+  buyerToken = signAccessToken({ sub: buyer.id, role: 'CUSTOMER' });
 
   newNumber = await generateOrderNumber();
   for (const orderNumber of [OLD_NUMBER, newNumber]) {
@@ -83,7 +85,7 @@ describe('order numbers', () => {
   it('tracks old and new numbers, typed in any letter case', async () => {
     for (const orderNumber of [OLD_NUMBER, newNumber]) {
       for (const typed of [orderNumber, orderNumber.toLowerCase()]) {
-        const res = await get<{ orderNumber: string }>(`/api/track?orderNumber=${encodeURIComponent(typed)}&phone=${PHONE}`);
+        const res = await get<{ orderNumber: string }>(`/api/track/mine?orderNumber=${encodeURIComponent(typed)}`, buyerToken);
         expect(res.status).toBe(200);
         expect(res.json.data.orderNumber).toBe(orderNumber);
       }

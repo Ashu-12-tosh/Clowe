@@ -158,6 +158,8 @@ export interface ApiOptions {
   /** Don't toast a failure: the caller shows it in place (next to a field, say).
       Failed changes made from admin and seller pages are toasted otherwise. */
   quiet?: boolean;
+  /** Extra request headers (Track Order's x-track-token). */
+  headers?: Record<string, string>;
 }
 
 export const TOO_MANY_REQUESTS = 'Too many requests, please try again in a moment';
@@ -199,7 +201,7 @@ function reportFailure(err: unknown, options: ApiOptions) {
 }
 
 async function rawRequest(path: string, options: ApiOptions) {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...options.headers };
   if (options.auth) {
     const token = localStorage.getItem(ACCESS_KEY);
     if (token) headers.Authorization = `Bearer ${token}`;

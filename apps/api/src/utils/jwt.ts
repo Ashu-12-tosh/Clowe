@@ -77,3 +77,25 @@ export function verifyAccessToken(token: string): AccessTokenPayload | null {
     return null;
   }
 }
+
+/**
+ * Track Order: proof that this browser entered the code sent to the phone or
+ * email on one order. It names only that order, under its own audience, so it
+ * opens nothing else and is never an access token.
+ */
+const TRACK_AUDIENCE = 'clowe-track-order';
+export const TRACK_TOKEN_TTL_MIN = 30;
+
+export function signTrackToken(orderId: string): string {
+  return jwt.sign({ oid: orderId }, env.JWT_ACCESS_SECRET, { expiresIn: `${TRACK_TOKEN_TTL_MIN}m`, issuer: 'clowe-api', audience: TRACK_AUDIENCE });
+}
+
+/** The order a live track token opens, else null. */
+export function verifyTrackToken(token: string): string | null {
+  try {
+    const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET, { issuer: 'clowe-api', audience: TRACK_AUDIENCE });
+    return typeof decoded !== 'string' && typeof decoded.oid === 'string' ? decoded.oid : null;
+  } catch {
+    return null;
+  }
+}

@@ -1322,3 +1322,12 @@ parcels booked with Delhivery — use it only with nothing in transit.
   only once their parcel's remittance is matched; mismatches are listed.
 - A seller whose pickup address failed to register can't book: admin →
   Sellers → the seller → Delhivery pickup address → Retry.
+- Buyers follow each parcel on its order page (and Track Order): Ordered →
+  Packed → Shipped → Out for delivery → Delivered, a plain-words headline,
+  and Delhivery's scans. Their "Refresh" asks Delhivery about an AWB at most
+  once every 10 minutes (the 30-minute poll counts too) — tracking reads only,
+  never a booking. Track Order without signing in needs a code sent to the
+  phone (SMS OTP) or confirmed email on the order.
+- Buyers are emailed at shipped, out for delivery, delivered, a failed
+  attempt and RTO. Order SMS are wired but off until their DLT templates are
+  approved (`apps/api/src/services/messaging/orderSms.ts`).

@@ -214,7 +214,7 @@ export async function settlePaymentFailure(orderId: string, reason: string): Pro
     });
     if (claim.count === 0) return false;
     await tx.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
-    await tx.orderItem.updateMany({ where: { orderId: order.id }, data: { status: 'CANCELLED' } });
+    await tx.orderItem.updateMany({ where: { orderId: order.id }, data: { status: 'CANCELLED', cancelledBy: 'PAYMENT_FAILED', cancelledAt: new Date() } });
     // Restore reserved stock.
     for (const item of order.items) {
       await tx.productVariant.update({

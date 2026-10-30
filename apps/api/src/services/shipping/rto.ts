@@ -1,4 +1,4 @@
-import { MAX_DELIVERY_ATTEMPTS } from '@clowe/shared';
+import { MAX_DELIVERY_ATTEMPTS, trackDay } from '@clowe/shared';
 import { prisma } from '../../db';
 import { ApiError } from '../../utils/ApiError';
 import { creditExpiryFrom } from '../../routes/credits';
@@ -7,6 +7,7 @@ import { returnStock } from '../stockService';
 import { valueOfLines } from './codAmount';
 import { shippingProvider } from './index';
 import { ShippingProviderError, type NdrAction } from './ShippingProvider';
+import { sendOrderSms } from '../messaging/orderSms';
 
 // ---------------------------------------------------------------------------
 // When delivery goes wrong.
@@ -71,6 +72,7 @@ export async function startRto(shipment: ShipmentForRto, at: Date = new Date()):
   }
 
   const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: shipment.sellerId }, select: { userId: true } });
+  sendOrderSms('RTO', order.shipPhone, { orderNumber: order.orderNumber });
   await prisma.notification.createMany({
     data: [
       {
@@ -101,8 +103,9 @@ export async function notifyFailedAttempt(
 ): Promise<void> {
   const last = attempt >= MAX_DELIVERY_ATTEMPTS;
   const ofMax = `attempt ${Math.min(attempt, MAX_DELIVERY_ATTEMPTS)} of ${MAX_DELIVERY_ATTEMPTS}`;
-  const order = await prisma.order.findUniqueOrThrow({ where: { id: shipment.orderId }, select: { id: true, userId: true, orderNumber: true } });
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: shipment.orderId }, select: { id: true, userId: true, orderNumber: true, shipPhone: true } });
   const seller = await prisma.sellerProfile.findUniqueOrThrow({ where: { id: shipment.sellerId }, select: { userId: true } });
+  sendOrderSms('DELIVERY_FAILED', order.shipPhone, { orderNumber: order.orderNumber, reason });
   await prisma.notification.createMany({
     data: [
       {
@@ -125,6 +128,28 @@ export async function notifyFailedAttempt(
       },
     ],
   });
+}
+
+/** Out for delivery: the buyer hears once per trip — once per day the courier sets out with it. */
+export async function notifyOutForDelivery(shipment: { id: string; orderId: string; awbNumber: string | null }, at: Date = new Date()): Promise<void> {
+  const order = await prisma.order.findUniqueOrThrow({ where: { id: shipment.orderId }, select: { id: true, userId: true, orderNumber: true, shipPhone: true } });
+  const day = trackDay(at);
+  const awb = shipment.awbNumber ?? '—';
+  // Back at the hub and out again the same day is the same trip.
+  const already = await prisma.notification.count({
+    where: { userId: order.userId, type: 'ORDER_OUT_FOR_DELIVERY', body: { contains: `AWB ${awb}) is out for delivery on ${day}` } },
+  });
+  if (already > 0) return;
+  await prisma.notification.create({
+    data: {
+      userId: order.userId,
+      type: 'ORDER_OUT_FOR_DELIVERY',
+      title: `Out for delivery — ${order.orderNumber}`,
+      body: `Your parcel (Delhivery AWB ${awb}) is out for delivery on ${day}. Keep your phone handy: the courier calls before coming.`,
+      linkHref: `/account/orders/${order.id}`,
+    },
+  });
+  sendOrderSms('OUT_FOR_DELIVERY', order.shipPhone, { orderNumber: order.orderNumber, awb: shipment.awbNumber ?? '' });
 }
 
 /** The parcel is back with the seller: ask them to check it. */

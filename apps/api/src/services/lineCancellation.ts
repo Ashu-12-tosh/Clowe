@@ -60,7 +60,7 @@ export async function cancelOrderLines(input: {
   const moved = await prisma.$transaction(async (tx) => {
     const { count } = await tx.orderItem.updateMany({
       where: { id: { in: [...lineIds] }, status: { in: input.statuses } },
-      data: { status: 'CANCELLED', ...(told ? { cancelReason: input.reason } : {}) },
+      data: { status: 'CANCELLED', cancelledBy: input.by, cancelledAt: new Date(), ...(told ? { cancelReason: input.reason } : {}) },
     });
     if (count !== lines.length) return false;
     for (const l of lines) {

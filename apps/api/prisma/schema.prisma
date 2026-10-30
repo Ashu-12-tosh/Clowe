@@ -1556,6 +1556,9 @@ model OrderItem {
   nonCancellable Boolean @default(false)
   // Why a seller or admin cancelled this line, as the buyer was told.
   cancelReason   String?
+  // CUSTOMER | SELLER | ADMIN | PAYMENT_FAILED, and when: what tracking tells the buyer.
+  cancelledBy    String?
+  cancelledAt    DateTime?
   // The GST rate this line was sold at, likewise fixed at checkout: invoices,
   // the ledger, payouts and GSTR-8 read it, so a later GST change (the flat
   // 18%) never rewrites a past sale. Null as above.
@@ -1681,6 +1684,9 @@ model Shipment {
   rtoFreightPaise       Int?
   /// Delhivery's own delivery date for the parcel, from tracking once booked.
   courierPromisedAt     DateTime?
+  /// When Delhivery was last asked about this parcel (poll, refresh or admin):
+  /// a buyer's "Refresh" asks again at most every 10 minutes.
+  trackedAt             DateTime?
   /// Why it went back (RTO): the courier's words on the first return scan, kept once.
   rtoReason             String?
   /// COD lines are payable only once the courier's remittance for this AWB is matched.

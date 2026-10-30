@@ -55,6 +55,7 @@ import { hasPackingVideo } from '../services/packingVideos';
 import { shippingProvider } from '../services/shipping';
 import { syncShipmentsFromLines } from '../services/shipping/shipments';
 import { refreshShipments } from '../services/shipping/tracking';
+import { orderTracking } from '../services/shipping/trackingView';
 import { requestNdrAction } from '../services/shipping/rto';
 import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
 import { createManualOrder } from '../services/manualOrderService';
@@ -562,6 +563,7 @@ adminOrdersRouter.get('/:id', async (req, res, next) => {
         subject: c.subject ?? 'Support ticket',
         status: c.status,
       })),
+      tracking: await orderTracking(order.id),
     };
 
     res.json({ success: true, data: body });
@@ -846,7 +848,7 @@ adminOrdersRouter.post('/:id/cancel', async (req, res, next) => {
     await prisma.$transaction([
       prisma.orderItem.updateMany({
         where: { id: { in: live.map((i) => i.id) } },
-        data: { status: 'CANCELLED' },
+        data: { status: 'CANCELLED', cancelledBy: 'ADMIN', cancelledAt: new Date() },
       }),
       prisma.order.update({
         where: { id: order.id },

@@ -484,6 +484,8 @@ export interface OrderListRow {
   /** True while every item can still be re-added to the cart. */
   canBuyAgain: boolean;
   createdAt: string;
+  /** The parcel needing the buyer's eye: a status chip and a plain-words headline. */
+  tracking: import('./tracking').OrderTrackingSummary | null;
 }
 
 export interface OrderListResponse {
@@ -680,6 +682,8 @@ export interface OrderDetailView {
   canCancel: boolean;
   /** Hours after delivery to claim a damaged, wrong or defective item (no change-of-mind returns). */
   claimWindowHours: number;
+  /** One tracking bar per parcel (a multi-seller order has several). */
+  tracking: import('./tracking').ParcelTracking[];
 }
 
 export const returnRequestSchema = z

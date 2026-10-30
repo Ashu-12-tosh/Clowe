@@ -8,7 +8,7 @@ import { markLineDelivered, markLineShipped } from './lineTransitions';
 import { flagShipmentLost } from './lostParcels';
 import { failPickup } from './pickups';
 import { isNotPicked } from './scanStatus';
-import { notifyFailedAttempt, notifyRtoArrived, startRto } from './rto';
+import { notifyFailedAttempt, notifyOutForDelivery, notifyRtoArrived, startRto } from './rto';
 import { applyReverseScan } from './reversePickup';
 import { syncShipmentsFromLines } from './shipments';
 import { TRACK_BATCH, type TrackingResult } from './ShippingProvider';
@@ -157,6 +157,10 @@ export async function applyTracking(result: TrackingResult, source: TrackingSour
       for (const line of live) await markLineDelivered(line.id, at);
       await prisma.shipment.update({ where: { id: shipment.id }, data: { deliveredAt: at } });
     }
+    if (next === 'OUT_FOR_DELIVERY') {
+      const trip = scans.filter((s) => s.statusType.toUpperCase() === 'UD' && s.status.toLowerCase() === 'dispatched').reduce<Date | null>((m, s) => (!m || s.at > m ? s.at : m), null);
+      await notifyOutForDelivery(shipment, trip ?? new Date());
+    }
     if (next === 'DELIVERY_FAILED') {
       // Counted per failed attempt; up to three are made (Shipping Policy 6.5).
       const { deliveryAttempts } = await prisma.shipment.update({
@@ -232,7 +236,10 @@ export function rtoReasonOf(result: TrackingResult, previousStatusText: string |
 export async function refreshShipments(awbNumbers: string[], source: TrackingSource): Promise<AppliedTracking[]> {
   const out: AppliedTracking[] = [];
   for (let i = 0; i < awbNumbers.length; i += TRACK_BATCH) {
-    const results = await shippingProvider.track(awbNumbers.slice(i, i + TRACK_BATCH));
+    const batch = awbNumbers.slice(i, i + TRACK_BATCH);
+    const results = await shippingProvider.track(batch);
+    // Asked just now: a buyer's "Refresh" within the next few minutes uses what we have.
+    await prisma.shipment.updateMany({ where: { awbNumber: { in: batch } }, data: { trackedAt: new Date() } });
     for (const r of results) out.push(await applyTracking(r, source));
   }
   return out;

@@ -38,6 +38,8 @@ import { assertCanPlaceOrders, canBuyTestListings, canPlaceOrders } from '../ser
 import { exchangeAllowed, raiseClaim, rulesForDelivery } from '../services/returnClaims';
 import { raiseComplaint } from '../services/complaintService';
 import { scanViews } from './track';
+import { orderTracking, ordersTrackingSummary, refreshOrderTracking } from '../services/shipping/trackingView';
+import { trackRefreshLimiter } from '../middleware/rateLimits';
 import { prisma } from '../db';
 import { creditNotesFor } from '../services/creditNotes';
 import { buildTaxInvoice } from '../services/taxInvoice';
@@ -605,6 +607,7 @@ ordersRouter.get('/', async (req, res, next) => {
     ) as Record<OrderFilter, number>;
 
     const isHidden = await hiddenProductTest();
+    const trackingByOrder = await ordersTrackingSummary(orders.map((o) => o.id));
     const rows: OrderListRow[] = orders.map((o) => {
       const images = o.items
         .map((i) => i.product.images[0]?.url)
@@ -633,6 +636,7 @@ ordersRouter.get('/', async (req, res, next) => {
           (i) => i.product.status === 'APPROVED' && !isHidden(i.product) && i.variant.stock > 0,
         ),
         createdAt: o.createdAt.toISOString(),
+        tracking: trackingByOrder.get(o.id) ?? null,
       };
     });
 
@@ -938,6 +942,7 @@ ordersRouter.get('/:id', async (req, res, next) => {
       canRequestIntercept: !intercept && liveItems.some((i) => i.status === 'SHIPPED'),
       interceptRequest: intercept ? { complaintId: intercept.complaintId, status: intercept.status } : null,
       claimWindowHours: CLAIM_WINDOW_HOURS,
+      tracking: await orderTracking(order.id),
     };
     // Return photos are private; this is the buyer's own order.
     const returnBlocks = body.items.flatMap((i) => (i.returnInfo ? [i.returnInfo] : []));
@@ -946,6 +951,19 @@ ordersRouter.get('/:id', async (req, res, next) => {
       block.photos = resolved[k].photos;
     });
     res.json({ success: true, data: body });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// "Refresh" on the buyer's tracking: asks Delhivery about the order's moving
+// parcels, each at most once per 10 minutes; the order's tracking comes back.
+ordersRouter.post('/:id/tracking/refresh', trackRefreshLimiter, async (req, res, next) => {
+  try {
+    const order = await prisma.order.findUnique({ where: { id: req.params.id }, select: { id: true, userId: true } });
+    if (!order || order.userId !== req.auth!.userId) throw ApiError.notFound('Order not found');
+    const refresh = await refreshOrderTracking(order.id);
+    res.json({ success: true, data: { ...refresh, tracking: await orderTracking(order.id) } });
   } catch (err) {
     next(err);
   }

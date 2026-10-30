@@ -2,19 +2,14 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { MAX_DELIVERY_ATTEMPTS, type LostParcelChoice, type OrderDetailItem } from '@clowe/shared';
+import type { LostParcelChoice, OrderDetailItem } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
-import { formatPaise, istDay } from '@/lib/format';
-
-// Indian calendar dates, as the order page and checkout quote them.
-function fmtShort(iso: string): string {
-  return istDay(iso);
-}
+import { formatPaise } from '@/lib/format';
 
 /**
- * A line's parcel as the Shipping Policy describes it: the estimate from
- * dispatch (3.2), failed attempts out of three (6.5), and — for a parcel
- * lost in transit (9.2) — the buyer's choice of a replacement or a refund.
+ * A line's parcel lost in transit (Shipping Policy 9.2): the buyer's choice of
+ * a replacement or a refund. Where it is and when it arrives is the tracking
+ * bar's (TrackingBar).
  */
 export function ParcelStatus({
   orderId,
@@ -46,17 +41,6 @@ export function ParcelStatus({
 
   return (
     <div className="mt-1.5 space-y-1" data-parcel>
-      {parcel && item.status === 'SHIPPED' && !parcel.lost && parcel.etaFrom && parcel.etaTo && (
-        <p className="t-caption text-gray-600">
-          Expected {fmtShort(parcel.etaFrom)} – {fmtShort(parcel.etaTo)}
-        </p>
-      )}
-      {parcel && item.status === 'SHIPPED' && parcel.deliveryAttempts > 0 && !parcel.lost && (
-        <p className="t-caption font-semibold text-amber-700">
-          Delivery attempt {Math.min(parcel.deliveryAttempts, MAX_DELIVERY_ATTEMPTS)} of {MAX_DELIVERY_ATTEMPTS} failed
-          {parcel.deliveryAttempts >= MAX_DELIVERY_ATTEMPTS ? ' — the parcel goes back to the seller' : ' — the courier will try again'}
-        </p>
-      )}
       {parcel?.lost && !parcel.lostChoice && (
         <div className="mt-2 rounded-lg border border-red-200 bg-red-50 p-3" data-lost-choice>
           <p className="t-caption font-bold text-red-700">This parcel is lost in transit</p>

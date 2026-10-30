@@ -16,6 +16,7 @@ import {
 } from '@/components/cart/CartIcons';
 import PolicyText from '@/components/PolicyText';
 import EmailPrompt from '@/components/account/EmailPrompt';
+import { TrackingChip } from '@/components/orders/TrackingBar';
 
 const TRUST_STRIP = [
   { Icon: BoxIcon, title: 'Free Shipping', text: 'On all orders' },
@@ -182,7 +183,7 @@ export default function AccountOverviewPage() {
                           Order #{order.orderNumber}
                         </p>
                         <p className="mt-0.5 text-xs text-gray-500">
-                          Placed on {formatDate(order.createdAt)}
+                          {order.tracking ? order.tracking.headline : `Placed on ${formatDate(order.createdAt)}`}
                         </p>
                       </div>
                       <div className="hidden shrink-0 text-right sm:block">
@@ -193,13 +194,17 @@ export default function AccountOverviewPage() {
                           {order.itemCount} Item{order.itemCount === 1 ? '' : 's'}
                         </p>
                       </div>
-                      <span
-                        className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-bold ${
-                          STATUS_STYLES[order.status] ?? 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {statusLabel(order.status)}
-                      </span>
+                      {order.tracking ? (
+                        <TrackingChip summary={order.tracking} className="shrink-0" />
+                      ) : (
+                        <span
+                          className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-bold ${
+                            STATUS_STYLES[order.status] ?? 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {statusLabel(order.status)}
+                        </span>
+                      )}
                       <span className="shrink-0 text-gray-300">›</span>
                     </Link>
                   </li>

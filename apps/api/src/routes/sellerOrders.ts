@@ -73,6 +73,7 @@ import {
   dispatchContext,
   type DispatchContext,
 } from '../services/lateDispatch';
+import { orderTracking } from '../services/shipping/trackingView';
 
 export const sellerOrdersRouter = Router();
 sellerOrdersRouter.use(requireAuth, requireSeller, blockSuspendedWrites);
@@ -1214,7 +1215,7 @@ sellerOrdersRouter.get('/:orderId', async (req, res, next) => {
     });
     if (!order || order.items.length === 0) throw ApiError.notFound('Order not found');
     const row = toRow(order, await dispatchContext(sellerId, [order.id]));
-    res.json({ success: true, data: { ...row, packingVideo: await packingVideoView(order.id, sellerId) } });
+    res.json({ success: true, data: { ...row, packingVideo: await packingVideoView(order.id, sellerId), tracking: await orderTracking(order.id, { sellerId }) } });
   } catch (err) {
     next(err);
   }

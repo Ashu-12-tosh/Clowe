@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { phoneSchema } from './auth';
+import { loginIdentifierSchema, phoneSchema } from './auth';
+import type { ParcelTracking } from './tracking';
 import { ORDER_NUMBER_PATTERN } from './orderNumber';
 
 // ---------------------------------------------------------------------------
@@ -110,39 +111,44 @@ export interface NotificationList {
 // Public order tracking
 // ---------------------------------------------------------------------------
 
-export const trackOrderSchema = z.object({
-  orderNumber: z
-    .string()
-    .trim()
-    .regex(ORDER_NUMBER_PATTERN, 'Check the order number: it is on your order confirmation, e.g. CLW-7KQ3MX9P2T'),
-  phone: phoneSchema,
-});
+const trackOrderNumber = z
+  .string()
+  .trim()
+  .regex(ORDER_NUMBER_PATTERN, 'Check the order number: it is on your order confirmation, e.g. CLW-7KQ3MX9P2T');
+
+/** Kept for links and tools from before Track Order asked for a code. */
+export const trackOrderSchema = z.object({ orderNumber: trackOrderNumber, phone: phoneSchema });
 export type TrackOrderInput = z.infer<typeof trackOrderSchema>;
 
-/** One courier scan, as buyers see it: what happened, where, when. */
+/**
+ * Track Order, step 1: the order number and the phone or email on the order.
+ * A one-time code goes to that phone (SMS) or that email.
+ */
+export const trackCodeRequestSchema = z.object({ orderNumber: trackOrderNumber, contact: loginIdentifierSchema });
+/** Step 2: the code. Right, it gives a short-lived token for this one order. */
+export const trackCodeVerifySchema = trackCodeRequestSchema.extend({ code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code') });
+
+export interface TrackCodeSent {
+  channel: 'sms' | 'email';
+  /** Where it went, masked: "98•••••210" or "pa•••@gmail.com". */
+  sentTo: string;
+  resendAfterSec: number;
+  expiresInSec: number;
+  /** Development with the mock only. */
+  devOtp?: string;
+}
+
+export interface TrackCodeVerified {
+  /** Sent back as the x-track-token header; good for TRACK_TOKEN_TTL_MIN minutes. */
+  token: string;
+  expiresInSec: number;
+}
+
+/** One courier scan, as older pages show it: what happened, where, when. */
 export interface TrackingScanView {
   at: string;
   status: string;
   location: string | null;
-}
-
-export interface TrackOrderItem {
-  title: string;
-  imageUrl: string | null;
-  quantity: number;
-  size: string;
-  color: string;
-  variantLabel: string;
-  status: string;
-  shippedAt: string | null;
-  deliveredAt: string | null;
-  /**
-   * Which courier has it. The courier's own tracking number and link are not
-   * part of public tracking: they are on the buyer's order page, signed in.
-   */
-  courierName: string | null;
-  /** The courier's scans for this line's parcel, newest first. */
-  scans: TrackingScanView[];
 }
 
 export interface TrackOrderView {
@@ -153,5 +159,6 @@ export interface TrackOrderView {
   shipCity: string;
   shipState: string;
   shipPincode: string;
-  items: TrackOrderItem[];
+  /** One bar per parcel, with Delhivery's scans and the AWB. */
+  parcels: ParcelTracking[];
 }

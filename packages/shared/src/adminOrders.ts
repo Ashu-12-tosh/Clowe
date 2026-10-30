@@ -232,6 +232,8 @@ export interface AdminOrderDetail {
   giftMessage: string | null;
   /** Support tickets the shopper raised about this order. */
   complaints: { id: string; reference: string; subject: string; status: string }[];
+  /** Each parcel's bar and Delhivery's scans, as the buyer sees them (read-only). */
+  tracking: import('./tracking').ParcelTracking[];
 }
 
 export interface AdminOrdersPage {

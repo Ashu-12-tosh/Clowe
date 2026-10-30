@@ -72,12 +72,29 @@ export const accountLookupLimiter = rateLimit({
   message: limitError('Too many lookups from this connection. Please try again in 15 minutes.'),
 });
 
-/** Public order tracking: a shopper checks an order a few times, not hundreds. */
+/**
+ * Track Order views, once the code is entered (or signed in): a shopper
+ * reloads an order a few times, not hundreds. Code requests and codes have
+ * the OTP limits.
+ */
+export const TRACK_VIEW_LIMIT = 30;
 export const trackLimiter = rateLimit({
   ...common,
   windowMs: 15 * 60 * 1000,
-  limit: 10,
+  limit: TRACK_VIEW_LIMIT,
   message: limitError('Too many tracking lookups. Please try again in 15 minutes.'),
+});
+
+/**
+ * "Refresh" on an order's tracking. Each parcel asks the courier at most once
+ * per 10 minutes anyway (services/shipping/trackingView); this stops a script
+ * hammering the endpoint itself.
+ */
+export const trackRefreshLimiter = rateLimit({
+  ...common,
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  message: limitError('Too many refreshes. Please try again in a few minutes.'),
 });
 
 /** Content-Security-Policy reports: one page load can send a few; a flood is not a browser. */

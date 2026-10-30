@@ -21,6 +21,7 @@ import { announceBooking } from '@/components/seller/orders/bookingNotice';
 import { ParcelIssues } from '@/components/seller/orders/ParcelIssues';
 import { ExternalLink } from '@/components/ExternalLink';
 import OrderCharges from '@/components/seller/orders/OrderCharges';
+import { OrderTracking } from '@/components/orders/TrackingBar';
 
 type Action = 'assign' | 'pack' | 'ship' | 'deliver';
 
@@ -431,6 +432,15 @@ export default function SellerOrderDetailPage({ params: paramsPromise }: { param
           ))}
 
           <ParcelIssues parcels={order.parcels} buyerRtoCount={order.buyerRtoCount} onChanged={load} flash={flash} />
+
+          {order.tracking && order.tracking.length > 0 && (
+            <section aria-labelledby="seller-tracking" className="space-y-2">
+              <h2 id="seller-tracking" className="text-sm font-bold text-ink-900">
+                Tracking (as the buyer sees it)
+              </h2>
+              <OrderTracking parcels={order.tracking} />
+            </section>
+          )}
 
           {booking && (
             <BookingConfirm

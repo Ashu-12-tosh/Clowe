@@ -4,7 +4,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Track your order',
   description:
-    'Track your Clowe order without logging in: enter your order number and the phone number used on it to see its status and the courier carrying your parcel.',
+    'Track your Clowe order: enter your order number and the phone or email on it, and the code we send there, to see where each parcel is and when it will arrive.',
 };
 
 export default function TrackLayout({ children }: { children: React.ReactNode }) {

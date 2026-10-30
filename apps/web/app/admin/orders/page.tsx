@@ -35,6 +35,7 @@ import Spinner from '@/components/Spinner';
 import { formatPaise } from '@/lib/format';
 import CancelReasonDialog, { type CancelReasonChoice } from '@/components/admin/CancelReasonDialog';
 import { BarList, DonutChart, LineChart } from '@/components/charts/Charts';
+import { OrderTracking } from '@/components/orders/TrackingBar';
 
 // ---------------------------------------------------------------------------
 // Shared bits
@@ -1221,6 +1222,12 @@ function OrderDrawer({
           </p>
         )}
       </Panel>
+
+      {detail.tracking.length > 0 && (
+        <Panel title="Tracking (as the buyer sees it)">
+          <OrderTracking parcels={detail.tracking} />
+        </Panel>
+      )}
 
       {detail.complaints.length > 0 && (
         <Panel title="Support tickets">

@@ -27,6 +27,7 @@ import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import { productListItemInclude, toProductListItem } from '../utils/productListing';
 import { toAddressInfo } from './addresses';
+import { ordersTrackingSummary } from '../services/shipping/trackingView';
 
 export const meRouter = Router();
 meRouter.use(requireAuth);
@@ -167,6 +168,7 @@ meRouter.get('/overview', async (req, res, next) => {
     if (!user) throw ApiError.notFound('Account not found');
 
     const defaultAddress = addresses.find((a) => a.isDefault) ?? addresses[0] ?? null;
+    const trackingByOrder = await ordersTrackingSummary(recentOrders.map((o) => o.id));
     const body: AccountOverview = {
       profile: {
         name: user.name,
@@ -207,6 +209,7 @@ meRouter.get('/overview', async (req, res, next) => {
           etaTo: null,
           canBuyAgain: false,
           createdAt: o.createdAt.toISOString(),
+          tracking: trackingByOrder.get(o.id) ?? null,
         };
       }),
       defaultAddress: defaultAddress ? toAddressInfo(defaultAddress) : null,

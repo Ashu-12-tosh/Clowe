@@ -201,17 +201,18 @@ describe('the webhook', () => {
 });
 
 describe('who sees the scans', () => {
-  it('shows buyers the scans on public tracking and their order page, never the AWB in public', async () => {
+  it('shows buyers the scans in plain words on their order page and on Track Order (signed in)', async () => {
     const p = await awaitingPickup();
     mock.simulate(p.awb, 'PICKED_UP');
     await pollOpenShipments();
     const order = await prisma.order.findUniqueOrThrow({ where: { id: p.orderId } });
-    const pub = await fetch(`${base}/api/track?orderNumber=${order.orderNumber}&phone=9194400002`);
-    const body = (await pub.json()) as { data: { items: { scans: { status: string }[] }[] } };
-    expect(body.data.items[0]!.scans.map((s) => s.status)).toEqual(['In Transit', 'Manifested']);
-    expect(JSON.stringify(body)).not.toContain(p.awb);
+    const res = await fetch(`${base}/api/track/mine?orderNumber=${order.orderNumber}`, { headers: { authorization: `Bearer ${buyerToken}` } });
+    const body = (await res.json()) as { data: { parcels: { awbNumber: string; courierName: string; scans: { description: string }[] }[] } };
+    expect(body.data.parcels[0]!.scans.map((s) => s.description)).toEqual(['In transit', 'Shipping label created — waiting for the courier to collect it']);
+    expect(body.data.parcels[0]).toMatchObject({ awbNumber: p.awb, courierName: 'Delhivery' });
     const mine = await call('GET', `/api/orders/${p.orderId}`, undefined, buyerToken);
     expect((mine.json.data.items as { scans: unknown[] }[])[0]!.scans).toHaveLength(2);
+    expect((mine.json.data.tracking as { scans: unknown[] }[])[0]!.scans).toHaveLength(2);
   });
 
   it('lets an admin refresh one parcel now', async () => {

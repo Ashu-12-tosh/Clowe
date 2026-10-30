@@ -191,9 +191,11 @@ export const authService = {
    * Generate an OTP, store its hash, deliver via the configured provider.
    * With the mock provider outside production, the OTP is also returned in the
    * response (devOtp) so the login page can show it. Never once a real SMS
-   * provider is live: then the code exists only in the SMS.
+   * provider is live: then the code exists only in the SMS. `deliver` sends
+   * it another way (Track Order emails a code to the order's address; the key
+   * is then "email:<address>", never a phone number).
    */
-  async requestOtp(phone: string): Promise<OtpRequestResult> {
+  async requestOtp(phone: string, deliver: (code: string) => Promise<void> = (code) => otpProvider.sendOtp(phone, code)): Promise<OtpRequestResult> {
     const latest = await prisma.otpCode.findFirst({
       where: { phone },
       orderBy: { createdAt: 'desc' },
@@ -229,7 +231,7 @@ export const authService = {
       },
     });
     try {
-      await otpProvider.sendOtp(phone, code);
+      await deliver(code);
     } catch (err) {
       // The provider has logged why. Drop the unsent code so "try again" is not
       // met by the resend cooldown, and so it cannot be used.

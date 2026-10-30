@@ -128,13 +128,13 @@ async function apiOk(method, p, token, body) {
   return r.data;
 }
 
-/** Delhivery-shaped scan for one AWB, through the local webhook. */
-async function scan(awb, status, statusType, code) {
+/** Delhivery-shaped scan for one AWB, through the local webhook (with the courier's words and place, when given). */
+async function scan(awb, status, statusType, code, { instructions = '', location = '' } = {}) {
   const res = await fetch(`${API}/api/webhooks/delhivery`, {
     method: 'POST',
     headers: { 'x-forwarded-for': SCRIPT_IP, authorization: `Bearer ${WEBHOOK_TOKEN}`, 'content-type': 'application/json' },
     body: JSON.stringify({
-      Shipment: { AWB: awb, Status: { Status: status, StatusType: statusType, StatusCode: code, StatusDateTime: new Date().toISOString() } },
+      Shipment: { AWB: awb, Status: { Status: status, StatusType: statusType, StatusCode: code, StatusDateTime: new Date().toISOString(), Instructions: instructions, StatusLocation: location } },
     }),
   });
   const json = await res.json();
@@ -142,13 +142,14 @@ async function scan(awb, status, statusType, code) {
 }
 const SCANS = {
   PICKED_UP: ['In Transit', 'UD', 'X-PPOM'],
+  OUT_FOR_DELIVERY: ['Dispatched', 'UD', 'X-DDD3FD'],
   DELIVERED: ['Delivered', 'DL', 'EOD-38'],
   DELIVERY_FAILED: ['Pending', 'UD', 'EOD-11'],
   RTO: ['In Transit', 'RT', 'RT-101'],
   RTO_DELIVERED: ['RTO', 'DL', 'RT-110'],
   LOST: ['Lost', 'UD', 'LT-100'],
 };
-const courier = (awb, event) => scan(awb, ...SCANS[event]);
+const courier = (awb, event, extra) => scan(awb, ...SCANS[event], extra);
 
 /** Run one API service function in-process (same code, same database) — the "time machine". */
 function runService(code) {
@@ -397,6 +398,7 @@ async function main() {
     if (want(12)) await renewAll().then(flow12Support);
     if (want(13)) await renewAll().then(flow13Admin);
     if (want(14)) await renewAll().then(flow14ChargesGst);
+    if (want(15)) await renewAll().then(flow15Tracking);
   } finally {
     fs.writeFileSync(path.join(OUT, 'api.log'), stack.apiLog.join(''));
     fs.writeFileSync(path.join(OUT, 'web.log'), stack.webLog.join(''));
@@ -2496,6 +2498,142 @@ async function flow14ChargesGst() {
     await page.getByRole('heading', { name: 'Delivery Charges Explained' }).waitFor({ timeout: 120_000 });
     check(await page.getByText(/Hinglish mein/).count(), 'no Hinglish');
   }, { page });
+}
+
+// ---------------------------------------------------------------------------
+// 15 Tracking bar: order page, list, Track Order, seller page; mobile + desktop
+// ---------------------------------------------------------------------------
+/** The tracking section, desktop and phone width; the phone must not scroll sideways. */
+async function trackingShots(page, name, selector = '#tracking') {
+  const area = page.locator(selector).first();
+  await area.screenshot({ path: path.join(OUT, `tracking-${name}-desktop.png`) });
+  const was = page.viewportSize();
+  await page.setViewportSize({ width: 360, height: 800 });
+  try {
+    await page.waitForTimeout(400);
+    const sideways = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    check(sideways <= 0, `${name}: the page scrolls ${sideways}px sideways at 360px`);
+    await area.screenshot({ path: path.join(OUT, `tracking-${name}-mobile.png`) });
+  } finally {
+    await page.setViewportSize(was);
+  }
+}
+
+async function orderPageTracking(page, orderId) {
+  await goto(page, `/account/orders/${orderId}`);
+  await page.locator('[data-parcel-tracking]').first().waitFor({ timeout: 120_000 });
+  return page.locator('[data-parcel-tracking]').first();
+}
+
+async function flow15Tracking() {
+  const F = '15 Tracking';
+  const page = () => S.shopPage;
+
+  await step(F, 'in transit: headline, Shipped current, AWB + "Courier: Delhivery", every scan under "See all updates"', async () => {
+    const o = await prepaidOrder(S.simpleVariantId);
+    const s = await fulfil(o.id, o.items[0].id, S.sellerPage, { tag: 'track' });
+    await courier(s.awbNumber, 'PICKED_UP', { instructions: 'Bag Received at Facility', location: 'Mumbai_Bhiwandi_HB (Maharashtra)' });
+    S.track = { orderId: o.id, orderNumber: o.orderNumber, awb: s.awbNumber };
+    const card = await orderPageTracking(page(), o.id);
+    const headline = await card.locator('[data-track-headline]').innerText();
+    check(/^(Arriving|On its way|Delayed)/.test(headline), `headline "${headline}"`);
+    check((await card.locator('[data-step=SHIPPED]').getAttribute('data-state')) === 'current', 'Shipped is not the current step');
+    check(/\d{1,2}:\d{2}/.test(await card.locator('[data-step=ORDERED]').innerText()), 'Ordered has no time');
+    check((await card.locator('[data-awb]').innerText()) === s.awbNumber, 'AWB not shown');
+    check(/Courier:\s*Delhivery/.test(await card.innerText()), 'no "Courier: Delhivery"');
+    await card.locator('[data-see-updates]').click();
+    const scans = await card.locator('[data-scan-list] li').allInnerTexts();
+    check(scans.length >= 2 && /Bag received at facility/i.test(scans[0]) && /Mumbai Bhiwandi, Maharashtra/.test(scans[0]), `scans: ${scans.join(' | ')}`);
+    await trackingShots(page(), 'in-transit');
+  }, { page, needs: ['shopper', 'live', 'delivered'], key: 'track' });
+
+  await step(F, 'Refresh: asks the courier, then "already up to date" (one call per AWB per 10 min)', async () => {
+    const card = await orderPageTracking(page(), S.track.orderId);
+    await card.locator('[data-refresh]').click();
+    await page().locator('[data-refresh-note]').filter({ hasText: /just now|up to date/i }).waitFor({ timeout: 60_000 });
+    await card.locator('[data-refresh]').click();
+    await page().locator('[data-refresh-note]').filter({ hasText: /Already up to date/ }).waitFor({ timeout: 60_000 });
+    check(await card.locator('[data-last-updated]').count(), 'no "Last updated"');
+  }, { page, needs: ['track'] });
+
+  await step(F, 'out for delivery: "Out for delivery today", the step current; buyer notified', async () => {
+    await courier(S.track.awb, 'OUT_FOR_DELIVERY', { location: 'Mumbai_Bandra_DC (Maharashtra)' });
+    const card = await orderPageTracking(page(), S.track.orderId);
+    const headline = await card.locator('[data-track-headline]').innerText();
+    check(headline === 'Out for delivery today', `headline "${headline}"`);
+    check((await card.locator('[data-step=OUT_FOR_DELIVERY]').getAttribute('data-state')) === 'current', 'step not current');
+    check(await prisma.notification.count({ where: { userId: S.shopperId, type: 'ORDER_OUT_FOR_DELIVERY' } }), 'no out-for-delivery notification');
+    await trackingShots(page(), 'out-for-delivery');
+  }, { page, needs: ['track'] });
+
+  await step(F, 'failed attempt: its own box, the reason in simple words and what happens next', async () => {
+    await courier(S.track.awb, 'DELIVERY_FAILED', { instructions: 'Consignee Unavailable', location: 'Mumbai_Bandra_DC (Maharashtra)' });
+    const card = await orderPageTracking(page(), S.track.orderId);
+    const box = await card.locator('[data-track-exception=FAILED_ATTEMPT]').innerText();
+    check(/attempt 1 of 3 failed/.test(box) && /Nobody was available/.test(box) && /try again/.test(box), `box: ${box}`);
+    await trackingShots(page(), 'failed-attempt');
+  }, { page, needs: ['track'] });
+
+  await step(F, 'delivered: date and time, every step done; the order list shows a chip and the headline', async () => {
+    await courier(S.track.awb, 'OUT_FOR_DELIVERY');
+    await courier(S.track.awb, 'DELIVERED');
+    const card = await orderPageTracking(page(), S.track.orderId);
+    const headline = await card.locator('[data-track-headline]').innerText();
+    check(/^Delivered on \w{3}, \d{1,2} \w{3}, \d{1,2}:\d{2} (AM|PM)$/.test(headline), `headline "${headline}"`);
+    const states = await card.locator('[data-step]').evaluateAll((els) => els.map((e) => e.getAttribute('data-state')));
+    check(states.every((x) => x === 'done'), `steps ${states.join(' ')}`);
+    await trackingShots(page(), 'delivered');
+    await goto(page(), '/orders');
+    const row = page().locator('li', { hasText: S.track.orderNumber }).first();
+    await row.locator('[data-tracking-chip]').filter({ hasText: 'Delivered' }).waitFor({ timeout: 60_000 });
+    check(/Delivered on/.test(await row.locator('[data-order-headline]').innerText()), 'no headline in the list');
+  }, { page, needs: ['track'] });
+
+  await step(F, 'RTO: "going back to the seller" box with the refund', async () => {
+    const o = await prepaidOrder(S.simpleVariantId);
+    const s = await fulfil(o.id, o.items[0].id, S.sellerPage, { tag: 'track-rto' });
+    await courier(s.awbNumber, 'OUT_FOR_DELIVERY');
+    await courier(s.awbNumber, 'DELIVERY_FAILED', { instructions: 'Customer refused to accept' });
+    await courier(s.awbNumber, 'RTO', { instructions: 'Return to origin: consignee refused' });
+    const card = await orderPageTracking(page(), o.id);
+    check(/going back to the seller/.test(await card.locator('[data-track-headline]').innerText()), 'headline');
+    const box = await card.locator('[data-track-exception=RTO]').innerText();
+    check(/refused at the door/.test(box) && /[Rr]efund of ₹/.test(box), `box: ${box}`);
+    await trackingShots(page(), 'rto');
+  }, { page, needs: ['shopper', 'live', 'delivered'] });
+
+  await step(F, "Track Order: a stranger with the wrong phone sees nothing; the code sent to the order's phone opens it", async () => {
+    const p = await newPage('track-visitor');
+    try {
+      await goto(p, `/track?orderNumber=${encodeURIComponent(S.track.orderNumber)}`);
+      await p.locator('input[name=contact]').fill('9000000001');
+      await p.getByRole('button', { name: 'Track' }).click();
+      await p.getByRole('alert').filter({ hasText: /No order found/ }).waitFor({ timeout: 60_000 });
+      check(!(await p.locator('[data-track-result]').count()), 'a result was shown for the wrong phone');
+      await p.locator('input[name=contact]').fill(S.shopperPhone);
+      await withOtpCooldown(p, () => p.getByRole('button', { name: 'Track' }).click());
+      const hint = await p.getByText(/test code: \d{6}/).innerText({ timeout: 60_000 });
+      await p.locator('input[name=code]').fill(hint.match(/(\d{6})/)[1]);
+      await p.getByRole('button', { name: 'Show my order' }).click();
+      const card = p.locator('[data-track-result] [data-parcel-tracking]').first();
+      await card.waitFor({ timeout: 60_000 });
+      check(/^Delivered on/.test(await card.locator('[data-track-headline]').innerText()), 'Track Order headline');
+      check((await card.locator('[data-awb]').innerText()) === S.track.awb, 'no AWB on Track Order');
+      const text = await p.locator('[data-track-result]').innerText();
+      check(!text.includes('22 Linking Road') && !text.includes(S.shopperPhone), 'Track Order shows the street or the phone');
+      await trackingShots(p, 'track-order', '[data-track-result]');
+    } finally {
+      await p.context().close();
+    }
+  }, { needs: ['track'] });
+
+  await step(F, 'seller order page: the same bar and updates, read-only (no Refresh)', async () => {
+    await goto(S.sellerPage, `/seller/orders/${S.track.orderId}`);
+    const card = S.sellerPage.locator('[data-order-tracking] [data-parcel-tracking]').first();
+    await card.waitFor({ timeout: 120_000 });
+    check(/^Delivered on/.test(await card.locator('[data-track-headline]').innerText()), 'seller headline');
+    check(!(await card.locator('[data-refresh]').count()), 'the seller has a Refresh button');
+  }, { page: () => S.sellerPage, needs: ['track'] });
 }
 
 // ---------------------------------------------------------------------------
