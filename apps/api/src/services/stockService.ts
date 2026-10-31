@@ -29,6 +29,17 @@ const DEFAULT_WAREHOUSE = {
  * The warehouse new stock lands in. Creates one on first use so a fresh install
  * is never in a state where stock has nowhere to go.
  */
+/**
+ * Lines in the order their stock rows are locked: by variant id, the same in
+ * every transaction. Two multi-item orders taking (or giving back) stock in
+ * different orders each held a row the other needed, and Postgres killed one
+ * of them as a deadlock (pre-launch test, 76 times under load).
+ */
+export function inLockOrder<T extends { variantId: string }>(lines: readonly T[]): T[] {
+  // Plain code-unit order: the same as Postgres ORDER BY id COLLATE "C" (lockVariants).
+  return [...lines].sort((a, b) => (a.variantId < b.variantId ? -1 : a.variantId > b.variantId ? 1 : 0));
+}
+
 export async function ensureDefaultWarehouse(): Promise<Warehouse> {
   const existing = await prisma.warehouse.findFirst({
     where: { isDefault: true, isActive: true },
@@ -47,6 +58,18 @@ export async function ensureDefaultWarehouse(): Promise<Warehouse> {
   return prisma.warehouse.create({ data: { ...DEFAULT_WAREHOUSE, isDefault: true } });
 }
 
+/**
+ * Locks variant rows, in id order, before any warehouse row is touched. Orders
+ * lock the variant first and then its locations (checkout, cancel, RTO): every
+ * inventory change does the same, so the two never wait on each other in a
+ * circle (a Postgres deadlock, the buyer's Pay or the seller's save failing).
+ */
+export async function lockVariants(tx: Tx, variantIds: readonly string[]): Promise<void> {
+  const ids = [...new Set(variantIds)].sort();
+  if (ids.length === 0) return;
+  await tx.$queryRaw`SELECT id FROM "product_variants" WHERE id = ANY(${ids}::text[]) ORDER BY id COLLATE "C" FOR NO KEY UPDATE`;
+}
+
 /** Re-derive `ProductVariant.stock` from the per-warehouse rows. */
 async function syncVariantStock(tx: Tx, variantId: string): Promise<number> {
   const agg = await tx.stockLocation.aggregate({
@@ -54,6 +77,12 @@ async function syncVariantStock(tx: Tx, variantId: string): Promise<number> {
     _sum: { quantity: true },
   });
   const total = agg._sum.quantity ?? 0;
+  // Only raising it past the ceiling is refused: a product above it (units that
+  // came back at the ceiling) can still be counted down or moved.
+  if (total > MAX_STOCK) {
+    const was = (await tx.productVariant.findUnique({ where: { id: variantId }, select: { stock: true } }))?.stock ?? 0;
+    if (total > was) throw stockLimit();
+  }
   await tx.productVariant.update({ where: { id: variantId }, data: { stock: total } });
   return total;
 }
@@ -63,16 +92,20 @@ async function addToLocation(
   warehouseId: string,
   variantId: string,
   delta: number,
+  /** Units that were on sale already (a cancel, a failed payment): never refused by the ceiling. */
+  returning = false,
 ): Promise<void> {
   const location = await tx.stockLocation.findUnique({
     where: { warehouseId_variantId: { warehouseId, variantId } },
   });
   if (!location) {
     if (delta < 0) throw ApiError.badRequest('No stock in that warehouse', 'NO_STOCK');
+    if (delta > MAX_STOCK && !returning) throw stockLimit();
     await tx.stockLocation.create({ data: { warehouseId, variantId, quantity: delta } });
     return;
   }
   const next = location.quantity + delta;
+  if (next > MAX_STOCK && !returning) throw stockLimit();
   if (next < 0) {
     throw ApiError.badRequest(
       `Only ${location.quantity} unit(s) in that warehouse`,
@@ -108,6 +141,57 @@ function writeMovement(tx: Tx, input: MovementInput) {
   });
 }
 
+/**
+ * The stock on sale, put where the warehouse rows can see it. A variant made
+ * on the product form (or before inventory existed) carries its stock with no
+ * warehouse row, and every warehouse action re-derives the variant's stock
+ * from those rows — so receiving one unit turned 50 into 1 (pre-launch test).
+ * Before any warehouse change, the difference goes into the default warehouse
+ * as an opening balance (or, if the rows hold more than is on sale, comes off
+ * them), recorded in the ledger. What is on sale is what buyers were sold
+ * against, so it wins. Call with the variant locked.
+ *
+ * `into`: the warehouse it belongs in (a count or adjustment: that count is
+ * the truth for its warehouse). Otherwise the default warehouse, or — before
+ * one is set, as on a fresh install — `fallback`, the warehouse acted on.
+ */
+async function reconcileLocations(tx: Tx, variantId: string, place: { into?: string; fallback?: string } = {}): Promise<void> {
+  const variant = await tx.productVariant.findUnique({ where: { id: variantId }, select: { stock: true } });
+  if (!variant) return;
+  const agg = await tx.stockLocation.aggregate({ where: { variantId }, _sum: { quantity: true } });
+  const diff = variant.stock - (agg._sum.quantity ?? 0);
+  if (diff === 0) return;
+  if (diff > 0) {
+    const home =
+      place.into ?? (await tx.warehouse.findFirst({ where: { isDefault: true, isActive: true }, select: { id: true } }))?.id ?? place.fallback;
+    if (!home) return;
+    await addToLocation(tx, home, variantId, diff);
+    await writeMovement(tx, {
+      type: 'RECEIPT',
+      variantId,
+      quantity: diff,
+      toWarehouseId: home,
+      reason: 'Opening balance: stock on sale with no warehouse row',
+    });
+    return;
+  }
+  let extra = -diff;
+  const rows = await tx.stockLocation.findMany({ where: { variantId, quantity: { gt: 0 } }, orderBy: { quantity: 'desc' } });
+  for (const row of rows) {
+    if (extra <= 0) break;
+    const take = Math.min(row.quantity, extra);
+    await tx.stockLocation.update({ where: { id: row.id }, data: { quantity: row.quantity - take } });
+    await writeMovement(tx, {
+      type: 'ADJUSTMENT',
+      variantId,
+      quantity: take,
+      fromWarehouseId: row.warehouseId,
+      reason: 'Correction: warehouse rows held more than was on sale',
+    });
+    extra -= take;
+  }
+}
+
 /** Stock arriving: a purchase-order receipt, an opening balance, a return. */
 export async function receiveStock(
   tx: Tx,
@@ -122,6 +206,8 @@ export async function receiveStock(
   },
 ): Promise<void> {
   if (input.quantity <= 0) throw ApiError.badRequest('Quantity must be at least 1');
+  await lockVariants(tx, [input.variantId]);
+  await reconcileLocations(tx, input.variantId, { fallback: input.warehouseId });
   await addToLocation(tx, input.warehouseId, input.variantId, input.quantity);
   await writeMovement(tx, {
     type: input.type ?? 'RECEIPT',
@@ -225,7 +311,7 @@ export async function returnStock(
   // but failing a customer refund over bookkeeping is worse.
   if (!warehouseId) return;
 
-  await addToLocation(tx, warehouseId, input.variantId, input.quantity);
+  await addToLocation(tx, warehouseId, input.variantId, input.quantity, true);
   await writeMovement(tx, {
     type: 'RETURN',
     variantId: input.variantId,
@@ -246,14 +332,24 @@ export async function adjustStock(
   input: {
     variantId: string;
     warehouseId: string;
-    newQuantity: number;
+    /** The warehouse's new quantity (a count, an absolute set)… */
+    newQuantity?: number;
+    /** …or units added to (or, negative, taken from) what the row holds now. */
+    addQuantity?: number;
     reason: string;
     actorId?: string | null;
     /** Set when this came from a cycle count, so accuracy can be reported. */
     isCount?: boolean;
   },
 ): Promise<{ before: number; after: number; delta: number }> {
-  if (input.newQuantity < 0) throw ApiError.badRequest('Stock cannot go below zero');
+  await lockVariants(tx, [input.variantId]);
+  // A count or an absolute set is the truth for its warehouse, so stock on
+  // sale with no row is placed there; an addition is not a count.
+  await reconcileLocations(
+    tx,
+    input.variantId,
+    input.addQuantity === undefined ? { into: input.warehouseId } : { fallback: input.warehouseId },
+  );
 
   const location = await tx.stockLocation.findUnique({
     where: {
@@ -261,17 +357,22 @@ export async function adjustStock(
     },
   });
   const before = location?.quantity ?? 0;
-  const delta = input.newQuantity - before;
+  // "Add" is worked out here, after the variant's stock on sale has been put
+  // into its rows: read before that, an import's "+1" overwrote it (25 → 1).
+  const newQuantity = input.addQuantity !== undefined ? before + input.addQuantity : (input.newQuantity ?? before);
+  if (newQuantity < 0) throw ApiError.badRequest('Stock cannot go below zero');
+  if (newQuantity > MAX_STOCK) throw stockLimit();
+  const delta = newQuantity - before;
 
   if (location) {
     await tx.stockLocation.update({
       where: { id: location.id },
       data: {
-        quantity: input.newQuantity,
+        quantity: newQuantity,
         ...(input.isCount
           ? {
               lastCountedAt: new Date(),
-              lastCountedQty: input.newQuantity,
+              lastCountedQty: newQuantity,
               lastCountMatched: delta === 0,
             }
           : {}),
@@ -282,11 +383,11 @@ export async function adjustStock(
       data: {
         warehouseId: input.warehouseId,
         variantId: input.variantId,
-        quantity: input.newQuantity,
+        quantity: newQuantity,
         ...(input.isCount
           ? {
               lastCountedAt: new Date(),
-              lastCountedQty: input.newQuantity,
+              lastCountedQty: newQuantity,
               lastCountMatched: delta === 0,
             }
           : {}),
@@ -308,7 +409,7 @@ export async function adjustStock(
     });
   }
   await syncVariantStock(tx, input.variantId);
-  return { before, after: input.newQuantity, delta };
+  return { before, after: newQuantity, delta };
 }
 
 /** Move units between two warehouses. The variant total is unchanged. */
@@ -328,6 +429,8 @@ export async function moveBetweenWarehouses(
   if (input.fromWarehouseId === input.toWarehouseId) {
     throw ApiError.badRequest('Pick two different warehouses');
   }
+  await lockVariants(tx, [input.variantId]);
+  await reconcileLocations(tx, input.variantId, { fallback: input.fromWarehouseId });
   await addToLocation(tx, input.fromWarehouseId, input.variantId, -input.quantity);
   await addToLocation(tx, input.toWarehouseId, input.variantId, input.quantity);
   await writeMovement(tx, {
@@ -344,6 +447,52 @@ export async function moveBetweenWarehouses(
 }
 
 /**
+ * A seller's stock change for one variant: a new total, or "+N / −N" applied
+ * to the stock as it is now — read under the variant's lock, so a sale, a
+ * cancel or another edit landing at the same moment is never overwritten
+ * (pre-launch test: reading it before the transaction put sold units back on
+ * sale). Never below zero. Returns the new total.
+ */
+/** The most units one variant can hold (the seller screens' limit). */
+export const MAX_STOCK = 1_000_000;
+const stockLimit = () => ApiError.badRequest('A product can hold at most 1,000,000 units', 'STOCK_LIMIT');
+
+export async function changeSellerStock(
+  tx: Tx,
+  input: {
+    variantId: string;
+    stock?: number;
+    delta?: number;
+    defaultWarehouseId: string;
+    reason: string;
+    actorId?: string | null;
+    /**
+     * This exact change, once: a save retried after its answer was lost (the
+     * first one may still be committing) finds its movement and is skipped.
+     */
+    onceKey?: string;
+  },
+): Promise<number> {
+  await lockVariants(tx, [input.variantId]);
+  const now = (await tx.productVariant.findUniqueOrThrow({ where: { id: input.variantId }, select: { stock: true } })).stock;
+  if (input.onceKey && (await tx.stockMovement.count({ where: { variantId: input.variantId, reference: input.onceKey } })) > 0) {
+    return now;
+  }
+  // The inventory screen's ceiling: a stock column is a 32-bit integer.
+  // Never past the ceiling, and an addition never lowers a product already above it.
+  const next = Math.min(Math.max(MAX_STOCK, now), input.stock !== undefined ? input.stock : Math.max(0, now + (input.delta ?? 0)));
+  await setVariantTotal(tx, {
+    variantId: input.variantId,
+    newTotal: next,
+    defaultWarehouseId: input.defaultWarehouseId,
+    reason: input.reason,
+    reference: input.onceKey,
+    actorId: input.actorId,
+  });
+  return next;
+}
+
+/**
  * Set a variant's total to an absolute figure without caring which warehouse —
  * what the seller's own inventory screen does. Increases land in the default
  * warehouse; decreases come off the largest holdings first.
@@ -355,9 +504,13 @@ export async function setVariantTotal(
     newTotal: number;
     defaultWarehouseId: string;
     reason: string;
+    /** Written on the movements (a form save's key, so a retry is recognised). */
+    reference?: string;
     actorId?: string | null;
   },
 ): Promise<void> {
+  await lockVariants(tx, [input.variantId]);
+  await reconcileLocations(tx, input.variantId, { fallback: input.defaultWarehouseId });
   const agg = await tx.stockLocation.aggregate({
     where: { variantId: input.variantId },
     _sum: { quantity: true },
@@ -377,6 +530,7 @@ export async function setVariantTotal(
       quantity: delta,
       toWarehouseId: input.defaultWarehouseId,
       reason: input.reason,
+      reference: input.reference,
       actorId: input.actorId,
     });
   } else {
@@ -398,6 +552,7 @@ export async function setVariantTotal(
         quantity: take,
         fromWarehouseId: location.warehouseId,
         reason: input.reason,
+        reference: input.reference,
         actorId: input.actorId,
       });
       remaining -= take;

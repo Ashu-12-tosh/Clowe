@@ -140,6 +140,8 @@ export class ApiRequestError extends Error {
     message: string,
     /** The input a validation error is about (e.g. "gstNumber"), when the API names one. */
     public readonly field?: string,
+    /** What the API adds to recover from the error (the order to resume, a new total). */
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -188,8 +190,11 @@ async function send(url: string, init: RequestInit) {
   }
 }
 
-function errorFrom(json: { error?: { code?: string; message?: string; field?: string } }, fallback: string) {
-  return new ApiRequestError(json.error?.code ?? 'UNKNOWN', json.error?.message ?? fallback, json.error?.field);
+function errorFrom(
+  json: { error?: { code?: string; message?: string; field?: string; details?: Record<string, unknown> } },
+  fallback: string,
+) {
+  return new ApiRequestError(json.error?.code ?? 'UNKNOWN', json.error?.message ?? fallback, json.error?.field, json.error?.details);
 }
 
 /** Changes made from the admin and seller panels report every failure. */

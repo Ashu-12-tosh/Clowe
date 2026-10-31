@@ -35,6 +35,7 @@ import {
 } from '@clowe/shared';
 import { bookReversePickup } from '../services/shipping/reversePickup';
 import { prisma } from '../db';
+import { changeSellerStock, ensureDefaultWarehouse } from '../services/stockService';
 import { isHiddenCategory } from '../services/shopperVisibility';
 import { categoryRulesFor, categoryRulesMap } from '../services/categoryRules';
 import { gstSettings } from '../services/economicsRates';
@@ -793,12 +794,47 @@ sellerRouter.post('/products', requireSeller, requireApprovedSeller, async (req,
  * removed variants, dimensions, SEO, visibility and the rest save at once.
  * Returns where the revision now stands, or null when there is none.
  */
+/**
+ * Stock typed on the product form, saved as the change the seller made: the
+ * form says what it showed (stockSeen) and what was typed (stock), and the
+ * difference is applied to the stock as it is now. Writing the typed number
+ * back as the stock put units sold while the form was open back on sale
+ * (pre-launch test). A client that does not send stockSeen sets the total, as
+ * before, but only when it differs from what this request read.
+ */
+async function applyFormStock(
+  rows: { input: { id?: string; stock: number; stockSeen?: number } }[],
+  readStock: Map<string, number>,
+  actorId: string,
+  /** The form's key for this edit: the same change sent again is applied once. */
+  saveKey?: string,
+): Promise<void> {
+  const changes = rows.flatMap(({ input: v }): { variantId: string; stock?: number; delta?: number; onceKey?: string }[] => {
+    if (!v.id || !readStock.has(v.id)) return [];
+    if (v.stockSeen !== undefined) {
+      if (v.stock === v.stockSeen) return [];
+      // The key names this change (shown → typed): a retry of it matches, a new change does not.
+      const onceKey = saveKey ? `form-save:${saveKey}:${v.stockSeen}:${v.stock}` : undefined;
+      return [{ variantId: v.id, delta: v.stock - v.stockSeen, onceKey }];
+    }
+    return v.stock !== readStock.get(v.id) ? [{ variantId: v.id, stock: v.stock }] : [];
+  });
+  if (changes.length === 0) return;
+  const warehouse = await ensureDefaultWarehouse();
+  for (const change of changes) {
+    await prisma.$transaction((tx) =>
+      changeSellerStock(tx, { ...change, defaultWarehouseId: warehouse.id, reason: 'Seller product edit', actorId }),
+    );
+  }
+}
+
 async function saveLiveEdit(
   input: PricedUpsertInput,
   product: Awaited<ReturnType<typeof ownProduct>>,
   rules: CategoryRules,
   variantRows: ReturnType<typeof variantRowsFrom<PricedUpsertInput>>,
   keptIds: string[],
+  actorId: string,
 ): Promise<ProductRevisionStatus | null> {
   // Removing every live variant would take the listing down while the new
   // ones wait for review.
@@ -853,6 +889,7 @@ async function saveLiveEdit(
   const liveRules = await categoryRulesFor(product.categoryId);
 
   await prisma.$transaction([
+    prisma.$executeRaw`SELECT 1 FROM "product_variants" WHERE "productId" = ${product.id} ORDER BY id COLLATE "C" FOR NO KEY UPDATE`,
     prisma.product.update({
       where: { id: product.id },
       data: {
@@ -887,7 +924,6 @@ async function saveLiveEdit(
           mrpPaise: v.mrpPaise ?? null,
           sellerPricePaise: v.sellerPricePaise,
           sellerMrpPaise: v.sellerMrpPaise ?? null,
-          stock: v.stock,
         },
       }),
     ),
@@ -909,6 +945,7 @@ async function saveLiveEdit(
         })
       : prisma.productRevision.deleteMany({ where: { productId: product.id } }),
   ]);
+  await applyFormStock(kept, new Map(product.variants.map((v) => [v.id, v.stock])), actorId, input.saveKey);
   return changed ? status : null;
 }
 
@@ -952,7 +989,7 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
     // A live listing stays live: its content waits for review, the rest saves now.
     if (product.status !== 'APPROVED' && input.mode !== 'DRAFT') assertParcelForReview(input);
     if (product.status === 'APPROVED') {
-      const revisionStatus = await saveLiveEdit(input, product, rules, variantRows, keptIds);
+      const revisionStatus = await saveLiveEdit(input, product, rules, variantRows, keptIds, req.auth!.userId);
       res.json({ success: true, data: { id: product.id, status: 'APPROVED', revisionStatus } });
       return;
     }
@@ -961,6 +998,7 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
     const imagesChanged = !sameList(input.imageUrls, product.images.map((i) => i.url));
 
     await prisma.$transaction([
+      prisma.$executeRaw`SELECT 1 FROM "product_variants" WHERE "productId" = ${product.id} ORDER BY id COLLATE "C" FOR NO KEY UPDATE`,
       prisma.product.update({
         where: { id: product.id },
         data: {
@@ -1002,7 +1040,6 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
               mrpPaise: v.mrpPaise ?? null,
               sellerPricePaise: v.sellerPricePaise,
               sellerMrpPaise: v.sellerMrpPaise ?? null,
-              stock: v.stock,
             },
           }),
         ),
@@ -1064,6 +1101,12 @@ sellerRouter.put('/products/:id', requireSeller, requireApprovedSeller, async (r
           }),
         ),
     ]);
+    await applyFormStock(
+      variantRows.filter((r) => r.input.id),
+      new Map(product.variants.map((v) => [v.id, v.stock])),
+      req.auth!.userId,
+      input.saveKey,
+    );
     res.json({
       success: true,
       data: { id: product.id, status: input.mode === 'DRAFT' ? 'DRAFT' : 'PENDING' },

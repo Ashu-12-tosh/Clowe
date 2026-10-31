@@ -367,3 +367,78 @@ describe('flat 18% on every product', () => {
     expect(rates).toEqual([5, 18, 3, 18]);
   });
 });
+
+// Attack on Batch 1 (2026-10-30, round 6): saving the product form wrote back
+// the stock it showed when it was opened, so units sold while it was open went
+// back on sale; it also skipped the warehouse rows.
+describe('a seller saving the product form while it sells', () => {
+  it('keeps the sales made meanwhile, and adds only what the seller changed', async () => {
+    const s = await seller();
+    const cat = await category({ defaultTaxRatePercent: 18 });
+    const created = await call('POST', '/api/seller/products', s.token, body(cat, [{ optionValues: {}, sellerPricePaise: 10_000, stock: 10 }]));
+    const id = (created.json.data as unknown as { id: string }).id;
+    await prisma.product.update({ where: { id }, data: { status: 'APPROVED', approvedAt: new Date() } });
+    const v = await variantOf(id);
+
+    // The form is opened showing 10; three sell before it is saved.
+    await prisma.productVariant.update({ where: { id: v.id }, data: { stock: { decrement: 3 } } });
+
+    // Only the price changed on the form.
+    const priceOnly = await call('PUT', `/api/seller/products/${id}`, s.token, body(cat, [{ id: v.id, optionValues: {}, sellerPricePaise: 10_100, stock: 10, stockSeen: 10 }]));
+    expect(priceOnly.status).toBe(200);
+    expect((await variantOf(id)).stock).toBe(7);
+
+    // The seller typed 12 over the 10 the form showed: two more, on top of what is there now.
+    await call('PUT', `/api/seller/products/${id}`, s.token, body(cat, [{ id: v.id, optionValues: {}, sellerPricePaise: 10_100, stock: 12, stockSeen: 10 }]));
+    expect((await variantOf(id)).stock).toBe(9);
+    const locations = await prisma.stockLocation.aggregate({ where: { variantId: v.id }, _sum: { quantity: true } });
+    expect(locations._sum.quantity).toBe(9);
+
+    // A client that does not say what it showed still sets the total.
+    await call('PUT', `/api/seller/products/${id}`, s.token, body(cat, [{ id: v.id, optionValues: {}, sellerPricePaise: 10_100, stock: 20 }]));
+    expect((await variantOf(id)).stock).toBe(20);
+  });
+});
+
+// Round 8 (test runner): a stock of 3,000,000,000 typed on the form reached
+// the database and failed there (a 32-bit column) with a 500, after the rest
+// of the save had already gone through.
+describe('a seller typing an impossible stock on the product form', () => {
+  it('is refused up front, and nothing is saved', async () => {
+    const s = await seller();
+    const cat = await category({ defaultTaxRatePercent: 18 });
+    const created = await call('POST', '/api/seller/products', s.token, body(cat, [{ optionValues: {}, sellerPricePaise: 10_000, stock: 10 }]));
+    const id = (created.json.data as unknown as { id: string }).id;
+    await prisma.product.update({ where: { id }, data: { status: 'APPROVED', approvedAt: new Date() } });
+    const v = await variantOf(id);
+    const huge = await call('PUT', `/api/seller/products/${id}`, s.token, body(cat, [{ id: v.id, optionValues: {}, sellerPricePaise: 12_000, stock: 3_000_000_000, stockSeen: 10 }]));
+    expect(huge.status).toBe(400);
+    const after = await variantOf(id);
+    expect([after.stock, after.sellerPricePaise]).toEqual([10, 10_000]);
+  });
+});
+
+// Round 10 (attacker): a save whose answer was lost before it had committed
+// looked unchanged to the form's re-check, and Save again added the change a
+// second time. The form's key for the edit makes the same change land once.
+describe('a seller saving the same product form twice (a lost answer)', () => {
+  it('changes the stock once; a new change with the same form still applies', async () => {
+    const s = await seller();
+    const cat = await category({ defaultTaxRatePercent: 18 });
+    const created = await call('POST', '/api/seller/products', s.token, body(cat, [{ optionValues: {}, sellerPricePaise: 10_000, stock: 10 }]));
+    const id = (created.json.data as unknown as { id: string }).id;
+    await prisma.product.update({ where: { id }, data: { status: 'APPROVED', approvedAt: new Date() } });
+    const v = await variantOf(id);
+    const save = (stock: number, stockSeen: number) =>
+      call('PUT', `/api/seller/products/${id}`, s.token, { ...body(cat, [{ id: v.id, optionValues: {}, sellerPricePaise: 10_000, stock, stockSeen }]), saveKey: 'form-open-0001' });
+
+    const [a, b] = await Promise.all([save(15, 10), save(15, 10)]);
+    expect([a.status, b.status]).toEqual([200, 200]);
+    await save(15, 10);
+    expect((await variantOf(id)).stock).toBe(15);
+
+    // The page re-read 15 and the seller typed 20: a new change.
+    await save(20, 15);
+    expect((await variantOf(id)).stock).toBe(20);
+  });
+});

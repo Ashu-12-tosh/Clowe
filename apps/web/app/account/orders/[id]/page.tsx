@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { summarizeOrderTracking, type OrderDetailItem, type OrderDetailView, type ParcelTracking, type ProductListItem } from '@clowe/shared';
 import { api, ApiRequestError } from '@/lib/api';
 import { formatPaise, istDay, paymentMethodLabel } from '@/lib/format';
+import { orderMoneyView } from '@/lib/paymentView';
 import { BADGES_EVENT } from '@/components/Header';
 import { SUPPORT_CHAT_EVENT } from '@/components/SupportChat';
 import { Scroller } from '@/components/home/HomeBits';
@@ -242,6 +243,9 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
   const etaWindow = currentEtaWindow(order);
   const eta = etaLabel(etaWindow.from, etaWindow.to);
   const cancelled = order.status === 'CANCELLED';
+  // "Paid" only when the money was taken: an order whose payment is pending or
+  // failed shows what it costs, not what was paid.
+  const { totalLabel, notPaidNote, showInvoice } = orderMoneyView(order);
   const tracking = summarizeOrderTracking(order.tracking);
 
   return (
@@ -293,8 +297,22 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
         </div>
       )}
       {order.awaitingPayment && (
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-          Payment pending — this order is not confirmed yet.
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+          <span>Not paid yet — this order is confirmed once the payment goes through.</span>
+          <span className="flex flex-wrap gap-2">
+            <Link
+              href={`/checkout/return?kind=ORDER&id=${encodeURIComponent(order.id)}&pay=1`}
+              className="t-caption rounded-lg bg-brand-600 px-4 py-2 font-bold text-white hover:bg-brand-700"
+            >
+              Retry payment
+            </Link>
+            <Link
+              href={`/checkout/return?kind=ORDER&id=${encodeURIComponent(order.id)}`}
+              className="t-caption rounded-lg border border-yellow-300 bg-white px-4 py-2 font-bold text-ink-900 hover:border-brand-600"
+            >
+              Check payment status
+            </Link>
+          </span>
         </div>
       )}
 
@@ -324,12 +342,14 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
                       ? `Estimated delivery: ${eta}`
                       : 'We will update you as it moves'}
               </p>
-              <Link
-                href={`/account/orders/${order.id}/invoice`}
-                className="t-caption mt-3 inline-block rounded-lg border border-gray-300 px-4 py-2 font-bold text-ink-900 transition hover:border-brand-600"
-              >
-                ⬇ Download Invoice
-              </Link>
+              {showInvoice && (
+                <Link
+                  href={`/account/orders/${order.id}/invoice`}
+                  className="t-caption mt-3 inline-block rounded-lg border border-gray-300 px-4 py-2 font-bold text-ink-900 transition hover:border-brand-600"
+                >
+                  ⬇ Download Invoice
+                </Link>
+              )}
             </div>
 
             <div className="sm:border-l sm:border-gray-100 sm:pl-4">
@@ -338,8 +358,9 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
             </div>
 
             <div className="sm:border-l sm:border-gray-100 sm:pl-4">
-              <p className="t-caption text-gray-500">Total Paid</p>
+              <p className="t-caption text-gray-500">{totalLabel}</p>
               <p className="t-cart-price mt-0.5 text-ink-900">{formatPaise(order.totalPaise)}</p>
+              {notPaidNote && <p className="t-caption font-semibold text-red-600">{notPaidNote}</p>}
               {savings > 0 && (
                 <p className="t-caption text-green-600">
                   You saved {formatPaise(savings)} on this order
@@ -581,17 +602,19 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
                   </span>
                 </Link>
               </li>
-              <li>
-                <Link
-                  href={`/account/orders/${order.id}/invoice`}
-                  className="flex items-center gap-2.5 py-3 transition hover:text-brand-600"
-                >
-                  <span className="w-4 text-center text-gray-500">⬇</span>
-                  <span className="t-caption min-w-0 flex-1 font-semibold text-ink-900">
-                    Download Invoice
-                  </span>
-                </Link>
-              </li>
+              {showInvoice && (
+                <li>
+                  <Link
+                    href={`/account/orders/${order.id}/invoice`}
+                    className="flex items-center gap-2.5 py-3 transition hover:text-brand-600"
+                  >
+                    <span className="w-4 text-center text-gray-500">⬇</span>
+                    <span className="t-caption min-w-0 flex-1 font-semibold text-ink-900">
+                      Download Invoice
+                    </span>
+                  </Link>
+                </li>
+              )}
             </ul>
           </div>
         </div>
@@ -601,12 +624,14 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
           <div className="rounded-2xl border border-gray-100 bg-white p-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="t-sub-heading text-ink-900">Order Summary</h2>
-              <Link
-                href={`/account/orders/${order.id}/invoice`}
-                className="t-caption font-semibold text-brand-600 hover:underline"
-              >
-                View Invoice
-              </Link>
+              {showInvoice && (
+                <Link
+                  href={`/account/orders/${order.id}/invoice`}
+                  className="t-caption font-semibold text-brand-600 hover:underline"
+                >
+                  View Invoice
+                </Link>
+              )}
             </div>
             <dl className="mt-3 space-y-2">
               <div className="flex justify-between">
@@ -647,7 +672,7 @@ export default function OrderDetailPage({ params: paramsPromise }: { params: Pro
             </dl>
             <div className="mt-3 flex items-baseline justify-between border-t border-gray-200 pt-3">
               <span className="t-card-label text-ink-900">
-                Total Paid
+                {totalLabel}
                 <span className="t-caption block font-normal text-gray-400">
                   (Inclusive of all taxes)
                 </span>

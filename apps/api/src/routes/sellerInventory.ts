@@ -18,7 +18,7 @@ import {
 import { prisma } from '../db';
 import { requireAuth } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
-import { ensureDefaultWarehouse, setVariantTotal } from '../services/stockService';
+import { changeSellerStock, ensureDefaultWarehouse } from '../services/stockService';
 import { blockSuspendedWrites, requireSeller } from './seller';
 
 export const sellerInventoryRouter = Router();
@@ -337,15 +337,14 @@ sellerInventoryRouter.patch('/stock', async (req, res, next) => {
         skipped.push({ variantId: update.variantId, reason: 'No new stock value given' });
         continue;
       }
-      // A relative adjustment can never push stock below zero.
-      const next =
-        update.stock !== undefined ? update.stock : Math.max(0, current + (update.delta ?? 0));
       // Goes through the stock service so the warehouse rows and the movement
       // ledger stay true — a seller edit is an adjustment like any other.
+      // "+3" adds to the stock as it is now, under the variant's lock.
       await prisma.$transaction((tx) =>
-        setVariantTotal(tx, {
+        changeSellerStock(tx, {
           variantId: update.variantId,
-          newTotal: next,
+          stock: update.stock,
+          delta: update.delta,
           defaultWarehouseId: warehouse.id,
           reason: 'Seller stock update',
           actorId: req.auth!.userId,

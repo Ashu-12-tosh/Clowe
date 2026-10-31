@@ -28,6 +28,7 @@ import { formatPaise, istDay } from '@/lib/format';
 import { LaunchingSoon, useOrdersOpen } from '@/lib/ordersOpen';
 import { getPublicSettings } from '@/lib/settings';
 import { payWithCashfree } from '@/lib/cashfree';
+import { checkoutKey, forgetCheckoutKey } from '@/lib/checkoutKey';
 import CheckoutStepper from '@/components/checkout/CheckoutStepper';
 import {
   BoxIcon,
@@ -137,6 +138,9 @@ function PaymentPageInner() {
   // order and the same payment — rather than placing a second order.
   const [gatewayOrder, setGatewayOrder] = useState<{ orderId: string; checkout: GatewayCheckout } | null>(null);
   const [error, setError] = useState('');
+  // The total changed after this page loaded (a price, the coupon, credits):
+  // the new one is shown and has to be confirmed before anything is charged.
+  const [priceChange, setPriceChange] = useState<{ previousTotalPaise: number; totalPaise: number; changedTitles: string[] } | null>(null);
 
   useEffect(() => {
     if (!getStoredUser()) {
@@ -172,7 +176,7 @@ function PaymentPageInner() {
   const beforeCredits = itemTotalPaise + shippingPaise - couponDiscountPaise;
   const creditsUsable =
     useCredits && credits
-      ? Math.min(credits.balance, Math.floor(Math.max(0, beforeCredits - 100) / CREDIT_VALUE_PAISE))
+      ? Math.max(0, Math.min(credits.balance + (cart?.heldCredits ?? 0), Math.floor(Math.max(0, beforeCredits - 100) / CREDIT_VALUE_PAISE)))
       : 0;
   const creditsDiscountPaise = creditsToPaise(creditsUsable);
   const totalPaise = beforeCredits - creditsDiscountPaise;
@@ -198,8 +202,17 @@ function PaymentPageInner() {
 
   /** Cashfree's window, then the server's answer about the payment. */
   async function runCashfree(orderId: string, checkout: GatewayCheckout) {
-    const r = await payWithCashfree('ORDER', orderId, checkout);
+    let r: Awaited<ReturnType<typeof payWithCashfree>>;
+    try {
+      r = await payWithCashfree('ORDER', orderId, checkout);
+    } catch {
+      // The window may have taken the money before the connection dropped:
+      // never offer a fresh Pay here — the return page keeps asking the server.
+      router.push(`/checkout/return?kind=ORDER&id=${encodeURIComponent(orderId)}`);
+      return;
+    }
     if (r.outcome === 'PAID') {
+      forgetCheckoutKey();
       router.push(`/orders/${orderId}/confirmation`);
       return;
     }
@@ -215,7 +228,49 @@ function PaymentPageInner() {
       return;
     }
     setGatewayOrder(null);
+    forgetCheckoutKey();
     setError(r.message ?? 'This payment could not be completed. Nothing was charged.');
+  }
+
+  /**
+   * What the server says instead of a new order: the order is paid already, a
+   * payment for it is still with the bank, or the total changed. True when
+   * handled here.
+   */
+  function handleRefusal(err: unknown): boolean {
+    if (!(err instanceof ApiRequestError)) return false;
+    const orderId = typeof err.details?.orderId === 'string' ? err.details.orderId : null;
+    if (err.code === 'ALREADY_PAID' && orderId) {
+      forgetCheckoutKey();
+      router.push(`/orders/${orderId}/confirmation`);
+      return true;
+    }
+    if (err.code === 'PAYMENT_PENDING' && orderId) {
+      router.push(`/checkout/return?kind=ORDER&id=${encodeURIComponent(orderId)}`);
+      return true;
+    }
+    if (err.code === 'PRICE_CHANGED') {
+      const before = lines;
+      const previousTotalPaise = typeof err.details?.previousTotalPaise === 'number' ? err.details.previousTotalPaise : totalPaise;
+      const newTotalPaise = typeof err.details?.totalPaise === 'number' ? err.details.totalPaise : totalPaise;
+      setError(err.message);
+      api<CreditsInfo>('/api/credits', { auth: true }).then(setCredits).catch(() => {});
+      api<CartView>('/api/cart', { auth: true })
+        .then((fresh) => {
+          const changedTitles = fresh.lines
+            .filter((l) => l.selected)
+            .filter((l) => {
+              const was = before.find((o) => o.variantId === l.variantId);
+              return was && (was.pricePaise !== l.pricePaise || was.promoDiscountPaise !== l.promoDiscountPaise);
+            })
+            .map((l) => l.title);
+          setCart(fresh);
+          setPriceChange({ previousTotalPaise, totalPaise: newTotalPaise, changedTitles });
+        })
+        .catch(() => {});
+      return true;
+    }
+    return false;
   }
 
   async function pay() {
@@ -240,6 +295,10 @@ function PaymentPageInner() {
     try {
       const result = await api<CheckoutResult>('/api/orders/checkout', {
         body: {
+          checkoutKey: checkoutKey(),
+          // What this page shows (or the new total the buyer just confirmed):
+          // a different total is refused, not charged.
+          expectedTotalPaise: priceChange?.totalPaise ?? totalPaise,
           addressId,
           useCredits,
           deliveryMethod,
@@ -252,8 +311,10 @@ function PaymentPageInner() {
         auth: true,
       });
 
+      setPriceChange(null);
       // COD is confirmed server-side — straight to the confirmation page.
       if (!result.requiresPayment) {
+        forgetCheckoutKey();
         router.push(`/orders/${result.orderId}/confirmation`);
         return;
       }
@@ -295,6 +356,7 @@ function PaymentPageInner() {
       });
       rzp.open();
     } catch (err) {
+      if (handleRefusal(err)) return;
       setError(err instanceof ApiRequestError || err instanceof Error ? err.message : 'Checkout failed');
     } finally {
       setPlacing(false);
@@ -309,6 +371,7 @@ function PaymentPageInner() {
         body: { orderId: mockOrder.orderId, outcome },
         auth: true,
       });
+      forgetCheckoutKey();
       router.push(
         outcome === 'success'
           ? `/orders/${mockOrder.orderId}/confirmation`
@@ -857,6 +920,19 @@ function PaymentPageInner() {
               </div>
             )}
 
+            {priceChange && (
+              <div role="status" className="t-caption mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900">
+                <p className="font-semibold">
+                  {priceChange.changedTitles.length > 0
+                    ? `The price of ${priceChange.changedTitles.join(', ')} changed.`
+                    : 'Your total changed.'}
+                </p>
+                <p>
+                  New total {formatPaise(priceChange.totalPaise)} (was {formatPaise(priceChange.previousTotalPaise)}). Nothing has been
+                  charged — confirm below to pay the new total.
+                </p>
+              </div>
+            )}
             <button
               onClick={() => void pay()}
               disabled={placing || ordersOpen === false}
@@ -867,7 +943,9 @@ function PaymentPageInner() {
                 ? 'Please wait…'
                 : gatewayOrder
                   ? 'Try the payment again'
-                  : method === 'COD'
+                  : priceChange
+                    ? `Confirm new total · ${method === 'COD' ? 'Place Order' : 'Pay'} ${formatPaise(priceChange.totalPaise)}`
+                    : method === 'COD'
                     ? `Place Order · ${formatPaise(totalPaise)}`
                     : `Pay ${formatPaise(totalPaise)} Securely`}
             </button>

@@ -6,6 +6,8 @@ export class ApiError extends Error {
     message: string,
     /** The input the error is about, when there is one: the form marks it. */
     public readonly field?: string,
+    /** Facts the client needs to recover (the order to resume, the new total). */
+    public readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'ApiError';

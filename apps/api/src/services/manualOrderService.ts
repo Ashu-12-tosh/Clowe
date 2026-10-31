@@ -9,7 +9,7 @@ import { codRefusal, deliveryRefusal, pincodeServiceability } from './shipping/s
 import { deliveryPriceFor, etaWindowFor } from './deliveryService';
 import { feeSnapshots } from './commercial';
 import { confirmCodOrder, generateOrderNumber, settlePaymentSuccess } from './orderService';
-import { allocateForDispatch } from './stockService';
+import { allocateForDispatch, inLockOrder } from './stockService';
 
 /**
  * An order an admin places for a shopper — the phone order.
@@ -129,7 +129,7 @@ export async function createManualOrder(input: {
   const feesByLine = await feeSnapshots(lines.map((l) => ({ productId: l.productId, sellerId: l.sellerId, unitPricePaise: l.pricePaise })));
 
   const order = await prisma.$transaction(async (tx) => {
-    for (const line of lines) {
+    for (const line of inLockOrder(lines)) {
       const updated = await tx.productVariant.updateMany({
         where: { id: line.variantId, stock: { gte: line.quantity } },
         data: { stock: { decrement: line.quantity } },

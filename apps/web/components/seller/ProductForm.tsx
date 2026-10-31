@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   MAX_VARIANT_AXES,
@@ -101,6 +101,8 @@ interface VariantRow {
   price: string; // rupees, as typed
   mrp: string;
   stock: string;
+  /** The stock shown when the form opened (saved variants): the save sends the change, not a total. */
+  stockSeen?: number;
   /** This variant's own pictures; empty means it shows the product's. */
   imageUrls: string[];
   /**
@@ -168,8 +170,20 @@ interface Props {
   initial?: SellerProductDetail;
 }
 
+/** A key for one edit of the form (see saveKey). */
+function newSaveKey(): string {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 export default function ProductForm({ initial }: Props) {
   const router = useRouter();
+  // A save failed or its answer was lost, and the stock could not be re-read
+  // since: the next save re-reads it first instead of sending a change twice.
+  const stockUncertain = useRef(false);
+  // One key per opening of the form: a save sent again applies its stock change once.
+  const saveKey = useRef(newSaveKey());
   const [step, setStep] = useState<StepKey>('BASIC');
   const [categories, setCategories] = useState<CategoryNode[]>([]);
 
@@ -223,6 +237,7 @@ export default function ProductForm({ initial }: Props) {
       price: String(v.sellerPricePaise / 100),
       mrp: v.sellerMrpPaise != null ? String(v.sellerMrpPaise / 100) : '',
       stock: String(v.stock),
+      stockSeen: v.stock,
       imageUrls: [...v.imageUrls],
     })) ?? [{ ...emptyRow }],
   );
@@ -466,6 +481,8 @@ export default function ProductForm({ initial }: Props) {
           sellerPricePaise: Math.round(Number(r.price) * 100),
           sellerMrpPaise: r.mrp.trim() ? Math.round(Number(r.mrp) * 100) : null,
           stock: Math.max(0, Math.round(Number(r.stock) || 0)),
+          // What the form showed: the API applies the seller's change to the stock as it is now.
+          ...(r.id && r.stockSeen !== undefined ? { stockSeen: r.stockSeen } : {}),
           // Sent only when the seller edited this variant's pictures. Leaving
           // the key off entirely is meaningful: the API reads an absent
           // imageUrls as "do not touch what is stored", so saving a price
@@ -589,6 +606,34 @@ export default function ProductForm({ initial }: Props) {
     if (step) setStep(step);
   }
 
+  /**
+   * Re-read the saved stock of the variants on the form: MOVED (shown, and the
+   * seller is asked to check it), SAME, or UNKNOWN (could not be read — the
+   * form will not save on a stock it cannot vouch for).
+   */
+  async function refreshStock(): Promise<'MOVED' | 'SAME' | 'UNKNOWN'> {
+    if (!initial) return 'SAME';
+    try {
+      const fresh = await api<SellerProductDetail>(`/api/seller/products/${initial.id}`, { auth: true, quiet: true });
+      stockUncertain.current = false;
+      const stockNow = new Map(fresh.variants.map((v) => [v.id, v.stock]));
+      const moved = rows.some((row) => row.id !== undefined && stockNow.has(row.id) && stockNow.get(row.id) !== row.stockSeen);
+      if (!moved) return 'SAME';
+      setRows((prev) =>
+        prev.map((row) => {
+          const now = row.id !== undefined ? stockNow.get(row.id) : undefined;
+          return now === undefined || now === row.stockSeen ? row : { ...row, stock: String(now), stockSeen: now };
+        }),
+      );
+      setError('Your last save may have gone through: the stock numbers below are what is saved now. Check them, then save again.');
+      // What the seller types next is a new change from these numbers.
+      saveKey.current = newSaveKey();
+      return 'MOVED';
+    } catch {
+      return 'UNKNOWN';
+    }
+  }
+
   async function save(mode: ProductSaveMode) {
     if (busy) return;
     setError('');
@@ -625,13 +670,23 @@ export default function ProductForm({ initial }: Props) {
       return;
     }
 
+    if (initial && stockUncertain.current) {
+      // The last save may have gone through: show the stock as it is now first,
+      // and do not save a change on top of a stock that cannot be checked.
+      const now = await refreshStock();
+      if (now === 'UNKNOWN') {
+        setError('We could not check your saved stock — check your connection and try again.');
+        return;
+      }
+      if (now === 'MOVED') return;
+    }
     setBusy(true);
     setSavingMode(mode);
     try {
       if (initial) {
         const saved = await api<{ status: string; revisionStatus?: 'DRAFT' | 'PENDING' | 'REJECTED' | null }>(
           `/api/seller/products/${initial.id}`,
-          { method: 'PUT', body: parsed.data, auth: true },
+          { method: 'PUT', body: { ...parsed.data, saveKey: saveKey.current }, auth: true },
         );
         toast.success(
           saved.status === 'APPROVED'
@@ -659,6 +714,14 @@ export default function ProductForm({ initial }: Props) {
         requestAnimationFrame(() => fromError(err));
       }
       setError(err instanceof ApiRequestError ? err.message : 'Could not reach the API');
+      // The save may have gone through before the answer was lost, stock
+      // included. The form sends stock as the change from what it showed, so
+      // pressing Save again would add that change twice: show the stock as it
+      // is now instead, and ask the seller to check it.
+      if (initial) {
+        stockUncertain.current = true;
+        await refreshStock();
+      }
       setBusy(false);
       setSavingMode(null);
     }

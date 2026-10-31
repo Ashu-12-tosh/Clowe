@@ -1,11 +1,13 @@
 import { randomInt } from 'node:crypto';
-import { creditsEarnedFor, creditsToPaise, newOrderNumber, promiseLabel, REFERRAL_REWARD_CREDITS } from '@clowe/shared';
+import { creditsEarnedFor, creditsToPaise, newOrderNumber, NOT_A_SALE_STATUSES, promiseLabel, REFERRAL_REWARD_CREDITS } from '@clowe/shared';
 import { prisma } from '../db';
 import { sendMessageSafe, sendToUserSafe } from './messaging';
 import { creditExpiryFrom } from '../routes/credits';
-import { returnStock } from './stockService';
+import { inLockOrder, returnStock } from './stockService';
 import { attributeOrder } from './advertising';
 import { notifySellersOfNewOrder } from './sellerOrderNotice';
+
+const NOT_A_SALE = new Set<string>(NOT_A_SALE_STATUSES);
 
 /** A confirmed order credited to the ads its shopper clicked (never blocks the order). */
 function attributeAdsSafe(orderId: string) {
@@ -49,6 +51,16 @@ export async function settlePaymentSuccess(orderId: string, providerPaymentId?: 
   if (order.payment.status === 'PAID' || order.payment.status === 'REFUNDED') return 'ALREADY_PAID';
   if (order.payment.status === 'FAILED') return 'LATE';
   const paymentId = order.payment.id;
+  if (order.status === 'CANCELLED') {
+    // Cancelled before the money arrived (by an older path that left the
+    // payment open): close the payment and let the caller refund it, never
+    // revive the order — its stock went back long ago.
+    await prisma.payment.updateMany({
+      where: { id: paymentId, status: 'CREATED' },
+      data: { status: 'FAILED', failureReason: 'The order was cancelled before the payment arrived' },
+    });
+    return 'LATE';
+  }
 
   const claimed = await prisma.$transaction(async (tx) => {
     const claim = await tx.payment.updateMany({
@@ -57,8 +69,9 @@ export async function settlePaymentSuccess(orderId: string, providerPaymentId?: 
     });
     if (claim.count === 0) return false;
     await tx.order.update({ where: { id: order.id }, data: { status: 'CONFIRMED' } });
+    // Only lines still waiting for the payment: a cancelled line stays cancelled.
     await tx.orderItem.updateMany({
-      where: { orderId: order.id },
+      where: { orderId: order.id, status: 'PLACED' },
       data: { status: 'CONFIRMED' },
     });
     // Clear only what was actually bought — lines the shopper left unticked
@@ -207,30 +220,47 @@ export async function settlePaymentFailure(orderId: string, reason: string): Pro
 
   // Claimed with a conditional update, like a success: a payment that turned
   // PAID a moment ago is never cancelled, and stock is never returned twice.
-  const claimed = await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     const claim = await tx.payment.updateMany({
       where: { id: paymentId, status: 'CREATED' },
       data: { status: 'FAILED', failureReason: reason },
     });
     if (claim.count === 0) return false;
+    // Read again under the claim: lines (or the whole order) a buyer, seller
+    // or admin cancelled earlier already gave their stock — and, for a whole
+    // order, its coupon and credits — back. Only what is still held returns.
+    const now = await tx.order.findUniqueOrThrow({ where: { id: order.id }, select: { status: true, items: { select: { id: true, status: true } } } });
+    const held = new Set(now.items.filter((i) => !NOT_A_SALE.has(i.status)).map((i) => i.id));
+    const wasOpen = now.status !== 'CANCELLED';
     await tx.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
-    await tx.orderItem.updateMany({ where: { orderId: order.id }, data: { status: 'CANCELLED', cancelledBy: 'PAYMENT_FAILED', cancelledAt: new Date() } });
-    // Restore reserved stock.
-    for (const item of order.items) {
+    await tx.orderItem.updateMany({
+      where: { orderId: order.id, id: { in: [...held] } },
+      data: { status: 'CANCELLED', cancelledBy: 'PAYMENT_FAILED', cancelledAt: new Date() },
+    });
+    // Restore reserved stock: onto the variant and, in the same step, back to
+    // the warehouse it was allocated from. Two separate steps let a stock
+    // re-sync in between leave the total short (pre-launch test).
+    for (const item of inLockOrder(order.items.filter((i) => held.has(i.id)))) {
       await tx.productVariant.update({
         where: { id: item.variantId },
         data: { stock: { increment: item.quantity } },
       });
+      await returnStock(tx, {
+        variantId: item.variantId,
+        quantity: item.quantity,
+        reason: `Payment failed: ${reason}`,
+        reference: order.orderNumber,
+      });
     }
     // Release the coupon redemption reserved at checkout.
-    if (order.couponCode && order.couponDiscountPaise > 0) {
+    if (wasOpen && order.couponCode && order.couponDiscountPaise > 0) {
       await tx.coupon.updateMany({
         where: { code: order.couponCode, usedCount: { gt: 0 } },
         data: { usedCount: { decrement: 1 } },
       });
     }
     // Give back any credits that were reserved for the discount.
-    if (order.creditsUsed > 0) {
+    if (wasOpen && order.creditsUsed > 0) {
       await tx.user.update({
         where: { id: order.userId },
         data: { creditsBalance: { increment: order.creditsUsed } },
@@ -247,21 +277,6 @@ export async function settlePaymentFailure(orderId: string, reason: string): Pro
     }
     return true;
   });
-  if (!claimed) return false;
-
-  // Reserved units are back on the variant; return them to the warehouse they
-  // were allocated from so the location rows stay in step.
-  await prisma.$transaction(async (tx) => {
-    for (const item of order.items) {
-      await returnStock(tx, {
-        variantId: item.variantId,
-        quantity: item.quantity,
-        reason: `Payment failed: ${reason}`,
-        reference: order.orderNumber,
-      });
-    }
-  });
-  return true;
 }
 
 /**

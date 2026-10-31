@@ -13,6 +13,7 @@ import { type CodAvailability,
   codPlatformRefusal,
 } from '@clowe/shared';
 import { prisma } from '../db';
+import { openHoldsFor, type OpenHolds } from '../services/openOrderHolds';
 import { hiddenProductTest, isHiddenProduct } from '../services/shopperVisibility';
 import { canBuyTestListings } from '../services/storeOpen';
 import { categoryRulesMap } from '../services/categoryRules';
@@ -68,6 +69,8 @@ export async function validateCoupon(
   code: string,
   subtotalPaise: number,
   userId?: string,
+  /** The buyer's own open orders for this cart: their redemption is this cart's (services/openOrderHolds). */
+  holds?: OpenHolds,
 ): Promise<{ coupon: CouponRow; discountPaise: number } | { error: string }> {
   // The single point every coupon is resolved through, so switching the
   // feature off reaches a cart that already carried a code: the caller above
@@ -89,7 +92,7 @@ export async function validateCoupon(
     }
     if (coupon.perUserLimit !== null) {
       const mine = await prisma.order.count({
-        where: { userId, couponCode: coupon.code, status: { not: 'CANCELLED' } },
+        where: { userId, couponCode: coupon.code, status: { not: 'CANCELLED' }, id: { notIn: holds?.orderIds ?? [] } },
       });
       if (mine >= coupon.perUserLimit) {
         return { error: `You have already used ${coupon.code}` };
@@ -100,7 +103,7 @@ export async function validateCoupon(
   const now = new Date();
   if (coupon.startsAt && coupon.startsAt > now) return { error: 'This coupon is not active yet' };
   if (coupon.expiresAt && coupon.expiresAt < now) return { error: 'This coupon has expired' };
-  if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit) {
+  if (coupon.usageLimit !== null && coupon.usedCount - (holds?.coupons.get(coupon.code) ?? 0) >= coupon.usageLimit) {
     return { error: 'This coupon has been fully redeemed' };
   }
   if (subtotalPaise < coupon.minSubtotalPaise) {
@@ -146,6 +149,14 @@ export async function buildCartView(userId: string): Promise<CartView> {
   // Seller promotions are resolved before the totals: they come off the line
   // price, so everything downstream (order, invoice, payout) sees the real
   // amount paid. A coded promotion only applies when its code is on the cart.
+  // Units, credits and the coupon use the buyer's own unpaid order for these
+  // items is holding are this cart's: a refresh or a second tab must not see
+  // its own last unit as sold or its coupon as used.
+  const holds = await openHoldsFor(
+    userId,
+    liveItems.filter((i) => i.selected).map((i) => i.variantId),
+  );
+
   const promotions = await applyPromotions(
     liveItems
       .filter((i) => i.selected)
@@ -175,7 +186,7 @@ export async function buildCartView(userId: string): Promise<CartView> {
       label: i.variant.label,
       pricePaise: i.variant.pricePaise,
       mrpPaise: i.variant.mrpPaise,
-      stock: i.variant.stock,
+      stock: i.variant.stock + (holds.units.get(i.variantId) ?? 0),
       quantity: i.quantity,
       selected: i.selected,
       rootCategorySlug:
@@ -213,7 +224,7 @@ export async function buildCartView(userId: string): Promise<CartView> {
   let coupon: AppliedCoupon | null = null;
   let couponDiscountPaise = 0;
   if (cart.couponCode) {
-    const result = await validateCoupon(cart.couponCode, subtotalPaise, userId);
+    const result = await validateCoupon(cart.couponCode, subtotalPaise, userId, holds);
     if ('error' in result) {
       await prisma.cart.update({ where: { id: cart.id }, data: { couponCode: null } });
     } else {
@@ -256,6 +267,7 @@ export async function buildCartView(userId: string): Promise<CartView> {
     promotions: [...appliedPromotions.values()],
     totalPaise: subtotalPaise + shippingPaise - couponDiscountPaise,
     savingsPaise: discountPaise + promoDiscountPaise + couponDiscountPaise,
+    heldCredits: holds.credits,
   };
 }
 
@@ -297,15 +309,17 @@ cartRouter.post('/items', async (req, res, next) => {
     ) {
       throw ApiError.notFound('Product not available');
     }
-    if (variant.stock < quantity) {
-      throw ApiError.badRequest(`Only ${variant.stock} left in stock`, 'OUT_OF_STOCK');
+    // Units the buyer's own unpaid order for this item holds are theirs here too.
+    const available = variant.stock + ((await openHoldsFor(req.auth!.userId, [variantId])).units.get(variantId) ?? 0);
+    if (available < quantity) {
+      throw ApiError.badRequest(`Only ${available} left in stock`, 'OUT_OF_STOCK');
     }
 
     const cart = await getOrCreateCart(req.auth!.userId);
     const existing = await prisma.cartItem.findUnique({
       where: { cartId_variantId: { cartId: cart.id, variantId } },
     });
-    const newQty = Math.min((existing?.quantity ?? 0) + quantity, 10, variant.stock);
+    const newQty = Math.min((existing?.quantity ?? 0) + quantity, 10, available);
     await prisma.cartItem.upsert({
       where: { cartId_variantId: { cartId: cart.id, variantId } },
       // A re-add re-ticks the line — you just said you want it.
@@ -377,8 +391,9 @@ cartRouter.patch('/items/:id', async (req, res, next) => {
       include: { variant: true },
     });
     if (!item || item.cartId !== cart.id) throw ApiError.notFound('Cart item not found');
-    if (quantity !== undefined && item.variant.stock < quantity) {
-      throw ApiError.badRequest(`Only ${item.variant.stock} left in stock`, 'OUT_OF_STOCK');
+    if (quantity !== undefined) {
+      const available = item.variant.stock + ((await openHoldsFor(req.auth!.userId, [item.variantId])).units.get(item.variantId) ?? 0);
+      if (available < quantity) throw ApiError.badRequest(`Only ${available} left in stock`, 'OUT_OF_STOCK');
     }
     await prisma.cartItem.update({
       where: { id: item.id },
@@ -431,9 +446,11 @@ cartRouter.post('/coupon', async (req, res, next) => {
     const { code } = couponApplySchema.parse(req.body);
     const userId = req.auth!.userId;
     const cart = await getOrCreateCart(userId);
-    // Validate against the current ticked subtotal, not the whole cart.
-    const { subtotalPaise } = await buildCartView(userId);
-    const result = await validateCoupon(code, subtotalPaise, userId);
+    // Validate against the current ticked subtotal, not the whole cart; the
+    // buyer's own unpaid order for these items does not count as a use.
+    const view = await buildCartView(userId);
+    const holds = await openHoldsFor(userId, view.lines.filter((l) => l.selected).map((l) => l.variantId));
+    const result = await validateCoupon(code, view.subtotalPaise, userId, holds);
     if ('error' in result) {
       // Not a platform coupon — it may be a seller's promotion code, which is
       // stored on the cart the same way and resolved per line in the view.

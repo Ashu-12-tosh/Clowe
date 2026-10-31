@@ -1,5 +1,5 @@
 import type { GatewayCheckout, GatewayPaymentKind, PaymentConfirmResult } from '@clowe/shared';
-import { api } from './api';
+import { api, ApiRequestError } from './api';
 
 // ---------------------------------------------------------------------------
 // Cashfree's browser checkout (JS SDK v3), and asking our server afterwards
@@ -62,20 +62,53 @@ export async function openCashfreeCheckout(checkout: GatewayCheckout): Promise<'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** One ask gives up after this long: a dead mobile connection must not leave a spinner up for minutes. */
+export const CONFIRM_TIMEOUT_MS = 15_000;
+
+/** The caller's cancel, or the time limit, whichever comes first. */
+function withTimeout(signal: AbortSignal | undefined, ms: number): { signal: AbortSignal; done: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new DOMException('Timed out', 'TimeoutError')), ms);
+  const onAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) controller.abort(signal.reason);
+  else signal?.addEventListener('abort', onAbort, { once: true });
+  return {
+    signal: controller.signal,
+    done: () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    },
+  };
+}
+
 /**
  * Ask the server what happened to a gateway payment. While the bank has not
  * answered (PENDING) it asks again, a few times, before handing PENDING back.
+ * Each ask has a time limit (a hung one counts as a connection problem);
+ * `signal` cancels the whole check, e.g. when the buyer presses Check again.
  */
 export async function confirmPayment(
   kind: GatewayPaymentKind,
   id: string,
-  { attempts = 8, intervalMs = 3000 }: { attempts?: number; intervalMs?: number } = {},
+  { attempts = 8, intervalMs = 3000, signal }: { attempts?: number; intervalMs?: number; signal?: AbortSignal } = {},
 ): Promise<PaymentConfirmResult> {
   let last: PaymentConfirmResult = { outcome: 'PENDING', message: null, checkout: null };
   for (let i = 0; i < attempts; i++) {
-    last = await api<PaymentConfirmResult>('/api/payments/confirm', { body: { kind, id }, auth: true, quiet: true });
+    const limit = withTimeout(signal, CONFIRM_TIMEOUT_MS);
+    try {
+      last = await api<PaymentConfirmResult>('/api/payments/confirm', { body: { kind, id }, auth: true, quiet: true, signal: limit.signal });
+    } catch (err) {
+      // Timed out (not cancelled by the caller): no answer, as if offline.
+      if (err instanceof DOMException && !signal?.aborted) {
+        throw new ApiRequestError('NETWORK_ERROR', 'Could not reach Clowe — check your connection and try again');
+      }
+      throw err;
+    } finally {
+      limit.done();
+    }
     if (last.outcome !== 'PENDING') return last;
     if (i < attempts - 1) await sleep(intervalMs);
+    if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
   }
   return last;
 }

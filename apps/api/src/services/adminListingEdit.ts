@@ -154,6 +154,8 @@ export async function adminEditListing(productId: string, input: AdminListingEdi
     ...(input.visible !== undefined ? { isVisible: input.visible } : {}),
   };
   await prisma.$transaction([
+    // The product's variants locked first, in id order, as orders lock them.
+    prisma.$executeRaw`SELECT 1 FROM "product_variants" WHERE "productId" = ${productId} ORDER BY id COLLATE "C" FOR NO KEY UPDATE`,
     prisma.product.update({ where: { id: productId }, data }),
     ...(input.sizes ? await sizeWrites(productId, input.sizes) : []),
     // Pictures: the set given, in order; the first is the main one.

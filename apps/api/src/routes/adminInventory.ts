@@ -45,6 +45,7 @@ import { requireAuth, requireRole } from '../middleware/auth';
 import { ApiError } from '../utils/ApiError';
 import {
   adjustStock,
+  lockVariants,
   moveBetweenWarehouses,
   nextDocumentNumber,
   receiveStock,
@@ -805,16 +806,25 @@ adminInventoryRouter.post('/stock/bulk', async (req, res, next) => {
           skipped.push({ locationId: id, reason: 'No new quantity given' });
           continue;
         }
-        await prisma.$transaction((tx) =>
-          adjustStock(tx, {
-            variantId: location.variantId,
-            warehouseId: location.warehouseId,
-            newQuantity: input.newQuantity!,
-            reason: input.reason || 'Bulk adjustment',
-            actorId: req.auth!.userId,
-            isCount: true,
-          }),
-        );
+        // Each row is its own step: one the stock rules refuse (the ceiling)
+        // is reported, not thrown halfway through with the rows before it
+        // already saved and nothing to say so.
+        try {
+          await prisma.$transaction((tx) =>
+            adjustStock(tx, {
+              variantId: location.variantId,
+              warehouseId: location.warehouseId,
+              newQuantity: input.newQuantity!,
+              reason: input.reason || 'Bulk adjustment',
+              actorId: req.auth!.userId,
+              isCount: true,
+            }),
+          );
+        } catch (err) {
+          if (!(err instanceof ApiError)) throw err;
+          skipped.push({ locationId: id, reason: err.message });
+          continue;
+        }
       }
       updated += 1;
     }
@@ -1243,6 +1253,7 @@ adminInventoryRouter.post('/purchase-orders/:id/receive', async (req, res, next)
     }
 
     await prisma.$transaction(async (tx) => {
+      await lockVariants(tx, input.lines.map((l) => byId.get(l.itemId)!.variantId));
       for (const line of input.lines) {
         if (line.quantity <= 0) continue;
         const item = byId.get(line.itemId)!;
@@ -1431,6 +1442,7 @@ adminInventoryRouter.patch('/transfers/:id/status', async (req, res, next) => {
 
     if (status === 'COMPLETED') {
       await prisma.$transaction(async (tx) => {
+        await lockVariants(tx, transfer.items.map((i) => i.variantId));
         for (const item of transfer.items) {
           await moveBetweenWarehouses(tx, {
             variantId: item.variantId,
@@ -1749,6 +1761,7 @@ adminInventoryRouter.post('/stock/receive', async (req, res, next) => {
     }
 
     await prisma.$transaction(async (tx) => {
+      await lockVariants(tx, input.lines.map((l) => l.variantId));
       for (const line of input.lines) {
         await receiveStock(tx, {
           variantId: line.variantId,
@@ -1820,24 +1833,31 @@ adminInventoryRouter.post('/stock/import', async (req, res, next) => {
         continue;
       }
 
-      const existing = await prisma.stockLocation.findUnique({
-        where: { warehouseId_variantId: { warehouseId: warehouse.id, variantId } },
-        select: { id: true, quantity: true },
-      });
-
       if (row.quantity !== undefined) {
-        const target =
-          input.mode === 'SET' ? row.quantity : (existing?.quantity ?? 0) + row.quantity;
-        const result = await prisma.$transaction((tx) =>
-          adjustStock(tx, {
-            variantId,
-            warehouseId: warehouse.id,
-            newQuantity: target,
-            reason: input.reason,
-            actorId: req.auth!.userId,
-            isCount: input.isCount,
-          }),
-        );
+        const quantity = row.quantity;
+        // "Add" adds to what is on the shelf now: read under the variant's
+        // lock, so a sale or another import in between is not overwritten.
+        // Each row is its own step: a row the stock rules refuse (the ceiling,
+        // below zero) is listed in skipped and the file goes on, so the answer
+        // says exactly what was saved — throwing here left the rows before it
+        // saved behind a bare error, and re-uploading the file added them twice.
+        let result: Awaited<ReturnType<typeof adjustStock>>;
+        try {
+          result = await prisma.$transaction((tx) =>
+            adjustStock(tx, {
+              variantId,
+              warehouseId: warehouse.id,
+              ...(input.mode === 'SET' ? { newQuantity: quantity } : { addQuantity: quantity }),
+              reason: input.reason,
+              actorId: req.auth!.userId,
+              isCount: input.isCount,
+            }),
+          );
+        } catch (err) {
+          if (!(err instanceof ApiError)) throw err;
+          skipped.push({ row: rowNumber, sku: row.sku, reason: err.message });
+          continue;
+        }
         if (result.delta !== 0) quantityChanged += 1;
       }
 

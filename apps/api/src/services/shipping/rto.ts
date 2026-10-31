@@ -3,7 +3,7 @@ import { prisma } from '../../db';
 import { ApiError } from '../../utils/ApiError';
 import { creditExpiryFrom } from '../../routes/credits';
 import { refundOrderPart } from '../refundService';
-import { returnStock } from '../stockService';
+import { inLockOrder, returnStock } from '../stockService';
 import { valueOfLines } from './codAmount';
 import { shippingProvider } from './index';
 import { ShippingProviderError, type NdrAction } from './ShippingProvider';
@@ -255,7 +255,7 @@ export async function receiveRto(input: { shipmentId: string; sellerId: string; 
   const lines = shipment.items.filter((i) => i.status === 'RTO_DELIVERED');
   if (input.condition === 'GOOD') {
     await prisma.$transaction(async (tx) => {
-      for (const l of lines) {
+      for (const l of inLockOrder(lines)) {
         await tx.productVariant.update({ where: { id: l.variantId }, data: { stock: { increment: l.quantity } } });
         await returnStock(tx, {
           variantId: l.variantId,

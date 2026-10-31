@@ -271,7 +271,8 @@ export default function AdminInventoryPage() {
         '/api/admin/inventory/stock/bulk',
         { method: 'POST', auth: true, body },
       );
-      const message = `${result.updated} row(s) updated${result.skipped.length > 0 ? `, ${result.skipped.length} skipped` : ''}.`;
+      const reasons = [...new Set(result.skipped.map((s) => s.reason))].join('; ');
+      const message = `${result.updated} row(s) updated${result.skipped.length > 0 ? `, ${result.skipped.length} skipped (${reasons})` : ''}.`;
       flash(message);
       (result.skipped.length > 0 ? toast.error : toast.success)(message);
       setSelected(new Set());
@@ -1431,6 +1432,8 @@ function ImportModal({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<InventoryImportResult | null>(null);
+  // The rows sent, in order: the API's row numbers count these, not the file's lines.
+  const [sent, setSent] = useState<ParsedImportRow[]>([]);
 
   const knownCodes = useMemo(
     () => new Set(options.warehouses.map((w) => w.code.toUpperCase())),
@@ -1526,6 +1529,7 @@ function ImportModal({
           })),
         },
       });
+      setSent(valid);
       setResult(body);
       (body.skipped.length === 0 ? toast.success : toast.error)(
         `${num(body.applied)} row(s) imported` +
@@ -1677,11 +1681,17 @@ function ImportModal({
           </p>
           {result.skipped.length > 0 && (
             <ul className="mt-2 max-h-32 space-y-0.5 overflow-y-auto text-[11px] text-red-600">
-              {result.skipped.map((s) => (
-                <li key={`${s.row}-${s.sku}`}>
-                  Row {s.row} ({s.sku}): {s.reason}
-                </li>
-              ))}
+              {result.skipped.map((s) => {
+                // The file line the admin sees in the preview, and its warehouse:
+                // two rows of one SKU must not be mistaken for each other.
+                const line = sent[s.row - 1];
+                return (
+                  <li key={`${s.row}-${s.sku}`}>
+                    Line {line?.line ?? s.row} ({s.sku}
+                    {line?.warehouseCode ? ` at ${line.warehouseCode}` : ''}): {s.reason} — not saved
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

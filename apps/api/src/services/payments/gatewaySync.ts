@@ -1,6 +1,7 @@
 import { prisma } from '../../db';
 import { ApiError } from '../../utils/ApiError';
 import { env, webPublicUrl } from '../../env';
+import { alertAdminsSafe } from '../adminAlerts';
 import { recordAudit } from '../auditService';
 import { settleCreditTopUp } from '../creditTopUps';
 import { settlePaymentFailure, settlePaymentSuccess } from '../orderService';
@@ -36,6 +37,8 @@ export const GATEWAY_ORDER_TTL_MIN = 30;
 export const UNASKABLE_ORDER_TTL_MIN = 60;
 /** Past expiry, wait this long before stopping an order, for a payment completing at the last moment. */
 const EXPIRY_GRACE_MS = 3 * 60 * 1000;
+/** A gateway session is handed out again (reopened, reused) only with this much time left on it. */
+export const MIN_SESSION_LEFT_MS = 3 * 60_000;
 
 export type PaymentKind = 'ORDER' | 'CREDITS' | 'PROMOTION';
 
@@ -60,6 +63,8 @@ export interface ConfirmResult {
   outcome: ConfirmOutcome;
   /** For the buyer: why it failed, or what is happening. */
   message?: string;
+  /** Money may be moving right now (an attempt the bank has not decided): never open a new attempt. */
+  attemptPending?: boolean;
 }
 
 /** Statuses of an attempt that ended without money: the buyer may try again. */
@@ -280,8 +285,20 @@ export function checkoutPayload(target: { provider: string; providerOrderId: str
  * number of times, from anywhere: the browser after checkout, a webhook, the
  * sweeper. `sweep` lets it stop an order whose time is up.
  */
-export async function syncGatewayPayment(target: GatewayTarget, opts: { sweep?: boolean } = {}): Promise<ConfirmResult> {
-  if (target.status === 'PAID' || target.status === 'REFUNDED') return { outcome: 'PAID' };
+export async function syncGatewayPayment(target: GatewayTarget, opts: { sweep?: boolean; webhook?: boolean } = {}): Promise<ConfirmResult> {
+  if (target.status === 'PAID' || target.status === 'REFUNDED') {
+    // A payment event for something already paid: a second payment on the same
+    // gateway order (two tabs shared one session) lands here, after the first
+    // settled it. Look, so the extra money is not left unnoticed.
+    if (opts.webhook) {
+      const late = providerFor(target.provider);
+      if (late?.fetchOrder) {
+        const state = await late.fetchOrder(target.providerOrderId);
+        await flagSeveralPayments(target, state.attempts.filter((a) => a.status === 'SUCCESS'));
+      }
+    }
+    return { outcome: 'PAID' };
+  }
 
   const provider = providerFor(target.provider);
   if (!provider?.fetchOrder) {
@@ -294,11 +311,13 @@ export async function syncGatewayPayment(target: GatewayTarget, opts: { sweep?: 
     await prisma.payment.updateMany({ where: { orderId: target.id }, data: { lastCheckedAt: new Date() } });
   }
 
-  const paid = state.attempts.find((a) => a.status === 'SUCCESS');
+  const successes = state.attempts.filter((a) => a.status === 'SUCCESS');
+  await flagSeveralPayments(target, successes);
+  const paid = successes[0];
   if (paid) return applySuccess(target, state, paid.providerPaymentId, paid.amountPaise, paid.currency);
   if (state.status === 'PAID') {
     // Paid with no successful attempt listed yet: the list catches up shortly.
-    return { outcome: 'PENDING', message: 'Payment received — confirming it with the bank.' };
+    return { outcome: 'PENDING', message: 'Payment received — confirming it with the bank.', attemptPending: true };
   }
 
   if (state.status === 'EXPIRED' || state.status === 'TERMINATED') {
@@ -309,7 +328,7 @@ export async function syncGatewayPayment(target: GatewayTarget, opts: { sweep?: 
 
   // Still payable.
   if (state.attempts.some((a) => a.status === 'PENDING')) {
-    return { outcome: 'PENDING', message: 'Your bank has not confirmed the payment yet.' };
+    return { outcome: 'PENDING', message: 'Your bank has not confirmed the payment yet.', attemptPending: true };
   }
   if (opts.sweep && target.expiresAt && target.expiresAt.getTime() + EXPIRY_GRACE_MS < Date.now()) {
     // Stop the gateway order first, so no payment can land after we cancel.
@@ -327,6 +346,37 @@ export async function syncGatewayPayment(target: GatewayTarget, opts: { sweep?: 
     };
   }
   return { outcome: 'PENDING' };
+}
+
+/**
+ * Two tabs handed the same session, both paid: one payment settles the order,
+ * the other must go back. A person checks it with the gateway — told once per
+ * gateway order and number of payments, however often the gateway is asked.
+ */
+async function flagSeveralPayments(target: GatewayTarget, successes: GatewayOrderState['attempts']): Promise<void> {
+  if (successes.length < 2) return;
+  const action = 'Several payments on one order';
+  const told = await prisma.auditLog.count({
+    where: { action, entityId: target.id, summary: { startsWith: `${successes.length} successful payments` } },
+  });
+  if (told > 0) return;
+  await recordAudit({
+    actorRole: 'SYSTEM',
+    module: 'PAYMENTS',
+    action,
+    entityType: target.kind === 'ORDER' ? 'Order' : 'Purchase',
+    entityId: target.id,
+    summary: `${successes.length} successful payments on gateway order ${target.providerOrderId}; only one is settled. Refund the others.`,
+    metadata: { providerOrderId: target.providerOrderId, providerPaymentIds: successes.map((a) => a.providerPaymentId) },
+    severity: 'CRITICAL',
+    status: 'FAILED',
+  });
+  alertAdminsSafe({
+    type: 'PAYMENT_DUPLICATE',
+    title: `Paid twice — ${target.providerOrderId}`,
+    body: `${successes.length} successful payments on one gateway order (${successes.map((a) => a.providerPaymentId).join(', ')}). One settles the order; refund the others from the gateway dashboard.`,
+    linkHref: '/admin/orders',
+  });
 }
 
 async function applySuccess(
@@ -353,7 +403,7 @@ async function applySuccess(
       severity: 'CRITICAL',
       status: 'FAILED',
     });
-    return { outcome: 'PENDING', message: 'Your payment is being checked by our team.' };
+    return { outcome: 'PENDING', message: 'Your payment is being checked by our team.', attemptPending: true };
   }
 
   if (target.kind === 'CREDITS') {
@@ -403,6 +453,14 @@ export async function refundLatePayment(target: GatewayTarget, providerPaymentId
     summary: `${order.orderNumber}: ₹${(target.amountPaise / 100).toFixed(2)} arrived after the order was cancelled; refund ${refund?.status ?? 'not created'}`,
     metadata: { providerPaymentId, refundId: refund?.id ?? null, refundStatus: refund?.status ?? null },
     severity: 'HIGH',
+  });
+  // A second payment for the same goods (an order replaced by a newer checkout,
+  // or one cancelled while the buyer was paying): a person should see it.
+  alertAdminsSafe({
+    type: 'PAYMENT_LATE_REFUNDED',
+    title: `Late payment refunded — ${order.orderNumber}`,
+    body: `₹${(target.amountPaise / 100).toFixed(2)} arrived after ${order.orderNumber} was cancelled and is being refunded in full (refund ${refund?.status ?? 'not created'}). Check that the buyer was not charged twice.`,
+    linkHref: '/admin/orders',
   });
   await prisma.notification.create({
     data: {

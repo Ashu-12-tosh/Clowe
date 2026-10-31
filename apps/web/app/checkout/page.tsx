@@ -242,9 +242,12 @@ export default function CheckoutPage() {
   const couponDiscountPaise = cart?.couponDiscountPaise ?? 0;
   // Mirrors the server rule: credits can't take the payable below ₹1.
   const beforeCredits = itemTotalPaise + shippingPaise - couponDiscountPaise;
+  // The balance, plus what this cart's own unpaid order is holding (it is
+  // handed back or replaced at checkout, so those credits are this cart's).
+  const creditsAvailable = (credits?.balance ?? 0) + (cart?.heldCredits ?? 0);
   const creditsUsable =
     useCredits && credits
-      ? Math.min(credits.balance, Math.floor(Math.max(0, beforeCredits - 100) / CREDIT_VALUE_PAISE))
+      ? Math.max(0, Math.min(creditsAvailable, Math.floor(Math.max(0, beforeCredits - 100) / CREDIT_VALUE_PAISE)))
       : 0;
   const creditsDiscountPaise = creditsToPaise(creditsUsable);
   const totalPaise = beforeCredits - creditsDiscountPaise;
@@ -607,7 +610,7 @@ export default function CheckoutPage() {
               />
             </div>
 
-            {credits && credits.balance > 0 && (
+            {credits && creditsAvailable > 0 && (
               <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-brand-100 bg-brand-50/50 p-3">
                 <input
                   type="checkbox"
@@ -617,8 +620,8 @@ export default function CheckoutPage() {
                 />
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold text-ink-900">
-                    Use my Clowe Credits — 🪙 {credits.balance} ={' '}
-                    {formatPaise(credits.valuePaise)}
+                    Use my Clowe Credits — 🪙 {creditsAvailable} ={' '}
+                    {formatPaise(creditsToPaise(creditsAvailable))}
                   </span>
                   <span className="block text-xs text-gray-500">
                     10 credits = ₹5 · applied as an instant discount

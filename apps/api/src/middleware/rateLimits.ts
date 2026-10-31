@@ -176,3 +176,16 @@ export const paymentConfirmLimiter = rateLimit({
   keyGenerator: (req) => `pay-confirm:${req.auth?.userId ?? 'anonymous'}`,
   message: limitError('Too many payment checks. Please wait a moment.'),
 });
+
+/**
+ * Place order / Pay, per buyer. A person checks out a few times a minute at
+ * most (a failed attempt, a changed address); a burst of one account's clicks
+ * or a script is stopped here before it queues for the checkout lock.
+ */
+export const checkoutLimiter = rateLimit({
+  ...common,
+  windowMs: 60 * 1000,
+  limit: 20,
+  keyGenerator: (req) => `checkout:${req.auth?.userId ?? 'anonymous'}`,
+  message: limitError('Too many checkout attempts. Please wait a moment and try again.'),
+});

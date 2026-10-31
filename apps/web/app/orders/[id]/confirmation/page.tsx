@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import type { AuthUser, OrderDetailView, ProductListItem } from '@clowe/shared';
 import { api, getStoredUser } from '@/lib/api';
 import { formatPaise, istDay, paymentMethodLabel } from '@/lib/format';
+import { orderMoneyView } from '@/lib/paymentView';
 import { fetchWishlistIds } from '@/lib/wishlist';
 import { Scroller } from '@/components/home/HomeBits';
 import ProductCard from '@/components/ProductCard';
@@ -143,6 +144,8 @@ export default function OrderConfirmationPage({ params: paramsPromise }: { param
 
   const reached = reachedIndex(order.status);
   const cancelled = order.status === 'CANCELLED';
+  const { totalLabel } = orderMoneyView(order);
+  const awaitingPayment = order.awaitingPayment;
   const eta = etaLabel(order.etaFrom, order.etaTo);
   const orderedIds = order.items.map((i) => i.productSlug);
   const itemCount = order.items.reduce((sum, i) => sum + i.quantity, 0);
@@ -171,16 +174,18 @@ export default function OrderConfirmationPage({ params: paramsPromise }: { param
           </span>
           <div className="min-w-0">
             <h1 className="t-page-title text-ink-900">
-              {cancelled ? 'Order cancelled' : `Thank you, ${user?.name?.split(' ')[0] ?? 'there'}!`}
+              {cancelled ? 'Order cancelled' : awaitingPayment ? 'Payment pending' : `Thank you, ${user?.name?.split(' ')[0] ?? 'there'}!`}
             </h1>
             <p
-              className={`t-sub-heading mt-1 ${cancelled ? 'text-red-600' : 'text-green-600'}`}
+              className={`t-sub-heading mt-1 ${cancelled ? 'text-red-600' : awaitingPayment ? 'text-yellow-700' : 'text-green-600'}`}
             >
               {cancelled
                 ? 'This order was cancelled.'
-                : 'Your order has been placed successfully.'}
+                : awaitingPayment
+                  ? 'Your order is confirmed once the payment goes through.'
+                  : 'Your order has been placed successfully.'}
             </p>
-            {!cancelled && (
+            {!cancelled && !awaitingPayment && (
               <p className="t-caption mt-2 text-gray-500">
                 We&apos;ve sent an order confirmation to
                 <br />
@@ -191,6 +196,22 @@ export default function OrderConfirmationPage({ params: paramsPromise }: { param
               </p>
             )}
             <div className="mt-4 flex flex-wrap gap-2">
+              {awaitingPayment && (
+                <>
+                  <Link
+                    href={`/checkout/return?kind=ORDER&id=${encodeURIComponent(order.id)}&pay=1`}
+                    className="t-btn rounded-lg bg-brand-600 px-5 py-2.5 text-white transition hover:bg-brand-700"
+                  >
+                    Retry payment
+                  </Link>
+                  <Link
+                    href={`/checkout/return?kind=ORDER&id=${encodeURIComponent(order.id)}`}
+                    className="t-btn rounded-lg border border-gray-300 px-5 py-2.5 text-ink-900 transition hover:border-brand-600"
+                  >
+                    Check payment status
+                  </Link>
+                </>
+              )}
               <Link
                 href={`/account/orders/${order.id}`}
                 className="t-btn rounded-lg bg-ink-900 px-5 py-2.5 text-white transition hover:bg-ink-800"
@@ -213,7 +234,7 @@ export default function OrderConfirmationPage({ params: paramsPromise }: { param
               { label: 'Order ID', value: order.orderNumber },
               { label: 'Order Date', value: fmtDateTime(order.createdAt) },
               { label: 'Payment Method', value: paymentLabel },
-              { label: 'Total Paid', value: formatPaise(order.totalPaise) },
+              { label: totalLabel, value: formatPaise(order.totalPaise) },
             ].map((row) => (
               <div key={row.label}>
                 <dt className="t-caption text-gray-500">{row.label}</dt>
@@ -486,7 +507,7 @@ export default function OrderConfirmationPage({ params: paramsPromise }: { param
 
             <div className="mt-3 flex items-baseline justify-between border-t border-gray-200 pt-3">
               <span className="t-card-label text-ink-900">
-                Total Paid
+                {totalLabel}
                 <span className="t-caption block font-normal text-gray-400">
                   (Inclusive of all taxes)
                 </span>

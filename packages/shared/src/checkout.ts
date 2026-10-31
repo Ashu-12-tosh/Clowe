@@ -151,6 +151,12 @@ export interface CartView {
   totalPaise: number;
   /** discountPaise + promoDiscountPaise + couponDiscountPaise — "you saved". */
   savingsPaise: number;
+  /**
+   * Credits the buyer's own unpaid order for these items has reserved: they are
+   * this cart's to use (the order is handed back or replaced at checkout), so
+   * they count with the balance when working out the total.
+   */
+  heldCredits: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -286,6 +292,20 @@ export const checkoutSchema = z.object({
   giftMessage: z.string().trim().max(200).optional(),
   /** Optional GSTIN for a business purchase, printed on the invoice. Only at checkout. */
   buyerGstin: gstNumberField.optional(),
+  /**
+   * The browser's key for this checkout attempt. A retry, a refresh or a second
+   * request with the same key gets the same order back, never a second one.
+   */
+  checkoutKey: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{8,64}$/, 'Invalid checkout key')
+    .optional(),
+  /**
+   * The amount to pay the shopper was shown. When prices, the coupon or the
+   * credits changed since, the order is refused with PRICE_CHANGED and the new
+   * total, so nobody is charged a number they did not see.
+   */
+  expectedTotalPaise: z.number().int().nonnegative().optional(),
 });
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
 
@@ -408,8 +428,10 @@ export const paymentConfirmSchema = z.object({
 export interface PaymentConfirmResult {
   outcome: 'PAID' | 'PENDING' | 'RETRY' | 'FAILED';
   message: string | null;
-  /** To reopen the checkout after RETRY. */
+  /** To reopen the checkout after RETRY, or to finish paying an order not paid yet. */
   checkout: GatewayCheckout | null;
+  /** A payment attempt is with the bank right now: wait, do not pay again. */
+  attemptPending?: boolean;
 }
 
 export interface CreditPurchaseResult {

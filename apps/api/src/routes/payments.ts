@@ -10,6 +10,7 @@ import { paymentProvider, RazorpayProvider } from '../services/payments';
 import { CASHFREE_WEBHOOK_MAX_AHEAD_MS, cashfreeWebhookFresh, cashfreeWebhookTime, verifyCashfreeWebhook } from '../services/cashfree/client';
 import {
   checkoutPayload,
+  MIN_SESSION_LEFT_MS,
   recordWebhook,
   refundLatePayment,
   syncGatewayPayment,
@@ -59,7 +60,9 @@ paymentsRouter.post('/mock-pay', requireAuth, async (req, res, next) => {
     }
 
     if (outcome === 'success') {
-      await settlePaymentSuccess(order.id, `mock_pay_${Date.now()}`);
+      if ((await settlePaymentSuccess(order.id, `mock_pay_${Date.now()}`)) === 'LATE') {
+        throw ApiError.badRequest('This order is not awaiting payment');
+      }
     } else {
       await settlePaymentFailure(order.id, 'Mock payment declined');
     }
@@ -77,16 +80,46 @@ paymentsRouter.post('/confirm', requireAuth, paymentConfirmLimiter, async (req, 
   try {
     const { kind, id } = paymentConfirmSchema.parse(req.body);
     const target = await ownTarget(req.auth!.userId, kind, id);
-    const result = await syncGatewayPayment(target);
+    let result = await syncGatewayPayment(target);
+    if (kind === 'ORDER' && result.outcome === 'PAID') {
+      // Paid, but the order was cancelled (a late payment, refunded): not a "thank you".
+      const order = await prisma.order.findUnique({ where: { id }, select: { status: true } });
+      if (order?.status === 'CANCELLED') {
+        result = { outcome: 'FAILED', message: 'This order was cancelled, so your payment is being refunded in full. It usually reaches you within 5–7 business days.' };
+      }
+    }
+    // A session about to run out is not reopened: the payment would fail at
+    // the bank, and the order is let go by the sweeper. Checking out again
+    // from the cart places a fresh one.
+    const sessionLeft = target.expiresAt ? target.expiresAt.getTime() - Date.now() : Infinity;
+    if (result.outcome !== 'PAID' && result.outcome !== 'FAILED' && !result.attemptPending && sessionLeft < MIN_SESSION_LEFT_MS) {
+      const timedOut: PaymentConfirmResult = {
+        outcome: 'PENDING',
+        message:
+          kind === 'ORDER'
+            ? 'This payment has timed out. If no money left your account, check out again from your cart.'
+            : 'This payment has timed out. If no money left your account, please start it again.',
+        checkout: null,
+        attemptPending: false,
+      };
+      res.json({ success: true, data: timedOut });
+      return;
+    }
     // After a failed attempt the same gateway order can be paid again, with
     // the same session, until it expires — but not while the store is closed
     // to this shopper: an order placed before it closed is not paid now.
-    const retryable = result.outcome === 'RETRY' || (result.outcome === 'PENDING' && target.status === 'CREATED');
-    const reopen = retryable && (await canPlaceOrders(req.auth!.userId));
+    // While the bank is deciding an attempt, nothing is reopened: a second
+    // attempt then could take the money twice.
+    const retryable =
+      result.outcome === 'RETRY' || (result.outcome === 'PENDING' && target.status === 'CREATED' && !result.attemptPending);
+    // A cancelled order is never offered for payment, whatever its payment row says.
+    const cancelled = kind === 'ORDER' && (await prisma.order.findUnique({ where: { id }, select: { status: true } }))?.status === 'CANCELLED';
+    const reopen = retryable && !cancelled && (await canPlaceOrders(req.auth!.userId));
     const body: PaymentConfirmResult = {
       outcome: result.outcome,
       message: retryable && !reopen ? STORE_CLOSED_MESSAGE : (result.message ?? null),
       checkout: reopen ? checkoutPayload(target) : null,
+      attemptPending: result.attemptPending ?? false,
     };
     res.json({ success: true, data: body });
   } catch (err) {
@@ -177,7 +210,7 @@ paymentsRouter.post('/cashfree/webhook', async (req, res, next) => {
       // are read too so a newer webhook version cannot slip past unread.
       reference = pick(body, ['data', 'order', 'order_id'], ['data', 'order_id'], ['data', 'payment', 'order_id']);
       const target = reference ? await targetByProviderOrderId(reference) : null;
-      if (target) await syncGatewayPayment(target);
+      if (target) await syncGatewayPayment(target, { webhook: true });
     } else if (type.includes('REFUND')) {
       reference = pick(body, ['data', 'refund', 'refund_id'], ['data', 'refund_id']);
       const refundId = reference ? await refundByGatewayId(reference) : null;

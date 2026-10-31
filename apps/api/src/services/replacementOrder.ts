@@ -2,7 +2,7 @@ import { orderEtaWindow } from '@clowe/shared';
 import { prisma } from '../db';
 import { generateOrderNumber } from './orderService';
 import { valueOfLines } from './shipping/codAmount';
-import { allocateForDispatch } from './stockService';
+import { allocateForDispatch, inLockOrder } from './stockService';
 
 // ---------------------------------------------------------------------------
 // A free replacement: the same items sent again on a new order, for a parcel
@@ -65,7 +65,7 @@ export async function createReplacementOrder(input: {
   const eta = orderEtaWindow(original.shipPincode);
 
   const created = await prisma.$transaction(async (tx) => {
-    for (const l of fromStock ? lines : []) {
+    for (const l of fromStock ? inLockOrder(lines) : []) {
       const took = await tx.productVariant.updateMany({
         where: { id: l.variantId, stock: { gte: l.quantity } },
         data: { stock: { decrement: l.quantity } },

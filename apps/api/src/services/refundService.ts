@@ -391,20 +391,7 @@ export async function refundOrderPart(
   amountPaise: number,
   reason: string,
 ): Promise<{ id: string; status: string; amountPaise: number } | null> {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { payment: true, refunds: { where: { status: { in: ['PENDING', 'PROCESSING', 'PROCESSED'] } } } },
-  });
-  if (!order?.payment || order.payment.status !== 'PAID') return null;
-  const alreadyRefunded = order.refunds.reduce((sum, r) => sum + r.amountPaise, 0);
-  const amount = Math.min(amountPaise, order.payment.amountPaise - alreadyRefunded);
-  if (amount <= 0) return null;
-  const refund = await prisma.refund.create({
-    data: { orderId, amountPaise: amount, provider: order.payment.provider, status: 'PENDING', reason },
-  });
-  await processRefund(refund.id);
-  const settled = await prisma.refund.findUniqueOrThrow({ where: { id: refund.id } });
-  return { id: settled.id, status: settled.status, amountPaise: settled.amountPaise };
+  return refundWhatIsLeft(orderId, reason, (left) => Math.min(amountPaise, left));
 }
 
 export async function refundCancelledOrder(
@@ -412,25 +399,44 @@ export async function refundCancelledOrder(
   reason: string,
   issuedByAdminId?: string,
 ): Promise<{ id: string; status: string; amountPaise: number } | null> {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { payment: true, refunds: { where: { status: { in: ['PENDING', 'PROCESSING', 'PROCESSED'] } } } },
-  });
-  if (!order?.payment || order.payment.status !== 'PAID') return null;
-  const alreadyRefunded = order.refunds.reduce((sum, r) => sum + r.amountPaise, 0);
-  const amountPaise = order.payment.amountPaise - alreadyRefunded;
-  if (amountPaise <= 0) return null;
+  return refundWhatIsLeft(orderId, reason, (left) => left, issuedByAdminId);
+}
 
-  const refund = await prisma.refund.create({
-    data: {
-      orderId,
-      amountPaise,
-      provider: order.payment.provider,
-      status: 'PENDING',
-      reason,
-      issuedByAdminId: issuedByAdminId ?? null,
-    },
+/**
+ * Records a refund out of what is still unrefunded on a paid order (`pick`
+ * chooses how much of it), then sends it to the gateway. The read and the
+ * insert happen under a per-order lock, so two cancels, a cancel and a
+ * late-payment refund, or a retry after a lost response never refund the
+ * same money twice: the second caller sees the first one's PENDING row.
+ */
+async function refundWhatIsLeft(
+  orderId: string,
+  reason: string,
+  pick: (leftPaise: number) => number,
+  issuedByAdminId?: string,
+): Promise<{ id: string; status: string; amountPaise: number } | null> {
+  const refund = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`order-refund:${orderId}`}))`;
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: { payment: true, refunds: { where: { status: { in: ['PENDING', 'PROCESSING', 'PROCESSED'] } } } },
+    });
+    if (!order?.payment || order.payment.status !== 'PAID') return null;
+    const alreadyRefunded = order.refunds.reduce((sum, r) => sum + r.amountPaise, 0);
+    const amountPaise = pick(order.payment.amountPaise - alreadyRefunded);
+    if (amountPaise <= 0) return null;
+    return tx.refund.create({
+      data: {
+        orderId,
+        amountPaise,
+        provider: order.payment.provider,
+        status: 'PENDING',
+        reason,
+        issuedByAdminId: issuedByAdminId ?? null,
+      },
+    });
   });
+  if (!refund) return null;
   await processRefund(refund.id);
   const settled = await prisma.refund.findUniqueOrThrow({ where: { id: refund.id } });
   return { id: settled.id, status: settled.status, amountPaise: settled.amountPaise };

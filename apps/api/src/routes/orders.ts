@@ -39,7 +39,7 @@ import { exchangeAllowed, raiseClaim, rulesForDelivery } from '../services/retur
 import { raiseComplaint } from '../services/complaintService';
 import { scanViews } from './track';
 import { orderTracking, ordersTrackingSummary, refreshOrderTracking } from '../services/shipping/trackingView';
-import { trackRefreshLimiter } from '../middleware/rateLimits';
+import { checkoutLimiter, trackRefreshLimiter } from '../middleware/rateLimits';
 import { prisma } from '../db';
 import { creditNotesFor } from '../services/creditNotes';
 import { buildTaxInvoice } from '../services/taxInvoice';
@@ -60,11 +60,17 @@ import { deliveryPriceFor, etaWindowFor, isDeliveryMethodAvailable } from '../se
 import { codRefusal, deliveryRefusal, pincodeServiceability } from '../services/shipping/serviceability';
 import { orderWindow, promisesFor, recordOrderPromises, undeliverableMessage } from '../services/shipping/deliveryPromises';
 import { confirmCodOrder, generateOrderNumber, settlePaymentFailure } from '../services/orderService';
+import { CHECKOUT_LOCK_WAIT_MS, checkoutBusy, checkoutFingerprint, openOrderFor, replaceOpenOrders, resumeOrder } from '../services/checkoutDedup';
+import { openHoldsFor } from '../services/openOrderHolds';
 import { nextRmaNumber } from '../services/returnService';
-import { allocateForDispatch } from '../services/stockService';
+import { allocateForDispatch, inLockOrder } from '../services/stockService';
 import { assertOwnAssets, withPhotoUrls } from '../services/assets';
 
 export const ordersRouter = Router();
+
+/** ₹1,499 or ₹1,499.40, as the shopper sees amounts. */
+const rupeeText = (paise: number) =>
+  `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: paise % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 ordersRouter.use(requireAuth);
 
 // ---------------------------------------------------------------------------
@@ -80,7 +86,7 @@ ordersRouter.get('/availability', async (req, res, next) => {
   }
 });
 
-ordersRouter.post('/checkout', async (req, res, next) => {
+ordersRouter.post('/checkout', checkoutLimiter, async (req, res, next) => {
   try {
     // Before launch: no orders, COD included, except from admins and test accounts.
     await assertCanPlaceOrders(req.auth!.userId);
@@ -101,6 +107,8 @@ ordersRouter.post('/checkout', async (req, res, next) => {
       paymentMethod,
       billingAddressId,
       buyerGstin,
+      checkoutKey,
+      expectedTotalPaise,
     } = checkoutSchema.parse(req.body);
     const userId = req.auth!.userId;
 
@@ -224,16 +232,33 @@ ordersRouter.post('/checkout', async (req, res, next) => {
         where: { id: userId },
         select: { creditsBalance: true },
       });
+      // Credits the buyer's own unpaid order for these items reserved come
+      // back to them if that order is replaced, and are the same credits if it
+      // is handed back: either way they are this checkout's.
+      const held = (await openHoldsFor(userId, orderLines.map((l) => l.variantId))).credits;
       const maxDiscountPaise = Math.max(
         0,
         subtotalPaise + shippingPaise - couponDiscountPaise - 100,
       );
       // A balance below zero (credits taken back after they were spent) is
       // never a discount the other way.
-      creditsUsed = Math.max(0, Math.min(me?.creditsBalance ?? 0, Math.floor(maxDiscountPaise / CREDIT_VALUE_PAISE)));
+      creditsUsed = Math.max(0, Math.min((me?.creditsBalance ?? 0) + held, Math.floor(maxDiscountPaise / CREDIT_VALUE_PAISE)));
     }
     const discountPaise = creditsToPaise(creditsUsed) + couponDiscountPaise;
     const totalPaise = subtotalPaise + shippingPaise - discountPaise;
+
+    // The shopper pays the amount they were shown, or is asked again: a price
+    // raised, a coupon expired or credits spent since the page loaded used to
+    // be charged without a word (pre-launch test H5).
+    if (expectedTotalPaise !== undefined && expectedTotalPaise !== totalPaise) {
+      throw new ApiError(
+        409,
+        'PRICE_CHANGED',
+        `Your total changed from ${rupeeText(expectedTotalPaise)} to ${rupeeText(totalPaise)} since this page loaded. Please check the new price and confirm.`,
+        undefined,
+        { previousTotalPaise: expectedTotalPaise, totalPaise },
+      );
+    }
 
     // Method-specific eligibility, checked server-side so the UI can't skip it.
     if (paymentMethod === 'EMI' && totalPaise < EMI_MIN_PAISE) {
@@ -281,133 +306,232 @@ ordersRouter.post('/checkout', async (req, res, next) => {
       })),
     );
 
-    // Create the order and reserve stock atomically. Conditional decrements
-    // guard against a concurrent checkout taking the last unit.
-    const order = await prisma.$transaction(async (tx) => {
-      for (const line of orderLines) {
-        const updated = await tx.productVariant.updateMany({
-          where: { id: line.variantId, stock: { gte: line.quantity } },
-          data: { stock: { decrement: line.quantity } },
-        });
-        if (updated.count === 0) {
-          throw ApiError.badRequest(`"${line.title}" just went out of stock`, 'OUT_OF_STOCK');
-        }
-        // Take the same units out of the warehouses holding them, so the
-        // location rows keep matching the variant total we just decremented.
-        await allocateForDispatch(tx, {
-          variantId: line.variantId,
-          quantity: line.quantity,
-          reference: orderNumber,
-        });
-      }
-      // Reserve the credits (conditional — guards a concurrent double-spend).
-      if (creditsUsed > 0) {
-        const spent = await tx.user.updateMany({
-          where: { id: userId, creditsBalance: { gte: creditsUsed } },
-          data: { creditsBalance: { decrement: creditsUsed } },
-        });
-        if (spent.count === 0) {
-          throw ApiError.badRequest('Your credits balance changed — please retry', 'CREDITS_CHANGED');
-        }
-      }
-      // Reserve one redemption of the coupon (released again if payment fails).
-      // Updating against the count we just read keeps a limited coupon from
-      // being over-redeemed by two concurrent checkouts.
-      if (couponCode && couponDiscountPaise > 0) {
-        const coupon = await tx.coupon.findUnique({ where: { code: couponCode } });
-        const exhausted =
-          !coupon ||
-          !coupon.isActive ||
-          (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit);
-        if (exhausted) {
-          throw ApiError.badRequest('That coupon is no longer available', 'COUPON_INVALID');
-        }
-        const claimed = await tx.coupon.updateMany({
-          where: { id: coupon.id, usedCount: coupon.usedCount },
-          data: { usedCount: { increment: 1 } },
-        });
-        if (claimed.count === 0) {
-          throw ApiError.badRequest('That coupon was just redeemed — please retry', 'COUPON_INVALID');
-        }
-      }
-      const created = await tx.order.create({
-        data: {
-          orderNumber,
-          userId,
-          addressId: address.id,
-          shipName: address.name,
-          shipPhone: address.phone,
-          shipLine1: address.line1,
-          shipLine2: address.line2,
-          shipCity: address.city,
-          shipState: address.state,
-          shipPincode: address.pincode,
-          status: 'PLACED',
-          subtotalPaise,
-          shippingPaise,
-          discountPaise,
-          creditsUsed,
-          couponCode,
-          couponDiscountPaise,
-          totalPaise,
-          deliveryMethod,
-          etaFrom: eta.from,
-          etaTo: eta.to,
-          isGift: isGift ?? false,
-          giftMessage: isGift ? (giftMessage ?? null) : null,
-          buyerGstin: buyerGstin || null,
-          paymentMethod,
-          billName: billing.name,
-          billLine1: billing.line1,
-          billLine2: billing.line2,
-          billCity: billing.city,
-          billState: billing.state,
-          billPincode: billing.pincode,
-          items: {
-            // pricePaise is what the shopper actually pays per unit — a seller
-            // promotion is already taken off it, so payouts, invoices and
-            // refunds all read the same number.
-            create: orderLines.map((line, i) => ({
-              productId: line.productId,
-              variantId: line.variantId,
-              sellerId: sellerByVariant.get(line.variantId)!,
-              title: line.title,
-              size: line.size,
-              color: line.color,
-              variantLabel: variantById.get(line.variantId)?.label ?? line.label,
-              optionValues: optionValuesFromJson(variantById.get(line.variantId)?.optionValues),
-              pricePaise: line.pricePaise - Math.floor(line.promoDiscountPaise / line.quantity),
-              quantity: line.quantity,
-              status: 'PLACED',
-              promotionId: line.promotion?.id ?? null,
-              promoDiscountPaise: line.promoDiscountPaise,
-              returnWindowDays: windowByProduct.get(line.productId) ?? null,
-              returnable: returnableByProduct.get(line.productId) ?? true,
-              nonCancellable: line.nonCancellable,
-              gstRatePercent: gstRates[i],
-              feeModel: 2,
-              feeRates: feesByLine[i] as object,
-            })),
-          },
-        },
-      });
-      if (creditsUsed > 0) {
-        await tx.creditLedger.create({
-          data: { userId, delta: -creditsUsed, reason: 'REDEEM_CHECKOUT', orderId: created.id },
-        });
-      }
-      // Promotion usage trail — powers the seller's redemption and ROI panels.
-      await recordRedemptions(tx as unknown as typeof prisma, {
-        orderId: created.id,
-        userId,
-        lines: orderLines.map((line) => ({
-          promotionId: line.promotion?.id ?? null,
-          promoDiscountPaise: line.promoDiscountPaise,
-          grossPaise: line.pricePaise * line.quantity,
-        })),
-      });
-      return created;
+    // What this order is, to recognise the same checkout coming again from a
+    // retry, a refresh or a second tab (services/checkoutDedup).
+    const fingerprint = checkoutFingerprint({
+      lines: orderLines.map((l) => ({
+        variantId: l.variantId,
+        quantity: l.quantity,
+        unitPaise: l.pricePaise - Math.floor(l.promoDiscountPaise / l.quantity),
+      })),
+      addressId: address.id,
+      billingAddressId: billing.id,
+      deliveryMethod,
+      isGift: isGift ?? false,
+      giftMessage: isGift ? (giftMessage ?? null) : null,
+      buyerGstin: buyerGstin || null,
+      creditsUsed,
+      couponCode,
+      totalPaise,
+      cod: paymentMethod === 'COD',
     });
+
+    // Create the order and reserve stock atomically. Conditional decrements
+    // guard against a concurrent checkout taking the last unit. First, under
+    // the buyer's checkout lock, an order already open for these items is
+    // handed back (the same checkout) or stopped and cancelled (a changed one).
+    let order: Awaited<ReturnType<typeof prisma.order.create>> | null = null;
+    const lockDeadline = Date.now() + CHECKOUT_LOCK_WAIT_MS;
+    // An earlier unpaid order for these items was cancelled to make way for this one.
+    let replacedEarlier = false;
+    for (let round = 0; !order; ) {
+      if (round === 3) throw checkoutBusy();
+      const placed = await prisma.$transaction(async (tx) => {
+        const open = await openOrderFor(tx, {
+          userId,
+          checkoutKey: checkoutKey ?? null,
+          fingerprint,
+          variantIds: orderLines.map((l) => l.variantId),
+        });
+        if (open.kind !== 'none') return open;
+        // Still what the cart holds? A payment that settled an order for these
+        // items a moment ago clears them from the cart; an order must not be
+        // placed again from the cart as it was read before that.
+        const inCart = await tx.cartItem.findMany({
+          where: { cart: { userId }, variantId: { in: orderLines.map((l) => l.variantId) } },
+          select: { variantId: true, quantity: true },
+        });
+        const inCartQty = new Map(inCart.map((c) => [c.variantId, c.quantity]));
+        if (orderLines.some((l) => inCartQty.get(l.variantId) !== l.quantity)) {
+          throw new ApiError(409, 'CART_CHANGED', 'Your cart changed just now — please check it and try again.');
+        }
+        // Once-per-account coupons, checked under the buyer's checkout lock so
+        // two checkouts at once cannot both use one (pre-launch test H4).
+        if (couponCode && couponDiscountPaise > 0) {
+          const limited = await tx.coupon.findUnique({ where: { code: couponCode }, select: { perUserLimit: true } });
+          if (limited?.perUserLimit != null) {
+            const used = await tx.order.count({ where: { userId, couponCode, status: { not: 'CANCELLED' } } });
+            if (used >= limited.perUserLimit) {
+              throw ApiError.badRequest(`You have already used ${couponCode}`, 'COUPON_INVALID');
+            }
+          }
+        }
+        for (const line of inLockOrder(orderLines)) {
+          const updated = await tx.productVariant.updateMany({
+            where: { id: line.variantId, stock: { gte: line.quantity } },
+            data: { stock: { decrement: line.quantity } },
+          });
+          if (updated.count === 0) {
+            throw ApiError.badRequest(`"${line.title}" just went out of stock`, 'OUT_OF_STOCK');
+          }
+          // Take the same units out of the warehouses holding them, so the
+          // location rows keep matching the variant total we just decremented.
+          await allocateForDispatch(tx, {
+            variantId: line.variantId,
+            quantity: line.quantity,
+            reference: orderNumber,
+          });
+        }
+        // Coupon before credits, the order cancel and payment failure release
+        // them in: two of one buyer's orders never wait on each other in a circle.
+        // Reserve one redemption of the coupon (released again if payment fails).
+        // Updating against the count we just read keeps a limited coupon from
+        // being over-redeemed by two concurrent checkouts.
+        if (couponCode && couponDiscountPaise > 0) {
+          const coupon = await tx.coupon.findUnique({ where: { code: couponCode } });
+          const exhausted =
+            !coupon ||
+            !coupon.isActive ||
+            (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit);
+          if (exhausted) {
+            throw ApiError.badRequest('That coupon is no longer available', 'COUPON_INVALID');
+          }
+          // One use claimed atomically: under a limit only while uses are left
+          // (Postgres re-checks the condition on the locked row), with no limit
+          // always. Comparing against the count read above refused about half
+          // of simultaneous checkouts of an unlimited code.
+          const claimed = await tx.coupon.updateMany({
+            where: { id: coupon.id, ...(coupon.usageLimit !== null ? { usedCount: { lt: coupon.usageLimit } } : {}) },
+            data: { usedCount: { increment: 1 } },
+          });
+          if (claimed.count === 0) {
+            throw ApiError.badRequest('That coupon is no longer available', 'COUPON_INVALID');
+          }
+        }
+        // Reserve the credits (conditional — guards a concurrent double-spend).
+        if (creditsUsed > 0) {
+          const spent = await tx.user.updateMany({
+            where: { id: userId, creditsBalance: { gte: creditsUsed } },
+            data: { creditsBalance: { decrement: creditsUsed } },
+          });
+          if (spent.count === 0) {
+            throw ApiError.badRequest('Your credits balance changed — please retry', 'CREDITS_CHANGED');
+          }
+        }
+        const created = await tx.order.create({
+          data: {
+            orderNumber,
+            userId,
+            addressId: address.id,
+            shipName: address.name,
+            shipPhone: address.phone,
+            shipLine1: address.line1,
+            shipLine2: address.line2,
+            shipCity: address.city,
+            shipState: address.state,
+            shipPincode: address.pincode,
+            status: 'PLACED',
+            subtotalPaise,
+            shippingPaise,
+            discountPaise,
+            creditsUsed,
+            couponCode,
+            couponDiscountPaise,
+            totalPaise,
+            deliveryMethod,
+            etaFrom: eta.from,
+            etaTo: eta.to,
+            isGift: isGift ?? false,
+            giftMessage: isGift ? (giftMessage ?? null) : null,
+            buyerGstin: buyerGstin || null,
+            paymentMethod,
+            checkoutKey: open.keyFree ? (checkoutKey ?? null) : null,
+            checkoutFingerprint: fingerprint,
+            billName: billing.name,
+            billLine1: billing.line1,
+            billLine2: billing.line2,
+            billCity: billing.city,
+            billState: billing.state,
+            billPincode: billing.pincode,
+            items: {
+              // pricePaise is what the shopper actually pays per unit — a seller
+              // promotion is already taken off it, so payouts, invoices and
+              // refunds all read the same number.
+              create: orderLines.map((line, i) => ({
+                productId: line.productId,
+                variantId: line.variantId,
+                sellerId: sellerByVariant.get(line.variantId)!,
+                title: line.title,
+                size: line.size,
+                color: line.color,
+                variantLabel: variantById.get(line.variantId)?.label ?? line.label,
+                optionValues: optionValuesFromJson(variantById.get(line.variantId)?.optionValues),
+                pricePaise: line.pricePaise - Math.floor(line.promoDiscountPaise / line.quantity),
+                quantity: line.quantity,
+                status: 'PLACED',
+                promotionId: line.promotion?.id ?? null,
+                promoDiscountPaise: line.promoDiscountPaise,
+                returnWindowDays: windowByProduct.get(line.productId) ?? null,
+                returnable: returnableByProduct.get(line.productId) ?? true,
+                nonCancellable: line.nonCancellable,
+                gstRatePercent: gstRates[i],
+                feeModel: 2,
+                feeRates: feesByLine[i] as object,
+              })),
+            },
+          },
+        });
+        if (creditsUsed > 0) {
+          await tx.creditLedger.create({
+            data: { userId, delta: -creditsUsed, reason: 'REDEEM_CHECKOUT', orderId: created.id },
+          });
+        }
+        // Promotion usage trail — powers the seller's redemption and ROI panels.
+        await recordRedemptions(tx as unknown as typeof prisma, {
+          orderId: created.id,
+          userId,
+          lines: orderLines.map((line) => ({
+            promotionId: line.promotion?.id ?? null,
+            promoDiscountPaise: line.promoDiscountPaise,
+            grossPaise: line.pricePaise * line.quantity,
+          })),
+        });
+        return { kind: 'created' as const, order: created };
+      }).catch((err: unknown) => {
+        // Someone else took the stock between cancelling the earlier order and
+        // placing this one: say so, rather than leave the buyer wondering where
+        // their first order went.
+        if (replacedEarlier && err instanceof ApiError && err.code === 'OUT_OF_STOCK') {
+          throw new ApiError(
+            400,
+            'OUT_OF_STOCK',
+            `${err.message}. Your earlier unpaid order for these items was released — please check the quantity and try again.`,
+          );
+        }
+        throw err;
+      });
+      if (placed.kind === 'created') {
+        order = placed.order;
+      } else if (placed.kind === 'locked') {
+        // Another checkout of this buyer holds the lock: wait outside any
+        // transaction, so no database connection is held while waiting.
+        if (Date.now() > lockDeadline) throw checkoutBusy();
+        await new Promise((r) => setTimeout(r, 150 + Math.random() * 150));
+        continue;
+      } else if (placed.kind === 'reuse') {
+        const again = await resumeOrder(placed.orderId);
+        if (again) {
+          res.json({ success: true, data: again });
+          return;
+        }
+      } else if (placed.kind === 'replace') {
+        await replaceOpenOrders(placed.orderIds);
+        replacedEarlier = true;
+      } else {
+        throw checkoutBusy(placed.orderId);
+      }
+      round++;
+    }
     await recordOrderPromises(order.id, promises).catch((err) =>
       console.error(`[clowe-api] ${orderNumber}: delivery promises not recorded:`, err instanceof Error ? err.message : err),
     );

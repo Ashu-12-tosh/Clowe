@@ -151,6 +151,8 @@ export async function applyRevision(productId: string): Promise<void> {
   }
 
   await prisma.$transaction([
+    // The product's variants locked first, in id order, as orders lock them.
+    prisma.$executeRaw`SELECT 1 FROM "product_variants" WHERE "productId" = ${product.id} ORDER BY id COLLATE "C" FOR NO KEY UPDATE`,
     prisma.product.update({
       where: { id: product.id },
       data: {

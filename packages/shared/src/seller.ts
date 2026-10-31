@@ -150,7 +150,14 @@ export const sellerVariantInputSchema = z.object({
   sellerPricePaise: z.number().int().min(100, 'Price must be at least ₹1'),
   /** MRP before GST; shoppers see it with GST added, like the price. */
   sellerMrpPaise: z.number().int().min(100).nullable().optional(),
-  stock: z.number().int().min(0),
+  // The same ceiling as the inventory screen (sellerInventory stockUpdateSchema).
+  stock: z.number().int().min(0).max(1000000),
+  /**
+   * The stock the form showed when it was opened. When sent, a save changes the
+   * stock by what the seller typed (stock − stockSeen), applied to the stock as
+   * it is now — units sold while the form was open are not put back on sale.
+   */
+  stockSeen: z.number().int().min(0).max(1000000).optional(),
   /** Seller's own code; generated when left blank. */
   sku: z
     .string()
@@ -206,6 +213,14 @@ export const sellerProductUpsertSchema = z
     attributes: z.array(productAttributeInputSchema).max(20).optional(),
     highlights: z.array(z.string().trim().min(3).max(120)).max(8).optional(),
     variants: z.array(sellerVariantInputSchema).max(60),
+    /**
+     * The form's key for this edit (one per opening of the form). A save sent
+     * again — after a lost answer — applies each stock change only once.
+     */
+    saveKey: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{8,64}$/)
+      .optional(),
     // Blank is fine on a draft; sending anything to review needs all four
     // within range (parcelProblems).
     weightGrams: z.number().int().min(0).max(SHIPPING_LIMITS.maxWeightGrams).nullable().optional(),

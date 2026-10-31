@@ -34,11 +34,8 @@ import {
   isNotASale,
   parcelNdrSchema,
 } from '@clowe/shared';
-import { cancelShipmentsForLinesSafe } from '../services/shipping/cancellations';
 import { cancelOrderLines } from '../services/lineCancellation';
 import { prisma } from '../db';
-import { refundCancelledOrder } from '../services/refundService';
-import { settleEarnedCredits } from '../services/purchaseCredits';
 import { getSettings } from '../services/settingsService';
 import { gstSettings } from '../services/economicsRates';
 import { categoryRulesMap } from '../services/categoryRules';
@@ -59,7 +56,6 @@ import { orderTracking } from '../services/shipping/trackingView';
 import { requestNdrAction } from '../services/shipping/rto';
 import { auditSafe, deviceFromUserAgent, ipFrom } from '../services/auditService';
 import { createManualOrder } from '../services/manualOrderService';
-import { returnStock } from '../services/stockService';
 
 export const adminOrdersRouter = Router();
 adminOrdersRouter.use(requireAuth, requireRole('ADMIN'));
@@ -845,71 +841,19 @@ adminOrdersRouter.post('/:id/cancel', async (req, res, next) => {
     }
     if (live.length === 0) throw ApiError.badRequest('Nothing on this order can be cancelled');
 
-    await prisma.$transaction([
-      prisma.orderItem.updateMany({
-        where: { id: { in: live.map((i) => i.id) } },
-        data: { status: 'CANCELLED', cancelledBy: 'ADMIN', cancelledAt: new Date() },
-      }),
-      prisma.order.update({
-        where: { id: order.id },
-        data: { adminNote: `Cancelled by admin: ${said}` },
-      }),
-      // Reserved units go back on the variant; the ledger entry follows below.
-      ...live.map((item) =>
-        prisma.productVariant.update({
-          where: { id: item.variantId },
-          data: { stock: { increment: item.quantity } },
-        }),
-      ),
-      // A cancelled order releases its coupon redemption and its credits.
-      ...(order.couponCode && order.couponDiscountPaise > 0
-        ? [
-            prisma.coupon.updateMany({
-              where: { code: order.couponCode, usedCount: { gt: 0 } },
-              data: { usedCount: { decrement: 1 } },
-            }),
-          ]
-        : []),
-      ...(order.creditsUsed > 0
-        ? [
-            prisma.user.update({
-              where: { id: order.userId },
-              data: { creditsBalance: { increment: order.creditsUsed } },
-            }),
-          ]
-        : []),
-    ]);
-
-    await prisma.$transaction(async (tx) => {
-      for (const item of live) {
-        await returnStock(tx, {
-          variantId: item.variantId,
-          quantity: item.quantity,
-          reason: `Cancelled by admin: ${said}`,
-          reference: order.orderNumber,
-          actorId: req.auth!.userId,
-        });
-      }
+    // The same claim-first path as buyer and seller cancels: the lines move to
+    // CANCELLED in one conditional update, and only the call that moved them
+    // returns stock, credits and the coupon, refunds and tells the buyer. A
+    // second click, a second admin or a retry gets 409 and changes nothing.
+    const { refund } = await cancelOrderLines({
+      orderId: order.id,
+      lineIds: live.map((i) => i.id),
+      statuses: ['PLACED', 'CONFIRMED', 'PACKED', 'SHIPPED'],
+      by: 'ADMIN',
+      actorUserId: req.auth!.userId,
+      reason: said,
+      wholeOrder: true,
     });
-
-    await syncOrderStatus(order.id);
-    // Booked with Delhivery already: cancel the booking too (after pickup,
-    // Delhivery brings the parcel back to the seller).
-    await cancelShipmentsForLinesSafe(live.map((i) => i.id));
-    await prisma.notification.create({
-      data: {
-        userId: order.userId,
-        type: 'ORDER_CANCELLED',
-        title: `Order ${order.orderNumber} cancelled`,
-        body: said,
-        linkHref: `/account/orders/${order.id}`,
-      },
-    });
-
-    // What was paid for the cancelled lines goes back through the gateway, the
-    // same path returns use; the refund is recorded whether it succeeds or fails.
-    const refund = await refundCancelledOrder(order.id, `Cancelled by admin: ${said}`, req.auth!.userId);
-    await settleEarnedCredits(order.id);
     res.json({ success: true, data: { cancelled: live.length, refund } });
   } catch (err) {
     next(err);

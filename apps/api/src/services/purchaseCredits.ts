@@ -18,36 +18,39 @@ import { isNotASale } from '@clowe/shared';
  * never treats a negative balance as a discount.
  */
 export async function settleEarnedCredits(orderId: string): Promise<number> {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    select: {
-      userId: true,
-      orderNumber: true,
-      items: { select: { status: true, pricePaise: true, quantity: true } },
-      creditLedger: {
-        where: { reason: { in: ['EARN_PURCHASE', 'REVERSE_PURCHASE'] } },
-        select: { delta: true, reason: true },
+  // One order at a time: parallel cancels or returns each read the ledger
+  // before the other's entry was written and took the credits back twice.
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`order-credits:${orderId}`}))`;
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      select: {
+        userId: true,
+        orderNumber: true,
+        items: { select: { status: true, pricePaise: true, quantity: true } },
+        creditLedger: {
+          where: { reason: { in: ['EARN_PURCHASE', 'REVERSE_PURCHASE'] } },
+          select: { delta: true, reason: true },
+        },
       },
-    },
-  });
-  if (!order) return 0;
+    });
+    if (!order) return 0;
 
-  const earned = order.creditLedger.filter((e) => e.reason === 'EARN_PURCHASE').reduce((s, e) => s + e.delta, 0);
-  if (earned <= 0) return 0;
-  const reversed = -order.creditLedger.filter((e) => e.reason === 'REVERSE_PURCHASE').reduce((s, e) => s + e.delta, 0);
+    const earned = order.creditLedger.filter((e) => e.reason === 'EARN_PURCHASE').reduce((s, e) => s + e.delta, 0);
+    if (earned <= 0) return 0;
+    const reversed = -order.creditLedger.filter((e) => e.reason === 'REVERSE_PURCHASE').reduce((s, e) => s + e.delta, 0);
 
-  const value = (items: typeof order.items) => items.reduce((s, i) => s + i.pricePaise * i.quantity, 0);
-  const allValue = value(order.items);
-  const keptValue = value(order.items.filter((i) => !isNotASale(i.status)));
-  const keep = allValue > 0 ? Math.floor((earned * keptValue) / allValue) : 0;
+    const value = (items: typeof order.items) => items.reduce((s, i) => s + i.pricePaise * i.quantity, 0);
+    const allValue = value(order.items);
+    const keptValue = value(order.items.filter((i) => !isNotASale(i.status)));
+    const keep = allValue > 0 ? Math.floor((earned * keptValue) / allValue) : 0;
 
-  const owed = earned - keep - reversed;
-  if (owed <= 0) return 0;
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: order.userId }, data: { creditsBalance: { decrement: owed } } }),
-    prisma.creditLedger.create({
+    const owed = earned - keep - reversed;
+    if (owed <= 0) return 0;
+    await tx.user.update({ where: { id: order.userId }, data: { creditsBalance: { decrement: owed } } });
+    await tx.creditLedger.create({
       data: { userId: order.userId, delta: -owed, reason: 'REVERSE_PURCHASE', orderId },
-    }),
-  ]);
-  return owed;
+    });
+    return owed;
+  });
 }

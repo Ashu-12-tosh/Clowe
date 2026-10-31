@@ -1496,6 +1496,12 @@ model Order {
   placedByAdmin   User?   @relation("OrderPlacedByAdmin", fields: [placedByAdminId], references: [id], onDelete: SetNull)
   // Free-text note an admin left when placing or editing the order.
   adminNote       String?
+  // Checkout de-duplication (pre-launch test H1/H2): the browser's key for
+  // one checkout attempt, and a fingerprint of what was bought, where, for how
+  // much. A retry, a refresh or a second tab with the same cart finds this
+  // order and pays it, instead of placing another.
+  checkoutKey         String?
+  checkoutFingerprint String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1511,6 +1517,7 @@ model Order {
   promotionRedemptions PromotionRedemption[]
 
   @@index([userId, createdAt])
+  @@unique([userId, checkoutKey])
   @@map("orders")
 }
 
